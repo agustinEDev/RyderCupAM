@@ -5,8 +5,6 @@ Caso de uso para actualizar la información personal de un usuario (nombre y ape
 NO requiere validación de contraseña, solo autenticación JWT.
 """
 
-from sqlalchemy.exc import IntegrityError
-
 from src.modules.user.application.dto.user_dto import (
     UpdateProfileRequestDTO,
     UpdateProfileResponseDTO,
@@ -14,6 +12,7 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.domain.errors.user_errors import (
     AliasAlreadyTakenError,
+    AliasTakenConcurrentlyError,
     UserNotFoundError,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -105,14 +104,12 @@ class UpdateProfileUseCase:
                 await self._uow.users.save(user)
 
                 # Context manager hace commit automático y publica eventos
-        except IntegrityError as e:
+        except AliasTakenConcurrentlyError as e:
             # La comprobación de arriba no basta: entre ella y el commit cabe
             # otra petición pidiendo el mismo alias, y quien lo resuelve de
-            # verdad es el índice único. Solo se traduce SU violación;
-            # cualquier otra se deja subir como está
-            if "ix_users_alias_lower" in str(e.orig):
-                raise AliasAlreadyTakenError(f"El alias '{request.alias}' ya está en uso.") from e
-            raise
+            # verdad es el índice único. La unidad de trabajo traduce SU
+            # violación a este error; aquí solo se le pone el alias al mensaje
+            raise AliasAlreadyTakenError(f"El alias '{request.alias}' ya está en uso.") from e
 
         # Construir respuesta
         return UpdateProfileResponseDTO(

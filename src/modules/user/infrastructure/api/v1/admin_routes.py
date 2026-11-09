@@ -111,6 +111,7 @@ async def list_users(
     responses={409: {"description": "`error_code` EMAIL_ALREADY_IN_USE: otra cuenta ya lo usa."}},
 )
 async def update_user(
+    request: Request,
     user_id: str,
     body: AdminUpdateUserRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -118,7 +119,16 @@ async def update_user(
 ):
     require_admin(current_user)
     try:
-        return await use_case.execute(user_id, body)
+        # Quién y desde dónde, para el log de seguridad (F-20)
+        return await use_case.execute(
+            user_id,
+            body,
+            actor_user_id=str(current_user.id),
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DuplicateEmailError:
@@ -171,6 +181,7 @@ async def set_user_active(
     ),
 )
 async def delete_user(
+    request: Request,
     user_id: str,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: AdminDeleteUserUseCase = Depends(get_admin_delete_user_use_case),
@@ -182,7 +193,15 @@ async def delete_user(
             detail="Admins cannot delete their own account",
         )
     try:
-        await use_case.execute(user_id)
+        # Quién y desde dónde, para el log de seguridad (F-20)
+        await use_case.execute(
+            user_id,
+            actor_user_id=str(current_user.id),
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except UserHasActivityException as e:

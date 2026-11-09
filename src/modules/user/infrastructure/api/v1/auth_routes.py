@@ -314,7 +314,7 @@ async def login_user(
     login_data.installed_app = es_la_app_instalada(request)
     login_data.country_code = cloudflare_client_country(request)
     # La red del intento: el freno del correo cuenta por correo + red (BE #732)
-    # Recortada al tamaño del DTO: fuera de producción la elige X-Test-Client-ID
+    # Recortada al tamaño del DTO: en los tests la elige X-Test-Client-ID
     login_data.red = get_client_identifier(request)[:100]
 
     try:

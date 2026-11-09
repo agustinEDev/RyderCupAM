@@ -67,3 +67,13 @@ class ITokenService(ABC):
     @abstractmethod
     def create_refresh_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         """Crea un refresh token (7 días por defecto)."""
+
+    @abstractmethod
+    def create_csrf_token(self, user_id: str) -> str:
+        """
+        Crea el token CSRF de la sesión, firmado para ese usuario (BE #724).
+
+        Se emite junto al de acceso y al de refresco en el login, en el de
+        Google y en cada refresco. Los casos de uso lo piden aquí en vez de
+        importar la configuración CSRF (auditoría de arquitectura, 9 nov 2026).
+        """

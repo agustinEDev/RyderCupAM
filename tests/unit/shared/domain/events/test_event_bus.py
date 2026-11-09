@@ -13,7 +13,7 @@ from src.modules.user.domain.events.user_registered_event import UserRegisteredE
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.events.event_bus import EventBus
 from src.shared.domain.events.event_handler import EventHandler
-from src.shared.domain.events.in_memory_event_bus import InMemoryEventBus
+from src.shared.infrastructure.events.in_memory_event_bus import InMemoryEventBus
 
 
 class SampleEvent(DomainEvent):

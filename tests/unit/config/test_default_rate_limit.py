@@ -227,13 +227,15 @@ def test_exempt_routes_are_exactly_the_agreed_ones():
     """
     Given: La lista de exentas del límite por defecto
     When: Se compara con la acordada (5 nov 2026)
-    Then: Es esa y solo esa: health y raíz (Render), la documentación, y los datos estáticos
+    Then: Es esa y solo esa: health y raíz (Render), la documentación (con su esquema,
+          privado desde F-11, y su propio límite por red), y los datos estáticos
     """
     assert {
         "main.root",
         "main.health",
         "main.get_documentation",
         "main.get_redoc_documentation",
+        "main.get_openapi_schema",
         "src.modules.user.infrastructure.api.v1.avatar_routes.list_avatar_presets",
         "src.modules.user.infrastructure.api.v1.avatar_routes.get_avatar_preset_image",
         "src.shared.infrastructure.api.v1.country_routes.list_countries",

@@ -56,6 +56,7 @@ class TestRefreshAccessTokenUseCase:
         service.refresh_token_expired.return_value = False
         # create_access_token es SYNC (no async)
         service.create_access_token.return_value = "new_access_token_jwt"
+        service.create_csrf_token.return_value = "csrf-del-servicio"
         return service
 
     @pytest.fixture
@@ -149,6 +150,9 @@ class TestRefreshAccessTokenUseCase:
         assert result.user.email == sample_user.email.value
         assert result.user.first_name == sample_user.first_name
         assert result.message == "Access token renovado exitosamente"
+        # El CSRF lo firma el servicio inyectado, no `src.config.csrf_config`
+        assert result.csrf_token == "csrf-del-servicio"
+        token_service.create_csrf_token.assert_called_once_with(str(sample_user.id.value))
 
         # Verificar que se llamaron los servicios correctos
         token_service.verify_refresh_token.assert_called_once_with(valid_refresh_token_jwt)

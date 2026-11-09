@@ -2,7 +2,8 @@
 Shared Domain Events - Event System Base
 
 Exporta las clases base para el sistema de eventos de dominio.
-Estas clases serán utilizadas por todos los módulos del sistema.
+Estas clases serán utilizadas por todos los módulos del sistema. La
+implementación en memoria vive en src.shared.infrastructure.events.
 """
 
 from .domain_event import DomainEvent
@@ -14,7 +15,6 @@ from .exceptions import (
     EventPublicationError,
     HandlerRegistrationError,
 )
-from .in_memory_event_bus import InMemoryEventBus
 
 __all__ = [
     # Clases base
@@ -26,6 +26,4 @@ __all__ = [
     "EventHandlerError",
     "EventPublicationError",
     "HandlerRegistrationError",
-    # Implementaciones
-    "InMemoryEventBus",
 ]

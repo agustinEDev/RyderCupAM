@@ -64,32 +64,12 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidAvatarPresetError,
     UserNotFoundError,
 )
+from src.shared.infrastructure.http.upload_reader import (
+    UploadTooLargeError,
+    read_upload_within_limit,
+)
 
 router = APIRouter()
-
-_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
-
-
-async def _read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
-    """
-    Lee un UploadFile por trozos, cortando en cuanto se supera `max_bytes`.
-
-    A diferencia de `await file.read()` (que carga el cuerpo entero en memoria
-    antes de que nadie pueda comprobar su tamaño), esto evita que un archivo
-    absurdamente grande llegue a bufferizarse por completo — el rechazo por
-    tamaño ocurre tan pronto como se cruza el límite, no después.
-    """
-    buffer = bytearray()
-    while True:
-        chunk = await file.read(_UPLOAD_READ_CHUNK_BYTES)
-        if not chunk:
-            break
-        buffer.extend(chunk)
-        if len(buffer) > max_bytes:
-            raise AvatarUploadTooLargeError(
-                f"El archivo supera el tamaño máximo permitido ({max_bytes // (1024 * 1024)}MB)"
-            )
-    return bytes(buffer)
 
 
 # ======================================================================================
@@ -203,11 +183,11 @@ async def upload_avatar(
     use_case: UploadAvatarUseCase = Depends(get_upload_avatar_use_case),
 ):
     try:
-        raw_bytes = await _read_upload_within_limit(file, MAX_UPLOAD_BYTES)
+        raw_bytes = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
         return await use_case.execute(str(current_user.id), raw_bytes)
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except AvatarUploadTooLargeError as e:
+    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
         raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(e)) from e
     except InvalidAvatarImageError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

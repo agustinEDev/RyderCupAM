@@ -17,6 +17,12 @@ from src.shared.infrastructure.logging.security_logger import (
 )
 
 
+def _lee(registro: SecurityLogger, fichero: Path) -> str:
+    """El fichero, después de que el hilo del log haya escrito lo encolado."""
+    registro.vacia()
+    return fichero.read_text()
+
+
 @pytest.fixture
 def temp_log_dir():
     """Directorio temporal para tests"""
@@ -62,9 +68,11 @@ class TestSecurityLoggerWriting:
         logger.log_security_event(event)
 
         log_file = temp_log_dir / "test_security.log"
-        content = log_file.read_text()
+        content = _lee(logger, log_file)
         assert "LoginAttemptEvent" in content
-        assert "test@example.com" in content
+        # El correo, enmascarado (revisión de la fase 2)
+        assert "t***@example.com" in content
+        assert "test@example.com" not in content
 
     def test_log_writes_valid_json_format(self, logger, temp_log_dir):
         """Cada línea es JSON válido"""
@@ -80,7 +88,7 @@ class TestSecurityLoggerWriting:
         logger.log_security_event(event)
 
         log_file = temp_log_dir / "test_security.log"
-        lines = log_file.read_text().strip().split("\n")
+        lines = _lee(logger, log_file).strip().split("\n")
 
         # Última línea debe ser JSON válido
         last_line = lines[-1]
@@ -116,8 +124,9 @@ class TestSecurityLoggerHelpers:
         )
 
         log_file = temp_log_dir / "test_security.log"
-        content = log_file.read_text()
-        assert "helper@test.com" in content
+        content = _lee(logger, log_file)
+        assert "h***@test.com" in content
+        assert "helper@test.com" not in content
         assert "LOGIN SUCCESS" in content
 
     def test_log_logout_helper(self, logger, temp_log_dir):
@@ -130,7 +139,7 @@ class TestSecurityLoggerHelpers:
         )
 
         log_file = temp_log_dir / "test_security.log"
-        content = log_file.read_text()
+        content = _lee(logger, log_file)
         assert "LOGOUT" in content
         assert "user-999" in content
 
@@ -152,7 +161,7 @@ class TestSecurityLoggerEdgeCases:
         logger.log_security_event(event)
 
         log_file = temp_log_dir / "test_security.log"
-        content = log_file.read_text()
+        content = _lee(logger, log_file)
         assert "Anonymous" in content or "null" in content
 
 
@@ -172,7 +181,7 @@ class TestTermsAccepted:
             terms_version="2026-10-20",
         )
 
-        content = (temp_log_dir / "test_security.log").read_text()
+        content = _lee(logger, temp_log_dir / "test_security.log")
         assert "TERMS ACCEPTED" in content
         assert "user-terms" in content
         assert "2026-10-20" in content
@@ -213,7 +222,7 @@ class TestGoogleUnlinked:
             user_agent="Safari/18.0",
         )
 
-        content = (temp_log_dir / "test_security.log").read_text()
+        content = _lee(logger, temp_log_dir / "test_security.log")
         assert "GOOGLE UNLINKED | User user-unlink" in content
         assert "203.0.113.21" in content
         assert "Safari/18.0" in content
@@ -234,7 +243,7 @@ class TestGoogleUnlinked:
             via="password_reset",
         )
 
-        content = (temp_log_dir / "test_security.log").read_text()
+        content = _lee(logger, temp_log_dir / "test_security.log")
         assert "GOOGLE UNLINKED | User user-reset | on password reset" in content
         entrada = json.loads(content.strip().split("\n")[-1])
         assert entrada["extra"]["security_event"]["via"] == "password_reset"

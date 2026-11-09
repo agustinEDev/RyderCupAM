@@ -40,7 +40,18 @@ services:
     ports:
       - "${DOCKER_APP_PORT:-8001}:8000"
     volumes:
-      - ..:/app
+      # Solo el código, para el hot-reload; no el checkout entero: montado sobre /app,
+      # el usuario de la app leía el .env y los secretos locales del Kind y se saltaba
+      # el .dockerignore. Lo demás de /app (requisitos instalados) es el de la imagen.
+      # En Linux, el checkout tiene que poder leerlo el uid 10001 de la imagen
+      # Solo carpetas: un fichero suelto montado (main.py, alembic.ini) deja de verse
+      # cuando el editor lo sustituye por uno nuevo y el hot-reload se pierde. Esos
+      # dos van en la imagen: si cambian, `docker compose build app`
+      - ../src:/app/src:ro
+      - ../alembic:/app/alembic:ro
+      - ../scripts:/app/scripts:ro
+      # Los logs, en su propio volumen: el de la imagen (uid 10001) los escribe
+      - app_logs:/app/logs
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:
       - path: .env
@@ -63,7 +74,6 @@ services:
       # JWT Configuration
       # SECRET_KEY is REQUIRED - validation script will fail if missing
       - SECRET_KEY=${SECRET_KEY:-MISSING_SECRET_KEY}
-      - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
 
       # Swagger/Docs Protection (optional - can be empty)
@@ -111,3 +121,4 @@ services:
 
 volumes:
   postgres_data:
+  app_logs:

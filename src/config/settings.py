@@ -22,8 +22,10 @@ class Settings:
     """
 
     # JWT Configuration
+    # Fuera de desarrollo, la app no arranca con esta de ejemplo (arranque_seguro.py)
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    # Fijo: leído del entorno, un ALGORITHM cambiado aceptaría otro algoritmo (F-12)
+    ALGORITHM: ClassVar[str] = "HS256"
 
     # Session Timeout (v1.8.0)
     # Access Token: Corto (15 min) para operaciones frecuentes

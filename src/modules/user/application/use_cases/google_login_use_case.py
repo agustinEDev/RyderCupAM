@@ -13,7 +13,6 @@ Los flujos 2 y 3, solo con el correo verificado por Google.
 import logging
 from datetime import datetime
 
-from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
     AvisoDeNuevoInicioRequestDTO,
@@ -407,7 +406,7 @@ class GoogleLoginUseCase:
         return GoogleLoginResponseDTO(
             access_token=access_token,
             refresh_token=refresh_token_jwt,
-            csrf_token=generate_csrf_token(str(user.id.value)),
+            csrf_token=self._token_service.create_csrf_token(str(user.id.value)),
             token_type="bearer",  # nosec B106 - not a password, it's an OAuth token type
             user=UserResponseDTO.model_validate(user),
             is_new_user=is_new_user,

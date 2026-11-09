@@ -38,6 +38,7 @@ from slowapi.util import get_remote_address
 from slowapi.wrappers import Limit
 from starlette.requests import Request
 
+from src.config.arranque_seguro import modo_de_tests
 from src.config.settings import settings
 from src.modules.user.domain.value_objects.email import Email, InvalidEmailError
 from src.shared.infrastructure.http.http_context_validator import cloudflare_client_ip
@@ -66,6 +67,12 @@ VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 # como mucho la mitad del tope de 20 al día de la app. 10 y no menos: como los demás,
 # dimensionado para un club entero, o para todos si falla la IP real (una sola red)
 CONTACT_LIMIT = "10/day"
+
+# Credenciales EQUIVOCADAS de la documentación (/docs, /redoc y /openapi.json), por
+# red (F-11 y /code-review, 9 nov 2026): probar contraseñas deja de ser gratis. Las
+# buenas ni cuentan ni se frenan: sin la IP real la red es toda la app, y cualquiera
+# dejaría al administrador sin documentación
+DOCS_LIMIT = "20/minute"
 
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
 REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token
@@ -115,14 +122,15 @@ def get_client_identifier(request: Request) -> str:
     En producción: la IP que da Cloudflare si la petición trae su secreto (BE #466,
     ADR-041); si no, la del peer, que es el proxy de Render: el contador
     compartido de siempre, nunca uno que elija quien llama.
-    En desarrollo y en los tests: X-Test-Client-ID si existe (simula clientes
-    distintos). Sin ENVIRONMENT, o con un valor desconocido, como en producción.
+    Solo en la suite de tests (TESTING=true Y ENVIRONMENT=development): X-Test-Client-ID
+    si existe, para simular clientes distintos. En el Kind (development sin TESTING) ya
+    NO vale, y sin ENVIRONMENT o con un valor desconocido, como en producción (ADR-047).
     """
     if not _admite_el_cliente_de_prueba():
         ip = cloudflare_client_ip(request)
         return _clave_de_red(ip) if ip else get_remote_address(request)
 
-    # En los tests y en desarrollo, simular clientes distintos con una cabecera
+    # En los tests, simular clientes distintos con una cabecera
     test_client_id = request.headers.get("X-Test-Client-ID")
     if test_client_id:
         return test_client_id
@@ -131,24 +139,17 @@ def get_client_identifier(request: Request) -> str:
     return get_remote_address(request)
 
 
-# El entorno que dice expresamente que no es producción (no hay staging)
-_ENTORNOS_DE_PRUEBA = frozenset({"development"})
-
-
 def _admite_el_cliente_de_prueba() -> bool:
     """
-    Si vale X-Test-Client-ID: solo cuando el entorno dice que NO es producción.
+    Si vale X-Test-Client-ID: solo en la suite de tests, con TESTING=true Y
+    ENVIRONMENT=development.
 
     Antes, sin ENVIRONMENT se tomaba por desarrollo: una producción mal configurada
     dejaba a quien llama elegir su red, y con ella el freno del login (auditoría
-    OWASP de BE #732, A05). Un valor desconocido cuenta como producción.
+    OWASP de BE #732, A05). Y bastaba TESTING o development: ahora hacen falta los
+    dos (F-12, 9 nov 2026). Un valor desconocido cuenta como producción.
     """
-    environment = os.getenv("ENVIRONMENT", "").lower()
-    if environment == "production":
-        return False
-    if os.getenv("TESTING", "").lower() == "true":
-        return True
-    return environment in _ENTORNOS_DE_PRUEBA
+    return modo_de_tests(os.environ)
 
 
 def get_rate_limit_key(request: Request) -> str:
@@ -336,14 +337,16 @@ limiter = Limiter(key_func=get_rate_limit_key)
 
 
 # Exentas del límite por defecto (5 nov 2026): /health y la raíz las llama Render
-# directo al origen; la documentación; y datos estáticos que se piden en ráfaga
-# (los avatares predefinidos, con sus imágenes, y los países)
+# directo al origen; la documentación, que lleva el suyo por red
+# (limita_la_documentacion, F-11); y datos estáticos que se piden en ráfaga (los
+# avatares predefinidos, con sus imágenes, y los países)
 EXEMPT_FROM_DEFAULT_LIMIT = frozenset(
     {
         "main.root",
         "main.health",
         "main.get_documentation",
         "main.get_redoc_documentation",
+        "main.get_openapi_schema",
         "src.modules.user.infrastructure.api.v1.avatar_routes.list_avatar_presets",
         "src.modules.user.infrastructure.api.v1.avatar_routes.get_avatar_preset_image",
         "src.shared.infrastructure.api.v1.country_routes.list_countries",
@@ -381,18 +384,62 @@ async def apply_default_rate_limit(request: Request) -> None:
     clave = get_rate_limit_key(request)
     if not clave.startswith(_USER_PREFIX):
         return
-    valor = DEFAULT_LIMIT_OVERRIDES.get(nombre, DEFAULT_LIMIT)
-    limite = parse(valor)
-    # Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
-    # X-RateLimit leen la ventana con estos mismos identificadores
-    identificadores = [clave, nombre]
+    _cuenta_o_responde_429(
+        request, DEFAULT_LIMIT_OVERRIDES.get(nombre, DEFAULT_LIMIT), clave, nombre
+    )
+
+
+def _identificadores(clave: str, ambito: str) -> list[str]:
+    """
+    Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
+    X-RateLimit leen la ventana con estos mismos identificadores.
+    """
     if limiter._key_prefix:
-        identificadores = [limiter._key_prefix, *identificadores]
+        return [limiter._key_prefix, clave, ambito]
+    return [clave, ambito]
+
+
+def _cuenta_o_responde_429(request: Request, valor: str, clave: str, ambito: str) -> None:
+    """
+    Cuenta la petición contra `valor` para (clave, ámbito) y, si lo supera, lanza el
+    mismo 429 que slowapi. Lo comparten el límite por defecto y el de los fallos de
+    la documentación.
+    """
+    limite = parse(valor)
+    identificadores = _identificadores(clave, ambito)
     if not limiter.limiter.hit(limite, *identificadores):
-        excedido = _exceeded(valor)
         # El manejador de slowapi lee el límite que saltó de aquí
         request.state.view_rate_limit = (limite, identificadores)
-        raise excedido
+        raise _exceeded(valor)
+
+
+def cuenta_un_fallo_de_la_documentacion(request: Request) -> None:
+    """
+    Cuenta unas credenciales equivocadas de la documentación (DOCS_LIMIT), por red, y
+    pasado el límite responde con el mismo 429 que slowapi (F-11, /code-review).
+
+    Solo se llama con credenciales equivocadas: las buenas ni cuentan ni se frenan.
+    """
+    if not limiter.enabled:
+        return
+    _cuenta_o_responde_429(request, DOCS_LIMIT, get_client_identifier(request), "docs")
+
+
+def frena_la_documentacion_con_la_ip_real(request: Request) -> None:
+    """
+    Con la IP real de quien llama (verificada por Cloudflare, ADR-041), si su contador
+    de fallos de la documentación está lleno responde 429 ANTES de comparar las
+    credenciales, también las buenas: así la fuerza bruta no puede seguir probando
+    (CodeRabbit en BE #774). Sin la IP real el contador es el de toda la app y no se
+    frena a nadie por adelantado: cualquiera dejaría fuera al administrador.
+    """
+    if not limiter.enabled or cloudflare_client_ip(request) is None:
+        return
+    limite = parse(DOCS_LIMIT)
+    identificadores = _identificadores(get_client_identifier(request), "docs")
+    if not limiter.limiter.test(limite, *identificadores):
+        request.state.view_rate_limit = (limite, identificadores)
+        raise _exceeded(DOCS_LIMIT)
 
 
 def limite_de_lo_publico(key: str) -> str:

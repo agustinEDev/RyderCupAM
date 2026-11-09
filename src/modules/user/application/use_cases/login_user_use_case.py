@@ -14,7 +14,6 @@ CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double
 from datetime import UTC, datetime
 from typing import NoReturn
 
-from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
     AvisoDeNuevoInicioRequestDTO,
@@ -598,8 +597,9 @@ class LoginUserUseCase:
                 )
             )
 
-        # Generar token CSRF (256 bits, 15 minutos de duración)
-        csrf_token = generate_csrf_token(str(user.id.value))
+        # Generar token CSRF (256 bits; vale lo que el refresh token más 1 h, y su cookie
+        # dura 15 minutos)
+        csrf_token = self._token_service.create_csrf_token(str(user.id.value))
 
         # El hándicap ya no se refresca aquí: el login esperaba a la RFEG antes de
         # contestar. Lo pide el frontend después de entrar (RyderCupAM#340).

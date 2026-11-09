@@ -10,11 +10,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.cupo_de_contacto import cupo_de_contacto
 from src.config.database import async_session_maker
 from src.config.freno_del_login import freno_del_login
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
+from src.config.settings import settings
 from src.config.terms_guard import require_current_terms
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
@@ -731,6 +733,10 @@ from src.shared.infrastructure.security.jwt_handler import (
     verify_access_token,
 )
 
+# El hash de las contraseñas: lo decide la infraestructura (bcrypt, 12 rondas) y se
+# instala aquí, al cargar la composition root, antes de cualquier petición
+instala_el_hasher_de_contrasenas()
+
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
@@ -1382,7 +1388,12 @@ def get_request_password_reset_use_case(
     3. Crea una instancia de `RequestPasswordResetUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return RequestPasswordResetUseCase(uow, email_service, security_audit=security_audit)
+    return RequestPasswordResetUseCase(
+        uow,
+        email_service,
+        frontend_url=settings.FRONTEND_URL,
+        security_audit=security_audit,
+    )
 
 
 def get_reset_password_use_case(
@@ -1570,9 +1581,10 @@ def get_admin_list_users_use_case(
 def get_admin_update_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminUpdateUserUseCase:
-    """Proveedor del caso de uso AdminUpdateUserUseCase."""
-    return AdminUpdateUserUseCase(uow, email_service=email_service)
+    """Proveedor de AdminUpdateUserUseCase (con su log de seguridad desde F-20)."""
+    return AdminUpdateUserUseCase(uow, email_service=email_service, security_audit=security_audit)
 
 
 def get_admin_set_user_active_use_case(
@@ -1588,9 +1600,16 @@ def get_admin_delete_user_use_case(
     competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminDeleteUserUseCase:
-    """Proveedor del caso de uso AdminDeleteUserUseCase."""
-    return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+    """Proveedor de AdminDeleteUserUseCase (con su log de seguridad desde F-20)."""
+    return AdminDeleteUserUseCase(
+        user_uow,
+        competition_uow,
+        quick_match_uow,
+        golf_course_uow,
+        security_audit=security_audit,
+    )
 
 
 def get_get_admin_stats_use_case(

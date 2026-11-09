@@ -16,7 +16,7 @@ from src.modules.user.application.handlers.user_registered_event_handler import 
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
-from src.shared.domain.events.in_memory_event_bus import InMemoryEventBus
+from src.shared.infrastructure.events.in_memory_event_bus import InMemoryEventBus
 
 
 class TestDomainEventsIntegration:

@@ -34,5 +34,9 @@ class InMemoryProfilePhotoRepository(ProfilePhotoRepositoryInterface):
     async def count_by_user(self, user_id: UserId) -> int:
         return len([p for p in self._photos.values() if p.user_id == user_id])
 
+    async def lock_gallery(self, user_id: UserId) -> None:
+        """En memoria no hay nada a la vez: no hay nada que bloquear."""
+        return
+
     async def delete(self, photo_id: ProfilePhotoId) -> bool:
         return self._photos.pop(photo_id, None) is not None

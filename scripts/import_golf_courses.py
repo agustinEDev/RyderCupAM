@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import select, text
 
+from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.database import async_session_maker
 from src.config.mappers import start_all_mappers
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
@@ -264,6 +265,7 @@ async def main() -> int:
     args = parse_args()
 
     start_all_mappers()  # la lista única de la aplicación (#565)
+    instala_el_hasher_de_contrasenas()  # el usuario de sistema lleva contraseña
 
     dataset = load_dataset(args.dataset)
     mapped, problems = map_all(dataset, args.limit)

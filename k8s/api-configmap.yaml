@@ -27,8 +27,7 @@ data:
   DATABASE_PORT: "5432"
   POSTGRES_DB: "rcfdevdb"                # RyderCup Friends - Development Database
 
-  # JWT settings (NO secret key)
-  ALGORITHM: "HS256"
+  # JWT settings (NO secret key; el algoritmo es HS256 fijo, ADR-047)
   ACCESS_TOKEN_EXPIRE_MINUTES: "60"
 
   # Mailgun settings (NO API key)

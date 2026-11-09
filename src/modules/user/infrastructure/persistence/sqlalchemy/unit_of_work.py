@@ -1,5 +1,7 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.user.domain.errors.user_errors import AliasTakenConcurrentlyError
 from src.modules.user.domain.repositories.password_history_repository_interface import (
     PasswordHistoryRepositoryInterface,
 )
@@ -109,6 +111,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         if exc_type:
             # Si hubo excepción, hacer rollback
             await self.rollback()
+            # Un autoflush dentro del bloque (una consulta tras modificar el usuario)
+            # también puede chocar con el índice del alias, sin pasar por commit ni flush
+            if isinstance(exc_val, IntegrityError):
+                _traduce_la_violacion_del_alias(exc_val)
         else:
             # Si todo fue exitoso, hacer commit automáticamente. Si el commit falla (una
             # restricción única), rollback: sin él la sesión quedaba inservible para lo
@@ -124,13 +130,38 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
             # real se implementará cuando se necesiten event handlers
 
     async def commit(self) -> None:
-        await self._session.commit()
+        """Confirma la transacción; el alias repetido sale como error del dominio."""
+        try:
+            await self._session.commit()
+        except IntegrityError as e:
+            _traduce_la_violacion_del_alias(e)
+            raise
 
     async def rollback(self) -> None:
+        """Deshace la transacción."""
         await self._session.rollback()
 
     async def flush(self) -> None:
-        await self._session.flush()
+        """Envía los cambios sin confirmar; el alias repetido sale como error del dominio."""
+        try:
+            await self._session.flush()
+        except IntegrityError as e:
+            _traduce_la_violacion_del_alias(e)
+            raise
 
     def is_active(self) -> bool:
         return self._session.is_active
+
+
+# El índice único del alias (mappers.py). Entre la comprobación del caso de uso y el
+# commit cabe otra petición pidiendo el mismo alias, y quien lo resuelve de verdad es
+# este índice. Su violación se traduce aquí, en la infraestructura, al error del
+# dominio: el caso de uso no conoce SQLAlchemy ni el esquema (auditoría del 9 nov
+# 2026, B1). Cualquier otra violación sube tal cual
+INDICE_DEL_ALIAS = "ix_users_alias_lower"
+
+
+def _traduce_la_violacion_del_alias(error: IntegrityError) -> None:
+    """Lanza AliasTakenConcurrentlyError si el error es el del índice del alias."""
+    if INDICE_DEL_ALIAS in str(error.orig):
+        raise AliasTakenConcurrentlyError("El alias ya está en uso.") from error
