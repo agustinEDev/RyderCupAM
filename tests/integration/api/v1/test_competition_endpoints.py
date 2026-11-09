@@ -429,6 +429,82 @@ class TestListCompetitions:
         assert "Ryder Cup 2025" in [c["name"] for c in data]
         assert "Ryder Cup Friends" in [c["name"] for c in data]
 
+    @staticmethod
+    async def _crear_con_nombres(client: AsyncClient, cookies, nombres: list[str]) -> None:
+        """Crea una competición por cada nombre, todas del mismo usuario."""
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        for nombre in nombres:
+            await create_competition(
+                client,
+                cookies,
+                {
+                    "name": nombre,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "main_country": "ES",
+                    "play_mode": "SCRATCH",
+                    "max_players": 24,
+                    "team_assignment": "MANUAL",
+                },
+            )
+
+    async def test_search_name_does_not_treat_a_percent_as_a_wildcard(self, client: AsyncClient):
+        """
+        Given: dos competiciones, y solo una lleva un `%` en el nombre
+        When: se busca por nombre `%`
+        Then: sale solo la que lo lleva, no todas (F-16)
+        """
+        user = await create_authenticated_user(
+            client, "porcentaje@test.com", "P@ssw0rd123!", "Pedro", "Porcentaje"
+        )
+        await self._crear_con_nombres(
+            client, user["cookies"], ["Torneo al 100% golf", "Torneo sin simbolos"]
+        )
+
+        response = await client.get("/api/v1/competitions?search_name=%25", cookies=user["cookies"])
+
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()] == ["Torneo al 100% golf"]
+
+    async def test_search_name_does_not_treat_an_underscore_as_a_wildcard(
+        self, client: AsyncClient
+    ):
+        """
+        Given: dos competiciones, y solo una lleva un `_` en el nombre
+        When: se busca por nombre `_`
+        Then: sale solo la que lo lleva, no cualquiera con al menos un carácter (F-16)
+        """
+        user = await create_authenticated_user(
+            client, "guionbajo@test.com", "P@ssw0rd123!", "Gema", "Guion"
+        )
+        await self._crear_con_nombres(
+            client, user["cookies"], ["Torneo_con_guiones", "Torneo sin guiones"]
+        )
+
+        response = await client.get("/api/v1/competitions?search_name=_", cookies=user["cookies"])
+
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()] == ["Torneo_con_guiones"]
+
+    async def test_search_name_is_still_case_insensitive(self, client: AsyncClient):
+        """
+        Given: una competición llamada «Ryder Cup Friends»
+        When: se busca por nombre `rYDER` (otra mezcla de mayúsculas)
+        Then: sale igual que antes con ILIKE
+        """
+        user = await create_authenticated_user(
+            client, "mayusculas@test.com", "P@ssw0rd123!", "Marta", "Mayus"
+        )
+        await self._crear_con_nombres(client, user["cookies"], ["Ryder Cup Friends"])
+
+        response = await client.get(
+            "/api/v1/competitions?search_name=rYDER", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()] == ["Ryder Cup Friends"]
+
 
 class TestMyCompetitionsFilter:
     """Tests para el filtro `my_competitions` en GET /api/v1/competitions"""

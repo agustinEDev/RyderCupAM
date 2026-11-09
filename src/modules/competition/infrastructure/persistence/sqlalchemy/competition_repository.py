@@ -400,7 +400,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         Busca competiciones aplicando múltiples filtros opcionales.
 
-        Implementa búsqueda case-insensitive con ILIKE:
+        Implementa búsqueda case-insensitive con LOWER(...) LIKE, escapando
+        `%` y `_` para que se busquen como letras:
         - search_name: Busca en competition.name
         - search_creator: Busca en creator.first_name OR creator.last_name OR creator.alias
 
@@ -428,9 +429,14 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         # Lista de condiciones WHERE
         conditions = []
 
-        # Filtro: search_name (búsqueda parcial case-insensitive)
+        # Filtro: search_name (búsqueda parcial case-insensitive). Con
+        # `LOWER(...).contains(..., autoescape=True)`, como las ramas del
+        # creador de abajo, y no `ilike(f"%{x}%")`: un `%` o un `_` tecleados
+        # se buscan como letras en vez de casar con todo (F-16)
         if search_name:
-            conditions.append(Competition._name_value.ilike(f"%{search_name}%"))
+            conditions.append(
+                func.lower(Competition._name_value).contains(search_name.lower(), autoescape=True)
+            )
 
         # Filtro: search_creator (búsqueda en first_name OR last_name OR alias)
         #
