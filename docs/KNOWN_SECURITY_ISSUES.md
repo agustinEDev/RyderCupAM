@@ -35,7 +35,7 @@ The `python-ecdsa` package is vulnerable to a Minerva timing attack on the P-256
 **Evidence**:
 ```python
 # src/config/settings.py
-ALGORITHM: str = os.getenv("ALGORITHM", "HS256")  # HMAC, not ECDSA
+ALGORITHM: ClassVar[str] = "HS256"  # HMAC, not ECDSA; fixed, not read from the env (ADR-047)
 ```
 
 **Code Analysis**:

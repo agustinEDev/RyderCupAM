@@ -389,6 +389,22 @@ class TestGoogleLoginUseCaseTokenGeneration:
         assert response.csrf_token is not None
         assert len(response.csrf_token) > 0
 
+    async def test_takes_the_csrf_token_from_the_token_service(
+        self, use_case, token_service, google_oauth_service, google_user_info, login_request
+    ):
+        """
+        Given: un servicio de tokens que firma el CSRF a su manera
+        When: se entra con Google
+        Then: el CSRF de la respuesta es el del servicio inyectado: el caso de
+            uso ya no lee `src.config.csrf_config` (auditoría 9 nov 2026)
+        """
+        token_service.create_csrf_token = lambda user_id: f"csrf-de-{user_id}"
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        response = await use_case.execute(login_request)
+
+        assert response.csrf_token == f"csrf-de-{response.user.id}"
+
     async def test_invalid_code_raises_value_error(
         self, use_case, google_oauth_service, login_request
     ):

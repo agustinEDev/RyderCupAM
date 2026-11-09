@@ -16,9 +16,9 @@ from src.shared.infrastructure.logging.security_logger import (
 
 
 def _fichero_de(registro: SecurityLogger) -> Path:
-    """El fichero de su handler rotativo (pytest cuelga además sus capturas)."""
+    """El fichero de su handler rotativo (lo escribe el hilo del log, no el logger)."""
     (handler,) = [
-        h for h in registro._logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+        h for h in registro._destinos if isinstance(h, logging.handlers.RotatingFileHandler)
     ]
     return Path(handler.baseFilename)
 
@@ -79,6 +79,6 @@ def test_l1_a_new_instance_closes_the_handlers_it_replaces(tmp_path):
 
 def _fichero_de_handler(registro):
     (handler,) = [
-        h for h in registro._logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+        h for h in registro._destinos if isinstance(h, logging.handlers.RotatingFileHandler)
     ]
     return handler

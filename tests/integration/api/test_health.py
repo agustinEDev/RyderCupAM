@@ -234,15 +234,31 @@ class TestAPIDocumentation:
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
+    def test_openapi_schema_requires_credentials(self, client):
+        """
+        Test: Schema OpenAPI privado (F-11)
+        Given: API de FastAPI funcionando
+        When: Se hace GET request a /openapi.json sin HTTP Basic Auth
+        Then: Responde 401, como /docs
+        """
+        response = client.get("/openapi.json")
+
+        assert response.status_code == 401
+
     def test_openapi_schema_accessible(self, client):
         """
-        Test: Schema OpenAPI accesible
+        Test: Schema OpenAPI accesible con credenciales
         Given: API de FastAPI funcionando
-        When: Se hace GET request a /openapi.json
+        When: Se hace GET request a /openapi.json con HTTP Basic Auth
         Then: Responde con JSON schema válido
         """
+        # Arrange
+        credentials = f"{settings.DOCS_USERNAME}:{settings.DOCS_PASSWORD}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
+
         # Act
-        response = client.get("/openapi.json")
+        response = client.get("/openapi.json", headers=headers)
 
         # Assert
         assert response.status_code == 200

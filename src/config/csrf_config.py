@@ -7,11 +7,23 @@ Estrategia de triple capa:
 2. Double-Submit Cookie csrf_token (NO httpOnly)
 3. SameSite="lax" (ya implementado en cookies)
 
-Tokens: `aleatorio.firma` (BE #724). El aleatorio son 256 bits
-(secrets.token_urlsafe(32)); la firma, HMAC-SHA256 del usuario y el aleatorio con
-una clave derivada de SECRET_KEY. Sin la firma, quien pudiera escribir una cookie
-en el dominio padre («cookie tossing») elegía cabecera y cookie a la vez.
-Duración: 15 minutos (igual que access tokens)
+Tokens: `aleatorio.emitido.firma` (BE #724 y F-19). El aleatorio son 256 bits
+(secrets.token_urlsafe(32)); `emitido`, la hora de emisión en segundos Unix; la
+firma, HMAC-SHA256 del usuario, el aleatorio y la hora con una clave derivada de
+SECRET_KEY. Sin la firma, quien pudiera escribir una cookie en el dominio padre
+(«cookie tossing») elegía cabecera y cookie a la vez.
+
+Caducidad (F-19, auditoría OWASP del 9 nov 2026): la cookie dura 15 minutos, pero el
+token en sí valía para siempre. Ahora vale lo que el refresh token
+(REFRESH_TOKEN_EXPIRE_DAYS) más una hora: cada login y cada refresco emiten uno
+nuevo, así que ninguna sesión viva usa uno más viejo. La hora de margen cubre la
+diferencia de reloj entre dos instancias durante un despliegue y una petición en
+vuelo; más no hace falta, porque el front recupera un 403 CSRF refrescando.
+
+Los tokens del formato anterior (`aleatorio.firma`, sin hora) no valen: no se sabe
+cuándo se emitieron. Nadie pierde la sesión al desplegar: ante un 403
+CSRF_VALIDATION_FAILED el front refresca (lo que emite uno nuevo, con hora) y repite
+la petición una vez (hotfix FE 2.63.1); solo cierra la sesión si el refresco falla.
 """
 
 import base64
@@ -19,6 +31,7 @@ import functools
 import hashlib
 import hmac
 import secrets
+import time
 from typing import Final
 
 from src.config.settings import settings
@@ -41,33 +54,61 @@ def _en_base64(datos: bytes) -> str:
     return base64.urlsafe_b64encode(datos).rstrip(b"=").decode()
 
 
-def _firma(user_id: str, aleatorio: str) -> str:
-    mensaje = f"{user_id}!{aleatorio}".encode()
+# El margen sobre la vida del refresh token (ver el docstring del módulo)
+MARGEN_DE_CADUCIDAD_S: Final[int] = 60 * 60
+# Una hora Unix en segundos tiene 10 cifras hasta el año 2286; más es basura
+_MAX_CIFRAS_DE_LA_HORA: Final[int] = 12
+
+
+def vida_del_token_csrf() -> int:
+    """Segundos que vale un token CSRF: la vida del refresh token más el margen."""
+    return settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60 + MARGEN_DE_CADUCIDAD_S
+
+
+def _firma(user_id: str, aleatorio: str, emitido: str) -> str:
+    """HMAC-SHA256 de usuario, aleatorio y hora de emisión, en base64 URL."""
+    mensaje = f"{user_id}!{aleatorio}!{emitido}".encode()
     return _en_base64(hmac.new(_clave(), mensaje, hashlib.sha256).digest())
 
 
-def generate_csrf_token(user_id: str) -> str:
+def generate_csrf_token(user_id: str, *, ahora: float | None = None) -> str:
     """
-    Genera un token CSRF firmado para ese usuario (BE #724).
+    Genera un token CSRF firmado para ese usuario, con su hora (BE #724, F-19).
 
     Args:
         user_id: El id del usuario de la sesión que lo recibe
+        ahora: La hora de emisión (segundos Unix); por defecto, la del reloj
 
     Returns:
-        str: `aleatorio.firma`, los dos en base64 URL
+        str: `aleatorio.emitido.firma`; aleatorio y firma en base64 URL
     """
     aleatorio = secrets.token_urlsafe(TOKEN_LENGTH)
-    return f"{aleatorio}.{_firma(user_id, aleatorio)}"
+    emitido = str(int(time.time() if ahora is None else ahora))
+    return f"{aleatorio}.{emitido}.{_firma(user_id, aleatorio, emitido)}"
 
 
-def csrf_token_belongs_to(token: str, user_id: str) -> bool:
-    """¿Lleva el token la firma de ese usuario? Comparación de tiempo constante."""
+def csrf_token_belongs_to(token: str, user_id: str, *, ahora: float | None = None) -> bool:
+    """
+    ¿Lleva el token la firma de ese usuario y sigue vigente? Comparación de tiempo
+    constante. Uno sin hora (el formato de BE #724) no vale.
+
+    Args:
+        token: El token de la cabecera X-CSRF-Token
+        user_id: El usuario de la sesión
+        ahora: La hora con la que se mide la edad; por defecto, la del reloj
+    """
     partes = token.split(".")
-    if len(partes) != 2 or not all(partes):  # noqa: PLR2004 - aleatorio y firma
+    if len(partes) != 3 or not all(partes):  # noqa: PLR2004 - aleatorio, hora y firma
         return False
-    aleatorio, firma = partes
+    aleatorio, emitido, firma = partes
+    # Solo cifras ASCII: int() aceptaría «١٢٣», « 1» o «1_0»
+    if not (emitido.isascii() and emitido.isdigit()) or len(emitido) > _MAX_CIFRAS_DE_LA_HORA:
+        return False
     # En bytes: con texto no ASCII, `compare_digest` lanza TypeError (revisor)
-    return hmac.compare_digest(firma.encode(), _firma(user_id, aleatorio).encode())
+    if not hmac.compare_digest(firma.encode(), _firma(user_id, aleatorio, emitido).encode()):
+        return False
+    edad = (time.time() if ahora is None else ahora) - int(emitido)
+    return -MARGEN_DE_CADUCIDAD_S <= edad <= vida_del_token_csrf()
 
 
 # Cookie configuration

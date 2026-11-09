@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 
-from src.shared.infrastructure.logging.security_logger import get_security_logger
+from src.shared.infrastructure.logging.security_logger import (
+    get_security_logger,
+    huella_del_correo,
+)
 
 
 def _fichero() -> Path:
@@ -16,7 +19,11 @@ def _fichero() -> Path:
 
 
 def _todo_el_log() -> str:
-    """El log de seguridad de este proceso: ningún otro worker escribe ni rota en él."""
+    """El log de seguridad de este proceso: ningún otro worker escribe ni rota en él.
+
+    Antes de leerlo, se espera a que el hilo del log escriba lo encolado.
+    """
+    get_security_logger().vacia()
     return _fichero().read_text(errors="replace")
 
 
@@ -50,7 +57,10 @@ class TestSecurityAuditTrail:
         # Verificar que contiene LoginAttemptEvent
         content = _todo_el_log()
         assert "LoginAttemptEvent" in content
-        assert "audit.test@example.com" in content
+        # El correo, enmascarado y con su hash; nunca en claro (ADR-047)
+        assert "a***@example.com" in content
+        assert huella_del_correo("audit.test@example.com") in content
+        assert "audit.test@example.com" not in content
 
     async def test_login_failure_creates_audit_log_with_reason(self, client: AsyncClient):
         """Login fallido registra evento con failure_reason"""

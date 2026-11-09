@@ -14,8 +14,10 @@
 #   cada módulo define sus propios decoradores de persistencia. Los imports
 #   INDIRECTOS se permiten porque todos pasan por src.config.dependencies, la
 #   composition root, que es el único sitio donde se ensambla todo.
-# - Dominio y aplicación no importan esa composition root. Sí pueden leer
-#   configuración (src.config.settings, csrf_config).
+# - Dominio y aplicación no importan nada de src.config: ni esa composition
+#   root ni la configuración (settings, csrf_config, env). Lo que necesiten de
+#   ahí les llega por constructor desde src.config.dependencies, como valor o
+#   como puerto (auditoría de arquitectura del 9 nov 2026).
 #
 # Si un contrato falla, la salida dice qué import lo rompe. No se relaja el
 # contrato sin decidirlo: añadir una excepción es una decisión de arquitectura.
@@ -173,9 +175,12 @@ source_modules =
 forbidden_modules =
     src.modules.quick_match
 
-[importlinter:contract:no-composition-root]
-name = Dominio y aplicación no importan la composition root (src.config.dependencies)
+[importlinter:contract:no-config]
+name = Dominio y aplicación no importan src.config (ni la composition root ni la configuración)
 type = forbidden
+# Antes solo se prohibía src.config.dependencies, y los casos de uso leían
+# settings, csrf_config y env directamente: probarlos o moverlos exigía la
+# configuración real. Ahora se les inyecta lo que necesitan
 source_modules =
     src.modules.competition.domain
     src.modules.competition.application
@@ -192,7 +197,7 @@ source_modules =
     src.shared.domain
     src.shared.application
 forbidden_modules =
-    src.config.dependencies
+    src.config
 
 [importlinter:contract:application-no-infrastructure]
 name = La aplicación (de cualquier módulo y la compartida) no importa infraestructura (#750)
@@ -240,3 +245,19 @@ forbidden_modules =
     PIL
     sentry_sdk
     alembic
+
+[importlinter:contract:shared-no-modules]
+name = src.shared no importa de los módulos (revisión de la fase 2, 9 nov 2026)
+type = forbidden
+source_modules =
+    src.shared
+forbidden_modules =
+    src.modules
+allow_indirect_imports = True
+# Deuda que ya existía y queda pendiente: cada línea es un import directo de shared
+# a un módulo que aún no se ha sacado. No se añaden más: una nueva rompe el contrato
+ignore_imports =
+    src.shared.infrastructure.security.jwt_handler -> src.modules.user.application.ports.token_service_interface
+    src.shared.infrastructure.security.authorization -> src.modules.**
+    src.shared.infrastructure.api.v1.country_routes -> src.modules.**
+    src.shared.infrastructure.email.email_service -> src.modules.**

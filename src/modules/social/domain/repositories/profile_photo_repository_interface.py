@@ -49,5 +49,15 @@ class ProfilePhotoRepositoryInterface(ABC):
         """Cuantas fotos tiene ya. Lo consulta el tope por perfil."""
 
     @abstractmethod
+    async def lock_gallery(self, user_id: UserId) -> None:
+        """
+        Bloquea la galeria de ese jugador hasta el final de la transaccion.
+
+        Dos subidas a la vez cuentan y guardan una detras de otra: la segunda
+        espera aqui y cuenta ya la foto de la primera, asi que el tope por
+        perfil no se pasa (F-17).
+        """
+
+    @abstractmethod
     async def delete(self, photo_id: ProfilePhotoId) -> bool:
         """Borra una foto. Devuelve si existia."""

@@ -66,6 +66,7 @@ async def _escena(con_dispositivo=True):
     tokens.verify_refresh_token.return_value = {"sub": str(usuario.id.value), "type": "refresh"}
     tokens.refresh_token_expired.return_value = False
     tokens.create_access_token.return_value = "acceso"
+    tokens.create_csrf_token.return_value = "csrf"
     return (
         uow,
         usuario,

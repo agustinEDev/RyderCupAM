@@ -47,6 +47,7 @@ from src.modules.social.application.use_cases.get_profile_photo_image_use_case i
     GetProfilePhotoImageUseCase,
 )
 from src.modules.social.application.use_cases.upload_profile_photo_use_case import (
+    MAX_UPLOAD_BYTES,
     UploadProfilePhotoUseCase,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -54,6 +55,10 @@ from src.modules.user.domain.errors.user_errors import (
     AvatarUploadTooLargeError,
     InvalidAvatarImageError,
     UserNotFoundError,
+)
+from src.shared.infrastructure.http.upload_reader import (
+    UploadTooLargeError,
+    read_upload_within_limit,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,12 +91,14 @@ async def upload_my_photo(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UploadProfilePhotoUseCase = Depends(get_upload_profile_photo_use_case),
 ):
-    raw = await file.read()
     try:
+        # Por trozos y cortando al pasarse del tope, no `file.read()` entero: un
+        # fichero enorme no llega completo a memoria antes de rechazarse (F-08)
+        raw = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
         return await use_case.execute(str(current_user.id), raw, caption=caption)
     except ProfileGalleryFullError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except AvatarUploadTooLargeError as e:
+    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e)
         ) from e

@@ -74,6 +74,53 @@ class SecurityAuditLogger(ISecurityAuditLogger):
             user_agent=user_agent,
         )
 
+    def log_admin_role_changed(
+        self,
+        user_id: str,
+        target_user_id: str,
+        is_admin: bool,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Un administrador dio o quitó el rol de administrador (F-20)."""
+        get_security_logger().log_admin_role_changed(
+            user_id=user_id,
+            target_user_id=target_user_id,
+            is_admin=is_admin,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    def log_account_deleted_by_admin(
+        self,
+        user_id: str,
+        deleted_user_id: str,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Un administrador borró una cuenta (F-20)."""
+        get_security_logger().log_account_deleted_by_admin(
+            user_id=user_id,
+            deleted_user_id=deleted_user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    def log_admin_email_change_requested(
+        self,
+        user_id: str,
+        target_user_id: str,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Un administrador pidió otro correo para una cuenta (F-20)."""
+        get_security_logger().log_admin_email_change_requested(
+            user_id=user_id,
+            target_user_id=target_user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:

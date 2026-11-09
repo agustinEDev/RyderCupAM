@@ -50,7 +50,10 @@ class TestRequestPasswordResetSuccess:
         email_service.send_password_reset_email = AsyncMock(return_value=True)
 
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         # Crear usuario existente
@@ -106,7 +109,10 @@ class TestRequestPasswordResetSuccess:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         user = User.create(
@@ -146,7 +152,10 @@ class TestRequestPasswordResetSuccess:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         user = User.create(
@@ -175,6 +184,35 @@ class TestRequestPasswordResetSuccess:
             saved_user = await uow.users.find_by_id(user.id)
             assert saved_user.password_reset_token in reset_link
 
+    async def test_reset_link_uses_the_injected_frontend_url(self, sample_user_data):
+        """
+        Given: el caso de uso construido con la URL del frontend (con barra final)
+        When: se pide el reseteo para un usuario que existe
+        Then: el enlace apunta a esa URL, sin doble barra: ya no lee
+            `src.config.settings` (auditoría 9 nov 2026)
+        """
+        uow = InMemoryUnitOfWork()
+        email_service = AsyncMock()
+        use_case = RequestPasswordResetUseCase(
+            uow,
+            email_service,
+            frontend_url="https://app.ejemplo.test/",
+            security_audit=SecurityAuditLogger(),
+        )
+        user = User.create(
+            first_name=sample_user_data["name"],
+            last_name=sample_user_data["surname"],
+            email_str=sample_user_data["email"],
+            plain_password="CurrentPassword123!",
+        )
+        async with uow:
+            await uow.users.save(user)
+
+        await use_case.execute(RequestPasswordResetRequestDTO(email=sample_user_data["email"]))
+
+        reset_link = email_service.send_password_reset_email.call_args.kwargs["reset_link"]
+        assert reset_link.startswith("https://app.ejemplo.test/reset-password/")
+
 
 class TestRequestPasswordResetEmailNotFound:
     """Tests para el flujo cuando el email no existe"""
@@ -190,7 +228,10 @@ class TestRequestPasswordResetEmailNotFound:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         request_dto = RequestPasswordResetRequestDTO(
@@ -231,7 +272,10 @@ class TestRequestPasswordResetEmailNotFound:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         request_existing = RequestPasswordResetRequestDTO(email="exists@test.com")
@@ -275,7 +319,10 @@ class TestRequestPasswordResetSecurityFeatures:
         mock_security_logger = MagicMock()
 
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=mock_security_logger
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=mock_security_logger,
         )
 
         user = User.create(
@@ -318,7 +365,10 @@ class TestRequestPasswordResetSecurityFeatures:
         mock_security_logger = MagicMock()
 
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=mock_security_logger
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=mock_security_logger,
         )
 
         request_dto = RequestPasswordResetRequestDTO(
@@ -352,7 +402,10 @@ class TestRequestPasswordResetSecurityFeatures:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         user = User.create(
@@ -386,7 +439,10 @@ class TestRequestPasswordResetSecurityFeatures:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         user = User.create(
@@ -431,7 +487,10 @@ class TestPasswordResetEmailIgnoresTheAlias:
         email_service = AsyncMock()
         email_service.send_password_reset_email = AsyncMock(return_value=True)
         use_case = RequestPasswordResetUseCase(
-            uow, email_service, security_audit=SecurityAuditLogger()
+            uow,
+            email_service,
+            frontend_url="http://localhost:5173",
+            security_audit=SecurityAuditLogger(),
         )
 
         user = User.create(

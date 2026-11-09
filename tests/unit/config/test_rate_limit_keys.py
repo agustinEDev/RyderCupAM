@@ -236,9 +236,12 @@ def _con_cliente_de_prueba() -> Request:
         (None, None, False),  # sin ENVIRONMENT: ya no se toma por desarrollo
         ("production", None, False),
         ("PRODUCTION", "true", False),  # producción manda, aunque diga TESTING
-        ("development", None, True),
+        ("development", None, False),  # el Kind, sin TESTING: tampoco (F-12)
         ("staging", None, False),  # no hay staging: como producción
-        (None, "true", True),  # la suite de tests
+        (None, "true", False),  # TESTING sin desarrollo declarado: no (F-12)
+        ("staging", "true", False),
+        ("development", "true", True),  # la suite de tests
+        ("Development", "TRUE", True),
         ("preproduccion", None, False),  # un valor raro: como producción
     ],
 )
@@ -248,9 +251,9 @@ def test_x_test_client_id_only_when_the_environment_says_it_is_not_production(
     """
     Given: Una petición con X-Test-Client-ID, y el entorno de cada caso
     When: Se calcula su red
-    Then: La cabecera solo cuenta si el entorno dice expresamente que no es
-          producción; si falta ENVIRONMENT, quien llama ya no elige su red
-          (auditoría OWASP de BE #732, A05)
+    Then: La cabecera solo cuenta con TESTING=true Y ENVIRONMENT=development: la suite
+          de tests. Ni el Kind ni una producción con TESTING olvidado dejan a quien
+          llama elegir su red (auditoría OWASP de BE #732, A05; F-12 del 9 nov 2026)
     """
     for nombre, valor in (("ENVIRONMENT", environment), ("TESTING", testing)):
         if valor is None:

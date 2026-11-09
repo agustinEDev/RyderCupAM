@@ -29,14 +29,20 @@ import logging
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
 
 from src.config import version
 from src.config.settings import settings
+from src.shared.infrastructure.logging.security_logger import ETIQUETA_DE_EVENTO_DE_SEGURIDAD
 
 logger = logging.getLogger(__name__)
+
+# Los loggers del log de auditoría (`security.audit` y uno por fichero). Sus eventos
+# HIGH y CRITICAL ya los manda el propio log, filtrados (F-05b); por la integración
+# irían enteros —el correo de un login, en las migas de pan— y el CRITICAL dos veces
+LOGGERS_DE_AUDITORIA = "security.audit*"
 
 
 # Lo que el SDK no quita solo (BE #466): el secreto de la regla de Cloudflare y
@@ -68,6 +74,41 @@ def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
     return event
 
 
+# Lo único de la petición que lleva un evento de seguridad (revisión de la fase 2)
+_DE_LA_PETICION_EN_LOS_EVENTOS_DE_SEGURIDAD = ("method", "url")
+
+
+def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
+    """
+    Un evento del log de seguridad sale con el método y la ruta de la petición y sin IP.
+
+    La integración de FastAPI adjunta el cuerpo de la petición a lo que se capture
+    dentro de ella (el correo tecleado en un login o en un cambio de correo), y la IP
+    no debe salir (BE #466): el log de seguridad (stdout) ya la guarda. Tampoco van
+    las migas ni los extras: los de otro logger de la misma petición pueden llevar
+    el correo (/code-review de la fase 2).
+    """
+    if ETIQUETA_DE_EVENTO_DE_SEGURIDAD not in (event.get("tags") or {}):
+        return event
+    peticion = event.get("request")
+    if isinstance(peticion, dict):
+        # La URL del SDK ya va sin la query (esa va aparte, en query_string)
+        event["request"] = {
+            clave: peticion[clave]
+            for clave in _DE_LA_PETICION_EN_LOS_EVENTOS_DE_SEGURIDAD
+            if clave in peticion
+        }
+    event.pop("breadcrumbs", None)
+    event.pop("extra", None)
+    usuario = event.get("user")
+    if isinstance(usuario, dict):
+        usuario.pop("ip_address", None)
+    contexto = (event.get("contexts") or {}).get(ETIQUETA_DE_EVENTO_DE_SEGURIDAD)
+    if isinstance(contexto, dict):
+        contexto.pop("ip_address", None)
+    return event
+
+
 def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
     """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
     return _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
@@ -92,6 +133,7 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     """
     _quita_cabeceras_de_origen(event)
     _quita_el_cuerpo_de_las_rutas_con_datos(event)
+    _recorta_los_eventos_de_seguridad(event)
 
     # Filtrar health checks del endpoint "/"
     if event.get("request", {}).get("url", "").endswith("/"):
@@ -143,6 +185,8 @@ def init_sentry() -> None:
     if not settings.SENTRY_DSN:
         logger.info("🔕 Sentry disabled - SENTRY_DSN not configured")
         return
+
+    ignore_logger(LOGGERS_DE_AUDITORIA)
 
     # Configurar integración de logging
     # Captura automáticamente logs de nivel ERROR o superior

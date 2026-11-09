@@ -7,9 +7,11 @@ from src.modules.user.application.dto.admin_dto import (
     AdminUserSummaryDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.avisa_del_cambio_de_correo import (
     avisa_del_cambio_de_correo,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import DuplicateEmailError, UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -19,19 +21,43 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class AdminUpdateUserUseCase:
-    """Edita los datos de un usuario desde el panel de administración (solo Admin)."""
+    """Edita los datos de un usuario desde el panel de administración (solo Admin).
 
-    def __init__(self, uow: UserUnitOfWorkInterface, *, email_service: IEmailService):
+    Dar o quitar el rol de administrador y pedir otro correo quedan en el log de
+    seguridad (F-20), con quién lo hizo y desde dónde.
+    """
+
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        *,
+        email_service: IEmailService,
+        security_audit: ISecurityAuditLogger,
+    ):
+        """
+        Args:
+            uow: Unit of Work (users y user_devices)
+            email_service: El enlace y el aviso de un correo nuevo (BE #753)
+            security_audit: El log de seguridad, donde quedan el rol y el correo (F-20)
+        """
         self._uow = uow
         # El cambio de correo queda pendiente, con su enlace y su aviso (BE #753)
         self._email_service = email_service
+        self._security_audit = security_audit
 
     async def execute(
-        self, user_id_str: str, request: AdminUpdateUserRequestDTO
+        self,
+        user_id_str: str,
+        request: AdminUpdateUserRequestDTO,
+        *,
+        actor_user_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> AdminUserSummaryDTO:
         """
         Edita un usuario con su fila bloqueada. Un correo nuevo queda pendiente hasta
         que el usuario lo confirme (BE #753), con su enlace y su aviso tras guardar.
+        El rol y el correo pedido quedan en el log de seguridad tras guardar (F-20).
 
         Raises:
             UserNotFoundError: si no existe
@@ -40,6 +66,7 @@ class AdminUpdateUserUseCase:
         user_id = UserId(user_id_str)
 
         token_del_cambio: str | None = None
+        rol_nuevo: bool | None = None
         async with self._uow:
             # Con la fila bloqueada: el cambio de correo compite con el del propio usuario
             user = await self._uow.users.find_by_id_for_update(user_id)
@@ -73,10 +100,31 @@ class AdminUpdateUserUseCase:
 
             if request.is_admin is not None and request.is_admin != user.is_admin:
                 user.set_is_admin(request.is_admin)
+                rol_nuevo = request.is_admin
 
             await self._uow.users.save(user)
             last_login_map = await self._uow.user_devices.find_last_login_map(
                 [uid] if (uid := user.id) is not None else []
+            )
+
+        # Ya guardado: si el log falla, el cambio vale igual
+        contexto = {"ip_address": ip_address or "unknown", "user_agent": user_agent or "unknown"}
+        if rol_nuevo is not None:
+            registra_sin_romper(
+                "Admin role change",
+                lambda: self._security_audit.log_admin_role_changed(
+                    user_id=actor_user_id,
+                    target_user_id=str(user_id),  # el canónico, no lo que traía la ruta
+                    is_admin=rol_nuevo,
+                    **contexto,
+                ),
+            )
+        if token_del_cambio is not None:
+            registra_sin_romper(
+                "Admin email change",
+                lambda: self._security_audit.log_admin_email_change_requested(
+                    user_id=actor_user_id, target_user_id=str(user_id), **contexto
+                ),
             )
 
         if token_del_cambio is not None and request.email is not None:

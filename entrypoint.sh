@@ -74,6 +74,19 @@ else
 fi
 
 # =============================================================================
+# CONFIGURACIÓN DE SEGURIDAD (ANTES DE MIGRAR)
+# =============================================================================
+# Fuera de desarrollo: ni TESTING, ni una SECRET_KEY de ejemplo o corta, ni
+# development en Render (ADR-047). Antes de las migraciones: si fallara solo al
+# arrancar la app, la base de datos ya estaría migrada y la versión anterior
+# seguiría sirviendo con el esquema nuevo. El lifespan lo vuelve a comprobar
+echo "🔐 Comprobando la configuración de seguridad..."
+if ! python -m src.config.arranque_seguro; then
+  echo "❌ Configuración insegura: no se migra ni se arranca"
+  exit 1
+fi
+
+# =============================================================================
 # EJECUTAR MIGRACIONES DE ALEMBIC
 # =============================================================================
 echo "🔄 Ejecutando migraciones de base de datos..."

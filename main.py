@@ -28,6 +28,7 @@ from pydantic import BaseModel  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
+from src.config.arranque_seguro import comprueba_la_configuracion_de_seguridad  # noqa: E402
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
@@ -41,7 +42,12 @@ from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
-from src.config.rate_limit import apply_default_rate_limit, limiter  # noqa: E402
+from src.config.rate_limit import (  # noqa: E402
+    apply_default_rate_limit,
+    cuenta_un_fallo_de_la_documentacion,
+    frena_la_documentacion_con_la_ip_real,
+    limiter,
+)
 from src.config.refresco_de_handicaps import (  # noqa: E402
     LanzadorEnSegundoPlano,
     VigilanteDeActualizaciones,
@@ -79,6 +85,9 @@ from src.modules.golf_course.infrastructure.api.v1 import (  # noqa: E402
     hole_map_routes,
 )
 from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
+from src.modules.social.application.use_cases.upload_profile_photo_use_case import (  # noqa: E402
+    MAX_UPLOAD_BYTES as MAX_PHOTO_UPLOAD_BYTES,
+)
 from src.modules.social.infrastructure.api.v1 import (  # noqa: E402
     friend_routes,
     profile_photo_routes,
@@ -108,6 +117,9 @@ from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E40
 from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
     informa_del_secreto_de_origen,
 )
+from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
+    LimitaElCuerpoDeLasSubidas,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -115,6 +127,7 @@ from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
 from src.shared.infrastructure.http.unhandled_error_middleware import (  # noqa: E402
     UnhandledErrorMiddleware,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger  # noqa: E402
 from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
     CSRFMiddleware,
 )
@@ -132,6 +145,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # Fuera de desarrollo, ni TESTING ni una SECRET_KEY de ejemplo o corta (F-06,
+    # F-12). Tras Sentry, para que un arranque fallido llegue allí
+    try:
+        comprueba_la_configuracion_de_seguridad(os.environ)
+    except RuntimeError:
+        logging.getLogger(__name__).exception("Insecure configuration: not starting")
+        raise
 
     # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
     # https (BE #563). Tras Sentry, para que un arranque fallido llegue allí
@@ -167,6 +188,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tarea.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await tarea
+    # El log de seguridad escribe en su hilo: lo pendiente se escribe y lo que llegue
+    # después, directamente (/code-review de la fase 2)
+    get_security_logger().para()
     print("INFO:     Apagando aplicación...")
 
 
@@ -174,9 +198,16 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 security = HTTPBasic()
 
 
-def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+def verify_docs_credentials(
+    request: Request, credentials: HTTPBasicCredentials = Depends(security)
+):
     """
-    Verifica las credenciales HTTP Basic para acceder a /docs y /redoc.
+    Verifica las credenciales HTTP Basic para acceder a /docs, /redoc y /openapi.json.
+
+    Unas equivocadas cuentan contra el límite de la documentación, por red, y pasado
+    este dan 429; las buenas no cuentan. Con la IP real de quien llama (Cloudflare),
+    un contador lleno frena también las buenas; con el contador compartido de toda la
+    app, no (F-11, /code-review, CodeRabbit).
 
     Las credenciales se configuran en variables de entorno:
     - DOCS_USERNAME
@@ -193,6 +224,9 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
             headers={"WWW-Authenticate": "Basic"},
         )
 
+    # Con la IP real y su contador lleno, ni se comparan (CodeRabbit en BE #774)
+    frena_la_documentacion_con_la_ip_real(request)
+
     # Verificar username
     correct_username = secrets.compare_digest(
         credentials.username.encode("utf8"), settings.DOCS_USERNAME.encode("utf8")
@@ -204,6 +238,7 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
     )
 
     if not (correct_username and correct_password):
+        cuenta_un_fallo_de_la_documentacion(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -234,13 +269,15 @@ class DeploymentHealthResponse(BaseModel):
 
 
 # Crear la app, registrando el gestor de ciclo de vida 'lifespan'
-# Deshabilitamos docs_url y redoc_url para crear endpoints protegidos manualmente
+# Deshabilitamos docs_url, redoc_url y openapi_url para crear endpoints protegidos
+# manualmente. El esquema sigue generándose con app.openapi() (el CI lo compara así)
 app = FastAPI(
     title="Ryder Cup Manager",
     description="API para gestion de torneos tipo Ryder Cup entre amigos",
     version=APP_VERSION,
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
+    openapi_url=None,  # Deshabilitado - el esquema, con las mismas credenciales (F-11)
     lifespan=lifespan,
     # El límite por defecto en toda ruta sin uno propio (BE #467). Va aquí, antes de
     # incluir los routers, para que lo hereden todas
@@ -269,22 +306,6 @@ app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
 
 
 # ================================
-# SECURITY HEADERS MIDDLEWARE
-# ================================
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    """
-    Middleware para añadir Security Headers HTTP a todas las respuestas.
-
-    La política (y el porqué de cada cabecera) vive en
-    src/shared/infrastructure/http/security_headers.py, con sus tests.
-    """
-    response = await call_next(request)
-    apply_security_headers(response)
-    return response
-
-
-# ================================
 # AVATAR UPLOAD SIZE GUARD (Content-Length fast-fail)
 # ================================
 # Rechaza subidas de avatar por encima del límite ANTES de que FastAPI/Starlette
@@ -297,7 +318,11 @@ async def add_security_headers(request: Request, call_next):
 # (podría mentir, o usar chunked encoding sin esa cabecera) — la lectura por
 # trozos con corte temprano en el propio endpoint sigue siendo la protección
 # real; esto es un fast-fail adicional para el caso común.
-_AVATAR_UPLOAD_PATH = "/api/v1/users/me/avatar/upload"
+# Las rutas de subida de imágenes con su tope: el avatar y la galería (F-08)
+_UPLOAD_SIZE_LIMITS = {
+    "/api/v1/users/me/avatar/upload": MAX_UPLOAD_BYTES,
+    "/api/v1/users/me/photos": MAX_PHOTO_UPLOAD_BYTES,
+}
 # Content-Length cubre el multipart body ENTERO (boundaries + cabeceras de cada
 # parte), no solo los bytes del fichero — un archivo justo en el límite (o algo
 # por debajo) puede declarar un tamaño total ligeramente mayor que
@@ -308,7 +333,8 @@ _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES = 16 * 1024
 
 @app.middleware("http")
 async def limit_avatar_upload_content_length(request: Request, call_next):
-    if request.url.path == _AVATAR_UPLOAD_PATH and request.method == "POST":
+    max_bytes = _UPLOAD_SIZE_LIMITS.get(request.url.path)
+    if max_bytes is not None and request.method == "POST":
         content_length = request.headers.get("content-length")
         if content_length is not None:
             try:
@@ -317,18 +343,28 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
                 declared_size = None
             if (
                 declared_size is not None
-                and declared_size > MAX_UPLOAD_BYTES + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
+                and declared_size > max_bytes + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
             ):
                 return JSONResponse(
                     status_code=413,
                     content={
                         "detail": (
                             "El archivo supera el tamaño máximo permitido "
-                            f"({MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+                            f"({max_bytes // (1024 * 1024)}MB)"
                         )
                     },
                 )
     return await call_next(request)
+
+
+# Y lo que no declara Content-Length (una subida chunked): se cuenta mientras llega y
+# se corta con 413 al pasar el tope más el margen, antes de que Starlette guarde el
+# multipart entero en /tmp (CodeRabbit en BE #774)
+app.add_middleware(
+    LimitaElCuerpoDeLasSubidas,
+    limites=_UPLOAD_SIZE_LIMITS,
+    margen=_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES,
+)
 
 
 # ================================
@@ -360,7 +396,7 @@ app.add_middleware(SentryUserContextMiddleware)
 app.add_middleware(CorrelationMiddleware)
 
 # Debug middleware para ver requests CORS (solo en desarrollo)
-# Este debe ir AL FINAL para que se ejecute PRIMERO y vea todo
+# Va casi al final para ejecutarse casi primero (solo le envuelve el de las cabeceras)
 ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
 
@@ -398,6 +434,25 @@ if ENV != "production":
                 print("   ⚠️  NO CORS headers in response!")
 
         return response
+
+
+# ================================
+# SECURITY HEADERS MIDDLEWARE
+# ================================
+# El ÚLTIMO en registrarse: el más externo. Así llevan las cabeceras también el 403
+# del CSRF, el preflight que contesta CORS y el 500 del UnhandledErrorMiddleware, que
+# se las saltaban cuando era el más interno (F-15)
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Middleware para añadir Security Headers HTTP a todas las respuestas.
+
+    La política (y el porqué de cada cabecera) vive en
+    src/shared/infrastructure/http/security_headers.py, con sus tests.
+    """
+    response = await call_next(request)
+    apply_security_headers(response, request.url.path)
+    return response
 
 
 # Incluir los routers de la API
@@ -549,7 +604,8 @@ app.include_router(
 )
 
 
-# Endpoints protegidos de documentación con HTTP Basic Auth
+# Endpoints protegidos de documentación con HTTP Basic Auth; las credenciales
+# equivocadas cuentan contra su límite por red (F-11)
 @app.get("/docs", include_in_schema=False)
 async def get_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
@@ -564,6 +620,18 @@ async def get_redoc_documentation(
 ):
     """ReDoc UI protegido con HTTP Basic Auth."""
     return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def get_openapi_schema(
+    username: str = Depends(verify_docs_credentials),  # noqa: ARG001
+) -> JSONResponse:
+    """El esquema OpenAPI, con las mismas credenciales que /docs (F-11).
+
+    Las páginas de /docs y /redoc lo piden desde el navegador, que repite las
+    credenciales de HTTP Basic en el mismo origen.
+    """
+    return JSONResponse(app.openapi())
 
 
 # Endpoint raíz para health check y metadata básica

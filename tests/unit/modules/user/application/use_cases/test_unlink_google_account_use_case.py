@@ -416,6 +416,7 @@ async def test_unlink_with_none_network_data_writes_the_real_line(
 
     import json
 
+    log.vacia()  # lo escribe el hilo del log
     escrito = (tmp_path / "unlink.log").read_text()
     assert f"GOOGLE UNLINKED | User {user_with_password.id.value}" in escrito
     evento = json.loads(escrito.strip().split("\n")[-1])["extra"]["security_event"]

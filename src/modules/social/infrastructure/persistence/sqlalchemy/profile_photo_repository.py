@@ -1,6 +1,6 @@
 """Profile Photo Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.social.domain.entities.profile_photo import ProfilePhoto
@@ -61,6 +61,22 @@ class SQLAlchemyProfilePhotoRepository(ProfilePhotoRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    async def lock_gallery(self, user_id: UserId) -> None:
+        """
+        `pg_advisory_xact_lock` con una clave por jugador: lo suelta Postgres al
+        acabar la transaccion, pase lo que pase.
+
+        Un candado consultivo y no un `SELECT ... FOR UPDATE` sobre la fila del
+        usuario: esa tabla es del modulo de usuarios, y bloquearla frenaria
+        tambien su login o su perfil mientras se guarda la foto. Ni una
+        restriccion de la BD: «como mucho N filas por usuario» no se puede
+        expresar como CHECK ni como indice unico.
+        """
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+            {"clave": f"profile-gallery:{user_id.value}"},
+        )
 
     async def delete(self, photo_id: ProfilePhotoId) -> bool:
         stmt = delete(profile_photos_table).where(profile_photos_table.c.id == photo_id)

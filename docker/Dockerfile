@@ -37,11 +37,17 @@ WORKDIR /app
 
 # 4. Copiar e instalar dependencias de Python
 # (aprovecha cache de Docker si requirements.txt no cambia)
-# pip al día antes que nada: el de la imagen base trae alertas (BE #308). Sin
-# setuptools: las imágenes 3.12+ no lo traen y requirements.txt fija su versión
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# pip al día antes que nada: el de la imagen base trae alertas (BE #308). Fijado y
+# con hash desde requirements-bootstrap.lock (revisión de la fase 2): el pip que
+# instala todo lo demás también se verifica. Sin setuptools: las imágenes 3.12+ no
+# lo traen y requirements.txt fija su versión
+# Desde requirements.lock, con un hash por paquete (OWASP A08, F-18): si alguien
+# sustituye un paquete en el índice, pip se niega a instalarlo. Los dos locks se
+# generan con scripts/freeze-requirements.sh, dentro de esta misma imagen y para
+# linux/amd64 (Render), y un test comprueba que dicen las versiones de sus fuentes
+COPY requirements.txt requirements.lock requirements-bootstrap.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements-bootstrap.lock \
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 # 5. Copiar código de la aplicación
 COPY . .
@@ -49,6 +55,14 @@ COPY . .
 # 6. Copiar y configurar script de inicio
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# 6b. Sin privilegios (F-14): un fallo que ejecutara código lo haría como este
+# usuario, no como root. El código sigue siendo de root, así que no puede
+# cambiarlo; solo escribe en logs/ (el log de seguridad) y en /tmp
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/logs \
+    && chown app:app /app/logs
+USER app
 
 # 7. Exponer puerto (configurable con ENV PORT)
 EXPOSE 8000

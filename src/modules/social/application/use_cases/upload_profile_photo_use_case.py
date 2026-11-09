@@ -26,6 +26,15 @@ from src.modules.user.domain.value_objects.user_id import UserId
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
+def _rechazar_si_esta_llena(ya_tiene: int) -> None:
+    """Rechaza la subida si la galeria ya esta en el tope."""
+    if ya_tiene >= MAX_PHOTOS_PER_PROFILE:
+        raise ProfileGalleryFullError(
+            f"La galería está llena ({MAX_PHOTOS_PER_PROFILE} fotos). "
+            f"Borra alguna antes de subir otra."
+        )
+
+
 class UploadProfilePhotoUseCase:
     """
     Sube una foto a la galeria del jugador.
@@ -68,13 +77,11 @@ class UploadProfilePhotoUseCase:
             if user is None or not user.is_active:
                 raise UserNotFoundError(f"User with id {user_id_raw} not found")
 
+        # Primera cuenta, sin bloquear: con la galeria llena no se gasta CPU en
+        # procesar una imagen que no va a entrar
         async with self._social_uow:
             ya_tiene = await self._social_uow.profile_photos.count_by_user(user_id)
-        if ya_tiene >= MAX_PHOTOS_PER_PROFILE:
-            raise ProfileGalleryFullError(
-                f"La galería está llena ({MAX_PHOTOS_PER_PROFILE} fotos). "
-                f"Borra alguna antes de subir otra."
-            )
+        _rechazar_si_esta_llena(ya_tiene)
 
         # Procesado fuera de cualquier transaccion: es CPU-bound y no necesita la
         # sesion abierta. Y en un hilo aparte porque Pillow es sincrono: sin eso,
@@ -86,7 +93,13 @@ class UploadProfilePhotoUseCase:
             user_id=user_id, image_data=processed, content_type="image/jpeg", caption=caption
         )
 
+        # La cuenta que decide va en la misma transaccion que el alta y con la
+        # galeria bloqueada: dos subidas a la vez con un solo hueco contaban las
+        # dos el mismo numero y entraban las dos (F-17)
         async with self._social_uow:
+            await self._social_uow.profile_photos.lock_gallery(user_id)
+            ya_tiene = await self._social_uow.profile_photos.count_by_user(user_id)
+            _rechazar_si_esta_llena(ya_tiene)
             await self._social_uow.profile_photos.add(photo)
 
         return ProfilePhotoDTO(

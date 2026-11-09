@@ -13,7 +13,6 @@ Security Features:
 
 import asyncio
 
-from src.config.settings import Settings
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
     RequestPasswordResetResponseDTO,
@@ -55,6 +54,7 @@ class RequestPasswordResetUseCase:
         uow: UserUnitOfWorkInterface,
         email_service: IEmailService,
         *,
+        frontend_url: str,
         security_audit: ISecurityAuditLogger,
     ):
         """
@@ -63,7 +63,10 @@ class RequestPasswordResetUseCase:
         Args:
             uow: Unit of Work para acceso a repositorio de usuarios
             email_service: Servicio para envío de emails (Mailgun)
+            frontend_url: URL del frontend para el enlace de reseteo; la pone
+                la composition root desde `FRONTEND_URL`
         """
+        self._frontend_url = frontend_url.rstrip("/")
         self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
@@ -186,6 +189,4 @@ class RequestPasswordResetUseCase:
             >>> print(link)
             "http://localhost:5173/reset-password/abc123..."
         """
-        settings = Settings()
-        frontend_url = settings.FRONTEND_URL.rstrip("/")
-        return f"{frontend_url}/reset-password/{token}"
+        return f"{self._frontend_url}/reset-password/{token}"

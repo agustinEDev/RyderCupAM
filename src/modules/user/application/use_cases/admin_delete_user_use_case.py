@@ -9,6 +9,8 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import UserHasActivityException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -37,6 +39,8 @@ class AdminDeleteUserUseCase:
     ON DELETE CASCADE (migracion c7d1e4f8a2b6), asi que las invitaciones enviadas
     y recibidas por la cuenta desaparecen con ella. Bloquear ahi dejaria al admin
     sin salida, porque no existe forma de borrar invitaciones ajenas.
+
+    El borrado queda en el log de seguridad (F-20); uno rechazado, no.
     """
 
     def __init__(
@@ -45,13 +49,37 @@ class AdminDeleteUserUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
+        """
+        Args:
+            user_uow: Unit of Work de usuarios
+            competition_uow: Para mirar competiciones, golpes, drafts y partidas
+            quick_match_uow: Para mirar partidas rápidas
+            golf_course_uow: Para mirar campos solicitados
+            security_audit: El log de seguridad, donde queda cada borrado (F-20)
+        """
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
+        self._security_audit = security_audit
 
-    async def execute(self, user_id_str: str) -> None:
+    async def execute(
+        self,
+        user_id_str: str,
+        *,
+        actor_user_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Borra la cuenta si no tiene actividad y lo deja en el log de seguridad.
+
+        Raises:
+            UserNotFoundError: si no existe
+            UserHasActivityException: si tiene actividad de la que dependen otros
+        """
         user_id = UserId(user_id_str)
 
         async with self._user_uow:
@@ -67,7 +95,22 @@ class AdminDeleteUserUseCase:
         # lo desvincula y lo fecha la propia base de datos (FK SET NULL y
         # trigger BEFORE DELETE ON users), sea cual sea el camino del borrado
         async with self._user_uow:
-            await self._user_uow.users.delete_by_id(user_id)
+            borrada = await self._user_uow.users.delete_by_id(user_id)
+        # Otro administrador la borró entre la comprobación y aquí: no se borró nada,
+        # así que no se apunta (la ruta lo da como 404)
+        if not borrada:
+            raise UserNotFoundError(f"User not found: {user_id_str}")
+
+        # Ya borrada: si el log falla, el borrado vale igual
+        registra_sin_romper(
+            "Account deletion",
+            lambda: self._security_audit.log_account_deleted_by_admin(
+                user_id=actor_user_id,
+                deleted_user_id=str(user_id),  # el canónico, no lo que traía la ruta
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+            ),
+        )
 
     async def _collect_activity_reasons(self, user_id: UserId) -> list[str]:
         reasons: list[str] = []

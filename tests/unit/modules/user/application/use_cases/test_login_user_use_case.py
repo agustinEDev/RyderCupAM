@@ -131,6 +131,32 @@ class TestLoginUserUseCase:
         assert response.user.last_name == "Doe"
         assert response.user.id == existing_user.id.value
 
+    async def test_login_takes_the_csrf_token_from_the_token_service(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
+        """
+        Given: un servicio de tokens que firma el CSRF a su manera
+        When: el usuario inicia sesión con sus credenciales
+        Then: el CSRF de la respuesta es el del servicio inyectado: el caso de
+            uso ya no lee `src.config.csrf_config` (auditoría 9 nov 2026)
+        """
+        token_service.create_csrf_token = lambda user_id: f"csrf-de-{user_id}"
+        use_case = LoginUserUseCase(
+            uow,
+            token_service,
+            register_device_use_case,
+            AsyncMock(),
+            FrenoDelLoginEnMemoria(),
+            AsyncMock(),
+            security_audit=SecurityAuditLogger(),
+        )
+
+        response = await use_case.execute(
+            LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
+        )
+
+        assert response.csrf_token == f"csrf-de-{existing_user.id.value}"
+
     async def test_login_fails_with_wrong_password(
         self, uow, token_service, register_device_use_case, existing_user
     ):

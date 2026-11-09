@@ -41,6 +41,10 @@ services:
       - "${DOCKER_APP_PORT:-8001}:8000"
     volumes:
       - ..:/app
+      # Los logs, en su propio volumen: el checkout montado en /app es del usuario del
+      # equipo y el de la imagen (uid 10001) no podría escribir el log de seguridad.
+      # El volumen nuevo se crea con el /app/logs de la imagen, que es suyo
+      - app_logs:/app/logs
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:
       - path: .env
@@ -63,7 +67,6 @@ services:
       # JWT Configuration
       # SECRET_KEY is REQUIRED - validation script will fail if missing
       - SECRET_KEY=${SECRET_KEY:-MISSING_SECRET_KEY}
-      - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
 
       # Swagger/Docs Protection (optional - can be empty)
@@ -111,3 +114,4 @@ services:
 
 volumes:
   postgres_data:
+  app_logs:

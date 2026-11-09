@@ -1,6 +1,6 @@
 """Tests para AdminDeleteUserUseCase."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -15,6 +15,8 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 
 pytestmark = pytest.mark.asyncio
+
+ADMIN = "admin-id"
 
 
 def _make_uow_mock(**repo_attrs):
@@ -77,11 +79,13 @@ class TestAdminDeleteUserUseCase:
         golf_courses_repo.count_by_creator = AsyncMock(return_value=golf_courses_created)
         golf_course_uow = _make_uow_mock(golf_courses=golf_courses_repo)
 
-        return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+        return AdminDeleteUserUseCase(
+            user_uow, competition_uow, quick_match_uow, golf_course_uow, security_audit=Mock()
+        )
 
     async def test_deletes_user_with_no_activity(self, user_uow, existing_user):
         use_case = self._make_use_case(user_uow)
-        await use_case.execute(str(existing_user.id.value))
+        await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
         async with user_uow:
             assert await user_uow.users.find_by_id(existing_user.id) is None
@@ -90,7 +94,7 @@ class TestAdminDeleteUserUseCase:
         use_case = self._make_use_case(user_uow, competitions_created=2)
 
         with pytest.raises(UserHasActivityException) as exc_info:
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
         assert "2 competition(s)" in str(exc_info.value)
 
         async with user_uow:
@@ -100,26 +104,26 @@ class TestAdminDeleteUserUseCase:
         use_case = self._make_use_case(user_uow, has_scores=True)
 
         with pytest.raises(UserHasActivityException):
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
     async def test_blocks_delete_when_user_created_quick_match(self, user_uow, existing_user):
         use_case = self._make_use_case(user_uow, quick_match_created=True)
 
         with pytest.raises(UserHasActivityException):
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
     async def test_blocks_delete_when_user_requested_golf_course(self, user_uow, existing_user):
         use_case = self._make_use_case(user_uow, golf_courses_created=1)
 
         with pytest.raises(UserHasActivityException):
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
     async def test_raises_not_found_before_checking_activity(self, user_uow):
         from uuid import uuid4
 
         use_case = self._make_use_case(user_uow)
         with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(uuid4()))
+            await use_case.execute(str(uuid4()), actor_user_id=ADMIN)
 
     @pytest.mark.asyncio
     async def test_blocks_delete_when_user_plays_a_tee_group(self, user_uow, existing_user):
@@ -131,7 +135,7 @@ class TestAdminDeleteUserUseCase:
         use_case = self._make_use_case(user_uow, juega_una_partida=True)
 
         with pytest.raises(UserHasActivityException) as error:
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
         assert "tee group" in str(error.value).lower()
         async with user_uow:
@@ -146,7 +150,7 @@ class TestAdminDeleteUserUseCase:
         use_case = self._make_use_case(user_uow, capitanea_un_draft=True)
 
         with pytest.raises(UserHasActivityException) as error:
-            await use_case.execute(str(existing_user.id.value))
+            await use_case.execute(str(existing_user.id.value), actor_user_id=ADMIN)
 
         assert "draft" in str(error.value).lower()
         async with user_uow:

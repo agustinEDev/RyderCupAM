@@ -3,6 +3,9 @@
 
 Logger dedicado exclusivamente a eventos de seguridad con:
 - Archivo separado (security_audit.log)
+- Una línea JSON por evento en la salida estándar, que Render guarda: el fichero
+  se pierde en cada despliegue (F-05b, auditoría OWASP del 9 nov 2026)
+- Los HIGH y CRITICAL, también a Sentry, sin más dato personal que el id y la IP
 - Formateo JSON estructurado
 - Rotación automática de logs
 - Contexto enriquecido (IP, User-Agent, correlation ID)
@@ -15,22 +18,38 @@ Características:
 - Helpers para eventos comunes
 """
 
+import functools
 import hashlib
+import hmac
 import logging
 import logging.handlers
+import queue
+import sys
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, Literal
+
+import sentry_sdk
+
+from src.config.settings import settings
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
     AccountDeactivatedAuditEvent,
+    AccountDeletedByAdminAuditEvent,
     AccountReactivatedAuditEvent,
     AccountUnlockedAuditEvent,
+    AdminEmailChangeRequestedAuditEvent,
+    AdminRoleChangedAuditEvent,
     EmailChangedEvent,
     GoogleAccountLinkedAuditEvent,
     GoogleAccountUnlinkedAuditEvent,
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
+    PasswordResetRequestedAuditEvent,
     RateLimitExceededEvent,
     RefreshRejectedAuditEvent,
     RefreshTokenRevokedEvent,
@@ -43,6 +62,191 @@ from ...domain.events.security_events import (
 )
 from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
+
+logger = logging.getLogger(__name__)
+
+# Lo que llega a Sentry de cada evento: el id del usuario como único dato personal
+# (F-05b). Ni el correo ni la IP, que se queda en el log (BE #466, revisión de la
+# fase 2). El cuerpo de la petición lo quita el before_send (sentry_config.py)
+_CAMPOS_PARA_SENTRY = frozenset({"event_id", "event_type", "occurred_on", "severity", "user_id"})
+# La etiqueta con la que el before_send reconoce un evento de seguridad
+ETIQUETA_DE_EVENTO_DE_SEGURIDAD = "security_event"
+# Y la cuenta afectada por un administrador (`deactivated_user_id`...): otro id
+_SUFIJO_DE_ID_DE_USUARIO = "_user_id"
+
+_NIVEL_EN_SENTRY: dict[SecuritySeverity, Literal["warning", "error"]] = {
+    SecuritySeverity.HIGH: "warning",
+    SecuritySeverity.CRITICAL: "error",
+}
+
+
+# El hilo que escribe cada fichero de auditoría: uno por logger, para pararlo si el
+# logger se vuelve a configurar (no quedan hilos huérfanos)
+_ESCUCHAS: dict[str, logging.handlers.QueueListener] = {}
+_CERROJO_DE_LAS_ESCUCHAS = threading.Lock()
+
+
+def _para_la_escucha(nombre: str) -> None:
+    """Para el hilo del logger `nombre`, si lo hay, escribiendo antes lo encolado."""
+    with _CERROJO_DE_LAS_ESCUCHAS:
+        anterior = _ESCUCHAS.pop(nombre, None)
+    if anterior is not None:
+        anterior.stop()
+        for destino in anterior.handlers:
+            destino.close()
+
+
+class _SalidaEstandar(logging.StreamHandler):
+    """Escribe en la salida estándar de CADA momento, no en la que había al crearse.
+
+    El logger es un singleton: si guardara el `sys.stdout` del arranque, uno
+    sustituido después (los tests lo cambian en cada uno) dejaría de recibir nada.
+    """
+
+    def __init__(self) -> None:
+        """Arranca con la salida estándar actual."""
+        super().__init__(sys.stdout)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Escribe el registro en la salida estándar de ahora."""
+        self.stream = sys.stdout
+        super().emit(record)
+
+
+def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
+    """Los campos del evento que pueden ir a Sentry: ids, tipo, severidad y fecha."""
+    return {
+        clave: valor
+        for clave, valor in event.to_dict().items()
+        if clave in _CAMPOS_PARA_SENTRY or clave.endswith(_SUFIJO_DE_ID_DE_USUARIO)
+    }
+
+
+# La etiqueta separa esta clave de cualquier otro uso de SECRET_KEY (como la del CSRF)
+_ETIQUETA_DE_LA_CLAVE_DEL_CORREO = b"rydercupfriends:security-log-email:v1"
+_CIFRAS_DE_LA_HUELLA = 32  # 128 bits: de sobra para relacionar intentos
+
+
+@functools.cache
+def _clave_del_correo() -> bytes:
+    """La clave del hash de los correos del log, derivada de SECRET_KEY con su etiqueta."""
+    return hmac.new(
+        settings.SECRET_KEY.encode(), _ETIQUETA_DE_LA_CLAVE_DEL_CORREO, hashlib.sha256
+    ).digest()
+
+
+def _normaliza(correo: str) -> str:
+    """El correo sin espacios alrededor y en minúsculas."""
+    return correo.strip().lower()
+
+
+def enmascara_el_correo(correo: str) -> str:
+    """`ana@gmail.com` -> `a***@gmail.com`; sin arroba, `***`; vacío, vacío."""
+    normalizado = _normaliza(correo)
+    if not normalizado:
+        return ""
+    local, arroba, dominio = normalizado.partition("@")
+    if not arroba:
+        return "***"
+    return f"{local[:1]}***@{dominio}"
+
+
+def huella_del_correo(correo: str) -> str:
+    """HMAC-SHA256 del correo normalizado con la clave del log: relaciona sin guardarlo."""
+    digest = hmac.new(_clave_del_correo(), _normaliza(correo).encode(), hashlib.sha256)
+    return digest.hexdigest()[:_CIFRAS_DE_LA_HUELLA]
+
+
+def _sin_el_correo(datos: dict[str, Any]) -> dict[str, Any]:
+    """
+    Los datos del evento con el correo tecleado enmascarado y su huella (revisión de la
+    fase 2): ni el fichero ni stdout lo guardan en claro. La IP y el navegador se quedan.
+    """
+    correo = datos.get("email")
+    if not isinstance(correo, str) or not correo:
+        return datos
+    return {**datos, "email": enmascara_el_correo(correo), "email_hash": huella_del_correo(correo)}
+
+
+def solo_en_el_log(event: SecurityAuditEvent) -> bool:
+    """
+    Los eventos que no van a Sentry aunque sean HIGH (Agustín, 9 nov 2026): los
+    logins fallidos y los restablecimientos pedidos para un correo que no es de nadie.
+    Son los más frecuentes y no dicen nada que el log (stdout) no guarde ya.
+    """
+    if isinstance(event, LoginAttemptEvent):
+        return not event.success
+    return isinstance(event, PasswordResetRequestedAuditEvent) and event.user_id is None
+
+
+class TopeDeSentry:
+    """
+    Como mucho un evento HIGH por tipo cada 10 minutos, por proceso (cupo de Sentry).
+
+    El que sale dice cuántos de su tipo se omitieron desde el anterior. Los CRITICAL
+    no pasan por aquí: van siempre.
+    """
+
+    VENTANA_S = 600
+
+    def __init__(self, reloj: Callable[[], float] = time.monotonic) -> None:
+        """
+        Args:
+            reloj: La hora en segundos; monotónica, para que un cambio de hora del
+                sistema no abra ni cierre la ventana
+        """
+        self._reloj = reloj
+        self._cerrojo = threading.Lock()
+        self._ultimo: dict[str, float] = {}
+        self._omitidos: dict[str, int] = {}
+
+    def deja_pasar(self, tipo: str) -> int | None:
+        """Los omitidos desde el último de ese tipo si este sale; None si no sale."""
+        with self._cerrojo:
+            ahora = self._reloj()
+            ultimo = self._ultimo.get(tipo)
+            if ultimo is not None and ahora - ultimo < self.VENTANA_S:
+                self._omitidos[tipo] = self._omitidos.get(tipo, 0) + 1
+                return None
+            self._ultimo[tipo] = ahora
+            return self._omitidos.pop(tipo, 0)
+
+
+_TOPE = TopeDeSentry()
+
+
+def avisa_a_sentry(event: SecurityAuditEvent) -> None:
+    """Manda a Sentry un evento HIGH (warning) o CRITICAL (error); los demás, no.
+
+    Uno por tipo de evento (fingerprint), con el id del usuario, nunca el correo ni
+    la IP. Los HIGH, con tope (TopeDeSentry); los logins fallidos y los
+    restablecimientos a un correo desconocido, nunca (solo_en_el_log). Si Sentry
+    falla, solo se apunta el tipo del error: ni la petición ni el log de auditoría
+    dependen de Sentry.
+    """
+    nivel = _NIVEL_EN_SENTRY.get(event.severity)
+    if nivel is None or solo_en_el_log(event):
+        return
+    tipo = event.__class__.__name__
+    omitidos = 0
+    if event.severity is not SecuritySeverity.CRITICAL:
+        pasa = _TOPE.deja_pasar(tipo)
+        if pasa is None:
+            return
+        omitidos = pasa
+    try:
+        sentry_sdk.capture_message(
+            f"Security event: {tipo}",
+            level=nivel,
+            fingerprint=["security-event", tipo],
+            tags={ETIQUETA_DE_EVENTO_DE_SEGURIDAD: tipo, "security_severity": event.severity.value},
+            contexts={
+                "security_event": {**datos_para_sentry(event), "omitted_since_last": omitidos}
+            },
+            user={"id": event.user_id} if event.user_id else None,
+        )
+    except Exception as error:
+        logger.warning("Security event not sent to Sentry: %s", type(error).__name__)
 
 
 class SecurityLogger:
@@ -125,23 +329,15 @@ class SecurityLogger:
         logger.setLevel(logging.INFO)
         logger.propagate = False  # No propagar a root logger
 
-        # Limpiar handlers existentes (por si se reinicializa), cerrando su fichero
+        # Limpiar handlers existentes (por si se reinicializa), cerrando su fichero, y
+        # parar el hilo que escribía para este logger
         for anterior in list(logger.handlers):
             anterior.close()
             logger.removeHandler(anterior)
+        _para_la_escucha(logger.name)
+        destinos: list[logging.Handler] = []
 
-        # Crear directorio de logs si no existe
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        # Handler con rotación automática
         log_path = self.log_dir / self.log_file
-        handler = logging.handlers.RotatingFileHandler(
-            filename=str(log_path),
-            maxBytes=self.MAX_BYTES,
-            backupCount=self.BACKUP_COUNT,
-            encoding="utf-8",
-        )
-        handler.setLevel(logging.INFO)
 
         # Formatter JSON para logs estructurados
         handler_config = HandlerConfig(
@@ -156,10 +352,47 @@ class SecurityLogger:
             include_context=True,
         )
         json_formatter = JsonFormatter(config=handler_config)
-        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
-        handler.setFormatter(PythonLoggingFormatter(json_formatter))
 
-        logger.addHandler(handler)
+        # La misma línea JSON por la salida estándar: Render la guarda, y el
+        # fichero se pierde en cada despliegue (F-05b). Va primero y no depende
+        # del fichero: si este no se puede abrir, el log sigue aquí
+        salida = _SalidaEstandar()
+        salida.setLevel(logging.INFO)
+        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
+        salida.setFormatter(PythonLoggingFormatter(json_formatter))
+        destinos.append(salida)
+
+        try:
+            # Crear directorio de logs si no existe, y el handler con rotación
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            handler = logging.handlers.RotatingFileHandler(
+                filename=str(log_path),
+                maxBytes=self.MAX_BYTES,
+                backupCount=self.BACKUP_COUNT,
+                encoding="utf-8",
+            )
+        except OSError as error:
+            # Sin fichero (en el Kind, uno de root que el usuario 10001 no abría): se
+            # avisa y el log sigue por stdout (revisión de la fase 2)
+            logging.getLogger(__name__).warning(
+                "Security audit file unavailable (%s): logging to stdout only",
+                type(error).__name__,
+            )
+        else:
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(PythonLoggingFormatter(json_formatter))
+            destinos.append(handler)
+
+        # La petición solo encola; stdout y el fichero los escribe un hilo, en orden
+        # (/code-review de la fase 2). `para` lo detiene al cerrar la app
+        cola: queue.SimpleQueue[logging.LogRecord] = queue.SimpleQueue()
+        self._destinos = destinos
+        self._encola = logging.handlers.QueueHandler(cola)
+        self._escucha = logging.handlers.QueueListener(cola, *destinos, respect_handler_level=True)
+        with _CERROJO_DE_LAS_ESCUCHAS:
+            _ESCUCHAS[logger.name] = self._escucha
+        self._escucha.start()
+        logger.addHandler(self._encola)
 
         # Log inicial de arranque
         logger.info(
@@ -173,6 +406,27 @@ class SecurityLogger:
         )
 
         return logger
+
+    def vacia(self) -> None:
+        """Espera a que el hilo haya escrito todo lo encolado (para leer el log al momento)."""
+        if self._encola in self._logger.handlers:
+            self._escucha.stop()
+            self._escucha.start()
+
+    def para(self) -> None:
+        """
+        Para el hilo al cerrar la app, escribiendo antes lo encolado. Lo que llegue
+        después se escribe directamente: no se pierde nada.
+        """
+        if self._encola not in self._logger.handlers:
+            return
+        self._logger.removeHandler(self._encola)
+        for destino in self._destinos:
+            self._logger.addHandler(destino)
+        self._escucha.stop()
+        with _CERROJO_DE_LAS_ESCUCHAS:
+            if _ESCUCHAS.get(self._logger.name) is self._escucha:
+                del _ESCUCHAS[self._logger.name]
 
     def log_security_event(self, event: SecurityAuditEvent) -> None:
         """
@@ -192,8 +446,8 @@ class SecurityLogger:
             )
             security_logger.log_security_event(event)
         """
-        # Serializar evento a dict
-        event_data = event.to_dict()
+        # Serializar evento a dict, sin el correo tecleado en claro
+        event_data = _sin_el_correo(event.to_dict())
 
         # Construir mensaje descriptivo
         message = self._build_message(event)
@@ -211,6 +465,9 @@ class SecurityLogger:
                 "severity": event.severity.value,
             },
         )
+
+        # Tras escribirlo: lo que haga Sentry no quita el registro (F-05b)
+        avisa_a_sentry(event)
 
     def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911
         """
@@ -234,7 +491,8 @@ class SecurityLogger:
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
             return (
-                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+                f"🔑 LOGIN {status} | {user_info} | Email: {enmascara_el_correo(event.email)}"
+                f" | IP: {event.ip_address}"
             )
 
         if isinstance(event, LogoutEvent):
@@ -569,6 +827,59 @@ class SecurityLogger:
                 user_agent=user_agent,
                 reactivated_user_id=reactivated_user_id,
                 tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_admin_role_changed(
+        self,
+        user_id: str,
+        target_user_id: str,
+        is_admin: bool,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador dio o quitó el rol de administrador (F-20)."""
+        self.log_security_event(
+            AdminRoleChangedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                target_user_id=target_user_id,
+                is_admin=is_admin,
+            )
+        )
+
+    def log_account_deleted_by_admin(
+        self,
+        user_id: str,
+        deleted_user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador borró definitivamente una cuenta (F-20)."""
+        self.log_security_event(
+            AccountDeletedByAdminAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                deleted_user_id=deleted_user_id,
+            )
+        )
+
+    def log_admin_email_change_requested(
+        self,
+        user_id: str,
+        target_user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador pidió otro correo para una cuenta (F-20)."""
+        self.log_security_event(
+            AdminEmailChangeRequestedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                target_user_id=target_user_id,
             )
         )
 

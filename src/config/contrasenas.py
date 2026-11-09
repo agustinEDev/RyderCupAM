@@ -14,9 +14,14 @@ import logging
 import os
 from collections.abc import Mapping
 
+from src.config.env import env_int
 from src.modules.user.domain.services.password_hasher import instala_el_hasher
 from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
     BcryptPasswordHasher,
+)
+from src.shared.application.concurrencia.bcrypt_executor import (
+    DEFAULT_MAX_CONCURRENCY,
+    configura_la_concurrencia_de_bcrypt,
 )
 
 RONDAS_DE_PRODUCCION = 12
@@ -65,5 +70,9 @@ def rondas_de_bcrypt(entorno: Mapping[str, str] = os.environ) -> int:
 
 
 def instala_el_hasher_de_contrasenas() -> None:
-    """Instala el adaptador de bcrypt con las rondas configuradas."""
+    """
+    Instala el adaptador de bcrypt con las rondas configuradas, y fija cuántos
+    hashes corren a la vez (`BCRYPT_MAX_CONCURRENCY`, 2 si no está o no sirve).
+    """
     instala_el_hasher(BcryptPasswordHasher(rounds=rondas_de_bcrypt()))
+    configura_la_concurrencia_de_bcrypt(env_int("BCRYPT_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY))
