@@ -231,7 +231,7 @@ def test_dockerignore_allows_only_runtime_files_and_drops_nested_caches():
         "requirements-bootstrap.txt",
         "requirements-bootstrap.lock",
     }
-    for patron in ("**/__pycache__", "**/*.py[cod]", "**/*.log", "**/.DS_Store"):
+    for patron in ("**/__pycache__", "**/*.py[cod]", "**/*.log", "**/.DS_Store", "**/*.md"):
         assert patron in lineas, patron
 
 
