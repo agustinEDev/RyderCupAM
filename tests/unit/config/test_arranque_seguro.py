@@ -222,3 +222,36 @@ def test_s9_the_jwt_algorithm_is_always_hs256():
             check=True,
         )
         assert salida.stdout.strip() == "HS256"
+
+
+@pytest.mark.parametrize("render", ["true", "1", "yes"])
+def test_s10_development_on_render_refuses_to_start(render):
+    """
+    Given: ENVIRONMENT=development con RENDER definida (Render la pone siempre)
+    When: Se comprueba la configuración
+    Then: No arranca: un desarrollo declarado por error en Render se saltaría todo lo
+          demás (revisión de la fase 2)
+    """
+    with pytest.raises(RuntimeError, match="RENDER"):
+        comprueba_la_configuracion_de_seguridad(
+            {"ENVIRONMENT": "development", "RENDER": render, "TESTING": "true"}
+        )
+
+
+@pytest.mark.parametrize("entorno", [{"RENDER": ""}, {}])
+def test_s10_development_without_render_still_starts(entorno):
+    """
+    Given: ENVIRONMENT=development sin RENDER (o vacía): local, Kind y los tests
+    When: Se comprueba la configuración
+    Then: Arranca
+    """
+    comprueba_la_configuracion_de_seguridad({"ENVIRONMENT": "development", **entorno})
+
+
+def test_s10_production_on_render_with_a_good_config_starts():
+    """
+    Given: Producción en Render con una configuración buena
+    When: Se comprueba
+    Then: Arranca
+    """
+    comprueba_la_configuracion_de_seguridad({**PRODUCCION, "RENDER": "true"})

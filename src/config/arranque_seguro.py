@@ -11,7 +11,8 @@ no arranca con:
   docker y k8s) o de menos de 32 bytes: firma los JWT, el CSRF y los contadores.
 
 Como en `contrasenas.py` y `rate_limit.py`, un ENVIRONMENT ausente o desconocido
-cuenta como producción. La comprobación va en el `lifespan` y no al importar: el CI
+cuenta como producción. Y `development` con `RENDER` definida (Render la pone) no
+arranca: un desarrollo declarado por error en Render se saltaría todo lo anterior. La comprobación va en el `lifespan` y no al importar: el CI
 genera el OpenAPI importando `main` sin ninguna variable (job «API contract»).
 """
 
@@ -54,6 +55,10 @@ def comprueba_la_configuracion_de_seguridad(entorno: Mapping[str, str] = os.envi
         RuntimeError: con el motivo; la app no arranca
     """
     if en_desarrollo_declarado(entorno):
+        # Render pone RENDER en todos sus servicios: un desarrollo ahí es un error de
+        # configuración que se saltaría todo lo demás (revisión de la fase 2)
+        if (entorno.get("RENDER") or "").strip():
+            raise RuntimeError("ENVIRONMENT=development con RENDER definida; no se arranca")
         return
     if testing_activado(entorno):
         raise RuntimeError("TESTING=true fuera de desarrollo: apaga el CSRF; no se arranca")
