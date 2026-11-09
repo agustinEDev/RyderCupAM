@@ -25,3 +25,75 @@ async def test_a_failed_commit_is_rolled_back_and_raised():
             pass
 
     sesion.rollback.assert_awaited_once()
+
+
+def _violacion(indice: str):
+    from sqlalchemy.exc import IntegrityError
+
+    return IntegrityError(
+        "UPDATE users ...",
+        {},
+        Exception(f'duplicate key value violates unique constraint "{indice}"'),
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_alias_index_violation_becomes_alias_already_taken():
+    """
+    Given: un commit que choca con el índice único del alias (otra petición se
+           llevó el mismo alias entre la comprobación y el commit)
+    When: sale de la unidad de trabajo
+    Then: sale AliasAlreadyTakenError del dominio, con rollback hecho; el caso de
+          uso no tiene que conocer SQLAlchemy ni el nombre del índice (auditoría
+          de arquitectura del 9 nov 2026, B1)
+    """
+    from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
+
+    sesion = MagicMock()
+    sesion.commit = AsyncMock(side_effect=_violacion("ix_users_alias_lower"))
+    sesion.rollback = AsyncMock()
+    uow = SQLAlchemyUnitOfWork(sesion)
+
+    with pytest.raises(AliasAlreadyTakenError):
+        async with uow:
+            pass
+
+    sesion.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_alias_index_violation_on_flush_becomes_alias_already_taken():
+    """
+    Given: un flush que choca con el índice único del alias
+    When: se hace el flush
+    Then: sale AliasAlreadyTakenError, igual que en el commit
+    """
+    from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
+
+    sesion = MagicMock()
+    sesion.flush = AsyncMock(side_effect=_violacion("ix_users_alias_lower"))
+    sesion.rollback = AsyncMock()
+    uow = SQLAlchemyUnitOfWork(sesion)
+
+    with pytest.raises(AliasAlreadyTakenError):
+        await uow.flush()
+
+
+@pytest.mark.asyncio
+async def test_other_integrity_errors_are_not_translated():
+    """
+    Given: un commit que choca con OTRA restricción (el correo)
+    When: sale de la unidad de trabajo
+    Then: sube el IntegrityError tal cual: llamarlo «alias cogido» mandaría al
+          usuario a cambiar lo que no falla
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    sesion = MagicMock()
+    sesion.commit = AsyncMock(side_effect=_violacion("users_email_key"))
+    sesion.rollback = AsyncMock()
+    uow = SQLAlchemyUnitOfWork(sesion)
+
+    with pytest.raises(IntegrityError):
+        async with uow:
+            pass

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 
 from src.modules.user.application.dto.user_dto import UpdateProfileRequestDTO
 from src.modules.user.application.use_cases.update_profile_use_case import (
@@ -312,14 +311,14 @@ class TestUpdateProfileAlias:
         assert response.user.alias == "Chuchi"
         assert response.user.first_name == "Johnny"
 
-    async def test_translates_the_unique_index_violation_into_a_conflict(
+    async def test_a_conflict_on_commit_comes_out_with_the_alias(
         self, uow, country_repository, existing_user
     ):
         """
-        La carrera la resuelve el índice, y su error sale como conflicto.
-
-        Entre la comprobación y el commit cabe otra petición pidiendo el mismo
-        alias. Se simula que el commit revienta con la violación del índice.
+        Given: otra petición se lleva el mismo alias entre la comprobación y el
+               commit, y la unidad de trabajo lo traduce a AliasAlreadyTakenError
+        When: se actualiza el perfil
+        Then: sale AliasAlreadyTakenError con el alias pedido en el mensaje
         """
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
@@ -327,42 +326,38 @@ class TestUpdateProfileAlias:
         original_commit = uow.commit
 
         async def commit_conflicting(*args, **kwargs):
-            raise IntegrityError(
-                "INSERT INTO users ...",
-                {},
-                Exception('duplicate key value violates unique constraint "ix_users_alias_lower"'),
-            )
+            raise AliasAlreadyTakenError("El alias ya está en uso.")
 
         uow.commit = commit_conflicting
         try:
-            with pytest.raises(AliasAlreadyTakenError):
+            with pytest.raises(AliasAlreadyTakenError, match="'Chuchi'"):
                 await use_case.execute(user_id, UpdateProfileRequestDTO(alias="Chuchi"))
         finally:
             uow.commit = original_commit
 
-    async def test_other_integrity_errors_are_not_swallowed(
+    async def test_other_commit_errors_are_not_swallowed(
         self, uow, country_repository, existing_user
     ):
         """
-        Solo se traduce la violación del índice del alias.
-
-        Cualquier otro IntegrityError seguiría subiendo: convertirlo en «ese
-        alias está cogido» mandaría al usuario a cambiar algo que no es lo que
-        falla.
+        Given: un commit que falla por otra causa
+        When: se actualiza el perfil
+        Then: el error sube tal cual: convertirlo en «ese alias está cogido»
+              mandaría al usuario a cambiar algo que no es lo que falla
         """
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
 
+        original_commit = uow.commit
+
         async def commit_failing(*args, **kwargs):
-            raise IntegrityError(
-                "INSERT INTO users ...",
-                {},
-                Exception('duplicate key value violates unique constraint "users_email_key"'),
-            )
+            raise RuntimeError("otra restricción")
 
         uow.commit = commit_failing
-        with pytest.raises(IntegrityError):
-            await use_case.execute(user_id, UpdateProfileRequestDTO(alias="Chuchi"))
+        try:
+            with pytest.raises(RuntimeError):
+                await use_case.execute(user_id, UpdateProfileRequestDTO(alias="Chuchi"))
+        finally:
+            uow.commit = original_commit
 
 
 class TestUpdateProfileAliasRequestDTO:
