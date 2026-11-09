@@ -40,7 +40,10 @@ class GoogleLoginResponseDTO(BaseModel):
 
     access_token: str = Field(..., description="Token JWT de acceso (15 minutos)")
     refresh_token: str = Field(..., description="Token JWT de renovación (7 días)")
-    csrf_token: str = Field(..., description="Token CSRF para double-submit (15 minutos)")
+    csrf_token: str = Field(
+        ...,
+        description="Token CSRF para double-submit (vale lo que el refresh token más 1 h; su cookie dura 15 minutos)",
+    )
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer')")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado")
     is_new_user: bool = Field(

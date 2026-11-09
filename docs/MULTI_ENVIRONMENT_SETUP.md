@@ -137,8 +137,7 @@ MAILGUN_FROM_EMAIL="Ryder Cup Friends <noreply@rydercupfriends.com>"
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
 # Correos (BE #563): local y Kind → EMAIL_TRANSPORT=mailpit (no se entregan, se ven en
 # http://localhost:8025); producción → mailgun, con RESEND_API_KEY y BREVO_API_KEY de respaldo
-SECRET_KEY=<production-secret>
-ALGORITHM=HS256
+SECRET_KEY=<production-secret>  # 32 bytes o más; HS256 fijo, sin ALGORITHM (ADR-047)
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 ENVIRONMENT=production
 PORT=8000

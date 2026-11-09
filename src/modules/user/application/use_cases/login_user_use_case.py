@@ -597,7 +597,8 @@ class LoginUserUseCase:
                 )
             )
 
-        # Generar token CSRF (256 bits, 15 minutos de duración)
+        # Generar token CSRF (256 bits; vale lo que el refresh token más 1 h, y su cookie
+        # dura 15 minutos)
         csrf_token = self._token_service.create_csrf_token(str(user.id.value))
 
         # El hándicap ya no se refresca aquí: el login esperaba a la RFEG antes de

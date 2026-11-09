@@ -25,7 +25,6 @@ POSTGRES_DB=ryderclub
 
 # JWT
 SECRET_KEY=your-super-secret-key-min-32-chars
-ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
 # Aplicación
@@ -229,8 +228,9 @@ En la sección **Environment Variables**:
 DATABASE_URL=postgresql+asyncpg://user:pass@host.oregon-postgres.render.com/db
 
 # JWT - Generar clave segura con: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Fuera de desarrollo la app no arranca sin ella, con una de ejemplo o con menos de
+# 32 bytes (ADR-047). El algoritmo es HS256 fijo: ALGORITHM ya no se lee
 SECRET_KEY=<generar-aleatoriamente-32-chars>
-ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
 # Documentación

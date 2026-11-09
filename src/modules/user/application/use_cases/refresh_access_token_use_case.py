@@ -346,7 +346,8 @@ class RefreshAccessTokenUseCase:
             data=datos_del_acceso(str(user.id.value), device_id)
         )
 
-        # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
+        # 7. Generar nuevo token CSRF (256 bits; vale lo que el refresh token más 1 h, y su
+        # cookie dura 15 minutos)
         csrf_token = self._token_service.create_csrf_token(str(user.id.value))
 
         # 8. Security Logging: Uso exitoso de refresh token

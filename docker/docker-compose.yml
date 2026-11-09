@@ -63,7 +63,6 @@ services:
       # JWT Configuration
       # SECRET_KEY is REQUIRED - validation script will fail if missing
       - SECRET_KEY=${SECRET_KEY:-MISSING_SECRET_KEY}
-      - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
 
       # Swagger/Docs Protection (optional - can be empty)
