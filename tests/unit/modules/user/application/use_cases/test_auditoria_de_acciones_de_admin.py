@@ -312,3 +312,24 @@ async def test_a12_without_ip_or_browser_it_says_unknown(uow, cuenta):
 
     datos = auditoria.log_admin_role_changed.call_args.kwargs
     assert (datos["ip_address"], datos["user_agent"]) == ("unknown", "unknown")
+
+
+async def test_a13_a_double_delete_is_not_found_and_writes_nothing(uow, cuenta):
+    """
+    Given: Una cuenta que otro administrador borra entre la comprobación y el borrado
+           (delete_by_id devuelve False)
+    When: El administrador la borra
+    Then: UserNotFoundError (la ruta da 404) y nada en el log: no se borró nada
+    """
+    auditoria = Mock()
+
+    async def _ya_no_esta(_user_id):
+        return False
+
+    caso = _borrar(uow, auditoria)
+    uow.users.delete_by_id = _ya_no_esta
+
+    with pytest.raises(UserNotFoundError):
+        await caso.execute(str(cuenta.id.value), actor_user_id=ADMIN, ip_address=IP)
+
+    _sin_auditoria(auditoria)

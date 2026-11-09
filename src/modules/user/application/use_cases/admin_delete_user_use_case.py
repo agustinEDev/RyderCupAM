@@ -95,7 +95,11 @@ class AdminDeleteUserUseCase:
         # lo desvincula y lo fecha la propia base de datos (FK SET NULL y
         # trigger BEFORE DELETE ON users), sea cual sea el camino del borrado
         async with self._user_uow:
-            await self._user_uow.users.delete_by_id(user_id)
+            borrada = await self._user_uow.users.delete_by_id(user_id)
+        # Otro administrador la borró entre la comprobación y aquí: no se borró nada,
+        # así que no se apunta (la ruta lo da como 404)
+        if not borrada:
+            raise UserNotFoundError(f"User not found: {user_id_str}")
 
         # Ya borrada: si el log falla, el borrado vale igual
         registra_sin_romper(
