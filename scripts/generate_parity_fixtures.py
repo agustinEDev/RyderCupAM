@@ -34,6 +34,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
+from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
@@ -212,6 +213,9 @@ def run(
 
 
 def main() -> None:
+    """Genera los fixtures de paridad (reparto y, con --standings, clasificaciones)."""
+    # Crea usuarios sin cargar la app: el hasher lo instala la composition root
+    instala_el_hasher_de_contrasenas()
     if "--standings" not in sys.argv:
         _allocation()
     salida = STANDINGS_OUTPUT

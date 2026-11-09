@@ -58,6 +58,12 @@ forbidden_modules =
     sqlalchemy
     pydantic
     asyncpg
+    bcrypt
+    jwt
+    httpx
+    PIL
+    sentry_sdk
+    alembic
 
 [importlinter:contract:competition-no-foreign-infra]
 name = competition no importa la infraestructura de otro módulo
@@ -207,3 +213,30 @@ forbidden_modules =
     src.modules.social.infrastructure
     src.modules.support.infrastructure
     src.modules.user.infrastructure
+
+[importlinter:contract:application-no-frameworks]
+name = La aplicación no depende de frameworks ni de librerías de infraestructura (auditoría 9 nov 2026)
+type = forbidden
+# Un caso de uso que conoce SQLAlchemy (o bcrypt, o httpx) ya no se puede probar ni
+# cambiar sin su infraestructura. Pydantic sí está permitido: los DTOs son Pydantic
+# por decisión del proyecto. La lista completa de lo permitido por capa está en
+# tests/unit/architecture/test_imports_permitidos_por_capa.py, que es más estricto
+source_modules =
+    src.modules.competition.application
+    src.modules.golf_course.application
+    src.modules.quick_match.application
+    src.modules.social.application
+    src.modules.support.application
+    src.modules.user.application
+    src.shared.application
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    asyncpg
+    bcrypt
+    jwt
+    httpx
+    PIL
+    sentry_sdk
+    alembic

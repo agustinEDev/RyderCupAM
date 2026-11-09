@@ -31,11 +31,11 @@ from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases import login_user_use_case
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.value_objects import password as modulo_password
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security import bcrypt_password_hasher as adaptador
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases.test_login_user_use_case import _rebuild_user
@@ -54,7 +54,8 @@ def cuenta_checkpw(monkeypatch):
         llamadas.append(args)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(modulo_password.bcrypt, "checkpw", espia)
+    # El bcrypt de verdad lo llama el adaptador del puerto PasswordHasher
+    monkeypatch.setattr(adaptador.bcrypt, "checkpw", espia)
     return llamadas
 
 
@@ -134,17 +135,25 @@ def test_dummy_hash_has_same_cost_as_real_hashes():
     assert relleno.startswith("$2")
 
 
-def test_dummy_hash_in_production_has_cost_12(monkeypatch):
+def test_dummy_hash_in_production_has_cost_12():
     """
-    Given: El entorno de producción
+    Given: El hasher de producción (bcrypt con las rondas por defecto)
     When: Se calcula el relleno
     Then: Su coste es 12
     """
-    monkeypatch.delenv("TESTING", raising=False)
+    from src.config.contrasenas import rondas_de_bcrypt
+    from src.modules.user.domain.services import password_hasher
+    from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
+        BcryptPasswordHasher,
+    )
+
+    anterior = password_hasher._instalado
+    password_hasher.instala_el_hasher(BcryptPasswordHasher(rounds=rondas_de_bcrypt({})))
     Password._relleno.cache_clear()
     try:
         assert Password._relleno().split("$")[2] == "12"
     finally:
+        password_hasher._instalado = anterior
         Password._relleno.cache_clear()
 
 
