@@ -156,3 +156,17 @@ def test_the_dev_compose_gives_logs_its_own_named_volume():
     volumen = de_logs[0].split(":")[0]
     assert not volumen.startswith((".", "/"))  # con nombre, no un directorio del equipo
     assert volumen in (compose.get("volumes") or {})
+
+
+def test_the_code_is_made_readable_before_dropping_root():
+    """
+    Given: el Dockerfile, que copia el árbol tal como está en el equipo que construye
+    When: se mira qué hace antes del USER sin privilegios
+    Then: da lectura (y paso por las carpetas) a todos sobre /app, porque un checkout
+          local con carpetas 700 dejaba al uid 10001 sin poder importar el código
+          (el Kind no arrancaba: ModuleNotFoundError al migrar, 9 nov 2026)
+    """
+    texto = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "chmod -R a+rX /app" in texto
+    assert texto.index("chmod -R a+rX /app") < texto.index("\nUSER app")
