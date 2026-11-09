@@ -88,6 +88,16 @@ class AliasAlreadyTakenError(UserDomainError):
     pass
 
 
+class AliasTakenConcurrentlyError(AliasAlreadyTakenError):
+    """
+    El alias se lo llevó otra petición entre la comprobación y el guardado.
+
+    Lo lanza la unidad de trabajo al chocar con el índice único del alias. No sabe
+    qué alias se pidió, así que el caso de uso lo vuelve a lanzar como
+    AliasAlreadyTakenError con el alias en el mensaje.
+    """
+
+
 class InvalidCredentialsError(UserDomainError):
     """
     Excepción lanzada cuando las credenciales proporcionadas son inválidas.

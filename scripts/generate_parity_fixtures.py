@@ -213,6 +213,7 @@ def run(
 
 
 def main() -> None:
+    """Genera los fixtures de paridad (reparto y, con --standings, clasificaciones)."""
     # Crea usuarios sin cargar la app: el hasher lo instala la composition root
     instala_el_hasher_de_contrasenas()
     if "--standings" not in sys.argv:

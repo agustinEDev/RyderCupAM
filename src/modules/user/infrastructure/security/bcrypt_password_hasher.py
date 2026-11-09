@@ -22,6 +22,7 @@ class BcryptPasswordHasher:
     """Hashes bcrypt con un coste fijo (12 en producción)."""
 
     def __init__(self, rounds: int) -> None:
+        """Con un coste que bcrypt acepte (4 a 31); si no, ValueError al crearlo."""
         if not _RONDAS_MINIMAS <= rounds <= _RONDAS_MAXIMAS:
             raise ValueError(
                 f"bcrypt acepta de {_RONDAS_MINIMAS} a {_RONDAS_MAXIMAS} rondas, no {rounds}"

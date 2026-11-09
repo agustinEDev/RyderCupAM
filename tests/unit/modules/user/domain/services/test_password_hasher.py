@@ -21,13 +21,16 @@ class HasherDePrueba:
     """Un hasher que deja rastro de lo que se le pide."""
 
     def __init__(self) -> None:
+        """Sin pedidos todavía."""
         self.pedidos: list[str] = []
 
     def hash(self, plain: str) -> str:
+        """Un hash falso que se reconoce a la vista."""
         self.pedidos.append(plain)
         return f"falso:{plain}"
 
     def matches(self, plain: str, hashed: str) -> bool:
+        """Casa si el hash es el falso de esa contraseña."""
         return hashed == f"falso:{plain}"
 
 
@@ -95,6 +98,7 @@ def test_a_hasher_error_on_verify_is_a_no(hasher_cambiado):
     contrasena = Password.from_plain_text(VALIDA)
 
     def revienta(plain: str, hashed: str) -> bool:
+        """Ayudante del test: falla como un hash corrupto."""
         raise ValueError("hash corrupto")
 
     hasher_cambiado.matches = revienta

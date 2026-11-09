@@ -16,6 +16,7 @@ from src.modules.user.application.use_cases.update_profile_use_case import (
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
     AliasAlreadyTakenError,
+    AliasTakenConcurrentlyError,
     UserNotFoundError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -326,10 +327,9 @@ class TestUpdateProfileAlias:
         original_commit = uow.commit
 
         async def commit_conflicting(*args, **kwargs):
-            # Como la unidad de trabajo: el error del dominio, causado por el índice
-            raise AliasAlreadyTakenError("El alias ya está en uso.") from RuntimeError(
-                "ix_users_alias_lower"
-            )
+            """Ayudante del test: el commit choca con el índice del alias."""
+            # Como la unidad de trabajo al chocar con el índice del alias
+            raise AliasTakenConcurrentlyError("El alias ya está en uso.")
 
         uow.commit = commit_conflicting
         try:
@@ -353,6 +353,7 @@ class TestUpdateProfileAlias:
         original_commit = uow.commit
 
         async def commit_failing(*args, **kwargs):
+            """Ayudante del test: el commit falla por otra causa."""
             raise RuntimeError("otra restricción")
 
         uow.commit = commit_failing

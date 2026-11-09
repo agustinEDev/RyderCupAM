@@ -84,6 +84,7 @@ PUERTAS_DE_ATRAS = frozenset({"__import__", "eval", "exec"})
 
 
 def _ficheros_de(capa: str) -> list[Path]:
+    """Los .py de esa capa en todos los módulos y en shared."""
     raices = [p / capa for p in (SRC / "modules").iterdir() if (p / capa).is_dir()]
     raices.append(SRC / "shared" / capa)
     return sorted(f for raiz in raices if raiz.is_dir() for f in raiz.rglob("*.py"))

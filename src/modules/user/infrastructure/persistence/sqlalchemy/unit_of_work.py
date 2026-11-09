@@ -1,7 +1,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
+from src.modules.user.domain.errors.user_errors import AliasTakenConcurrentlyError
 from src.modules.user.domain.repositories.password_history_repository_interface import (
     PasswordHistoryRepositoryInterface,
 )
@@ -130,6 +130,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
             # real se implementará cuando se necesiten event handlers
 
     async def commit(self) -> None:
+        """Confirma la transacción; el alias repetido sale como error del dominio."""
         try:
             await self._session.commit()
         except IntegrityError as e:
@@ -137,9 +138,11 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
             raise
 
     async def rollback(self) -> None:
+        """Deshace la transacción."""
         await self._session.rollback()
 
     async def flush(self) -> None:
+        """Envía los cambios sin confirmar; el alias repetido sale como error del dominio."""
         try:
             await self._session.flush()
         except IntegrityError as e:
@@ -159,6 +162,6 @@ INDICE_DEL_ALIAS = "ix_users_alias_lower"
 
 
 def _traduce_la_violacion_del_alias(error: IntegrityError) -> None:
-    """Lanza AliasAlreadyTakenError si el error es el del índice del alias."""
+    """Lanza AliasTakenConcurrentlyError si el error es el del índice del alias."""
     if INDICE_DEL_ALIAS in str(error.orig):
-        raise AliasAlreadyTakenError("El alias ya está en uso.") from error
+        raise AliasTakenConcurrentlyError("El alias ya está en uso.") from error
