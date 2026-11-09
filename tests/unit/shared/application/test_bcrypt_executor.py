@@ -186,3 +186,54 @@ def test_a_cap_below_one_is_rejected(tope):
     """
     with pytest.raises(ValueError):
         configura_la_concurrencia_de_bcrypt(tope)
+
+
+def test_importing_the_module_creates_no_thread_pool():
+    """
+    Given: Un proceso nuevo
+    When: Se importa el ejecutor de bcrypt (sin configurarlo)
+    Then: No hay pool todavía: se crea al configurarlo o al primer hash, no al importar
+          (/code-review de la fase 2)
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    programa = (
+        "from src.shared.application.concurrencia import bcrypt_executor as b; "
+        "print(b._executor is None)"
+    )
+    salida = subprocess.run(
+        [sys.executable, "-c", programa],
+        cwd=Path(__file__).resolve().parents[4],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert salida.stdout.strip() == "True"
+
+
+async def test_the_first_hash_creates_the_pool_if_nobody_configured_it(monkeypatch):
+    """
+    Given: El ejecutor sin pool (nadie lo configuró)
+    When: Se hashea
+    Then: Crea el pool con el tope actual y devuelve el resultado
+    """
+    monkeypatch.setattr(bcrypt_executor, "_executor", None)
+
+    assert await run_bcrypt(lambda: 7) == 7
+    assert bcrypt_executor._executor is not None
+    assert bcrypt_executor._executor._max_workers == bcrypt_executor.max_concurrency()
+    bcrypt_executor._executor.shutdown(wait=False)
+
+
+def test_the_configuration_parameter_does_not_shadow_the_getter():
+    """
+    Given: configura_la_concurrencia_de_bcrypt
+    When: Se mira su parámetro
+    Then: Se llama `tope`, no `max_concurrency`, que es la función de lectura
+    """
+    import inspect
+
+    assert list(inspect.signature(configura_la_concurrencia_de_bcrypt).parameters) == ["tope"]

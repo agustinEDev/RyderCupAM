@@ -47,8 +47,9 @@ DEFAULT_MAX_CONCURRENCY = 2
 _max_concurrency = DEFAULT_MAX_CONCURRENCY
 
 # Pool propio, no el del runtime: así el límite es real y los hashes no compiten por los
-# hilos que FastAPI usa para los endpoints síncronos.
-_executor = ThreadPoolExecutor(max_workers=_max_concurrency, thread_name_prefix="bcrypt")
+# hilos que FastAPI usa para los endpoints síncronos. Se crea al configurarlo o con el
+# primer hash, no al importar: importar el módulo no levanta hilos (/code-review)
+_executor: ThreadPoolExecutor | None = None
 
 # Un semáforo por event loop. `asyncio.Semaphore` se ata al loop en el que se usa por
 # primera vez, así que uno global rompería en cuanto hubiera más de uno (los tests crean
@@ -63,7 +64,15 @@ def max_concurrency() -> int:
     return _max_concurrency
 
 
-def configura_la_concurrencia_de_bcrypt(max_concurrency: int) -> None:
+def _el_pool() -> ThreadPoolExecutor:
+    """El pool de bcrypt, creándolo con el tope actual si aún no existe."""
+    global _executor  # noqa: PLW0603 - estado del proceso, creado al primer uso
+    if _executor is None:
+        _executor = ThreadPoolExecutor(max_workers=_max_concurrency, thread_name_prefix="bcrypt")
+    return _executor
+
+
+def configura_la_concurrencia_de_bcrypt(tope: int) -> None:
     """
     Fija cuántos hashes corren (y esperan dentro del pool) a la vez.
 
@@ -75,13 +84,14 @@ def configura_la_concurrencia_de_bcrypt(max_concurrency: int) -> None:
         ValueError: con un tope menor que 1 (un pool sin hilos no hashearía nunca).
     """
     global _executor, _max_concurrency  # noqa: PLW0603 - estado del proceso, como el pool
-    if max_concurrency < 1:
-        raise ValueError(f"El tope de bcrypt tiene que ser al menos 1, no {max_concurrency}")
+    if tope < 1:
+        raise ValueError(f"El tope de bcrypt tiene que ser al menos 1, no {tope}")
     anterior = _executor
-    _executor = ThreadPoolExecutor(max_workers=max_concurrency, thread_name_prefix="bcrypt")
-    _max_concurrency = max_concurrency
+    _executor = ThreadPoolExecutor(max_workers=tope, thread_name_prefix="bcrypt")
+    _max_concurrency = tope
     _admission_gates.clear()
-    anterior.shutdown(wait=False)
+    if anterior is not None:
+        anterior.shutdown(wait=False)
 
 
 def _admission_gate(loop: asyncio.AbstractEventLoop) -> asyncio.Semaphore:
@@ -118,4 +128,4 @@ async def run_bcrypt(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) ->
     # Hay tantos permisos como hilos, así que nada llega al executor sin un hilo libre
     # esperándolo: la cola de dentro no crece, y quien espera lo hace aquí.
     async with _admission_gate(loop):
-        return await loop.run_in_executor(_executor, call)
+        return await loop.run_in_executor(_el_pool(), call)
