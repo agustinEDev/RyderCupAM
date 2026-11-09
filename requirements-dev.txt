@@ -103,7 +103,7 @@ respx==0.23.1
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
 # Actualizado a 1.4.1: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
-pytest-asyncio==1.4.1
+pytest-asyncio==1.4.1.post1
 
 # pytest-cov - Plugin de cobertura para pytest
 # Sin versión fijada, como estaba en requirements.txt: se mueve tal cual para no
