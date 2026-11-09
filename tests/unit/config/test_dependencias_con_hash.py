@@ -170,3 +170,40 @@ def test_the_code_is_made_readable_before_dropping_root():
 
     assert "chmod -R a+rX /app" in texto
     assert texto.index("chmod -R a+rX /app") < texto.index("\nUSER app")
+
+
+def test_the_entrypoint_is_readable_and_executable_by_everyone():
+    """
+    Given: el Dockerfile, que copia entrypoint.sh fuera de /app
+    When: se mira cómo le da permisos
+    Then: 755 explícito: `chmod +x` no da lectura, y sh necesita leer el script; con
+          un checkout en 600 el usuario sin privilegios no podría arrancar
+    """
+    texto = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "chmod 755 /entrypoint.sh" in texto
+    assert "chmod +x /entrypoint.sh" not in texto
+
+
+def test_local_tool_folders_stay_out_of_the_image():
+    """
+    Given: .dockerignore
+    When: se mira qué excluye
+    Then: los ficheros locales que no son de la app (configuración del asistente,
+          cachés de herramientas, workflows, colecciones de Postman) no entran en
+          la imagen que se construye desde el árbol de trabajo (el Kind)
+    """
+    lineas = {
+        linea.strip() for linea in (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    }
+
+    for patron in (
+        ".claude/",
+        ".mypy_cache/",
+        ".ruff_cache/",
+        ".grimp_cache/",
+        ".import_linter_cache/",
+        ".github/",
+        "postman_*.json",
+    ):
+        assert patron in lineas, patron

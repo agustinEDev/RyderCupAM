@@ -54,7 +54,7 @@ COPY . .
 
 # 6. Copiar y configurar script de inicio
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
 
 # 6b. Sin privilegios (F-14): un fallo que ejecutara código lo haría como este
 # usuario, no como root. El código sigue siendo de root, así que no puede

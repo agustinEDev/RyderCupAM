@@ -71,3 +71,13 @@ data/rfeg_dataset*
 # Logs locales: el log de seguridad del equipo (de root) no entra en la imagen, que
 # escribe el suyo como el usuario 10001 (revisión de la fase 2)
 logs/
+
+# Lo local que no es de la app: con el árbol de trabajo (el Kind) entraba en la
+# imagen y, desde que se da lectura a todo /app, el usuario de la app podía leerlo
+.claude/
+.mypy_cache/
+.ruff_cache/
+.grimp_cache/
+.import_linter_cache/
+.github/
+postman_*.json
