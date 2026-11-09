@@ -40,10 +40,16 @@ services:
     ports:
       - "${DOCKER_APP_PORT:-8001}:8000"
     volumes:
-      - ..:/app
-      # Los logs, en su propio volumen: el checkout montado en /app es del usuario del
-      # equipo y el de la imagen (uid 10001) no podría escribir el log de seguridad.
-      # El volumen nuevo se crea con el /app/logs de la imagen, que es suyo
+      # Solo el código, para el hot-reload; no el checkout entero: montado sobre /app,
+      # el usuario de la app leía el .env y los secretos locales del Kind y se saltaba
+      # el .dockerignore. Lo demás de /app (requisitos instalados) es el de la imagen.
+      # En Linux, el checkout tiene que poder leerlo el uid 10001 de la imagen
+      - ../src:/app/src:ro
+      - ../alembic:/app/alembic:ro
+      - ../alembic.ini:/app/alembic.ini:ro
+      - ../main.py:/app/main.py:ro
+      - ../scripts:/app/scripts:ro
+      # Los logs, en su propio volumen: el de la imagen (uid 10001) los escribe
       - app_logs:/app/logs
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:

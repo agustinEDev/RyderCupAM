@@ -158,52 +158,86 @@ def test_the_dev_compose_gives_logs_its_own_named_volume():
     assert volumen in (compose.get("volumes") or {})
 
 
-def test_the_code_is_made_readable_before_dropping_root():
+def _ordenes_del_dockerfile() -> list[str]:
+    """Las instrucciones del Dockerfile, sin comentarios y con las continuaciones unidas."""
+    texto = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    sin_comentarios = [x for x in texto.splitlines() if not x.lstrip().startswith("#")]
+    return [
+        o.strip() for o in "\n".join(sin_comentarios).replace("\\\n", " ").splitlines() if o.strip()
+    ]
+
+
+def test_copy_tree_unreadable_by_others_is_made_readable_before_user():
     """
     Given: el Dockerfile, que copia el árbol tal como está en el equipo que construye
-    When: se mira qué hace antes del USER sin privilegios
-    Then: da lectura (y paso por las carpetas) a todos sobre /app, porque un checkout
-          local con carpetas 700 dejaba al uid 10001 sin poder importar el código
-          (el Kind no arrancaba: ModuleNotFoundError al migrar, 9 nov 2026)
+    When: se miran sus instrucciones (no los comentarios) antes del USER sin privilegios
+    Then: un RUN da lectura a todos sobre /app, porque un checkout local con carpetas
+          700 dejaba al uid 10001 sin poder importar el código (el Kind no arrancaba:
+          ModuleNotFoundError al migrar, 9 nov 2026)
     """
-    texto = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    ordenes = _ordenes_del_dockerfile()
+    usuario = next(i for i, o in enumerate(ordenes) if o.startswith("USER app"))
+    antes = ordenes[:usuario]
 
-    assert "chmod -R a+rX /app" in texto
-    assert texto.index("chmod -R a+rX /app") < texto.index("\nUSER app")
+    assert any(
+        o.startswith("RUN") and re.search(r"find /app\b.*-exec chmod a\+rX", o) for o in antes
+    )
 
 
-def test_the_entrypoint_is_readable_and_executable_by_everyone():
+def test_entrypoint_copied_with_600_gets_755_for_bash():
     """
     Given: el Dockerfile, que copia entrypoint.sh fuera de /app
-    When: se mira cómo le da permisos
-    Then: 755 explícito: `chmod +x` no da lectura, y sh necesita leer el script; con
-          un checkout en 600 el usuario sin privilegios no podría arrancar
+    When: se miran sus instrucciones
+    Then: 755 explícito. `chmod +x` conserva los bits de lectura del equipo: con un
+          checkout en 600 quedaba en 711, y bash, que tiene que leer el script, no
+          podía con el usuario sin privilegios
     """
-    texto = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    ordenes = _ordenes_del_dockerfile()
 
-    assert "chmod 755 /entrypoint.sh" in texto
-    assert "chmod +x /entrypoint.sh" not in texto
+    assert "RUN chmod 755 /entrypoint.sh" in ordenes
+    assert not any("chmod +x /entrypoint.sh" in o for o in ordenes)
 
 
-def test_local_tool_folders_stay_out_of_the_image():
+def test_dockerignore_allows_only_runtime_files_and_drops_nested_caches():
     """
     Given: .dockerignore
-    When: se mira qué excluye
-    Then: los ficheros locales que no son de la app (configuración del asistente,
-          cachés de herramientas, workflows, colecciones de Postman) no entran en
-          la imagen que se construye desde el árbol de trabajo (el Kind)
+    When: se lee
+    Then: es una lista de PERMITIDOS (todo fuera y solo vuelve lo que la app usa en
+          ejecución), sin volver a meter nada local, y las cachés se excluyen a
+          cualquier profundidad, no solo en la raíz
     """
-    lineas = {
-        linea.strip() for linea in (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
-    }
+    lineas = [
+        linea.strip()
+        for linea in (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if linea.strip() and not linea.lstrip().startswith("#")
+    ]
+    vuelven = {linea[1:] for linea in lineas if linea.startswith("!")}
 
-    for patron in (
-        ".claude/",
-        ".mypy_cache/",
-        ".ruff_cache/",
-        ".grimp_cache/",
-        ".import_linter_cache/",
-        ".github/",
-        "postman_*.json",
-    ):
+    assert lineas[0] == "*"
+    assert vuelven == {
+        "src",
+        "alembic",
+        "alembic.ini",
+        "main.py",
+        "entrypoint.sh",
+        "scripts",
+        "requirements.txt",
+        "requirements.lock",
+        "requirements-bootstrap.txt",
+        "requirements-bootstrap.lock",
+    }
+    for patron in ("**/__pycache__", "**/*.py[cod]", "**/*.log", "**/.DS_Store"):
         assert patron in lineas, patron
+
+
+def test_dev_compose_mounts_only_the_code_not_the_whole_checkout():
+    """
+    Given: el compose de desarrollo, que monta el código para el hot-reload
+    When: se miran sus volúmenes
+    Then: no monta el checkout entero sobre /app: con él, el usuario de la app leía
+          .env y los secretos locales del Kind, y se saltaba el .dockerignore
+    """
+    compose = (RAIZ / "docker" / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "..:/app\n" not in compose and "- ..:/app" not in compose
+    assert "../src:/app/src" in compose
