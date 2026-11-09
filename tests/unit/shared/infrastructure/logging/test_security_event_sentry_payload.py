@@ -52,6 +52,10 @@ app = FastAPI()
 
 @app.patch("/api/v1/users/security")
 async def seguridad(request: Request, body: dict):
+    # Otro logger de la misma petición deja una miga con el correo, y alguien un extra
+    import logging
+    logging.getLogger("src.otro").warning("cambio pedido a %s", body["new_email"])
+    sentry_sdk.set_extra("pedido", body["new_email"])
     avisa_a_sentry(
         PasswordChangedEvent(user_id="u-1", ip_address="203.0.113.7", user_agent="ua")
     )
@@ -85,7 +89,8 @@ def test_a_security_event_reaches_sentry_without_body_ip_or_email():
     Given: Sentry con la integración de FastAPI y el before_send de la app
     When: Se manda un evento de seguridad dentro de una petición con correo en el cuerpo
     Then: Llega uno, con el método y la ruta de la petición y nada más de ella, sin IP
-          en el contexto ni en el usuario, y sin el correo en ningún sitio
+          en el contexto ni en el usuario, sin migas ni extras (los de otro logger de la
+          misma petición pueden llevar el correo), y sin el correo en ningún sitio
     """
     [evento] = _eventos_enviados()
 
@@ -96,6 +101,8 @@ def test_a_security_event_reaches_sentry_without_body_ip_or_email():
     assert "ip_address" not in evento["contexts"]["security_event"]
     assert "ip_address" not in evento.get("user", {})
     assert evento["contexts"]["security_event"]["user_id"] == "u-1"
+    assert not (evento.get("breadcrumbs") or {}).get("values")
+    assert not evento.get("extra")
     texto = json.dumps(evento)
     assert "victima@example.com" not in texto
     assert "203.0.113.7" not in texto

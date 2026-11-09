@@ -84,7 +84,9 @@ def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
 
     La integración de FastAPI adjunta el cuerpo de la petición a lo que se capture
     dentro de ella (el correo tecleado en un login o en un cambio de correo), y la IP
-    no debe salir (BE #466): el log de seguridad (stdout) ya la guarda.
+    no debe salir (BE #466): el log de seguridad (stdout) ya la guarda. Tampoco van
+    las migas ni los extras: los de otro logger de la misma petición pueden llevar
+    el correo (/code-review de la fase 2).
     """
     if ETIQUETA_DE_EVENTO_DE_SEGURIDAD not in (event.get("tags") or {}):
         return event
@@ -96,6 +98,8 @@ def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
             for clave in _DE_LA_PETICION_EN_LOS_EVENTOS_DE_SEGURIDAD
             if clave in peticion
         }
+    event.pop("breadcrumbs", None)
+    event.pop("extra", None)
     usuario = event.get("user")
     if isinstance(usuario, dict):
         usuario.pop("ip_address", None)
