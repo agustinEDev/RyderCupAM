@@ -106,7 +106,7 @@ class AdminDeleteUserUseCase:
             "Account deletion",
             lambda: self._security_audit.log_account_deleted_by_admin(
                 user_id=actor_user_id,
-                deleted_user_id=user_id_str,
+                deleted_user_id=str(user_id),  # el canónico, no lo que traía la ruta
                 ip_address=ip_address or "unknown",
                 user_agent=user_agent or "unknown",
             ),

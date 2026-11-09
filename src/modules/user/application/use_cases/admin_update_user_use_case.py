@@ -114,7 +114,7 @@ class AdminUpdateUserUseCase:
                 "Admin role change",
                 lambda: self._security_audit.log_admin_role_changed(
                     user_id=actor_user_id,
-                    target_user_id=user_id_str,
+                    target_user_id=str(user_id),  # el canónico, no lo que traía la ruta
                     is_admin=rol_nuevo,
                     **contexto,
                 ),
@@ -123,7 +123,7 @@ class AdminUpdateUserUseCase:
             registra_sin_romper(
                 "Admin email change",
                 lambda: self._security_audit.log_admin_email_change_requested(
-                    user_id=actor_user_id, target_user_id=user_id_str, **contexto
+                    user_id=actor_user_id, target_user_id=str(user_id), **contexto
                 ),
             )
 

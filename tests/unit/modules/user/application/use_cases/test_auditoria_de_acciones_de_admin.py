@@ -333,3 +333,44 @@ async def test_a13_a_double_delete_is_not_found_and_writes_nothing(uow, cuenta):
         await caso.execute(str(cuenta.id.value), actor_user_id=ADMIN, ip_address=IP)
 
     _sin_auditoria(auditoria)
+
+
+def _otras_grafias(user_id: str) -> list[str]:
+    """Formas del mismo UUID que UserId acepta: mayúsculas, sin guiones, urn y llaves."""
+    return [user_id.upper(), user_id.replace("-", ""), f"urn:uuid:{user_id}", f"{{{user_id}}}"]
+
+
+@pytest.mark.parametrize("grafia", range(4))
+async def test_a14_role_and_email_events_carry_the_canonical_id(uow, cuenta, grafia):
+    """
+    Given: El id de la cuenta escrito de otra forma en la ruta (mayúsculas, sin guiones...)
+    When: El administrador le da el rol y le pide otro correo
+    Then: Los eventos llevan el id canónico del UserId, el mismo que el resto del log
+          (CodeRabbit en BE #774)
+    """
+    canonico = str(cuenta.id.value)
+    auditoria = Mock()
+
+    await _edita(
+        uow, auditoria, _otras_grafias(canonico)[grafia], is_admin=True, email="nuevo@test.com"
+    )
+
+    assert auditoria.log_admin_role_changed.call_args.kwargs["target_user_id"] == canonico
+    assert auditoria.log_admin_email_change_requested.call_args.kwargs["target_user_id"] == canonico
+
+
+@pytest.mark.parametrize("grafia", range(4))
+async def test_a14_the_delete_event_carries_the_canonical_id(uow, cuenta, grafia):
+    """
+    Given: El id de la cuenta escrito de otra forma en la ruta
+    When: El administrador la borra
+    Then: El evento lleva el id canónico del UserId
+    """
+    canonico = str(cuenta.id.value)
+    auditoria = Mock()
+
+    await _borrar(uow, auditoria).execute(
+        _otras_grafias(canonico)[grafia], actor_user_id=ADMIN, ip_address=IP
+    )
+
+    assert auditoria.log_account_deleted_by_admin.call_args.kwargs["deleted_user_id"] == canonico
