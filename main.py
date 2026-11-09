@@ -42,7 +42,11 @@ from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
-from src.config.rate_limit import apply_default_rate_limit, limiter  # noqa: E402
+from src.config.rate_limit import (  # noqa: E402
+    apply_default_rate_limit,
+    limita_la_documentacion,
+    limiter,
+)
 from src.config.refresco_de_handicaps import (  # noqa: E402
     LanzadorEnSegundoPlano,
     VigilanteDeActualizaciones,
@@ -246,13 +250,15 @@ class DeploymentHealthResponse(BaseModel):
 
 
 # Crear la app, registrando el gestor de ciclo de vida 'lifespan'
-# Deshabilitamos docs_url y redoc_url para crear endpoints protegidos manualmente
+# Deshabilitamos docs_url, redoc_url y openapi_url para crear endpoints protegidos
+# manualmente. El esquema sigue generándose con app.openapi() (el CI lo compara así)
 app = FastAPI(
     title="Ryder Cup Manager",
     description="API para gestion de torneos tipo Ryder Cup entre amigos",
     version=APP_VERSION,
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
+    openapi_url=None,  # Deshabilitado - el esquema, con las mismas credenciales (F-11)
     lifespan=lifespan,
     # El límite por defecto en toda ruta sin uno propio (BE #467). Va aquí, antes de
     # incluir los routers, para que lo hereden todas
@@ -566,8 +572,12 @@ app.include_router(
 )
 
 
-# Endpoints protegidos de documentación con HTTP Basic Auth
-@app.get("/docs", include_in_schema=False)
+# Endpoints protegidos de documentación con HTTP Basic Auth, y con su límite por red
+# antes de mirar las credenciales (F-11)
+_PROTEGIDA = [Depends(limita_la_documentacion)]
+
+
+@app.get("/docs", include_in_schema=False, dependencies=_PROTEGIDA)
 async def get_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
@@ -575,12 +585,24 @@ async def get_documentation(
     return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
 
 
-@app.get("/redoc", include_in_schema=False)
+@app.get("/redoc", include_in_schema=False, dependencies=_PROTEGIDA)
 async def get_redoc_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
     """ReDoc UI protegido con HTTP Basic Auth."""
     return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
+
+
+@app.get("/openapi.json", include_in_schema=False, dependencies=_PROTEGIDA)
+async def get_openapi_schema(
+    username: str = Depends(verify_docs_credentials),  # noqa: ARG001
+) -> JSONResponse:
+    """El esquema OpenAPI, con las mismas credenciales que /docs (F-11).
+
+    Las páginas de /docs y /redoc lo piden desde el navegador, que repite las
+    credenciales de HTTP Basic en el mismo origen.
+    """
+    return JSONResponse(app.openapi())
 
 
 # Endpoint raíz para health check y metadata básica

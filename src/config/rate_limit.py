@@ -68,6 +68,11 @@ VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 # dimensionado para un club entero, o para todos si falla la IP real (una sola red)
 CONTACT_LIMIT = "10/day"
 
+# La documentación (/docs, /redoc y /openapi.json), por red y antes de mirar sus
+# credenciales HTTP Basic (F-11, 9 nov 2026): para quien la abre sobra, y probar
+# contraseñas deja de ser gratis
+DOCS_LIMIT = "20/minute"
+
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
 REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token
 
@@ -330,14 +335,16 @@ limiter = Limiter(key_func=get_rate_limit_key)
 
 
 # Exentas del límite por defecto (5 nov 2026): /health y la raíz las llama Render
-# directo al origen; la documentación; y datos estáticos que se piden en ráfaga
-# (los avatares predefinidos, con sus imágenes, y los países)
+# directo al origen; la documentación, que lleva el suyo por red
+# (limita_la_documentacion, F-11); y datos estáticos que se piden en ráfaga (los
+# avatares predefinidos, con sus imágenes, y los países)
 EXEMPT_FROM_DEFAULT_LIMIT = frozenset(
     {
         "main.root",
         "main.health",
         "main.get_documentation",
         "main.get_redoc_documentation",
+        "main.get_openapi_schema",
         "src.modules.user.infrastructure.api.v1.avatar_routes.list_avatar_presets",
         "src.modules.user.infrastructure.api.v1.avatar_routes.get_avatar_preset_image",
         "src.shared.infrastructure.api.v1.country_routes.list_countries",
@@ -387,6 +394,26 @@ async def apply_default_rate_limit(request: Request) -> None:
         # El manejador de slowapi lee el límite que saltó de aquí
         request.state.view_rate_limit = (limite, identificadores)
         raise excedido
+
+
+async def limita_la_documentacion(request: Request) -> None:
+    """
+    El límite de la documentación (DOCS_LIMIT), por red (F-11, 9 nov 2026).
+
+    Va como dependencia de cada ruta, antes de las credenciales: con un decorador de
+    slowapi solo contaría lo que pasa la autenticación, y la fuerza bruta no pasa.
+    Responde con el mismo 429 que slowapi.
+    """
+    if not limiter.enabled:
+        return
+    limite = parse(DOCS_LIMIT)
+    identificadores = [get_client_identifier(request), "docs"]
+    if limiter._key_prefix:
+        identificadores = [limiter._key_prefix, *identificadores]
+    if not limiter.limiter.hit(limite, *identificadores):
+        # El manejador de slowapi lee el límite que saltó de aquí
+        request.state.view_rate_limit = (limite, identificadores)
+        raise _exceeded(DOCS_LIMIT)
 
 
 def limite_de_lo_publico(key: str) -> str:
