@@ -88,6 +88,9 @@ async def test_con_un_hueco_libre_solo_entra_una_de_dos_subidas_a_la_vez(db_sess
         plain_password="SecureP@ssw0rd123",
     )
     await SQLAlchemyUserRepository(db_session).save(usuario)
+    # El usuario antes que sus fotos: sin relación mapeada entre las dos tablas,
+    # SQLAlchemy no sabe que el INSERT de users tiene que ir primero
+    await db_session.flush()
     fotos = SQLAlchemyProfilePhotoRepository(db_session)
     for _ in range(MAX_PHOTOS_PER_PROFILE - 1):
         await fotos.add(
