@@ -505,6 +505,43 @@ class TestListCompetitions:
         assert response.status_code == 200
         assert [c["name"] for c in response.json()] == ["Ryder Cup Friends"]
 
+    async def test_search_name_matches_accented_capitals(self, client: AsyncClient):
+        """
+        Given: una competición llamada «Open de Ávila»
+        When: se busca por nombre `ávila` (la tilde en minúscula)
+        Then: sale: las mayúsculas las compara la base de datos (ILIKE) a los dos
+              lados, no Python en uno y LOWER en el otro (/code-review de la fase 2)
+        """
+        user = await create_authenticated_user(
+            client, "avila@test.com", "P@ssw0rd123!", "Ana", "Avila"
+        )
+        await self._crear_con_nombres(client, user["cookies"], ["Open de Ávila", "Open de Soria"])
+
+        response = await client.get(
+            "/api/v1/competitions?search_name=%C3%A1vila", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()] == ["Open de Ávila"]
+
+    async def test_search_creator_matches_accented_capitals(self, client: AsyncClient):
+        """
+        Given: una competición creada por «Álvaro»
+        When: se busca por creador `álvaro`
+        Then: sale
+        """
+        user = await create_authenticated_user(
+            client, "alvaro@test.com", "P@ssw0rd123!", "Álvaro", "Creador"
+        )
+        await self._crear_con_nombres(client, user["cookies"], ["Torneo de Álvaro"])
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=%C3%A1lvaro", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()] == ["Torneo de Álvaro"]
+
 
 class TestMyCompetitionsFilter:
     """Tests para el filtro `my_competitions` en GET /api/v1/competitions"""

@@ -45,13 +45,13 @@ class _SesionQueApunta:
         return _ResultadoVacio()
 
 
-async def _sql_y_parametros(search_name: str) -> tuple[str, dict[str, Any]]:
+async def _sql_y_parametros(search_name: str, **otros: str) -> tuple[str, dict[str, Any]]:
     """La SQL (dialecto PostgreSQL) y sus parámetros al buscar por ese nombre."""
     start_all_mappers()
     sesion = _SesionQueApunta()
     repositorio = SQLAlchemyCompetitionRepository(sesion)  # type: ignore[arg-type]
 
-    await repositorio.find_by_filters(search_name=search_name)
+    await repositorio.find_by_filters(search_name=search_name or None, **otros)
 
     compilada = sesion.sentencia.compile(dialect=postgresql.dialect())
     return str(compilada), compilada.params
@@ -82,11 +82,29 @@ async def test_un_guion_bajo_se_busca_escapado():
 
 async def test_la_busqueda_sigue_sin_distinguir_mayusculas():
     """
-    Given: una búsqueda por nombre de `Ryder`
+    Given: una búsqueda por nombre de `Ávila`
     When: se construye la consulta
-    Then: se compara en minúsculas a ambos lados, como hacía ILIKE
+    Then: ILIKE con el texto tal cual: las mayúsculas (también las acentuadas) las
+          compara la base de datos a los dos lados, y no Python en uno y LOWER en el
+          otro (/code-review de la fase 2)
     """
-    sql, parametros = await _sql_y_parametros("Ryder")
+    sql, parametros = await _sql_y_parametros("Ávila")
 
-    assert "lower(competitions.name)" in sql
-    assert "ryder" in parametros.values()
+    assert "competitions.name ILIKE" in sql
+    assert "Ávila" in parametros.values()
+    assert "lower(" not in sql
+
+
+async def test_las_ramas_del_creador_tambien_usan_ilike_escapado():
+    """
+    Given: una búsqueda por creador de `Á%`
+    When: se construye la consulta
+    Then: nombre, apellido y alias van con ILIKE, escapados y sin LOWER
+    """
+    sql, parametros = await _sql_y_parametros("", search_creator="Á%")
+
+    for columna in ("users.first_name", "users.last_name", "users.alias"):
+        assert f"{columna} ILIKE" in sql
+    assert sql.count("ESCAPE '/'") == 3  # las tres ramas
+    assert "Á/%" in parametros.values()
+    assert "lower(" not in sql

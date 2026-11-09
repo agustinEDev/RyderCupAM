@@ -400,8 +400,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         Busca competiciones aplicando múltiples filtros opcionales.
 
-        Implementa búsqueda case-insensitive con LOWER(...) LIKE, escapando
-        `%` y `_` para que se busquen como letras:
+        Implementa búsqueda case-insensitive con ILIKE, escapando `%` y `_` para
+        que se busquen como letras:
         - search_name: Busca en competition.name
         - search_creator: Busca en creator.first_name OR creator.last_name OR creator.alias
 
@@ -430,13 +430,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         conditions = []
 
         # Filtro: search_name (búsqueda parcial case-insensitive). Con
-        # `LOWER(...).contains(..., autoescape=True)`, como las ramas del
-        # creador de abajo, y no `ilike(f"%{x}%")`: un `%` o un `_` tecleados
-        # se buscan como letras en vez de casar con todo (F-16)
+        # `icontains(..., autoescape=True)`, como las ramas del creador de abajo, y
+        # no `ilike(f"%{x}%")`: un `%` o un `_` tecleados se buscan como letras en
+        # vez de casar con todo (F-16). Las mayúsculas las compara PostgreSQL (ILIKE)
+        # a los dos lados, no Python en uno y LOWER en el otro (/code-review)
         if search_name:
-            conditions.append(
-                func.lower(Competition._name_value).contains(search_name.lower(), autoescape=True)
-            )
+            conditions.append(Competition._name_value.icontains(search_name, autoescape=True))
 
         # Filtro: search_creator (búsqueda en first_name OR last_name OR alias)
         #
@@ -446,21 +445,20 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         # espacios devolvería la lista entera en vez de nada. Tal cual llega,
         # se busca «  » y no casa nada, que es lo que hacía antes.
         #
-        # Las tres ramas usan `LOWER(...).contains(..., autoescape=True)` y no
+        # Las tres ramas usan `icontains(..., autoescape=True)` y no
         # `ilike(f"%{x}%")`: aquel interpolaba el texto tecleado dentro del
         # patrón, así que un `%` devolvía todas las competiciones y un `_`
         # casaba con cualquier carácter. Las dos primeras venían ya así y se
         # arreglan aquí en vez de añadir una tercera con el mismo fallo.
         #
-        # Para las cuentas sin alias, LOWER(NULL) es NULL: no casan por esa
+        # Para las cuentas sin alias, NULL ILIKE ... es NULL: no casan por esa
         # rama, pero siguen entrando por las otras dos.
         if search_creator:
-            creator_query = search_creator.lower()
             conditions.append(
                 or_(
-                    func.lower(User._first_name).contains(creator_query, autoescape=True),
-                    func.lower(User._last_name).contains(creator_query, autoescape=True),
-                    func.lower(User._alias).contains(creator_query, autoescape=True),
+                    User._first_name.icontains(search_creator, autoescape=True),
+                    User._last_name.icontains(search_creator, autoescape=True),
+                    User._alias.icontains(search_creator, autoescape=True),  # type: ignore[union-attr]
                 )
             )
 
