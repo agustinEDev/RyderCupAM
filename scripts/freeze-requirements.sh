@@ -5,9 +5,13 @@
 # Generates requirements.lock with SHA256 hashes for dependency verification
 # Complies with OWASP A08:2021 Software and Data Integrity Failures
 #
-# Usage: ./scripts/freeze-requirements.sh
+# Usage: ./scripts/freeze-requirements.sh   (from the repo root, with Docker running)
 #
-# Requirements: pip-tools (pip install pip-tools)
+# The lock is resolved INSIDE the production base image (same digest as
+# docker/Dockerfile): resolving on a Mac with another Python could pick other
+# transitive dependencies than the ones the image installs. The image installs
+# it with --require-hashes, and tests/unit/config/test_dependencias_con_hash.py
+# checks that it pins the same versions as requirements.txt.
 
 set -e
 
@@ -22,21 +26,21 @@ echo -e "${BLUE}  Requirements Freeze with Hashes${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
-echo -e "${GREEN}[1/3]${NC} Checking dependencies..."
-if ! command -v pip-compile &> /dev/null; then
-    echo -e "${YELLOW}⚠️  pip-tools not found. Installing...${NC}"
-    pip install pip-tools
-fi
+echo -e "${GREEN}[1/3]${NC} Reading the base image from docker/Dockerfile..."
+BASE_IMAGE=$(grep -m1 -E '^FROM ' docker/Dockerfile | awk '{print $2}')
+echo "   $BASE_IMAGE"
 
-echo -e "${GREEN}[2/3]${NC} Generating requirements.lock with SHA256 hashes..."
-pip-compile \
-    requirements.txt \
-    --output-file requirements.lock \
-    --generate-hashes \
-    --allow-unsafe \
-    --no-emit-index-url \
-    --no-emit-trusted-host \
-    --verbose
+echo -e "${GREEN}[2/3]${NC} Generating requirements.lock with SHA256 hashes inside that image..."
+docker run --rm -v "$PWD":/w -w /w "$BASE_IMAGE" sh -c "\
+    pip install --quiet pip-tools==7.6.2 && \
+    pip-compile requirements.txt \
+        --output-file requirements.lock \
+        --generate-hashes \
+        --allow-unsafe \
+        --no-emit-index-url \
+        --no-emit-trusted-host \
+        --strip-extras \
+        --quiet"
 
 echo -e "${GREEN}[3/3]${NC} Generating lock file metadata..."
 HASH_COUNT=$(grep -c "sha256:" requirements.lock)

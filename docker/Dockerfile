@@ -39,9 +39,13 @@ WORKDIR /app
 # (aprovecha cache de Docker si requirements.txt no cambia)
 # pip al día antes que nada: el de la imagen base trae alertas (BE #308). Sin
 # setuptools: las imágenes 3.12+ no lo traen y requirements.txt fija su versión
-COPY requirements.txt .
+# Desde requirements.lock, con un hash por paquete (OWASP A08, F-18): si alguien
+# sustituye un paquete en el índice, pip se niega a instalarlo. El lock se genera
+# desde requirements.txt con scripts/freeze-requirements.sh, dentro de esta misma
+# imagen, y un test comprueba que los dos dicen las mismas versiones
+COPY requirements.txt requirements.lock ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 # 5. Copiar código de la aplicación
 COPY . .
@@ -49,6 +53,14 @@ COPY . .
 # 6. Copiar y configurar script de inicio
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# 6b. Sin privilegios (F-14): un fallo que ejecutara código lo haría como este
+# usuario, no como root. El código sigue siendo de root, así que no puede
+# cambiarlo; solo escribe en logs/ (el log de seguridad) y en /tmp
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/logs \
+    && chown app:app /app/logs
+USER app
 
 # 7. Exponer puerto (configurable con ENV PORT)
 EXPOSE 8000
