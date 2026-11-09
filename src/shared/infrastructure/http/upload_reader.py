@@ -25,6 +25,12 @@ async def read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
     absurdamente grande llegue a bufferizarse por completo: el rechazo por
     tamaño ocurre tan pronto como se cruza el límite, no después.
 
+    Es la comprobación EXACTA del fichero. El cuerpo de la petición ya llega acotado:
+    el fast-fail por Content-Length y `LimitaElCuerpoDeLasSubidas` (para las subidas
+    chunked) cortan con 413 en cuanto pasa del tope más el margen del multipart,
+    antes de que Starlette lo guarde en /tmp. Aquí se rechaza un fichero que, con
+    el margen, aún cupiera.
+
     Raises:
         UploadTooLargeError: si el fichero pasa de `max_bytes`.
     """

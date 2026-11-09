@@ -117,6 +117,9 @@ from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E40
 from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
     informa_del_secreto_de_origen,
 )
+from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
+    LimitaElCuerpoDeLasSubidas,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -352,6 +355,16 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
                     },
                 )
     return await call_next(request)
+
+
+# Y lo que no declara Content-Length (una subida chunked): se cuenta mientras llega y
+# se corta con 413 al pasar el tope más el margen, antes de que Starlette guarde el
+# multipart entero en /tmp (CodeRabbit en BE #774)
+app.add_middleware(
+    LimitaElCuerpoDeLasSubidas,
+    limites=_UPLOAD_SIZE_LIMITS,
+    margen=_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES,
+)
 
 
 # ================================
