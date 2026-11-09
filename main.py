@@ -28,6 +28,7 @@ from pydantic import BaseModel  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
+from src.config.arranque_seguro import comprueba_la_configuracion_de_seguridad  # noqa: E402
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
@@ -135,6 +136,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # Fuera de desarrollo, ni TESTING ni una SECRET_KEY de ejemplo o corta (F-06,
+    # F-12). Tras Sentry, para que un arranque fallido llegue allí
+    try:
+        comprueba_la_configuracion_de_seguridad(os.environ)
+    except RuntimeError:
+        logging.getLogger(__name__).exception("Insecure configuration: not starting")
+        raise
 
     # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
     # https (BE #563). Tras Sentry, para que un arranque fallido llegue allí

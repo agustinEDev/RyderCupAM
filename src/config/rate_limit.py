@@ -38,6 +38,7 @@ from slowapi.util import get_remote_address
 from slowapi.wrappers import Limit
 from starlette.requests import Request
 
+from src.config.arranque_seguro import en_desarrollo_declarado, testing_activado
 from src.config.settings import settings
 from src.modules.user.domain.value_objects.email import Email, InvalidEmailError
 from src.shared.infrastructure.http.http_context_validator import cloudflare_client_ip
@@ -131,24 +132,17 @@ def get_client_identifier(request: Request) -> str:
     return get_remote_address(request)
 
 
-# El entorno que dice expresamente que no es producción (no hay staging)
-_ENTORNOS_DE_PRUEBA = frozenset({"development"})
-
-
 def _admite_el_cliente_de_prueba() -> bool:
     """
-    Si vale X-Test-Client-ID: solo cuando el entorno dice que NO es producción.
+    Si vale X-Test-Client-ID: solo en la suite de tests, con TESTING=true Y
+    ENVIRONMENT=development.
 
     Antes, sin ENVIRONMENT se tomaba por desarrollo: una producción mal configurada
     dejaba a quien llama elegir su red, y con ella el freno del login (auditoría
-    OWASP de BE #732, A05). Un valor desconocido cuenta como producción.
+    OWASP de BE #732, A05). Y bastaba TESTING o development: ahora hacen falta los
+    dos (F-12, 9 nov 2026). Un valor desconocido cuenta como producción.
     """
-    environment = os.getenv("ENVIRONMENT", "").lower()
-    if environment == "production":
-        return False
-    if os.getenv("TESTING", "").lower() == "true":
-        return True
-    return environment in _ENTORNOS_DE_PRUEBA
+    return testing_activado(os.environ) and en_desarrollo_declarado(os.environ)
 
 
 def get_rate_limit_key(request: Request) -> str:
