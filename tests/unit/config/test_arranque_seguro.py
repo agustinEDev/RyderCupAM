@@ -317,3 +317,40 @@ def test_s12_the_entrypoint_checks_before_migrating():
 
     assert comprobacion < migracion
     assert "exit 1" in guion[comprobacion:migracion]
+
+
+@pytest.mark.parametrize(
+    ("entorno", "es"),
+    [
+        ({"TESTING": "true", "ENVIRONMENT": "development"}, True),
+        ({"TESTING": "TRUE", "ENVIRONMENT": " Development "}, True),
+        ({"TESTING": "true"}, False),
+        ({"ENVIRONMENT": "development"}, False),
+        ({"TESTING": "true", "ENVIRONMENT": "production"}, False),
+        ({}, False),
+    ],
+)
+def test_s13_test_mode_needs_testing_and_development(entorno, es):
+    """
+    Given: Cada combinación de TESTING y ENVIRONMENT
+    When: Se pregunta si es el modo de tests
+    Then: Solo con TESTING=true Y ENVIRONMENT=development (ADR-047)
+    """
+    from src.config.arranque_seguro import modo_de_tests
+
+    assert modo_de_tests(entorno) is es
+
+
+def test_s13_csrf_and_rate_limit_share_the_test_mode_predicate():
+    """
+    Given: El salto del CSRF y X-Test-Client-ID
+    When: Se mira de dónde sacan el modo de tests
+    Then: Los dos de modo_de_tests, sin repetir la condición (/code-review)
+    """
+    for fichero in (
+        "src/shared/infrastructure/middleware/csrf_middleware.py",
+        "src/config/rate_limit.py",
+    ):
+        codigo = (RAIZ / fichero).read_text(encoding="utf-8")
+        assert "modo_de_tests(" in codigo, fichero
+        assert "testing_activado(" not in codigo, fichero

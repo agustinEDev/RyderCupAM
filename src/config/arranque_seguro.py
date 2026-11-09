@@ -45,6 +45,14 @@ def testing_activado(entorno: Mapping[str, str] = os.environ) -> bool:
     return (entorno.get("TESTING") or "").strip().lower() == "true"
 
 
+def modo_de_tests(entorno: Mapping[str, str] = os.environ) -> bool:
+    """
+    La suite de tests: TESTING=true Y ENVIRONMENT=development (ADR-047). Solo así se
+    salta el CSRF de los tests de integración y vale X-Test-Client-ID.
+    """
+    return testing_activado(entorno) and en_desarrollo_declarado(entorno)
+
+
 def comprueba_la_configuracion_de_seguridad(entorno: Mapping[str, str] = os.environ) -> None:
     """
     No deja arrancar fuera de desarrollo con TESTING ni con una SECRET_KEY mala.

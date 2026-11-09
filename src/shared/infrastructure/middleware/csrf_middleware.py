@@ -18,7 +18,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.config.arranque_seguro import en_desarrollo_declarado, testing_activado
+from src.config.arranque_seguro import modo_de_tests
 from src.config.csrf_config import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
@@ -77,11 +77,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # con TESTING, y aquí tampoco apagaría nada (F-06)
         import os  # noqa: PLC0415 - Avoid circular import with config
 
-        if (
-            testing_activado(os.environ)
-            and en_desarrollo_declarado(os.environ)
-            and os.getenv("TEST_CSRF") != "true"
-        ):
+        if modo_de_tests(os.environ) and os.getenv("TEST_CSRF") != "true":
             return await call_next(request)
 
         # Eximir métodos seguros (GET, HEAD, OPTIONS)

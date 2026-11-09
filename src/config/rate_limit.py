@@ -38,7 +38,7 @@ from slowapi.util import get_remote_address
 from slowapi.wrappers import Limit
 from starlette.requests import Request
 
-from src.config.arranque_seguro import en_desarrollo_declarado, testing_activado
+from src.config.arranque_seguro import modo_de_tests
 from src.config.settings import settings
 from src.modules.user.domain.value_objects.email import Email, InvalidEmailError
 from src.shared.infrastructure.http.http_context_validator import cloudflare_client_ip
@@ -122,14 +122,15 @@ def get_client_identifier(request: Request) -> str:
     En producción: la IP que da Cloudflare si la petición trae su secreto (BE #466,
     ADR-041); si no, la del peer, que es el proxy de Render: el contador
     compartido de siempre, nunca uno que elija quien llama.
-    En desarrollo y en los tests: X-Test-Client-ID si existe (simula clientes
-    distintos). Sin ENVIRONMENT, o con un valor desconocido, como en producción.
+    Solo en la suite de tests (TESTING=true Y ENVIRONMENT=development): X-Test-Client-ID
+    si existe, para simular clientes distintos. En el Kind (development sin TESTING) ya
+    NO vale, y sin ENVIRONMENT o con un valor desconocido, como en producción (ADR-047).
     """
     if not _admite_el_cliente_de_prueba():
         ip = cloudflare_client_ip(request)
         return _clave_de_red(ip) if ip else get_remote_address(request)
 
-    # En los tests y en desarrollo, simular clientes distintos con una cabecera
+    # En los tests, simular clientes distintos con una cabecera
     test_client_id = request.headers.get("X-Test-Client-ID")
     if test_client_id:
         return test_client_id
@@ -148,7 +149,7 @@ def _admite_el_cliente_de_prueba() -> bool:
     OWASP de BE #732, A05). Y bastaba TESTING o development: ahora hacen falta los
     dos (F-12, 9 nov 2026). Un valor desconocido cuenta como producción.
     """
-    return testing_activado(os.environ) and en_desarrollo_declarado(os.environ)
+    return modo_de_tests(os.environ)
 
 
 def get_rate_limit_key(request: Request) -> str:
@@ -383,18 +384,27 @@ async def apply_default_rate_limit(request: Request) -> None:
     clave = get_rate_limit_key(request)
     if not clave.startswith(_USER_PREFIX):
         return
-    valor = DEFAULT_LIMIT_OVERRIDES.get(nombre, DEFAULT_LIMIT)
+    _cuenta_o_responde_429(
+        request, DEFAULT_LIMIT_OVERRIDES.get(nombre, DEFAULT_LIMIT), clave, nombre
+    )
+
+
+def _cuenta_o_responde_429(request: Request, valor: str, clave: str, ambito: str) -> None:
+    """
+    Cuenta la petición contra `valor` para (clave, ámbito) y, si lo supera, lanza el
+    mismo 429 que slowapi. Lo comparten el límite por defecto y el de los fallos de
+    la documentación.
+    """
     limite = parse(valor)
     # Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
     # X-RateLimit leen la ventana con estos mismos identificadores
-    identificadores = [clave, nombre]
+    identificadores = [clave, ambito]
     if limiter._key_prefix:
         identificadores = [limiter._key_prefix, *identificadores]
     if not limiter.limiter.hit(limite, *identificadores):
-        excedido = _exceeded(valor)
         # El manejador de slowapi lee el límite que saltó de aquí
         request.state.view_rate_limit = (limite, identificadores)
-        raise excedido
+        raise _exceeded(valor)
 
 
 def cuenta_un_fallo_de_la_documentacion(request: Request) -> None:
@@ -406,14 +416,7 @@ def cuenta_un_fallo_de_la_documentacion(request: Request) -> None:
     """
     if not limiter.enabled:
         return
-    limite = parse(DOCS_LIMIT)
-    identificadores = [get_client_identifier(request), "docs"]
-    if limiter._key_prefix:
-        identificadores = [limiter._key_prefix, *identificadores]
-    if not limiter.limiter.hit(limite, *identificadores):
-        # El manejador de slowapi lee el límite que saltó de aquí
-        request.state.view_rate_limit = (limite, identificadores)
-        raise _exceeded(DOCS_LIMIT)
+    _cuenta_o_responde_429(request, DOCS_LIMIT, get_client_identifier(request), "docs")
 
 
 def limite_de_lo_publico(key: str) -> str:
