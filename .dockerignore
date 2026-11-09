@@ -67,3 +67,7 @@ k8s/
 
 # Datos de importación locales: no entran en la imagen
 data/rfeg_dataset*
+
+# Logs locales: el log de seguridad del equipo (de root) no entra en la imagen, que
+# escribe el suyo como el usuario 10001 (revisión de la fase 2)
+logs/

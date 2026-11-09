@@ -317,18 +317,7 @@ class SecurityLogger:
             anterior.close()
             logger.removeHandler(anterior)
 
-        # Crear directorio de logs si no existe
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        # Handler con rotación automática
         log_path = self.log_dir / self.log_file
-        handler = logging.handlers.RotatingFileHandler(
-            filename=str(log_path),
-            maxBytes=self.MAX_BYTES,
-            backupCount=self.BACKUP_COUNT,
-            encoding="utf-8",
-        )
-        handler.setLevel(logging.INFO)
 
         # Formatter JSON para logs estructurados
         handler_config = HandlerConfig(
@@ -343,17 +332,36 @@ class SecurityLogger:
             include_context=True,
         )
         json_formatter = JsonFormatter(config=handler_config)
-        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
-        handler.setFormatter(PythonLoggingFormatter(json_formatter))
-
-        logger.addHandler(handler)
 
         # La misma línea JSON por la salida estándar: Render la guarda, y el
-        # fichero se pierde en cada despliegue (F-05b)
+        # fichero se pierde en cada despliegue (F-05b). Va primero y no depende
+        # del fichero: si este no se puede abrir, el log sigue aquí
         salida = _SalidaEstandar()
         salida.setLevel(logging.INFO)
+        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
         salida.setFormatter(PythonLoggingFormatter(json_formatter))
         logger.addHandler(salida)
+
+        try:
+            # Crear directorio de logs si no existe, y el handler con rotación
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            handler = logging.handlers.RotatingFileHandler(
+                filename=str(log_path),
+                maxBytes=self.MAX_BYTES,
+                backupCount=self.BACKUP_COUNT,
+                encoding="utf-8",
+            )
+        except OSError as error:
+            # Sin fichero (en el Kind, uno de root que el usuario 10001 no abría): se
+            # avisa y el log sigue por stdout (revisión de la fase 2)
+            logging.getLogger(__name__).warning(
+                "Security audit file unavailable (%s): logging to stdout only",
+                type(error).__name__,
+            )
+        else:
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(PythonLoggingFormatter(json_formatter))
+            logger.addHandler(handler)
 
         # Log inicial de arranque
         logger.info(
