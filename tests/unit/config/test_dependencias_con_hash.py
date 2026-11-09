@@ -86,3 +86,53 @@ def test_the_image_runs_as_an_unprivileged_user():
 
     assert usuarios, "el Dockerfile no declara USER: arranca como root"
     assert usuarios[-1] not in {"root", "0", "0:0"}
+
+
+def test_pip_itself_is_installed_pinned_and_with_hashes():
+    """
+    Given: el Dockerfile y requirements-bootstrap.lock
+    When: se mira cómo se pone pip al día
+    Then: desde el lock de arranque, con --require-hashes, y no con un
+          `pip install --upgrade pip` sin versión ni hash (revisión de la fase 2):
+          el pip que instala todo lo demás también se verifica
+    """
+    dockerfile = (RAIZ / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    instalaciones = [
+        linea for linea in dockerfile.replace("\\\n", " ").splitlines() if "pip install" in linea
+    ]
+
+    assert "--require-hashes -r requirements-bootstrap.lock" in dockerfile
+    assert "--upgrade pip" not in dockerfile
+    for linea in instalaciones:
+        for orden in linea.split("&&"):
+            if "pip install" in orden:
+                assert "--require-hashes" in orden, orden
+
+
+def test_the_bootstrap_lock_pins_pip_like_its_source_and_with_hashes():
+    """
+    Given: requirements-bootstrap.txt y su lock
+    When: se comparan
+    Then: el lock fija pip a la versión de la fuente, con su hash
+    """
+    fuente = _pines("requirements-bootstrap.txt")
+    lock = _pines("requirements-bootstrap.lock")
+    texto = (RAIZ / "requirements-bootstrap.lock").read_text(encoding="utf-8")
+
+    assert set(fuente) == {"pip"}
+    assert lock == fuente
+    assert "--hash=sha256:" in texto
+
+
+def test_the_locks_are_resolved_for_the_platform_of_render():
+    """
+    Given: scripts/freeze-requirements.sh
+    When: se mira cómo arranca la imagen que resuelve los locks
+    Then: con --platform linux/amd64 (Render): en un Mac ARM saldrían otras ruedas; y
+          compila los dos locks
+    """
+    guion = (RAIZ / "scripts" / "freeze-requirements.sh").read_text(encoding="utf-8")
+
+    assert "docker run --rm --platform linux/amd64" in guion
+    # Y compila también la fuente del lock de arranque
+    assert "for fuente in requirements.txt requirements-bootstrap.txt" in guion
