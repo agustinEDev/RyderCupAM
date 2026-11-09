@@ -389,6 +389,16 @@ async def apply_default_rate_limit(request: Request) -> None:
     )
 
 
+def _identificadores(clave: str, ambito: str) -> list[str]:
+    """
+    Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
+    X-RateLimit leen la ventana con estos mismos identificadores.
+    """
+    if limiter._key_prefix:
+        return [limiter._key_prefix, clave, ambito]
+    return [clave, ambito]
+
+
 def _cuenta_o_responde_429(request: Request, valor: str, clave: str, ambito: str) -> None:
     """
     Cuenta la petición contra `valor` para (clave, ámbito) y, si lo supera, lanza el
@@ -396,11 +406,7 @@ def _cuenta_o_responde_429(request: Request, valor: str, clave: str, ambito: str
     la documentación.
     """
     limite = parse(valor)
-    # Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
-    # X-RateLimit leen la ventana con estos mismos identificadores
-    identificadores = [clave, ambito]
-    if limiter._key_prefix:
-        identificadores = [limiter._key_prefix, *identificadores]
+    identificadores = _identificadores(clave, ambito)
     if not limiter.limiter.hit(limite, *identificadores):
         # El manejador de slowapi lee el límite que saltó de aquí
         request.state.view_rate_limit = (limite, identificadores)
@@ -417,6 +423,23 @@ def cuenta_un_fallo_de_la_documentacion(request: Request) -> None:
     if not limiter.enabled:
         return
     _cuenta_o_responde_429(request, DOCS_LIMIT, get_client_identifier(request), "docs")
+
+
+def frena_la_documentacion_con_la_ip_real(request: Request) -> None:
+    """
+    Con la IP real de quien llama (verificada por Cloudflare, ADR-041), si su contador
+    de fallos de la documentación está lleno responde 429 ANTES de comparar las
+    credenciales, también las buenas: así la fuerza bruta no puede seguir probando
+    (CodeRabbit en BE #774). Sin la IP real el contador es el de toda la app y no se
+    frena a nadie por adelantado: cualquiera dejaría fuera al administrador.
+    """
+    if not limiter.enabled or cloudflare_client_ip(request) is None:
+        return
+    limite = parse(DOCS_LIMIT)
+    identificadores = _identificadores(get_client_identifier(request), "docs")
+    if not limiter.limiter.test(limite, *identificadores):
+        request.state.view_rate_limit = (limite, identificadores)
+        raise _exceeded(DOCS_LIMIT)
 
 
 def limite_de_lo_publico(key: str) -> str:

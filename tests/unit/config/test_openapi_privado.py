@@ -163,6 +163,54 @@ def test_an_exhausted_bucket_does_not_lock_out_the_admin(cliente, limite_de_2):
     assert cliente.get("/docs", headers=buena).status_code == 200
 
 
+@pytest.fixture
+def ip_real(monkeypatch):
+    """La petición trae la IP real de quien llama, verificada por Cloudflare (ADR-041)."""
+    monkeypatch.setattr(rate_limit, "cloudflare_client_ip", lambda _peticion: "203.0.113.5")
+
+
+def test_with_the_real_ip_a_full_bucket_blocks_even_good_credentials(cliente, limite_de_2, ip_real):
+    """
+    Given: La IP real de quien llama (su propio contador) y el límite a 2 por minuto
+    When: Prueba 2 contraseñas equivocadas y después las buenas
+    Then: 401, 401 y 429: con su contador lleno se le frena ANTES de comparar, también
+          con las buenas, y la fuerza bruta no puede seguir probando (CodeRabbit)
+    """
+    mala = {**_basic(USUARIO, "mala"), "X-Test-Client-ID": "atacante"}
+    buena = {**_basic(USUARIO, CLAVE), "X-Test-Client-ID": "atacante"}
+
+    codigos = [cliente.get("/openapi.json", headers=mala).status_code for _ in range(2)]
+    codigos.append(cliente.get("/openapi.json", headers=buena).status_code)
+
+    assert codigos == [401, 401, 429]
+
+
+def test_with_the_real_ip_another_network_is_not_blocked(cliente, limite_de_2, ip_real):
+    """
+    Given: El contador de una IP real lleno
+    When: Entra el administrador con sus credenciales desde otra red
+    Then: 200: cada IP real tiene su propio contador
+    """
+    mala = {**_basic(USUARIO, "mala"), "X-Test-Client-ID": "atacante"}
+    for _ in range(3):
+        cliente.get("/docs", headers=mala)
+
+    buena = {**_basic(USUARIO, CLAVE), "X-Test-Client-ID": "admin"}
+
+    assert cliente.get("/docs", headers=buena).status_code == 200
+
+
+def test_with_the_real_ip_good_credentials_still_do_not_count(cliente, limite_de_2, ip_real):
+    """
+    Given: La IP real y el límite a 2 por minuto
+    When: El administrador abre la documentación 5 veces con sus credenciales
+    Then: 200 las 5: los aciertos siguen sin contar
+    """
+    buena = {**_basic(USUARIO, CLAVE), "X-Test-Client-ID": "admin"}
+
+    assert [cliente.get("/docs", headers=buena).status_code for _ in range(5)] == [200] * 5
+
+
 def test_the_docs_limit_is_per_network():
     """
     Given: El límite de la documentación

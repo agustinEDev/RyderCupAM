@@ -45,6 +45,7 @@ from src.config.mappers import start_all_mappers  # noqa: E402
 from src.config.rate_limit import (  # noqa: E402
     apply_default_rate_limit,
     cuenta_un_fallo_de_la_documentacion,
+    frena_la_documentacion_con_la_ip_real,
     limiter,
 )
 from src.config.refresco_de_handicaps import (  # noqa: E402
@@ -201,7 +202,9 @@ def verify_docs_credentials(
     Verifica las credenciales HTTP Basic para acceder a /docs, /redoc y /openapi.json.
 
     Unas equivocadas cuentan contra el límite de la documentación, por red, y pasado
-    este dan 429; las buenas ni cuentan ni se frenan (F-11, /code-review).
+    este dan 429; las buenas no cuentan. Con la IP real de quien llama (Cloudflare),
+    un contador lleno frena también las buenas; con el contador compartido de toda la
+    app, no (F-11, /code-review, CodeRabbit).
 
     Las credenciales se configuran en variables de entorno:
     - DOCS_USERNAME
@@ -217,6 +220,9 @@ def verify_docs_credentials(
             detail="Documentación no disponible - credenciales no configuradas",
             headers={"WWW-Authenticate": "Basic"},
         )
+
+    # Con la IP real y su contador lleno, ni se comparan (CodeRabbit en BE #774)
+    frena_la_documentacion_con_la_ip_real(request)
 
     # Verificar username
     correct_username = secrets.compare_digest(
