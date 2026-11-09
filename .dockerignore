@@ -1,73 +1,24 @@
-# Git
-.git
-.gitignore
-.gitattributes
+# Lista de PERMITIDOS: todo fuera y solo vuelve lo que la app usa en ejecución.
+# Con una lista de excluidos se colaba cualquier fichero local nuevo, y desde que la
+# imagen da lectura a todo /app (fix/docker-readable-tree) el usuario de la app lo
+# podría leer. Render y el CI construyen desde git; el Kind, desde el árbol de
+# trabajo, que tiene .env, secretos del Kind, cachés y configuración local.
+*
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
-dist
-build
-.venv
-venv/
+!src
+!alembic
+!alembic.ini
+!main.py
+!entrypoint.sh
+# Los scripts de importación (campos, mapas) se lanzan dentro del contenedor
+!scripts
+!requirements.txt
+!requirements.lock
+!requirements-bootstrap.txt
+!requirements-bootstrap.lock
 
-# Environment files (se configuran por variables de entorno)
-.env
-.env.*
-
-# Documentation
-*.md
-docs/
-README.md
-DEPLOYMENT.md
-RENDER_DEPLOYMENT.md
-
-# Tests
-tests/
-pytest.ini
-dev_tests.py
-.pytest_cache
-htmlcov/
-.coverage
-
-# IDE
-.vscode/
-.idea/
-*.code-workspace
-
-# Docker
-docker-compose.yml
-Dockerfile
-.dockerignore
-
-# macOS
-.DS_Store
-
-# Logs
-*.log
-
-# Postman
-*.postman_collection.json
-*.postman_environment.json
-
-# Otros
-CLAUDE.md
-GEMINI.md
-STITCH_PROMPT.md
-
-# El clúster local (Kind): manifiestos, secretos locales y volcados de la BD.
-# La app no lo usa y no debe ir dentro de ninguna imagen
-k8s/
-
-# Datos de importación locales: no entran en la imagen
-data/rfeg_dataset*
-
-# Logs locales: el log de seguridad del equipo (de root) no entra en la imagen, que
-# escribe el suyo como el usuario 10001 (revisión de la fase 2)
-logs/
+# Dentro de lo permitido, nada de cachés ni restos del equipo, a cualquier nivel
+**/__pycache__
+**/*.py[cod]
+**/*.log
+**/.DS_Store

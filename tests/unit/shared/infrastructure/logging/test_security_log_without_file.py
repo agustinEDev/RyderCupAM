@@ -45,8 +45,15 @@ def test_the_local_logs_folder_does_not_go_into_the_image():
     """
     Given: El .dockerignore del repositorio
     When: Se buscan sus exclusiones
-    Then: Excluye logs/: el fichero de root del equipo no entra en la imagen
+    Then: logs/ no entra en la imagen: el .dockerignore lo deja todo fuera (`*`) y
+          no vuelve a permitir logs/, así que el fichero de root del equipo no llega
     """
-    lineas = (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    lineas = [
+        linea.strip()
+        for linea in (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if linea.strip() and not linea.lstrip().startswith("#")
+    ]
 
-    assert "logs/" in [linea.strip() for linea in lineas]
+    assert lineas[0] == "*"
+    assert not any(linea.startswith("!") and "logs" in linea for linea in lineas)
+    assert "**/*.log" in lineas

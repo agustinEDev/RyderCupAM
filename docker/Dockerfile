@@ -54,12 +54,18 @@ COPY . .
 
 # 6. Copiar y configurar script de inicio
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
 
 # 6b. Sin privilegios (F-14): un fallo que ejecutara código lo haría como este
 # usuario, no como root. El código sigue siendo de root, así que no puede
-# cambiarlo; solo escribe en logs/ (el log de seguridad) y en /tmp
-RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
+# cambiarlo; solo escribe en logs/ (el log de seguridad) y en /tmp.
+# chmod a+rX: COPY conserva los permisos del equipo que construye, y un checkout
+# local con carpetas 700 (el Kind se construye desde el árbol de trabajo) dejaba
+# al usuario sin poder importar el código. Lectura para todos, escritura no
+# Solo lo que no tiene ya esos bits: un chmod de todo el árbol copiaría a la capa
+# nueva cada fichero aunque su modo no cambie
+RUN find /app \( -type d ! -perm -a+rx -o -type f ! -perm -a+r \) -exec chmod a+rX {} + \
+    && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
     && mkdir -p /app/logs \
     && chown app:app /app/logs
 USER app
