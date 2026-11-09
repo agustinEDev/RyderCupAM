@@ -97,3 +97,25 @@ async def test_other_integrity_errors_are_not_translated():
     with pytest.raises(IntegrityError):
         async with uow:
             pass
+
+
+@pytest.mark.asyncio
+async def test_an_alias_violation_from_autoflush_inside_the_block_is_translated():
+    """
+    Given: una consulta dentro del bloque que dispara el autoflush y choca con el
+           índice del alias (no pasa por commit ni por flush de la unidad de trabajo)
+    When: el error sale del bloque
+    Then: sale AliasAlreadyTakenError, con rollback: una carrera del alias es un
+          409, nunca un 500
+    """
+    from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
+
+    sesion = MagicMock()
+    sesion.rollback = AsyncMock()
+    uow = SQLAlchemyUnitOfWork(sesion)
+
+    with pytest.raises(AliasAlreadyTakenError):
+        async with uow:
+            raise _violacion("ix_users_alias_lower")
+
+    sesion.rollback.assert_awaited_once()

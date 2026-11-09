@@ -59,7 +59,7 @@ def test_production_cost_is_12_when_nothing_is_configured():
     Then: son 12
     """
     assert rondas_de_bcrypt({}) == 12
-    assert rondas_de_bcrypt({"BCRYPT_ROUNDS": "4"}) == 4
+    assert rondas_de_bcrypt({"ENVIRONMENT": "development", "BCRYPT_ROUNDS": "4"}) == 4
 
 
 def test_the_testing_flag_no_longer_lowers_the_cost():
@@ -116,3 +116,38 @@ def test_an_unusable_value_falls_back_to_12(valor):
           natural de quitarla), no un error al arrancar
     """
     assert rondas_de_bcrypt({"BCRYPT_ROUNDS": valor}) == 12
+
+
+@pytest.mark.parametrize("entorno", [None, "prod", "production ", "staging"])
+def test_low_rounds_are_refused_unless_the_environment_says_development(entorno):
+    """
+    Given: BCRYPT_ROUNDS=4 con ENVIRONMENT ausente, mal escrito o desconocido
+    When: se leen las rondas
+    Then: la app no arranca: solo un desarrollo declarado admite menos de 12
+          (como rate_limit, un entorno desconocido cuenta como producción)
+    """
+    valores = {"BCRYPT_ROUNDS": "4"}
+    if entorno is not None:
+        valores["ENVIRONMENT"] = entorno
+    with pytest.raises(RuntimeError, match="BCRYPT_ROUNDS"):
+        rondas_de_bcrypt(valores)
+
+
+def test_development_admits_low_rounds():
+    """
+    Given: ENVIRONMENT=development (local, Kind y la configuración de los tests)
+    When: BCRYPT_ROUNDS=4
+    Then: valen 4
+    """
+    assert rondas_de_bcrypt({"ENVIRONMENT": "development", "BCRYPT_ROUNDS": "4"}) == 4
+
+
+@pytest.mark.parametrize("valor", ["0", "3", "16", "40"])
+def test_an_out_of_range_cost_falls_back_to_12(valor):
+    """
+    Given: un coste que bcrypt no acepta (menos de 4) o que tumbaría el login por
+           CPU (más de 15: cada hash tardaría segundos)
+    When: se leen las rondas
+    Then: se usan las 12, igual que con una errata, sin tumbar el arranque
+    """
+    assert rondas_de_bcrypt({"ENVIRONMENT": "development", "BCRYPT_ROUNDS": valor}) == 12

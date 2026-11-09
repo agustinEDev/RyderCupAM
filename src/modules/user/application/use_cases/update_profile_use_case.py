@@ -104,6 +104,9 @@ class UpdateProfileUseCase:
 
                 # Context manager hace commit automático y publica eventos
         except AliasAlreadyTakenError as e:
+            if e.__cause__ is None:
+                # La comprobación de arriba: ya lleva el alias en el mensaje
+                raise
             # La comprobación de arriba no basta: entre ella y el commit cabe
             # otra petición pidiendo el mismo alias, y quien lo resuelve de
             # verdad es el índice único. La unidad de trabajo traduce SU

@@ -111,6 +111,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         if exc_type:
             # Si hubo excepción, hacer rollback
             await self.rollback()
+            # Un autoflush dentro del bloque (una consulta tras modificar el usuario)
+            # también puede chocar con el índice del alias, sin pasar por commit ni flush
+            if isinstance(exc_val, IntegrityError):
+                _traduce_la_violacion_del_alias(exc_val)
         else:
             # Si todo fue exitoso, hacer commit automáticamente. Si el commit falla (una
             # restricción única), rollback: sin él la sesión quedaba inservible para lo

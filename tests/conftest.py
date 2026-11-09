@@ -28,6 +28,9 @@ os.environ["TESTING"] = "true"
 # producción). Lo lee src/config/contrasenas.py al instalar el hasher; antes lo
 # decidía el dominio mirando TESTING (auditoría de arquitectura del 9 nov 2026, B2)
 os.environ["BCRYPT_ROUNDS"] = "4"
+# Un coste bajo solo se admite en un desarrollo declarado; sin ENVIRONMENT, el
+# resto del código ya toma desarrollo por defecto (cookies, CORS, logging)
+os.environ.setdefault("ENVIRONMENT", "development")
 
 # Configuración de seguridad para Device Fingerprinting (v1.13.1)
 # En testing, configuramos una IP "mágica" como proxy confiable

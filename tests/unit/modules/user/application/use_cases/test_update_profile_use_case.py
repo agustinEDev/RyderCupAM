@@ -326,7 +326,10 @@ class TestUpdateProfileAlias:
         original_commit = uow.commit
 
         async def commit_conflicting(*args, **kwargs):
-            raise AliasAlreadyTakenError("El alias ya está en uso.")
+            # Como la unidad de trabajo: el error del dominio, causado por el índice
+            raise AliasAlreadyTakenError("El alias ya está en uso.") from RuntimeError(
+                "ix_users_alias_lower"
+            )
 
         uow.commit = commit_conflicting
         try:

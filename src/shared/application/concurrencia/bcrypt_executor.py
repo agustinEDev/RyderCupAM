@@ -1,7 +1,8 @@
 """
 Ejecutor de bcrypt fuera del event loop, con la concurrencia acotada.
 
-bcrypt con 12 rounds (`Password._hash_password`) cuesta ~200 ms de CPU, y llamarlo
+bcrypt con 12 rondas (el adaptador `BcryptPasswordHasher`; el coste sale de
+`BCRYPT_ROUNDS`) cuesta ~200 ms de CPU, y llamarlo
 directamente desde una corrutina bloquea el event loop: mientras dura, el proceso no
 atiende NINGUNA otra petición. Producción corre un único worker de uvicorn
 (`entrypoint.sh`), así que un login congelaba la API entera para todo el mundo, y la

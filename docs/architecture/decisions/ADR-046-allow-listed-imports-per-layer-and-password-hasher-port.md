@@ -38,12 +38,15 @@ passed, and packages outside `domain/application/infrastructure` were never chec
    adapter lives in `user/infrastructure/security` and the composition root installs one
    per process (`src/config/contrasenas.py`), also from scripts that create users.
    Without an installed hasher, creating or checking a password raises: it fails closed.
-5. **The cost is configuration.** `BCRYPT_ROUNDS` sets the bcrypt cost: 12 when unset or
-   unusable, and the app refuses to start in production with fewer than 12. The test
-   configuration sets 4. `TESTING` no longer changes the cost.
+5. **The cost is configuration.** `BCRYPT_ROUNDS` sets the bcrypt cost: 12 when unset,
+   mistyped or outside 4-15. Fewer than 12 is accepted only with
+   `ENVIRONMENT=development` (local, Kind, tests, which set 4); anywhere else, including
+   an unset or unknown `ENVIRONMENT`, the app refuses to start. `TESTING` no longer
+   changes the cost.
 6. **Database errors are translated in infrastructure.** A unique violation that means
    something in the domain (the alias index) becomes the domain error in the unit of
-   work, as the social module already did for friendships.
+   work, on commit, flush or an autoflush inside the block, as the social module
+   already did for friendships.
 
 ## Consequences
 
