@@ -255,3 +255,65 @@ def test_s10_production_on_render_with_a_good_config_starts():
     Then: Arranca
     """
     comprueba_la_configuracion_de_seguridad({**PRODUCCION, "RENDER": "true"})
+
+
+def _como_script(entorno: dict[str, str]) -> subprocess.CompletedProcess:
+    """Ejecuta `python -m src.config.arranque_seguro` con solo ese entorno (y PATH)."""
+    return subprocess.run(
+        [sys.executable, "-m", "src.config.arranque_seguro"],
+        cwd=RAIZ,
+        env={"PATH": os.environ.get("PATH", ""), **entorno},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "entorno",
+    [
+        {"ENVIRONMENT": "production", "SECRET_KEY": CLAVE_BUENA, "TESTING": "true"},
+        {"ENVIRONMENT": "production", "SECRET_KEY": "corta-y-secreta"},
+        {"ENVIRONMENT": "production"},
+    ],
+)
+def test_s11_as_a_script_a_bad_config_exits_non_zero_without_the_key(entorno):
+    """
+    Given: Una configuración insegura de producción
+    When: Se ejecuta el módulo como script (lo hace entrypoint.sh antes de migrar)
+    Then: Sale con código distinto de 0, dice el motivo y no muestra la clave
+    """
+    resultado = _como_script(entorno)
+
+    assert resultado.returncode != 0
+    assert "no se arranca" in resultado.stderr
+    assert "corta-y-secreta" not in resultado.stdout + resultado.stderr
+
+
+@pytest.mark.parametrize(
+    "entorno",
+    [{"ENVIRONMENT": "production", "SECRET_KEY": CLAVE_BUENA}, {"ENVIRONMENT": "development"}],
+)
+def test_s11_as_a_script_a_good_config_exits_zero(entorno):
+    """
+    Given: Una configuración buena (o un desarrollo declarado)
+    When: Se ejecuta el módulo como script
+    Then: Sale con 0
+    """
+    assert _como_script(entorno).returncode == 0
+
+
+def test_s12_the_entrypoint_checks_before_migrating():
+    """
+    Given: entrypoint.sh (el arranque de Render y del Kind)
+    When: Se mira el orden de sus pasos
+    Then: Comprueba la configuración de seguridad ANTES de `alembic upgrade head`, y
+          sale si falla: con una configuración mala la base de datos no se migra
+          mientras la app vieja sigue sirviendo
+    """
+    guion = (RAIZ / "entrypoint.sh").read_text(encoding="utf-8")
+    comprobacion = guion.index("if ! python -m src.config.arranque_seguro; then")
+    migracion = guion.index("alembic upgrade head")
+
+    assert comprobacion < migracion
+    assert "exit 1" in guion[comprobacion:migracion]

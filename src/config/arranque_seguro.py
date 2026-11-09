@@ -72,3 +72,24 @@ def comprueba_la_configuracion_de_seguridad(entorno: Mapping[str, str] = os.envi
             f"SECRET_KEY de menos de {LONGITUD_MINIMA_DE_LA_CLAVE} bytes fuera de desarrollo;"
             " no se arranca"
         )
+
+
+def main() -> int:
+    """
+    `python -m src.config.arranque_seguro`: lo ejecuta entrypoint.sh ANTES de migrar
+    (/code-review de la fase 2). Si la comprobación fallara solo en el lifespan, la base
+    de datos ya estaría migrada y la versión anterior seguiría sirviendo con el esquema
+    nuevo. Sale con 1 y el motivo (nunca la clave) si la configuración no vale.
+    """
+    import sys  # noqa: PLC0415 - solo al ejecutarse como script
+
+    try:
+        comprueba_la_configuracion_de_seguridad(os.environ)
+    except RuntimeError as error:
+        print(f"Configuración insegura: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
