@@ -18,7 +18,9 @@ Características:
 - Helpers para eventos comunes
 """
 
+import functools
 import hashlib
+import hmac
 import logging
 import logging.handlers
 import sys
@@ -29,6 +31,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import sentry_sdk
+
+from src.config.settings import settings
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
@@ -99,6 +103,52 @@ def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
         for clave, valor in event.to_dict().items()
         if clave in _CAMPOS_PARA_SENTRY or clave.endswith(_SUFIJO_DE_ID_DE_USUARIO)
     }
+
+
+# La etiqueta separa esta clave de cualquier otro uso de SECRET_KEY (como la del CSRF)
+_ETIQUETA_DE_LA_CLAVE_DEL_CORREO = b"rydercupfriends:security-log-email:v1"
+_CIFRAS_DE_LA_HUELLA = 32  # 128 bits: de sobra para relacionar intentos
+
+
+@functools.cache
+def _clave_del_correo() -> bytes:
+    """La clave del hash de los correos del log, derivada de SECRET_KEY con su etiqueta."""
+    return hmac.new(
+        settings.SECRET_KEY.encode(), _ETIQUETA_DE_LA_CLAVE_DEL_CORREO, hashlib.sha256
+    ).digest()
+
+
+def _normaliza(correo: str) -> str:
+    """El correo sin espacios alrededor y en minúsculas."""
+    return correo.strip().lower()
+
+
+def enmascara_el_correo(correo: str) -> str:
+    """`ana@gmail.com` -> `a***@gmail.com`; sin arroba, `***`; vacío, vacío."""
+    normalizado = _normaliza(correo)
+    if not normalizado:
+        return ""
+    local, arroba, dominio = normalizado.partition("@")
+    if not arroba:
+        return "***"
+    return f"{local[:1]}***@{dominio}"
+
+
+def huella_del_correo(correo: str) -> str:
+    """HMAC-SHA256 del correo normalizado con la clave del log: relaciona sin guardarlo."""
+    digest = hmac.new(_clave_del_correo(), _normaliza(correo).encode(), hashlib.sha256)
+    return digest.hexdigest()[:_CIFRAS_DE_LA_HUELLA]
+
+
+def _sin_el_correo(datos: dict[str, Any]) -> dict[str, Any]:
+    """
+    Los datos del evento con el correo tecleado enmascarado y su huella (revisión de la
+    fase 2): ni el fichero ni stdout lo guardan en claro. La IP y el navegador se quedan.
+    """
+    correo = datos.get("email")
+    if not isinstance(correo, str) or not correo:
+        return datos
+    return {**datos, "email": enmascara_el_correo(correo), "email_hash": huella_del_correo(correo)}
 
 
 def solo_en_el_log(event: SecurityAuditEvent) -> bool:
@@ -336,8 +386,8 @@ class SecurityLogger:
             )
             security_logger.log_security_event(event)
         """
-        # Serializar evento a dict
-        event_data = event.to_dict()
+        # Serializar evento a dict, sin el correo tecleado en claro
+        event_data = _sin_el_correo(event.to_dict())
 
         # Construir mensaje descriptivo
         message = self._build_message(event)
@@ -381,7 +431,8 @@ class SecurityLogger:
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
             return (
-                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+                f"🔑 LOGIN {status} | {user_info} | Email: {enmascara_el_correo(event.email)}"
+                f" | IP: {event.ip_address}"
             )
 
         if isinstance(event, LogoutEvent):

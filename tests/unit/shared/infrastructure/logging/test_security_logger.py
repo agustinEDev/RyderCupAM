@@ -64,7 +64,9 @@ class TestSecurityLoggerWriting:
         log_file = temp_log_dir / "test_security.log"
         content = log_file.read_text()
         assert "LoginAttemptEvent" in content
-        assert "test@example.com" in content
+        # El correo, enmascarado (revisión de la fase 2)
+        assert "t***@example.com" in content
+        assert "test@example.com" not in content
 
     def test_log_writes_valid_json_format(self, logger, temp_log_dir):
         """Cada línea es JSON válido"""
@@ -117,7 +119,8 @@ class TestSecurityLoggerHelpers:
 
         log_file = temp_log_dir / "test_security.log"
         content = log_file.read_text()
-        assert "helper@test.com" in content
+        assert "h***@test.com" in content
+        assert "helper@test.com" not in content
         assert "LOGIN SUCCESS" in content
 
     def test_log_logout_helper(self, logger, temp_log_dir):
