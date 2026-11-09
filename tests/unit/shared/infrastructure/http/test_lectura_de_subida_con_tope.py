@@ -2,13 +2,17 @@
 La lectura por trozos de una subida corta en cuanto se pasa del tope (F-08).
 
 La comparten la subida del avatar y la de la galería: ninguna de las dos debe
-cargar un fichero enorme entero en memoria antes de rechazarlo.
+cargar un fichero enorme entero en memoria antes de rechazarlo. Lanza su propio
+error, UploadTooLargeError: `shared` no importa de los módulos (revisión de la fase 2),
+y cada ruta lo traduce a su 413.
 """
 
 import pytest
 
-from src.modules.user.domain.errors.user_errors import AvatarUploadTooLargeError
-from src.shared.infrastructure.http.upload_reader import read_upload_within_limit
+from src.shared.infrastructure.http.upload_reader import (
+    UploadTooLargeError,
+    read_upload_within_limit,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,7 +42,7 @@ async def test_un_fichero_enorme_se_rechaza_sin_leerlo_entero():
     """
     fichero = _FicheroQueCuenta(50 * MB)
 
-    with pytest.raises(AvatarUploadTooLargeError):
+    with pytest.raises(UploadTooLargeError):
         await read_upload_within_limit(fichero, 10 * MB)  # type: ignore[arg-type]
 
     assert fichero.leido <= 11 * MB
@@ -50,7 +54,7 @@ async def test_un_fichero_de_11_mb_se_rechaza():
     When: se lee con el tope
     Then: se rechaza
     """
-    with pytest.raises(AvatarUploadTooLargeError):
+    with pytest.raises(UploadTooLargeError):
         await read_upload_within_limit(_FicheroQueCuenta(11 * MB), 10 * MB)  # type: ignore[arg-type]
 
 

@@ -64,7 +64,10 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidAvatarPresetError,
     UserNotFoundError,
 )
-from src.shared.infrastructure.http.upload_reader import read_upload_within_limit
+from src.shared.infrastructure.http.upload_reader import (
+    UploadTooLargeError,
+    read_upload_within_limit,
+)
 
 router = APIRouter()
 
@@ -184,7 +187,7 @@ async def upload_avatar(
         return await use_case.execute(str(current_user.id), raw_bytes)
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except AvatarUploadTooLargeError as e:
+    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
         raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(e)) from e
     except InvalidAvatarImageError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

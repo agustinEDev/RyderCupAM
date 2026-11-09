@@ -56,7 +56,10 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidAvatarImageError,
     UserNotFoundError,
 )
-from src.shared.infrastructure.http.upload_reader import read_upload_within_limit
+from src.shared.infrastructure.http.upload_reader import (
+    UploadTooLargeError,
+    read_upload_within_limit,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -95,7 +98,7 @@ async def upload_my_photo(
         return await use_case.execute(str(current_user.id), raw, caption=caption)
     except ProfileGalleryFullError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except AvatarUploadTooLargeError as e:
+    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e)
         ) from e

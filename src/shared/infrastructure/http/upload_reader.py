@@ -2,14 +2,18 @@
 Lectura por trozos de un fichero subido, con tope de tamaño.
 
 La comparten las rutas que reciben imágenes (avatar y galería del perfil), para
-que ninguna cargue un fichero enorme entero en memoria antes de rechazarlo.
+que ninguna cargue un fichero enorme entero en memoria antes de rechazarlo. Su error
+es propio: `shared` no importa de los módulos, y cada ruta lo traduce a su 413
+(revisión de la fase 2, 9 nov 2026).
 """
 
 from fastapi import UploadFile
 
-from src.modules.user.domain.errors.user_errors import AvatarUploadTooLargeError
-
 _UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
+
+
+class UploadTooLargeError(Exception):
+    """El fichero subido pasa del tope; el mensaje dice el tope en MB."""
 
 
 async def read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
@@ -22,7 +26,7 @@ async def read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
     tamaño ocurre tan pronto como se cruza el límite, no después.
 
     Raises:
-        AvatarUploadTooLargeError: si el fichero pasa de `max_bytes`.
+        UploadTooLargeError: si el fichero pasa de `max_bytes`.
     """
     buffer = bytearray()
     while True:
@@ -31,7 +35,7 @@ async def read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
             break
         buffer.extend(chunk)
         if len(buffer) > max_bytes:
-            raise AvatarUploadTooLargeError(
+            raise UploadTooLargeError(
                 f"El archivo supera el tamaño máximo permitido ({max_bytes // (1024 * 1024)}MB)"
             )
     return bytes(buffer)

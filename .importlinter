@@ -245,3 +245,19 @@ forbidden_modules =
     PIL
     sentry_sdk
     alembic
+
+[importlinter:contract:shared-no-modules]
+name = src.shared no importa de los módulos (revisión de la fase 2, 9 nov 2026)
+type = forbidden
+source_modules =
+    src.shared
+forbidden_modules =
+    src.modules
+allow_indirect_imports = True
+# Deuda que ya existía y queda pendiente: cada línea es un import directo de shared
+# a un módulo que aún no se ha sacado. No se añaden más: una nueva rompe el contrato
+ignore_imports =
+    src.shared.infrastructure.security.jwt_handler -> src.modules.user.application.ports.token_service_interface
+    src.shared.infrastructure.security.authorization -> src.modules.**
+    src.shared.infrastructure.api.v1.country_routes -> src.modules.**
+    src.shared.infrastructure.email.email_service -> src.modules.**
