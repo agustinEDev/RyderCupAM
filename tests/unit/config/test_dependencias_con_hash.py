@@ -9,6 +9,8 @@ se probó.
 import re
 from pathlib import Path
 
+import yaml
+
 RAIZ = Path(__file__).resolve().parents[3]
 PIN = re.compile(r"^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?==([^\s;\\]+)", re.MULTILINE)
 
@@ -177,7 +179,10 @@ def test_copy_tree_unreadable_by_others_is_made_readable_before_user():
     """
     ordenes = _ordenes_del_dockerfile()
     usuario = next(i for i, o in enumerate(ordenes) if o.startswith("USER app"))
-    antes = ordenes[:usuario]
+    # Después del ÚLTIMO COPY: lo que se copiara detrás conservaría los permisos del
+    # equipo y el usuario podría volver a no leerlo
+    ultimo_copy = max(i for i, o in enumerate(ordenes) if o.startswith("COPY"))
+    antes = ordenes[ultimo_copy + 1 : usuario]
 
     assert any(
         o.startswith("RUN") and re.search(r"find /app\b.*-exec chmod a\+rX", o) for o in antes
@@ -230,14 +235,32 @@ def test_dockerignore_allows_only_runtime_files_and_drops_nested_caches():
         assert patron in lineas, patron
 
 
+def _destinos_del_checkout_en_la_app() -> list[tuple[str, str]]:
+    """(origen, destino) de cada volumen del servicio app, en sintaxis corta o larga."""
+    compose = yaml.safe_load((RAIZ / "docker" / "docker-compose.yml").read_text(encoding="utf-8"))
+    montajes = []
+    for volumen in compose["services"]["app"].get("volumes", []):
+        if isinstance(volumen, str):
+            partes = volumen.split(":")
+            montajes.append((partes[0], partes[1] if len(partes) > 1 else ""))
+        else:
+            montajes.append((str(volumen.get("source", "")), str(volumen.get("target", ""))))
+    return montajes
+
+
 def test_dev_compose_mounts_only_the_code_not_the_whole_checkout():
     """
     Given: el compose de desarrollo, que monta el código para el hot-reload
-    When: se miran sus volúmenes
-    Then: no monta el checkout entero sobre /app: con él, el usuario de la app leía
-          .env y los secretos locales del Kind, y se saltaba el .dockerignore
+    When: se leen los volúmenes del servicio app (sintaxis corta y larga)
+    Then: ninguno monta la raíz del checkout (con él, el usuario de la app leía .env
+          y los secretos locales del Kind) y el código entra por carpetas, no por
+          ficheros sueltos (un fichero montado deja de verse cuando el editor lo
+          sustituye por uno nuevo y el hot-reload se pierde)
     """
-    compose = (RAIZ / "docker" / "docker-compose.yml").read_text(encoding="utf-8")
+    montajes = _destinos_del_checkout_en_la_app()
+    raices = {"..", "../", "./..", "../."}
 
-    assert "..:/app\n" not in compose and "- ..:/app" not in compose
-    assert "../src:/app/src" in compose
+    assert not [m for m in montajes if m[0].rstrip("/") in {r.rstrip("/") for r in raices}]
+    assert ("../src", "/app/src") in montajes
+    del_checkout = [m for m in montajes if m[0].startswith("..")]
+    assert all((RAIZ / m[0].removeprefix("../")).is_dir() for m in del_checkout), del_checkout

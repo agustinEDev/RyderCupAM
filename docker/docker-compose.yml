@@ -44,10 +44,11 @@ services:
       # el usuario de la app leía el .env y los secretos locales del Kind y se saltaba
       # el .dockerignore. Lo demás de /app (requisitos instalados) es el de la imagen.
       # En Linux, el checkout tiene que poder leerlo el uid 10001 de la imagen
+      # Solo carpetas: un fichero suelto montado (main.py, alembic.ini) deja de verse
+      # cuando el editor lo sustituye por uno nuevo y el hot-reload se pierde. Esos
+      # dos van en la imagen: si cambian, `docker compose build app`
       - ../src:/app/src:ro
       - ../alembic:/app/alembic:ro
-      - ../alembic.ini:/app/alembic.ini:ro
-      - ../main.py:/app/main.py:ro
       - ../scripts:/app/scripts:ro
       # Los logs, en su propio volumen: el de la imagen (uid 10001) los escribe
       - app_logs:/app/logs
