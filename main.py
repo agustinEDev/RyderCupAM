@@ -123,6 +123,7 @@ from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
 from src.shared.infrastructure.http.unhandled_error_middleware import (  # noqa: E402
     UnhandledErrorMiddleware,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger  # noqa: E402
 from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
     CSRFMiddleware,
 )
@@ -183,6 +184,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tarea.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await tarea
+    # El log de seguridad escribe en su hilo: lo pendiente se escribe y lo que llegue
+    # después, directamente (/code-review de la fase 2)
+    get_security_logger().para()
     print("INFO:     Apagando aplicación...")
 
 

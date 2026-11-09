@@ -31,6 +31,7 @@ def test_stdout_keeps_working_when_the_file_cannot_be_opened(tmp_path, capsys, c
     with caplog.at_level(logging.WARNING):
         audit = SecurityLogger(log_dir=bloqueo, log_file="audit.log")
     audit.log_security_event(LogoutEvent(user_id="u-1", ip_address="1.2.3.4", user_agent="ua"))
+    audit.vacia()  # lo escribe el hilo del log
 
     lineas = [json.loads(fila) for fila in capsys.readouterr().out.splitlines() if fila.strip()]
     assert any(

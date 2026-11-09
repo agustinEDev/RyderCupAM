@@ -67,6 +67,7 @@ def test_the_typed_email_is_masked_with_its_keyed_hash_in_stdout_and_file(audit,
     capsys.readouterr()
 
     audit.log_security_event(_fallo())
+    audit.vacia()  # lo escribe el hilo del log
 
     linea = _evento_en_stdout(capsys.readouterr().out)
     evento = linea["extra"]["security_event"]

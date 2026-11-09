@@ -19,7 +19,11 @@ def _fichero() -> Path:
 
 
 def _todo_el_log() -> str:
-    """El log de seguridad de este proceso: ningún otro worker escribe ni rota en él."""
+    """El log de seguridad de este proceso: ningún otro worker escribe ni rota en él.
+
+    Antes de leerlo, se espera a que el hilo del log escriba lo encolado.
+    """
+    get_security_logger().vacia()
     return _fichero().read_text(errors="replace")
 
 

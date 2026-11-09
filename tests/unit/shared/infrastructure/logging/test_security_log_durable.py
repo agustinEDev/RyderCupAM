@@ -87,6 +87,7 @@ def test_every_event_goes_to_stdout_as_one_json_line(audit, capsys, enviados):
     capsys.readouterr()
 
     audit.log_security_event(_fallo_de_login())
+    audit.vacia()  # lo escribe el hilo del log
 
     [linea] = _lineas_json(capsys.readouterr().out)
     evento = linea["extra"]["security_event"]
@@ -105,6 +106,7 @@ def test_the_local_file_is_still_written(audit, tmp_path, enviados):
     Then: El fichero local sigue recibiéndolo, como antes
     """
     audit.log_security_event(_fallo_de_login())
+    audit.vacia()  # lo escribe el hilo del log
 
     contenido = (tmp_path / "audit.log").read_text(encoding="utf-8")
     assert "LoginAttemptEvent" in contenido
@@ -120,6 +122,7 @@ def test_stdout_follows_the_current_stdout(tmp_path, capsys, enviados):
     capsys.readouterr()
 
     viejo.log_security_event(_fallo_de_login())
+    viejo.vacia()  # lo escribe el hilo del log
 
     assert len(_lineas_json(capsys.readouterr().out)) == 1
 
@@ -229,6 +232,7 @@ def test_a_sentry_failure_does_not_break_the_log(audit, tmp_path, capsys, monkey
     capsys.readouterr()
 
     audit.log_security_event(_reset_hecho())
+    audit.vacia()  # lo escribe el hilo del log
 
     assert "PasswordResetCompletedAuditEvent" in (tmp_path / "audit.log").read_text(
         encoding="utf-8"

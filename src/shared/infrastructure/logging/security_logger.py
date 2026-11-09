@@ -23,6 +23,7 @@ import hashlib
 import hmac
 import logging
 import logging.handlers
+import queue
 import sys
 import threading
 import time
@@ -77,6 +78,22 @@ _NIVEL_EN_SENTRY: dict[SecuritySeverity, Literal["warning", "error"]] = {
     SecuritySeverity.HIGH: "warning",
     SecuritySeverity.CRITICAL: "error",
 }
+
+
+# El hilo que escribe cada fichero de auditoría: uno por logger, para pararlo si el
+# logger se vuelve a configurar (no quedan hilos huérfanos)
+_ESCUCHAS: dict[str, logging.handlers.QueueListener] = {}
+_CERROJO_DE_LAS_ESCUCHAS = threading.Lock()
+
+
+def _para_la_escucha(nombre: str) -> None:
+    """Para el hilo del logger `nombre`, si lo hay, escribiendo antes lo encolado."""
+    with _CERROJO_DE_LAS_ESCUCHAS:
+        anterior = _ESCUCHAS.pop(nombre, None)
+    if anterior is not None:
+        anterior.stop()
+        for destino in anterior.handlers:
+            destino.close()
 
 
 class _SalidaEstandar(logging.StreamHandler):
@@ -312,10 +329,13 @@ class SecurityLogger:
         logger.setLevel(logging.INFO)
         logger.propagate = False  # No propagar a root logger
 
-        # Limpiar handlers existentes (por si se reinicializa), cerrando su fichero
+        # Limpiar handlers existentes (por si se reinicializa), cerrando su fichero, y
+        # parar el hilo que escribía para este logger
         for anterior in list(logger.handlers):
             anterior.close()
             logger.removeHandler(anterior)
+        _para_la_escucha(logger.name)
+        destinos: list[logging.Handler] = []
 
         log_path = self.log_dir / self.log_file
 
@@ -340,7 +360,7 @@ class SecurityLogger:
         salida.setLevel(logging.INFO)
         # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
         salida.setFormatter(PythonLoggingFormatter(json_formatter))
-        logger.addHandler(salida)
+        destinos.append(salida)
 
         try:
             # Crear directorio de logs si no existe, y el handler con rotación
@@ -361,7 +381,18 @@ class SecurityLogger:
         else:
             handler.setLevel(logging.INFO)
             handler.setFormatter(PythonLoggingFormatter(json_formatter))
-            logger.addHandler(handler)
+            destinos.append(handler)
+
+        # La petición solo encola; stdout y el fichero los escribe un hilo, en orden
+        # (/code-review de la fase 2). `para` lo detiene al cerrar la app
+        cola: queue.SimpleQueue[logging.LogRecord] = queue.SimpleQueue()
+        self._destinos = destinos
+        self._encola = logging.handlers.QueueHandler(cola)
+        self._escucha = logging.handlers.QueueListener(cola, *destinos, respect_handler_level=True)
+        with _CERROJO_DE_LAS_ESCUCHAS:
+            _ESCUCHAS[logger.name] = self._escucha
+        self._escucha.start()
+        logger.addHandler(self._encola)
 
         # Log inicial de arranque
         logger.info(
@@ -375,6 +406,27 @@ class SecurityLogger:
         )
 
         return logger
+
+    def vacia(self) -> None:
+        """Espera a que el hilo haya escrito todo lo encolado (para leer el log al momento)."""
+        if self._encola in self._logger.handlers:
+            self._escucha.stop()
+            self._escucha.start()
+
+    def para(self) -> None:
+        """
+        Para el hilo al cerrar la app, escribiendo antes lo encolado. Lo que llegue
+        después se escribe directamente: no se pierde nada.
+        """
+        if self._encola not in self._logger.handlers:
+            return
+        self._logger.removeHandler(self._encola)
+        for destino in self._destinos:
+            self._logger.addHandler(destino)
+        self._escucha.stop()
+        with _CERROJO_DE_LAS_ESCUCHAS:
+            if _ESCUCHAS.get(self._logger.name) is self._escucha:
+                del _ESCUCHAS[self._logger.name]
 
     def log_security_event(self, event: SecurityAuditEvent) -> None:
         """
