@@ -68,9 +68,10 @@ VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 # dimensionado para un club entero, o para todos si falla la IP real (una sola red)
 CONTACT_LIMIT = "10/day"
 
-# La documentación (/docs, /redoc y /openapi.json), por red y antes de mirar sus
-# credenciales HTTP Basic (F-11, 9 nov 2026): para quien la abre sobra, y probar
-# contraseñas deja de ser gratis
+# Credenciales EQUIVOCADAS de la documentación (/docs, /redoc y /openapi.json), por
+# red (F-11 y /code-review, 9 nov 2026): probar contraseñas deja de ser gratis. Las
+# buenas ni cuentan ni se frenan: sin la IP real la red es toda la app, y cualquiera
+# dejaría al administrador sin documentación
 DOCS_LIMIT = "20/minute"
 
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
@@ -396,13 +397,12 @@ async def apply_default_rate_limit(request: Request) -> None:
         raise excedido
 
 
-async def limita_la_documentacion(request: Request) -> None:
+def cuenta_un_fallo_de_la_documentacion(request: Request) -> None:
     """
-    El límite de la documentación (DOCS_LIMIT), por red (F-11, 9 nov 2026).
+    Cuenta unas credenciales equivocadas de la documentación (DOCS_LIMIT), por red, y
+    pasado el límite responde con el mismo 429 que slowapi (F-11, /code-review).
 
-    Va como dependencia de cada ruta, antes de las credenciales: con un decorador de
-    slowapi solo contaría lo que pasa la autenticación, y la fuerza bruta no pasa.
-    Responde con el mismo 429 que slowapi.
+    Solo se llama con credenciales equivocadas: las buenas ni cuentan ni se frenan.
     """
     if not limiter.enabled:
         return

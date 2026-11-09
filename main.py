@@ -44,7 +44,7 @@ from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
 from src.config.rate_limit import (  # noqa: E402
     apply_default_rate_limit,
-    limita_la_documentacion,
+    cuenta_un_fallo_de_la_documentacion,
     limiter,
 )
 from src.config.refresco_de_handicaps import (  # noqa: E402
@@ -190,9 +190,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 security = HTTPBasic()
 
 
-def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+def verify_docs_credentials(
+    request: Request, credentials: HTTPBasicCredentials = Depends(security)
+):
     """
-    Verifica las credenciales HTTP Basic para acceder a /docs y /redoc.
+    Verifica las credenciales HTTP Basic para acceder a /docs, /redoc y /openapi.json.
+
+    Unas equivocadas cuentan contra el límite de la documentación, por red, y pasado
+    este dan 429; las buenas ni cuentan ni se frenan (F-11, /code-review).
 
     Las credenciales se configuran en variables de entorno:
     - DOCS_USERNAME
@@ -220,6 +225,7 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
     )
 
     if not (correct_username and correct_password):
+        cuenta_un_fallo_de_la_documentacion(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -575,12 +581,9 @@ app.include_router(
 )
 
 
-# Endpoints protegidos de documentación con HTTP Basic Auth, y con su límite por red
-# antes de mirar las credenciales (F-11)
-_PROTEGIDA = [Depends(limita_la_documentacion)]
-
-
-@app.get("/docs", include_in_schema=False, dependencies=_PROTEGIDA)
+# Endpoints protegidos de documentación con HTTP Basic Auth; las credenciales
+# equivocadas cuentan contra su límite por red (F-11)
+@app.get("/docs", include_in_schema=False)
 async def get_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
@@ -588,7 +591,7 @@ async def get_documentation(
     return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
 
 
-@app.get("/redoc", include_in_schema=False, dependencies=_PROTEGIDA)
+@app.get("/redoc", include_in_schema=False)
 async def get_redoc_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
@@ -596,7 +599,7 @@ async def get_redoc_documentation(
     return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
 
 
-@app.get("/openapi.json", include_in_schema=False, dependencies=_PROTEGIDA)
+@app.get("/openapi.json", include_in_schema=False)
 async def get_openapi_schema(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ) -> JSONResponse:

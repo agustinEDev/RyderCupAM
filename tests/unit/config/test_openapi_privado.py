@@ -3,8 +3,10 @@ El esquema OpenAPI, privado como /docs (F-11, auditoría OWASP del 9 nov 2026).
 
 /docs y /redoc pedían HTTP Basic, pero /openapi.json, con el mapa entero de la API,
 estaba abierto. Ahora pide las mismas credenciales, y las tres rutas tienen un límite
-por red que cuenta ANTES de mirar las credenciales: antes estaban exentas de todo
-límite, y probar contraseñas era gratis.
+por red de las credenciales EQUIVOCADAS: antes estaban exentas de todo límite, y
+probar contraseñas era gratis. Las buenas ni cuentan ni se frenan: sin la IP real, la
+red es toda la app, y cualquiera dejaría al administrador sin documentación
+(/code-review de la fase 2).
 
 El job «API contract» del CI no pide nada por HTTP: genera el esquema importando la
 app (`app.openapi()`), y eso sigue igual.
@@ -17,7 +19,7 @@ from fastapi.testclient import TestClient
 
 import main
 from src.config import rate_limit
-from src.config.rate_limit import EXEMPT_FROM_DEFAULT_LIMIT, limita_la_documentacion, limiter
+from src.config.rate_limit import EXEMPT_FROM_DEFAULT_LIMIT, limiter
 
 USUARIO = "docs-user"
 CLAVE = "docs-pass-de-prueba"  # nosec B105 - test credential, not a real secret
@@ -97,38 +99,68 @@ def test_the_schema_generated_offline_is_unchanged():
     assert not {"/openapi.json", "/docs", "/redoc"} & set(esquema["paths"])
 
 
-def test_the_docs_routes_count_against_their_own_limit():
+def test_the_docs_routes_are_exempt_from_the_default_limit():
     """
-    Given: Las rutas de la documentación (exentas del límite por defecto, que no cuenta
-           sin sesión)
-    When: Se miran sus dependencias
-    Then: Las tres llevan el límite de la documentación
+    Given: Las rutas de la documentación
+    When: Se mira la lista de exentas del límite por defecto (por usuario)
+    Then: Están las tres: su límite es el de los fallos de credenciales, por red
     """
     rutas = {r.path: r for r in main.app.routes if getattr(r, "path", None) in RUTAS}
 
     assert set(rutas) == set(RUTAS)
     for ruta in rutas.values():
-        assert limita_la_documentacion in {d.call for d in ruta.dependant.dependencies}
         assert f"{ruta.endpoint.__module__}.{ruta.endpoint.__name__}" in EXEMPT_FROM_DEFAULT_LIMIT
 
 
-def test_failed_attempts_hit_the_limit_and_get_429(cliente, monkeypatch):
-    """
-    Given: El límite de la documentación a 2 por minuto y el limitador encendido
-    When: Se prueban 3 contraseñas equivocadas desde la misma red
-    Then: 401, 401 y 429: el límite cuenta antes de mirar las credenciales
-    """
+@pytest.fixture
+def limite_de_2(monkeypatch):
+    """El límite de la documentación a 2 por minuto, con el limitador encendido."""
     monkeypatch.setattr(rate_limit, "DOCS_LIMIT", "2/minute")
     monkeypatch.setattr(limiter, "enabled", True)
     limiter.reset()
+    yield
+    limiter.reset()
+
+
+def test_failed_attempts_hit_the_limit_and_get_429(cliente, limite_de_2):
+    """
+    Given: El límite de la documentación a 2 por minuto
+    When: Se prueban 3 contraseñas equivocadas desde la misma red
+    Then: 401, 401 y 429: cada fallo cuenta, y pasado el límite se frena
+    """
     cabeceras = {**_basic(USUARIO, "mala"), "X-Test-Client-ID": "fuerza-bruta"}
 
-    try:
-        codigos = [cliente.get("/openapi.json", headers=cabeceras).status_code for _ in range(3)]
-    finally:
-        limiter.reset()
+    codigos = [cliente.get("/openapi.json", headers=cabeceras).status_code for _ in range(3)]
 
     assert codigos == [401, 401, 429]
+
+
+def test_good_credentials_never_count(cliente, limite_de_2):
+    """
+    Given: El límite de la documentación a 2 por minuto
+    When: El administrador abre la documentación 5 veces con sus credenciales
+    Then: 200 las 5: un acierto ni cuenta ni se frena
+    """
+    cabeceras = {**_basic(USUARIO, CLAVE), "X-Test-Client-ID": "admin"}
+
+    codigos = [cliente.get("/openapi.json", headers=cabeceras).status_code for _ in range(5)]
+
+    assert codigos == [200] * 5
+
+
+def test_an_exhausted_bucket_does_not_lock_out_the_admin(cliente, limite_de_2):
+    """
+    Given: El contador de una red agotado con contraseñas equivocadas (sin la IP real,
+           en producción es toda la app: el cubo compartido)
+    When: El administrador entra desde esa misma red con sus credenciales
+    Then: 200: nadie puede dejarle sin documentación probando contraseñas
+    """
+    mala = {**_basic(USUARIO, "mala"), "X-Test-Client-ID": "cubo-compartido"}
+    buena = {**_basic(USUARIO, CLAVE), "X-Test-Client-ID": "cubo-compartido"}
+    for _ in range(3):
+        cliente.get("/docs", headers=mala)
+
+    assert cliente.get("/docs", headers=buena).status_code == 200
 
 
 def test_the_docs_limit_is_per_network():
