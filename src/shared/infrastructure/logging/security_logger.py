@@ -30,8 +30,11 @@ import sentry_sdk
 from ...domain.events.security_events import (
     AccessDeniedEvent,
     AccountDeactivatedAuditEvent,
+    AccountDeletedByAdminAuditEvent,
     AccountReactivatedAuditEvent,
     AccountUnlockedAuditEvent,
+    AdminEmailChangeRequestedAuditEvent,
+    AdminRoleChangedAuditEvent,
     EmailChangedEvent,
     GoogleAccountLinkedAuditEvent,
     GoogleAccountUnlinkedAuditEvent,
@@ -651,6 +654,59 @@ class SecurityLogger:
                 user_agent=user_agent,
                 reactivated_user_id=reactivated_user_id,
                 tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_admin_role_changed(
+        self,
+        user_id: str,
+        target_user_id: str,
+        is_admin: bool,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador dio o quitó el rol de administrador (F-20)."""
+        self.log_security_event(
+            AdminRoleChangedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                target_user_id=target_user_id,
+                is_admin=is_admin,
+            )
+        )
+
+    def log_account_deleted_by_admin(
+        self,
+        user_id: str,
+        deleted_user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador borró definitivamente una cuenta (F-20)."""
+        self.log_security_event(
+            AccountDeletedByAdminAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                deleted_user_id=deleted_user_id,
+            )
+        )
+
+    def log_admin_email_change_requested(
+        self,
+        user_id: str,
+        target_user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un administrador pidió otro correo para una cuenta (F-20)."""
+        self.log_security_event(
+            AdminEmailChangeRequestedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                target_user_id=target_user_id,
             )
         )
 

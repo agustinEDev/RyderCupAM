@@ -564,6 +564,90 @@ class AccountReactivatedAuditEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class AdminRoleChangedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador dio o quitó el rol de administrador a una cuenta (F-20).
+
+    `user_id` es el administrador; `target_user_id`, la cuenta; `is_admin`, el rol nuevo.
+    """
+
+    target_user_id: str = ""
+    is_admin: bool = False
+
+    def __post_init__(self):
+        """Validación y severidad: cambiar quién administra es CRITICAL."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        accion = "GRANTED" if self.is_admin else "REVOKED"
+        return f"ADMIN ROLE {accion} | {user_info} | Target: {self.target_user_id}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con la cuenta y el rol nuevo."""
+        base = super().to_dict()
+        base.update({"target_user_id": self.target_user_id, "is_admin": self.is_admin})
+        return base
+
+
+@dataclass(frozen=True)
+class AccountDeletedByAdminAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador borró definitivamente una cuenta (F-20).
+
+    `user_id` es el administrador; `deleted_user_id`, la cuenta borrada.
+    """
+
+    deleted_user_id: str = ""
+
+    def __post_init__(self):
+        """Validación y severidad: un borrado sin vuelta atrás es CRITICAL."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return f"ACCOUNT DELETED BY ADMIN | {user_info} | Deleted: {self.deleted_user_id}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con la cuenta borrada."""
+        base = super().to_dict()
+        base.update({"deleted_user_id": self.deleted_user_id})
+        return base
+
+
+@dataclass(frozen=True)
+class AdminEmailChangeRequestedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador pidió otro correo para una cuenta (F-20). Queda pendiente hasta
+    que el usuario lo confirme (BE #753). Sin ninguno de los dos correos.
+
+    `user_id` es el administrador; `target_user_id`, la cuenta.
+    """
+
+    target_user_id: str = ""
+
+    def __post_init__(self):
+        """Validación y severidad: el correo es la llave de la cuenta, CRITICAL."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"EMAIL CHANGE REQUESTED BY ADMIN | {user_info} | Target: {self.target_user_id}"
+            " | pending confirmation"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con la cuenta."""
+        base = super().to_dict()
+        base.update({"target_user_id": self.target_user_id})
+        return base
+
+
+@dataclass(frozen=True)
 class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
     """Quien demostró el correo se quedó una cuenta sin verificar (pre-captura, #749).
 

@@ -1581,9 +1581,10 @@ def get_admin_list_users_use_case(
 def get_admin_update_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminUpdateUserUseCase:
-    """Proveedor del caso de uso AdminUpdateUserUseCase."""
-    return AdminUpdateUserUseCase(uow, email_service=email_service)
+    """Proveedor de AdminUpdateUserUseCase (con su log de seguridad desde F-20)."""
+    return AdminUpdateUserUseCase(uow, email_service=email_service, security_audit=security_audit)
 
 
 def get_admin_set_user_active_use_case(
@@ -1599,9 +1600,16 @@ def get_admin_delete_user_use_case(
     competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminDeleteUserUseCase:
-    """Proveedor del caso de uso AdminDeleteUserUseCase."""
-    return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+    """Proveedor de AdminDeleteUserUseCase (con su log de seguridad desde F-20)."""
+    return AdminDeleteUserUseCase(
+        user_uow,
+        competition_uow,
+        quick_match_uow,
+        golf_course_uow,
+        security_audit=security_audit,
+    )
 
 
 def get_get_admin_stats_use_case(

@@ -12,7 +12,7 @@ se aplicaba sin verificar, y una errata daba la cuenta a quien tuviera esa direc
 """
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -29,6 +29,8 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 
 pytestmark = pytest.mark.asyncio
+
+ADMIN = "admin-id"
 
 
 class TestAdminUpdateUserUseCase:
@@ -49,19 +51,22 @@ class TestAdminUpdateUserUseCase:
         return user
 
     async def test_updates_name_and_handicap(self, uow, existing_user):
-        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock())
+        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock(), security_audit=Mock())
         result = await use_case.execute(
             str(existing_user.id.value),
             AdminUpdateUserRequestDTO(first_name="Carlitos", handicap=12.5),
+            actor_user_id=ADMIN,
         )
 
         assert result.first_name == "Carlitos"
         assert result.handicap == 12.5
 
     async def test_promotes_user_to_admin(self, uow, existing_user):
-        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock())
+        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock(), security_audit=Mock())
         result = await use_case.execute(
-            str(existing_user.id.value), AdminUpdateUserRequestDTO(is_admin=True)
+            str(existing_user.id.value),
+            AdminUpdateUserRequestDTO(is_admin=True),
+            actor_user_id=ADMIN,
         )
 
         assert result.is_admin is True
@@ -80,8 +85,12 @@ class TestAdminUpdateUserUseCase:
 
         uow.users.find_by_id_for_update = espia
 
-        result = await AdminUpdateUserUseCase(uow, email_service=correos).execute(
-            str(existing_user.id.value), AdminUpdateUserRequestDTO(email="new-email@test.com")
+        result = await AdminUpdateUserUseCase(
+            uow, email_service=correos, security_audit=Mock()
+        ).execute(
+            str(existing_user.id.value),
+            AdminUpdateUserRequestDTO(email="new-email@test.com"),
+            actor_user_id=ADMIN,
         )
 
         assert result.email == "carlos@test.com"
@@ -102,8 +111,10 @@ class TestAdminUpdateUserUseCase:
         )
 
         correos = AsyncMock()
-        await AdminUpdateUserUseCase(uow, email_service=correos).execute(
-            str(existing_user.id.value), AdminUpdateUserRequestDTO(email="new-email@test.com")
+        await AdminUpdateUserUseCase(uow, email_service=correos, security_audit=Mock()).execute(
+            str(existing_user.id.value),
+            AdminUpdateUserRequestDTO(email="new-email@test.com"),
+            actor_user_id=ADMIN,
         )
         token = correos.send_email_change_confirmation.await_args.kwargs["token"]
 
@@ -120,8 +131,10 @@ class TestAdminUpdateUserUseCase:
     async def test_ad3_no_new_email_sends_nothing(self, uow, existing_user, cambio):
         correos = AsyncMock()
 
-        result = await AdminUpdateUserUseCase(uow, email_service=correos).execute(
-            str(existing_user.id.value), AdminUpdateUserRequestDTO(**cambio)
+        result = await AdminUpdateUserUseCase(
+            uow, email_service=correos, security_audit=Mock()
+        ).execute(
+            str(existing_user.id.value), AdminUpdateUserRequestDTO(**cambio), actor_user_id=ADMIN
         )
 
         assert result.pending_email is None
@@ -150,10 +163,11 @@ class TestAdminUpdateUserUseCase:
                 )
             )
 
-        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock())
+        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock(), security_audit=Mock())
         result = await use_case.execute(
             str(existing_user.id.value),
             AdminUpdateUserRequestDTO(first_name="Carlitos"),
+            actor_user_id=ADMIN,
         )
 
         assert result.last_login_at == last_used_at
@@ -161,9 +175,11 @@ class TestAdminUpdateUserUseCase:
     async def test_raises_when_user_not_found(self, uow):
         from uuid import uuid4
 
-        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock())
+        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock(), security_audit=Mock())
         with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(uuid4()), AdminUpdateUserRequestDTO(first_name="X"))
+            await use_case.execute(
+                str(uuid4()), AdminUpdateUserRequestDTO(first_name="X"), actor_user_id=ADMIN
+            )
 
     async def test_raises_on_duplicate_email(self, uow, existing_user):
         other = User.create(
@@ -175,11 +191,12 @@ class TestAdminUpdateUserUseCase:
         async with uow:
             await uow.users.save(other)
 
-        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock())
+        use_case = AdminUpdateUserUseCase(uow, email_service=AsyncMock(), security_audit=Mock())
         with pytest.raises(DuplicateEmailError):
             await use_case.execute(
                 str(existing_user.id.value),
                 AdminUpdateUserRequestDTO(email="taken@test.com"),
+                actor_user_id=ADMIN,
             )
 
 

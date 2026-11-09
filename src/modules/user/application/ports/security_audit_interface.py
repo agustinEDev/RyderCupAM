@@ -84,6 +84,61 @@ class ISecurityAuditLogger(ABC):
         """
 
     @abstractmethod
+    def log_admin_role_changed(
+        self,
+        user_id: str,
+        target_user_id: str,
+        is_admin: bool,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Deja constancia de que un administrador dio o quitó el rol de admin (F-20).
+
+        Args:
+            user_id: ID del administrador
+            target_user_id: ID de la cuenta
+            is_admin: El rol nuevo
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador del administrador ("unknown" si no se conoce)
+        """
+
+    @abstractmethod
+    def log_account_deleted_by_admin(
+        self,
+        user_id: str,
+        deleted_user_id: str,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Deja constancia de que un administrador borró una cuenta (F-20).
+
+        Args:
+            user_id: ID del administrador
+            deleted_user_id: ID de la cuenta borrada
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador del administrador ("unknown" si no se conoce)
+        """
+
+    @abstractmethod
+    def log_admin_email_change_requested(
+        self,
+        user_id: str,
+        target_user_id: str,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Deja constancia de que un administrador pidió otro correo para una cuenta (F-20).
+
+        Sin ninguno de los dos correos.
+
+        Args:
+            user_id: ID del administrador
+            target_user_id: ID de la cuenta
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador del administrador ("unknown" si no se conoce)
+        """
+
+    @abstractmethod
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:
