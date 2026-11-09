@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
+from src.config.csrf_config import generate_csrf_token
 from src.config.settings import settings
 from src.modules.user.application.ports.token_service_interface import ITokenService
 
@@ -170,6 +171,10 @@ class JWTTokenService(ITokenService):
             return payload
         except InvalidTokenError:
             return None
+
+    def create_csrf_token(self, user_id: str) -> str:
+        """El CSRF firmado de siempre (`csrf_config.generate_csrf_token`)."""
+        return generate_csrf_token(user_id)
 
 
 # ============================================================================

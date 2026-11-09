@@ -12,7 +12,6 @@ import logging
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
 )
@@ -348,7 +347,7 @@ class RefreshAccessTokenUseCase:
         )
 
         # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
-        csrf_token = generate_csrf_token(str(user.id.value))
+        csrf_token = self._token_service.create_csrf_token(str(user.id.value))
 
         # 8. Security Logging: Uso exitoso de refresh token
         registra_sin_romper(

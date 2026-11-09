@@ -92,6 +92,7 @@ class TestRefrescarSegunElUso:
         service = Mock()
         service.verify_refresh_token.return_value = {"sub": str(user.id.value), "type": "refresh"}
         service.create_access_token.return_value = "nuevo_access_token"
+        service.create_csrf_token.return_value = "csrf"
         return service
 
     async def _refresca(

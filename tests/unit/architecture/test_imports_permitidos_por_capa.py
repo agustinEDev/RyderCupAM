@@ -9,6 +9,12 @@ una decisión de arquitectura, no un trámite para que pase el CI.
 
 Y todo paquete de un módulo (o de `shared`) tiene que ser una de las tres capas:
 `src/shared/security` vivía fuera de ellas y por eso ningún contrato lo miraba.
+
+Este test solo mira las librerías de fuera. Los imports de primera parte
+(`src.*`) los cubren los contratos de `.importlinter`: las capas, la aplicación
+sin infraestructura y, desde la misma auditoría, dominio y aplicación sin nada
+de `src.config` (contrato `no-config`: ni la composition root ni la
+configuración; lo que necesitan les llega por constructor).
 """
 
 import ast

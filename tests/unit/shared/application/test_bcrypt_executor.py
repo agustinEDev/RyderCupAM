@@ -14,9 +14,11 @@ import time
 
 import pytest
 
+from src.shared.application.concurrencia import bcrypt_executor
 from src.shared.application.concurrencia.bcrypt_executor import (
-    MAX_CONCURRENCY,
-    _executor,
+    DEFAULT_MAX_CONCURRENCY,
+    configura_la_concurrencia_de_bcrypt,
+    max_concurrency,
     run_bcrypt,
 )
 
@@ -101,9 +103,10 @@ async def test_limits_how_many_hashes_run_at_once():
         with lock:
             running -= 1
 
-    await asyncio.gather(*(run_bcrypt(work) for _ in range(MAX_CONCURRENCY * 3)))
+    tope = max_concurrency()
+    await asyncio.gather(*(run_bcrypt(work) for _ in range(tope * 3)))
 
-    assert peak <= MAX_CONCURRENCY, f"{peak} hashes a la vez, el tope es {MAX_CONCURRENCY}"
+    assert peak <= tope, f"{peak} hashes a la vez, el tope es {tope}"
 
 
 @pytest.mark.asyncio
@@ -129,12 +132,57 @@ async def test_does_not_let_work_pile_up_in_the_executor_queue():
     def blocked():
         release.wait(timeout=5)
 
-    tasks = [asyncio.create_task(run_bcrypt(blocked)) for _ in range(MAX_CONCURRENCY * 10)]
+    tope = max_concurrency()
+    tasks = [asyncio.create_task(run_bcrypt(blocked)) for _ in range(tope * 10)]
     try:
         await asyncio.sleep(0.2)  # deja que todas intenten entrar
-        queued = _executor._work_queue.qsize()
+        queued = bcrypt_executor._executor._work_queue.qsize()
     finally:
         release.set()
         await asyncio.gather(*tasks)
 
-    assert queued <= MAX_CONCURRENCY, f"{queued} tareas esperando dentro del executor"
+    assert queued <= tope, f"{queued} tareas esperando dentro del executor"
+
+
+@pytest.mark.asyncio
+async def test_the_composition_root_sets_the_cap():
+    """
+    Given: un loop que ya hasheó con el tope de 2, y la composition root fija
+        uno de 3 (el de `BCRYPT_MAX_CONCURRENCY`)
+    When: llegan nueve hashes a la vez
+    Then: corren hasta tres a la vez, ni uno más: el pool y el semáforo usan el
+        tope nuevo. El ejecutor ya no lee el entorno él mismo (auditoría 9 nov 2026)
+    """
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def work():
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.05)
+        with lock:
+            running -= 1
+
+    await run_bcrypt(lambda: None)  # el semáforo de este loop ya existe, con 2
+    configura_la_concurrencia_de_bcrypt(3)
+    try:
+        await asyncio.gather(*(run_bcrypt(work) for _ in range(9)))
+        assert max_concurrency() == 3
+    finally:
+        configura_la_concurrencia_de_bcrypt(DEFAULT_MAX_CONCURRENCY)
+
+    assert peak == 3, f"{peak} hashes a la vez con un tope de 3"
+
+
+@pytest.mark.parametrize("tope", [0, -1])
+def test_a_cap_below_one_is_rejected(tope):
+    """
+    Given: un tope menor que 1
+    When: la composition root intenta fijarlo
+    Then: se rechaza: un pool sin hilos no hashearía nunca
+    """
+    with pytest.raises(ValueError):
+        configura_la_concurrencia_de_bcrypt(tope)

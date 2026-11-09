@@ -20,7 +20,9 @@ La corrección tiene dos mitades, y la segunda importa tanto como la primera:
    tiene tope— acumularía una tarea por petición, cada una reteniendo sus argumentos
    (contraseñas en claro incluidas) hasta que le tocara el turno. Con el semáforo la
    espera ocurre en el event loop, que es barato y no guarda nada.
-   `BCRYPT_MAX_CONCURRENCY` ajusta los dos si algún día crece la CPU del plan.
+   `BCRYPT_MAX_CONCURRENCY` ajusta los dos si algún día crece la CPU del plan: lo lee la
+   composition root (`src.config.contrasenas`) y lo fija con
+   `configura_la_concurrencia_de_bcrypt`; esta capa no lee el entorno.
 
 NO usar con `token_hash` (SHA-256): son microsegundos y el salto de hilo costaría más que
 la propia operación.
@@ -34,19 +36,19 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import ParamSpec, TypeVar
 
-from src.config.env import env_int
-
 P = ParamSpec("P")
 T = TypeVar("T")
 
 
 # Con el medio núcleo del plan actual, más de dos hashes a la vez no acaban antes: solo
 # se estorban entre ellos y se llevan por delante la CPU del resto de peticiones.
-MAX_CONCURRENCY = env_int("BCRYPT_MAX_CONCURRENCY", 2)
+DEFAULT_MAX_CONCURRENCY = 2
+
+_max_concurrency = DEFAULT_MAX_CONCURRENCY
 
 # Pool propio, no el del runtime: así el límite es real y los hashes no compiten por los
 # hilos que FastAPI usa para los endpoints síncronos.
-_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENCY, thread_name_prefix="bcrypt")
+_executor = ThreadPoolExecutor(max_workers=_max_concurrency, thread_name_prefix="bcrypt")
 
 # Un semáforo por event loop. `asyncio.Semaphore` se ata al loop en el que se usa por
 # primera vez, así que uno global rompería en cuanto hubiera más de uno (los tests crean
@@ -56,11 +58,37 @@ _admission_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.S
 )
 
 
+def max_concurrency() -> int:
+    """Cuántos hashes pueden correr a la vez ahora mismo."""
+    return _max_concurrency
+
+
+def configura_la_concurrencia_de_bcrypt(max_concurrency: int) -> None:
+    """
+    Fija cuántos hashes corren (y esperan dentro del pool) a la vez.
+
+    Lo llama la composition root al arrancar, con `BCRYPT_MAX_CONCURRENCY`. Cambia el
+    pool por uno de ese tamaño y olvida los semáforos de admisión, que se rehacen con el
+    tope nuevo en su siguiente uso. El pool anterior acaba lo que tuviera en marcha.
+
+    Raises:
+        ValueError: con un tope menor que 1 (un pool sin hilos no hashearía nunca).
+    """
+    global _executor, _max_concurrency  # noqa: PLW0603 - estado del proceso, como el pool
+    if max_concurrency < 1:
+        raise ValueError(f"El tope de bcrypt tiene que ser al menos 1, no {max_concurrency}")
+    anterior = _executor
+    _executor = ThreadPoolExecutor(max_workers=max_concurrency, thread_name_prefix="bcrypt")
+    _max_concurrency = max_concurrency
+    _admission_gates.clear()
+    anterior.shutdown(wait=False)
+
+
 def _admission_gate(loop: asyncio.AbstractEventLoop) -> asyncio.Semaphore:
     """Devuelve el semáforo de admisión de este loop, creándolo la primera vez."""
     gate = _admission_gates.get(loop)
     if gate is None:
-        gate = asyncio.Semaphore(MAX_CONCURRENCY)
+        gate = asyncio.Semaphore(_max_concurrency)
         _admission_gates[loop] = gate
     return gate
 
