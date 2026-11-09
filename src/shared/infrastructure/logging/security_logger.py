@@ -3,6 +3,9 @@
 
 Logger dedicado exclusivamente a eventos de seguridad con:
 - Archivo separado (security_audit.log)
+- Una línea JSON por evento en la salida estándar, que Render guarda: el fichero
+  se pierde en cada despliegue (F-05b, auditoría OWASP del 9 nov 2026)
+- Los HIGH y CRITICAL, también a Sentry, sin más dato personal que el id y la IP
 - Formateo JSON estructurado
 - Rotación automática de logs
 - Contexto enriquecido (IP, User-Agent, correlation ID)
@@ -18,7 +21,11 @@ Características:
 import hashlib
 import logging
 import logging.handlers
+import sys
 from pathlib import Path
+from typing import Any, Literal
+
+import sentry_sdk
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
@@ -43,6 +50,71 @@ from ...domain.events.security_events import (
 )
 from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
+
+logger = logging.getLogger(__name__)
+
+# Lo que llega a Sentry de cada evento: el id del usuario y la IP como único dato
+# personal (F-05b). Sentry va con send_default_pii=False; aquí tampoco sale el correo
+_CAMPOS_PARA_SENTRY = frozenset(
+    {"event_id", "event_type", "occurred_on", "severity", "user_id", "ip_address"}
+)
+# Y la cuenta afectada por un administrador (`deactivated_user_id`...): otro id
+_SUFIJO_DE_ID_DE_USUARIO = "_user_id"
+
+_NIVEL_EN_SENTRY: dict[SecuritySeverity, Literal["warning", "error"]] = {
+    SecuritySeverity.HIGH: "warning",
+    SecuritySeverity.CRITICAL: "error",
+}
+
+
+class _SalidaEstandar(logging.StreamHandler):
+    """Escribe en la salida estándar de CADA momento, no en la que había al crearse.
+
+    El logger es un singleton: si guardara el `sys.stdout` del arranque, uno
+    sustituido después (los tests lo cambian en cada uno) dejaría de recibir nada.
+    """
+
+    def __init__(self) -> None:
+        """Arranca con la salida estándar actual."""
+        super().__init__(sys.stdout)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Escribe el registro en la salida estándar de ahora."""
+        self.stream = sys.stdout
+        super().emit(record)
+
+
+def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
+    """Los campos del evento que pueden ir a Sentry: ids, IP, tipo, severidad y fecha."""
+    return {
+        clave: valor
+        for clave, valor in event.to_dict().items()
+        if clave in _CAMPOS_PARA_SENTRY or clave.endswith(_SUFIJO_DE_ID_DE_USUARIO)
+    }
+
+
+def avisa_a_sentry(event: SecurityAuditEvent) -> None:
+    """Manda a Sentry un evento HIGH (warning) o CRITICAL (error); los demás, no.
+
+    Uno por tipo de evento (fingerprint), con el id del usuario y la IP, nunca el
+    correo. Si Sentry falla, solo se apunta el tipo del error: ni la petición ni
+    el log de auditoría dependen de Sentry.
+    """
+    nivel = _NIVEL_EN_SENTRY.get(event.severity)
+    if nivel is None:
+        return
+    tipo = event.__class__.__name__
+    try:
+        sentry_sdk.capture_message(
+            f"Security event: {tipo}",
+            level=nivel,
+            fingerprint=["security-event", tipo],
+            tags={"security_event": tipo, "security_severity": event.severity.value},
+            contexts={"security_event": datos_para_sentry(event)},
+            user={"id": event.user_id} if event.user_id else None,
+        )
+    except Exception as error:
+        logger.warning("Security event not sent to Sentry: %s", type(error).__name__)
 
 
 class SecurityLogger:
@@ -161,6 +233,13 @@ class SecurityLogger:
 
         logger.addHandler(handler)
 
+        # La misma línea JSON por la salida estándar: Render la guarda, y el
+        # fichero se pierde en cada despliegue (F-05b)
+        salida = _SalidaEstandar()
+        salida.setLevel(logging.INFO)
+        salida.setFormatter(PythonLoggingFormatter(json_formatter))
+        logger.addHandler(salida)
+
         # Log inicial de arranque
         logger.info(
             "🔐 Security Logger iniciado",
@@ -211,6 +290,9 @@ class SecurityLogger:
                 "severity": event.severity.value,
             },
         )
+
+        # Tras escribirlo: lo que haga Sentry no quita el registro (F-05b)
+        avisa_a_sentry(event)
 
     def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911
         """

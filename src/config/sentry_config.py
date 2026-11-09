@@ -29,7 +29,7 @@ import logging
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
 
@@ -37,6 +37,11 @@ from src.config import version
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Los loggers del log de auditoría (`security.audit` y uno por fichero). Sus eventos
+# HIGH y CRITICAL ya los manda el propio log, filtrados (F-05b); por la integración
+# irían enteros —el correo de un login, en las migas de pan— y el CRITICAL dos veces
+LOGGERS_DE_AUDITORIA = "security.audit*"
 
 
 # Lo que el SDK no quita solo (BE #466): el secreto de la regla de Cloudflare y
@@ -143,6 +148,8 @@ def init_sentry() -> None:
     if not settings.SENTRY_DSN:
         logger.info("🔕 Sentry disabled - SENTRY_DSN not configured")
         return
+
+    ignore_logger(LOGGERS_DE_AUDITORIA)
 
     # Configurar integración de logging
     # Captura automáticamente logs de nivel ERROR o superior
