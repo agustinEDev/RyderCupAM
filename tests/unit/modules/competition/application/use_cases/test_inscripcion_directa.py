@@ -27,6 +27,7 @@ elige franja con hueco, o la espera de una llena, en el mismo paso.
 from datetime import date, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import ClassVar
 from uuid import uuid4
 
 import pytest
@@ -81,14 +82,18 @@ DENTRO_DE_UN_MES = date.today() + timedelta(days=30)
 
 
 class _Usuarios:
-    """Todos con género, hándicap y su correo."""
+    """Todos con género, hándicap y su correo, verificado salvo los que se digan (F-07)."""
+
+    sin_verificar: ClassVar[set] = set()
 
     async def find_by_id(self, user_id):
+        """Un usuario con género, hándicap y correo; verificado salvo los de la lista."""
         return SimpleNamespace(
             id=user_id,
             gender=Gender.MALE,
             handicap=Decimal("12.0"),
             email=SimpleNamespace(value=f"{user_id.value}@example.com"),
+            email_verified=user_id not in self.sin_verificar,
         )
 
 
@@ -358,6 +363,30 @@ class TestSinFranjas:
         async with e.uow:
             despues = await e.uow.invitations.find_by_id(invitacion.id)
         assert despues.status == InvitationStatus.ACCEPTED
+
+    async def test_d14_la_de_su_correo_sin_verificar_no_se_toca(self, e, monkeypatch):
+        """
+        Given: Una invitación a su correo (sin cuenta al enviarla) y su correo SIN verificar
+        When: Se inscribe directamente
+        Then: Entra, pero la invitación no es suya (F-07): sigue pendiente
+        """
+        await e.ryder()
+        quien = UserId(uuid4())
+        monkeypatch.setattr(_Usuarios, "sin_verificar", {quien})
+        invitacion = Invitation.create(
+            id=InvitationId.generate(),
+            competition_id=e.competicion.id,
+            inviter_id=e.creador,
+            invitee_email=f"{quien.value}@example.com",
+        )
+        async with e.uow:
+            await e.uow.invitations.add(invitacion)
+
+        await e.entra(quien)
+
+        async with e.uow:
+            despues = await e.uow.invitations.find_by_id(invitacion.id)
+        assert despues.status == InvitationStatus.PENDING
 
     async def test_d14_la_de_otra_competicion_no_se_toca(self, e):
         otra = await e.ryder()

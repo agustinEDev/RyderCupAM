@@ -178,6 +178,23 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
             for requester_id, addressee_id in result.all()
         ]
 
+    async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
+        # Quien bloqueó está en `blocked_by`; él en cualquiera de las dos columnas
+        """Quienes bloquearon a `user_id` (`blocked_by` es el otro), en una consulta."""
+        stmt = select(friendships_table.c.blocked_by).where(
+            and_(
+                friendships_table.c.status == FriendshipStatus.BLOCKED,
+                or_(
+                    friendships_table.c.requester_id == user_id,
+                    friendships_table.c.addressee_id == user_id,
+                ),
+                friendships_table.c.blocked_by.is_not(None),
+                friendships_table.c.blocked_by != user_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:
         # El bloqueo se guarda en la misma fila de la amistad, con cualquiera
         # de los dos en cualquier columna: como `find_friend_ids`

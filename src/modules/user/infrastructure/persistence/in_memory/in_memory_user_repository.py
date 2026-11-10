@@ -1,9 +1,12 @@
+from collections.abc import Collection
+
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -21,6 +24,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def find_by_id(self, user_id: UserId) -> User | None:
         return self._users.get(user_id)
+
+    async def lock_for_sessions(self, user_id: UserId) -> None:
+        # En memoria no hay concurrencia real de transacciones que bloquear.
+        return None
 
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         # En memoria no hay concurrencia real de transacciones que bloquear.
@@ -133,17 +140,23 @@ class InMemoryUserRepository(UserRepositoryInterface):
             self._users[user.id] = user
 
     async def find_by_full_name(self, full_name: str) -> User | None:
+        """La cuenta ACTIVA con ese nombre completo, como el repositorio real (F7)."""
         full_name_lower = full_name.lower().strip()
         for user in self._users.values():
             user_full_name = f"{user.first_name} {user.last_name}".lower()
-            if user_full_name == full_name_lower:
+            # Solo activas, como el repositorio real (F7)
+            if user.is_active and user_full_name == full_name_lower:
                 return user
         return None
 
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(
-        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        exclude_user_id: UserId | None = None,
+        exclude_user_ids: Collection[UserId] = (),
     ) -> list[User]:
         """
         Searches active users by partial name or alias match.
@@ -156,7 +169,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             return []
         results = []
         for user in self._users.values():
-            if not user.is_active or user.id == exclude_user_id:
+            if not user.is_active or user.id == exclude_user_id or user.id in exclude_user_ids:
                 continue
             full_name = f"{user.first_name} {user.last_name}".lower()
             alias = user.alias.lower() if user.alias else ""
@@ -190,15 +203,17 @@ class InMemoryUserRepository(UserRepositoryInterface):
         )
 
     async def find_by_verification_token(self, token: str) -> User | None:
-        """Busca un usuario por su token de verificación."""
+        """Busca un usuario por su token de verificación, por su SHA-256 (fase 3, C3)."""
+        token_hash = hash_del_enlace(token) if token else None
         for user in self._users.values():
-            if user.verification_token == token:
+            if token_hash is not None and user.verification_token == token_hash:
                 return user
         return None
 
     async def find_by_password_reset_token(self, token: str) -> User | None:
-        """Busca un usuario por su token de reseteo de contraseña."""
+        """Busca un usuario por su token de reseteo, por su SHA-256 (fase 3, C3)."""
+        token_hash = hash_del_enlace(token) if token else None
         for user in self._users.values():
-            if user.password_reset_token == token:
+            if token_hash is not None and user.password_reset_token == token_hash:
                 return user
         return None

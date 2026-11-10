@@ -9,12 +9,26 @@ from pydantic.json_schema import SkipJsonSchema
 
 from .user_dto import UserResponseDTO
 
+# PKCE (FE-02, fase 3 del plan a 9, 10 nov 2026): el verifier es OPCIONAL en esta
+# release porque el front de hoy no lo manda; sin él, el canje es el de siempre. En
+# la release 3 pasa a OBLIGATORIO (quitar el default y exigirlo en el canje)
+
 
 class GoogleLoginRequestDTO(BaseModel):
     """Request DTO para login/registro con Google."""
 
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
+    )
+    code_verifier: str | None = Field(
+        default=None,
+        min_length=43,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9\-._~]+$",
+        description=(
+            "PKCE (RFC 7636): el verifier del code_challenge con el que se pidió el "
+            "código. Opcional en esta release; obligatorio a partir de la release 3."
+        ),
     )
     # Campos inyectados por la ruta (no vienen del body)
     ip_address: str | None = Field(None, description="IP del cliente (inyectada por la ruta)")
@@ -74,6 +88,16 @@ class LinkGoogleAccountRequestDTO(BaseModel):
 
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
+    )
+    code_verifier: str | None = Field(
+        default=None,
+        min_length=43,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9\-._~]+$",
+        description=(
+            "PKCE (RFC 7636): el verifier del code_challenge con el que se pidió el "
+            "código. Opcional en esta release; obligatorio a partir de la release 3."
+        ),
     )
     # Para el log de seguridad (#750 punto 3): la ruta los pone siempre desde la
     # petición, como en el login; lo que mande el cliente no cuenta

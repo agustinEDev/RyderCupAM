@@ -29,6 +29,7 @@ from tests.conftest import (
     create_authenticated_user,
     set_auth_cookies,
     sql_en_la_bd_de_test,
+    token_de_verificacion_enviado,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -231,9 +232,8 @@ async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client:
     usuario = r.json()
     admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
     await _desactiva(client, admin, usuario["id"])
-    token = (
-        await sql_en_la_bd_de_test("select verification_token from users where email = :e", e=email)
-    ).scalar()
+    # El token en claro viaja en el correo; la BD guarda su SHA-256 (fase 3)
+    token = await token_de_verificacion_enviado(email)
     client.cookies.clear()
 
     r = await client.post("/api/v1/auth/verify-email", json={"token": token})

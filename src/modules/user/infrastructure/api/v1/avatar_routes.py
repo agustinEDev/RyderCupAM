@@ -128,11 +128,15 @@ async def get_avatar_preset_image(
 )
 async def get_user_avatar_image(
     user_id: UUID,
-    _current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetAvatarImageUseCase = Depends(get_avatar_image_use_case),
 ):
+    """El avatar de un usuario; 404 como inexistente si su dueño bloqueó a quien lo pide."""
     try:
-        image_bytes, content_type = await use_case.execute(str(user_id))
+        # Quien lo pide: si el dueño le bloqueó, 404 como si no existiera (F-09)
+        image_bytes, content_type = await use_case.execute(
+            str(user_id), viewer_id=str(current_user.id)
+        )
         return Response(content=image_bytes, media_type=content_type)
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

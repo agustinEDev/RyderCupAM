@@ -1,7 +1,10 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.user.domain.errors.user_errors import AliasTakenConcurrentlyError
+from src.modules.user.domain.errors.user_errors import (
+    AliasTakenConcurrentlyError,
+    EmailTakenConcurrentlyError,
+)
 from src.modules.user.domain.repositories.password_history_repository_interface import (
     PasswordHistoryRepositoryInterface,
 )
@@ -142,11 +145,14 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         await self._session.rollback()
 
     async def flush(self) -> None:
-        """Envía los cambios sin confirmar; el alias repetido sale como error del dominio."""
+        """Envía los cambios sin confirmar; el alias o el correo repetidos salen como error
+        del dominio (el correo, solo aquí: es donde el alta envía su fila, fase 3)."""
         try:
             await self._session.flush()
         except IntegrityError as e:
             _traduce_la_violacion_del_alias(e)
+            if _es_el_correo_repetido(e):
+                raise EmailTakenConcurrentlyError("El correo ya está en uso.") from e
             raise
 
     def is_active(self) -> bool:
@@ -165,3 +171,16 @@ def _traduce_la_violacion_del_alias(error: IntegrityError) -> None:
     """Lanza AliasTakenConcurrentlyError si el error es el del índice del alias."""
     if INDICE_DEL_ALIAS in str(error.orig):
         raise AliasTakenConcurrentlyError("El alias ya está en uso.") from error
+
+
+# La restricción única del correo de users (la que pone Postgres a `unique=True`)
+RESTRICCION_DEL_CORREO = "users_email_key"
+
+
+def _es_el_correo_repetido(error: IntegrityError) -> bool:
+    """True si lo que saltó es la restricción única del correo de users."""
+    causa = getattr(error.orig, "__cause__", None)
+    nombre = getattr(causa, "constraint_name", None) or getattr(error.orig, "constraint_name", None)
+    if nombre:
+        return nombre == RESTRICCION_DEL_CORREO
+    return RESTRICCION_DEL_CORREO in str(error.orig)

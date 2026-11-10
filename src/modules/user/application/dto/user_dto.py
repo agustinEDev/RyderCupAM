@@ -737,6 +737,28 @@ class ResendVerificationEmailRequestDTO(BaseModel):
     )
 
 
+class ResendVerificationFromLinkRequestDTO(BaseModel):
+    """El cuerpo de `POST /auth/resend-verification-link` (fase 3): el enlace caducado."""
+
+    token: str = Field(
+        ...,
+        min_length=1,
+        max_length=512,
+        description="El token del enlace de verificación caducado (prueba de tener el buzón).",
+    )
+
+
+class ResendVerificationFromLinkResponseDTO(BaseModel):
+    """La respuesta, la misma tanto si se envió como si no."""
+
+    message: str = Field(
+        default=(
+            "If the link belongs to an account pending verification, a new one has been sent."
+        ),
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
+
+
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
 
@@ -790,7 +812,8 @@ class RefreshAccessTokenResponseDTO(BaseModel):
     DTO de salida para renovación de access token.
 
     Retorna un nuevo access token válido por 15 minutos.
-    El refresh token NO se renueva (sigue siendo el mismo hasta su expiración).
+    El refresh token rota (F-02): el nuevo va solo a la cookie httpOnly, nunca al JSON
+    (`exclude=True`), y no está si no toca emitir otro (dos pestañas a la vez).
 
     CSRF Protection (v1.13.0):
     - csrf_token: Nuevo token CSRF generado al renovar access token (vale lo que el
@@ -813,6 +836,10 @@ class RefreshAccessTokenResponseDTO(BaseModel):
     )
     # El dispositivo de la sesión, el de su token de refresco (BE #737)
     device_id: str = Field(..., description="ID del dispositivo de esta sesión.")
+    # El refresh token nuevo y lo que le queda en segundos (F-02): para la cookie de la
+    # ruta, nunca para el cuerpo ni el esquema. None: no se emite otro
+    refresh_token: str | None = Field(default=None, exclude=True)
+    refresh_token_max_age: int | None = Field(default=None, exclude=True)
 
 
 # ======================================================================================
@@ -899,7 +926,7 @@ class ResetPasswordRequestDTO(BaseModel):
         ...,
         min_length=32,
         max_length=100,
-        description="Token de reseteo único recibido por email (válido 24 horas).",
+        description="Token de reseteo único recibido por email (válido 1 hora).",
     )
     new_password: str = Field(
         ...,
@@ -949,6 +976,17 @@ class ValidateResetTokenRequestDTO(BaseModel):
     token: str = Field(
         ..., min_length=32, max_length=100, description="Token de reseteo a validar."
     )
+
+
+class ValidateResetTokenBodyDTO(BaseModel):
+    """
+    El cuerpo de `POST /auth/validate-reset-token` (fase 3, C4): el token, fuera de la URL.
+
+    Sin la longitud exacta aquí: un token imposible responde 200 con valid=False, como
+    el GET (BE #453), no 422. Con tope, para no aceptar cuerpos enormes.
+    """
+
+    token: str = Field(..., max_length=512, description="Token de reseteo a validar.")
 
 
 class ValidateResetTokenResponseDTO(BaseModel):

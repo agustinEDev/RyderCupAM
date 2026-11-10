@@ -13,7 +13,12 @@ from typing import ClassVar
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
+from tests.conftest import (
+    create_authenticated_user,
+    create_competition,
+    set_auth_cookies,
+    sql_en_la_bd_de_test,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -22,6 +27,16 @@ async def _jugador(client: AsyncClient, nombre: str) -> dict:
     return await create_authenticated_user(
         client, f"qvi_{nombre.lower()}@test.com", "P@ssw0rd123!", nombre, "Visible"
     )
+
+
+async def _verificado(client: AsyncClient, nombre: str) -> dict:
+    """Con el correo verificado: solo así casa las invitaciones a su dirección (F-07)."""
+    jugador = await _jugador(client, nombre)
+    await sql_en_la_bd_de_test(
+        "update users set email_verified = true where email = :e",
+        e=f"qvi_{nombre.lower()}@test.com",
+    )
+    return jugador
 
 
 async def _privada(client: AsyncClient, creador: dict) -> dict:
@@ -75,7 +90,7 @@ async def test_16_invitado_por_correo_antes_de_darse_de_alta(client: AsyncClient
         json={"invitee_email": "qvi_nuevo@test.com"},
     )
     assert r.status_code == 201, r.text
-    nuevo = await _jugador(client, "Nuevo")
+    nuevo = await _verificado(client, "Nuevo")
 
     assert comp["id"] in await _mis_competiciones(client, nuevo)
 
@@ -103,7 +118,7 @@ async def test_16_explorar_no_la_repite_y_todas_la_traen_tambien_por_correo(
         json={"invitee_email": "qvi_correo@test.com"},
     )
     assert r.status_code == 201, r.text
-    invitado = await _jugador(client, "Correo")
+    invitado = await _verificado(client, "Correo")
 
     assert comp["id"] not in await _explorar(client, invitado, "false")
     assert comp["id"] in await _explorar(client, invitado, None)
@@ -150,10 +165,11 @@ class _BastaError(Exception):
 
 
 async def test_14_la_agenda_sabe_quien_mira(client: AsyncClient):
+    """La agenda recibe quién mira y su correo verificado."""
     from main import app
     from src.config.dependencies import get_get_schedule_use_case
 
-    yo = await _jugador(client, "Mira")
+    yo = await _verificado(client, "Mira")
     set_auth_cookies(client, yo["cookies"])
     app.dependency_overrides[get_get_schedule_use_case] = _Apunta
     try:
@@ -170,10 +186,11 @@ async def test_14_la_agenda_sabe_quien_mira(client: AsyncClient):
 
 
 async def test_la_lista_sabe_el_correo_de_quien_mira(client: AsyncClient):
+    """La lista de inscritos recibe el correo verificado de quien mira."""
     from main import app
     from src.config.dependencies import get_list_enrollments_use_case
 
-    yo = await _jugador(client, "Lista")
+    yo = await _verificado(client, "Lista")
     set_auth_cookies(client, yo["cookies"])
     app.dependency_overrides[get_list_enrollments_use_case] = _Apunta
     try:
@@ -189,10 +206,11 @@ async def test_la_lista_sabe_el_correo_de_quien_mira(client: AsyncClient):
 
 
 async def test_las_partidas_saben_el_correo_de_quien_mira(client: AsyncClient):
+    """Las partidas reciben el correo verificado de quien mira."""
     from main import app
     from src.config.dependencies import get_ver_partidas_use_case
 
-    yo = await _jugador(client, "Partidas")
+    yo = await _verificado(client, "Partidas")
     set_auth_cookies(client, yo["cookies"])
     app.dependency_overrides[get_ver_partidas_use_case] = _Apunta
     try:
@@ -263,6 +281,7 @@ async def test_13_la_ficha_trae_la_invitacion_pendiente_de_quien_mira(client: As
 
 
 async def test_13_tambien_la_que_se_mando_a_su_correo_antes_del_alta(client: AsyncClient):
+    """La invitada por correo antes del alta, ya verificada, la ve en la ficha."""
     creador = await _jugador(client, "Anfitriona")
     comp = await _privada(client, creador)
     set_auth_cookies(client, creador["cookies"])
@@ -271,7 +290,7 @@ async def test_13_tambien_la_que_se_mando_a_su_correo_antes_del_alta(client: Asy
         json={"invitee_email": "qvi_huespeda@test.com"},
     )
     assert enviada.status_code == 201, enviada.text
-    nueva = await _jugador(client, "Huespeda")
+    nueva = await _verificado(client, "Huespeda")
 
     assert (await _pendiente(client, nueva, comp))["id"] == enviada.json()["id"]
 

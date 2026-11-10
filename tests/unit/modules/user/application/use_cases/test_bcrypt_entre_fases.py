@@ -2,7 +2,8 @@
 Lo que pasa ENTRE la lectura y la escritura, ahora que el bcrypt va fuera de la
 transacción (BE #283, tabla aprobada por Agustín el 7 nov 2026).
 
-  B2-1 alta: otro se registra con el mismo correo durante el bcrypt → «ya registrado»
+  B2-1 alta: otro se registra con el mismo correo durante el bcrypt → la respuesta de
+       siempre, sin guardar (fase 3: el registro ya no dice «ya registrado»)
   B2-3 cambio de seguridad:
        - la contraseña cambia durante el bcrypt (un restablecimiento) → «contraseña
          actual incorrecta», y no se escribe la nueva
@@ -39,7 +40,6 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
     InvalidCredentialsError,
-    UserAlreadyExistsError,
 )
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.email import Email
@@ -87,7 +87,7 @@ async def test_b2_1_someone_takes_the_email_during_the_bcrypt(monkeypatch):
     """
     Given: Un alta con un correo libre
     When: Otro se registra con ese correo mientras se calcula el bcrypt
-    Then: «ya registrado», y solo queda la cuenta del otro
+    Then: La respuesta de siempre (fase 3), y solo queda la cuenta del otro
     """
     uow = InMemoryUnitOfWork()
     paises = AsyncMock()
@@ -99,16 +99,17 @@ async def test_b2_1_someone_takes_the_email_during_the_bcrypt(monkeypatch):
 
     _entretanto(monkeypatch, register_user_use_case, otro_se_registra)
 
-    with pytest.raises(UserAlreadyExistsError):
-        await use_case.execute(
-            RegisterUserRequestDTO(
-                accept_terms=True,
-                email="b21@example.com",
-                password=NUEVA,
-                first_name="Bea",
-                last_name="Ruiz",
-            )
+    respuesta = await use_case.execute(
+        RegisterUserRequestDTO(
+            accept_terms=True,
+            email="b21@example.com",
+            password=NUEVA,
+            first_name="Bea",
+            last_name="Ruiz",
         )
+    )
+
+    assert respuesta.email == "b21@example.com" and respuesta.first_name == "Bea"
 
     guardado = await uow.users.find_by_email(Email("b21@example.com"))
     assert guardado is not None and guardado.first_name == "Ana"

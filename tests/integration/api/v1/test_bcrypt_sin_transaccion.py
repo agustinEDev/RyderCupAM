@@ -16,13 +16,12 @@ viva de SQLAlchemy esté dentro de una transacción.
 
 import importlib
 import weakref
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_authenticated_user, token_de_reset_enviado
 
 pytestmark = pytest.mark.asyncio
 
@@ -94,11 +93,14 @@ async def test_b2_1_sign_up_hashes_with_no_transaction_open(client: AsyncClient,
     assert vigia.con_transaccion == []
 
 
-async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
+async def test_b2_1_a_taken_email_costs_the_same_bcrypt_outside_a_transaction(
+    client: AsyncClient, vigia
+):
     """
     Given: Un correo ya registrado
     When: Se intenta otra alta con él
-    Then: 409 sin gastar ningún bcrypt
+    Then: El mismo 201 y el mismo bcrypt que un alta nueva (fase 3: el tiempo no dice si
+          el correo existe), sin transacción abierta
     """
     datos = {
         "email": "b21.ocupado@example.com",
@@ -112,8 +114,9 @@ async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
 
     r = await client.post("/api/v1/auth/register", json=datos)
 
-    assert r.status_code == 409
-    assert vigia.bcrypts == antes
+    assert r.status_code == 201
+    assert vigia.bcrypts == antes + 1
+    assert vigia.con_transaccion == []
 
 
 @pytest.mark.parametrize(
@@ -166,9 +169,7 @@ async def test_b2_3_a_password_change_hashes_with_no_transaction_open(client: As
     assert vigia.con_transaccion == []
 
 
-async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
-    client: AsyncClient, vigia, mock_external_services
-):
+async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(client: AsyncClient, vigia):
     """
     Given: Un enlace de restablecer válido
     When: Se usa con una contraseña nueva
@@ -177,11 +178,8 @@ async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
     await create_authenticated_user(client, "b24@example.com", CLAVE, "Ana", "Lopez")
     client.cookies.clear()
     await client.post("/api/v1/auth/forgot-password", json={"email": "b24@example.com"})
-    llamada = mock_external_services.send_password_reset_email.await_args
-    enlace = llamada.kwargs.get("reset_link") or llamada.args[1]
-    token = parse_qs(urlparse(enlace).query).get("token", [enlace.rstrip("/").rsplit("/", 1)[-1]])[
-        0
-    ]
+    # El correo sale en segundo plano (fase 3, B-2): el helper lo espera
+    token = await token_de_reset_enviado("b24@example.com")
     vigia.con_transaccion.clear()
     antes = vigia.bcrypts
 

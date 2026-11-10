@@ -66,6 +66,7 @@ class GetPlayerProfileUseCase:
         self._shared_games = shared_games
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> PlayerProfileResponseDTO:
+        """El perfil según quién mira; 404 si no existe, está de baja o el otro me bloqueó."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
         propio = viewer_id == target_id
@@ -87,10 +88,17 @@ class GetPlayerProfileUseCase:
             handicap = float(user.handicap.value) if user.handicap else None
             email = user.email.value
 
-        relacion, amigos, lo_bloquee = await self._relacion_y_amigos(viewer_id, target_id, propio)
+        relacion, amigos, lo_bloquee, me_bloqueo = await self._relacion_y_amigos(
+            viewer_id, target_id, propio
+        )
+        # Si el otro me bloqueó, su perfil no existe para mí: el mismo 404 que una
+        # cuenta que no está (F-09, fase 3; opción A de Agustín, 10 nov 2026). Si lo
+        # bloqueé yo, solo nombre y foto: desde aquí se desbloquea. Un bloqueo sin
+        # autor no lo puso nadie: como antes (la regla de `Friendship.bloqueado_por`)
+        if me_bloqueo:
+            raise ProfileNotVisibleError("Profile not found")
         amigo = relacion.status == FriendshipStatus.ACCEPTED.value
         puede_ver_todo = propio or amigo
-        # Con un bloqueo de por medio, de un lado o del otro, solo nombre y foto
         bloqueado = relacion.status == FriendshipStatus.BLOCKED.value
 
         # Fuera de la unidad de trabajo: las estadisticas abren las suyas, y
@@ -126,11 +134,11 @@ class GetPlayerProfileUseCase:
 
     async def _relacion_y_amigos(
         self, viewer_id: UserId, target_id: UserId, propio: bool
-    ) -> tuple[FriendshipStateDTO, int, bool]:
+    ) -> tuple[FriendshipStateDTO, int, bool, bool]:
         """
         En que punto esta la relacion y cuantos amigos tiene el otro.
 
-        Las dos cosas salen del mismo repositorio, asi que se resuelven en una
+        Y si lo bloqueé yo o me bloqueó él. Las dos cosas salen del mismo repositorio, asi que se resuelven en una
         sola apertura en lugar de dos.
 
         **El contador va en la ficha publica**, junto al nombre y la foto. Es un
@@ -142,12 +150,12 @@ class GetPlayerProfileUseCase:
             amigos = await self._social_uow.friendships.count_friends(target_id)
 
             if propio:
-                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
+                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False, False
 
             friendship = await self._social_uow.friendships.find_by_pair(viewer_id, target_id)
 
         if friendship is None:
-            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
+            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False, False
 
         return (
             FriendshipStateDTO(
@@ -155,7 +163,8 @@ class GetPlayerProfileUseCase:
                 friendship_id=str(friendship.id.value),
             ),
             amigos,
-            friendship.is_blocked() and friendship.blocked_by == viewer_id,
+            friendship.bloqueado_por(viewer_id),
+            friendship.bloqueado_por(target_id),
         )
 
     @staticmethod

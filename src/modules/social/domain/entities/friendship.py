@@ -204,6 +204,13 @@ class Friendship:
     def is_blocked(self) -> bool:
         return self._status.is_blocked()
 
+    def bloqueado_por(self, user_id: UserId) -> bool:
+        """
+        Si es un bloqueo que puso `user_id` (F-09). Un bloqueo sin autor
+        (`blocked_by` NULL, que la tabla admite) no lo puso nadie.
+        """
+        return self.is_blocked() and self._blocked_by == user_id
+
     def involves_user(self, user_id: UserId) -> bool:
         """Verifica si el usuario dado participa en esta relacion (requester o addressee)."""
         return user_id in (self._requester_id, self._addressee_id)

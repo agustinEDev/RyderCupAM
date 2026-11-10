@@ -1,5 +1,6 @@
 """Caso de Uso: Ver la galeria de fotos de un jugador."""
 
+from src.modules.social.application.bloqueos import me_bloqueo
 from src.modules.social.application.dto.profile_photo_dto import (
     ProfileGalleryResponseDTO,
     ProfilePhotoDTO,
@@ -42,6 +43,7 @@ class GetProfileGalleryUseCase:
         self._user_uow = user_uow
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> ProfileGalleryResponseDTO:
+        """Su galería, solo para amigos; 404 si no existe o si me bloqueó (F-09)."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
 
@@ -52,6 +54,9 @@ class GetProfileGalleryUseCase:
 
         if viewer_id != target_id:
             async with self._social_uow:
+                # Si me bloqueó, no existe para mí: el 404 de una cuenta que no está
+                if await me_bloqueo(self._social_uow.friendships, viewer_id, target_id):
+                    raise ProfileNotVisibleError("Profile not found")
                 if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
                     raise ActivityNotVisibleError("Only friends can see this player's photos")
 

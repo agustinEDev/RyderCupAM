@@ -23,6 +23,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.correo_del_invitado import (
+    correo_del_invitado,
+)
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     al_entrar_uno,
     exigir_sitio,
@@ -368,7 +371,12 @@ class RequestEnrollmentUseCase:
     ) -> Invitation | None:
         """La invitación pendiente que tenía a esa competición queda aceptada (D14)."""
         usuario = await self._user_repo.find_by_id(user_id)
-        correo = str(usuario.email.value) if usuario is not None and usuario.email else None
+        # Por su correo, solo si lo ha verificado (F-07)
+        correo = (
+            correo_del_invitado(str(usuario.email.value), usuario.email_verified)
+            if usuario is not None and usuario.email
+            else None
+        )
         pendiente = await self._uow.invitations.pendiente_de(
             user_id, correo, competition.id, datetime.now()
         )

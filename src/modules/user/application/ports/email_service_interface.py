@@ -54,7 +54,7 @@ class IEmailService(ABC):
             True si se envió correctamente, False en caso contrario
 
         Security:
-            - reset_link incluye token de 256 bits válido por 24 horas
+            - reset_link incluye token de 256 bits válido durante 1 hora
             - Email enviado solo si el usuario existe (previene enumeración)
             - Plantilla bilingüe (ES/EN)
         """
@@ -67,6 +67,23 @@ class IEmailService(ABC):
         """
         Avisa al usuario de que alguien ha entrado en su cuenta desde un dispositivo
         nuevo (BE #737), con un botón para revisar sus dispositivos.
+
+        Args:
+            to_email: El email del usuario
+            user_name: Su nombre
+            dispositivo: Lo que es, ya en texto («iPhone · Safari»)
+            cuando: La fecha y la hora, ya en texto y en hora de España
+            pais: El país aproximado, o None
+        """
+
+    @abstractmethod
+    async def send_session_closed_for_security_notice(
+        self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Avisa al usuario de que hemos cerrado su sesión en un dispositivo por seguridad
+        (F-02): su refresh token se usó desde dos sitios, con un botón para revisar sus
+        dispositivos.
 
         Args:
             to_email: El email del usuario
@@ -141,6 +158,18 @@ class IEmailService(ABC):
         """
         Avisa a la cuenta de que se ha vinculado (o desvinculado) un Google (BE #753): un
         Google vinculado da acceso a la cuenta.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_register_attempt_notice(self, to_email: str, user_name: str) -> bool:
+        """
+        Avisa al buzón de una cuenta de que alguien intentó registrarse con su correo
+        (fase 3, B2/B3): si fue él, que inicie sesión o restablezca la contraseña. Sin
+        token ni nada que dé acceso. Como mucho uno al día por cuenta (lo decide el caso
+        de uso).
 
         Returns:
             True si se envió correctamente

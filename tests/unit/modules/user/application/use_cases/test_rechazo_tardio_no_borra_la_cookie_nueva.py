@@ -18,7 +18,7 @@ en segundo plano) después de volver a entrar, su Set-Cookie borraría la cookie
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -60,7 +60,9 @@ async def _escena():
     tokens = Mock()
     tokens.verify_refresh_token.return_value = {"sub": str(usuario.id.value), "type": "refresh"}
     tokens.refresh_token_expired.return_value = False
-    caso = RefreshAccessTokenUseCase(uow, tokens, security_audit=SecurityAuditLogger())
+    caso = RefreshAccessTokenUseCase(
+        uow, tokens, security_audit=SecurityAuditLogger(), aviso_de_cierre=AsyncMock()
+    )
     return uow, usuario, dispositivo, viejo, caso
 
 

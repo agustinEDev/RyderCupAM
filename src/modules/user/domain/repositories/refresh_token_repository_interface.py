@@ -79,6 +79,14 @@ class RefreshTokenRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_token_hash_for_update(self, token: str) -> RefreshToken | None:
+        """
+        Como find_by_token_hash, pero bloquea la fila hasta el final de la transacción
+        (F-02): dos refrescos a la vez con el mismo token se ordenan, y el segundo lee
+        lo que dejó el primero. Así no salen dos sustitutos ni un robo falso.
+        """
+
+    @abstractmethod
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los refresh tokens de un usuario.
@@ -114,7 +122,8 @@ class RefreshTokenRepositoryInterface(ABC):
             user_id: ID del usuario
 
         Returns:
-            Número de tokens revocados
+            Número de sesiones vivas revocadas: también revoca los tokens ya
+            sustituidos por la rotación, pero no los cuenta (F-02)
 
         Example:
             >>> # Usuario cambia contraseña -> invalidar todas las sesiones
@@ -143,7 +152,7 @@ class RefreshTokenRepositoryInterface(ABC):
     @abstractmethod
     async def count_active_for_user(self, user_id: UserId) -> int:
         """
-        Cuenta los refresh tokens activos (no revocados, no expirados) de un usuario.
+        Cuenta los refresh tokens activos (no revocados, no sustituidos, no expirados).
 
         Útil para:
         - Limitar número de sesiones simultáneas
@@ -198,7 +207,8 @@ class RefreshTokenRepositoryInterface(ABC):
             device_id: ID del dispositivo cuyos tokens se revocarán
 
         Returns:
-            Número de tokens revocados
+            Número de sesiones vivas revocadas: también revoca los tokens ya
+            sustituidos por la rotación, pero no los cuenta (F-02)
 
         Example:
             >>> # Usuario revoca su iPhone desde su Mac
@@ -214,8 +224,9 @@ class RefreshTokenRepositoryInterface(ABC):
         self, user_id: UserId, ahora: datetime
     ) -> set[UserDeviceId]:
         """
-        Los dispositivos del usuario con algún refresh token vivo: sin revocar y sin
-        caducar a `ahora` (BE #737). Son los que tienen una sesión abierta de verdad.
+        Los dispositivos del usuario con algún refresh token vivo: sin revocar, sin
+        sustituir y sin caducar a `ahora` (BE #737). Son los que tienen una sesión
+        abierta de verdad.
         """
 
     @abstractmethod
@@ -224,7 +235,8 @@ class RefreshTokenRepositoryInterface(ABC):
     ) -> bool:
         """
         Si alguno de esos dispositivos (los del navegador) tiene un refresh token vivo
-        (sin revocar ni caducar a `ahora`) creado después de `creado_despues_de` (BE
+        (sin revocar, sin sustituir ni caducar a `ahora`) de una sesión empezada después
+        de `creado_despues_de` (BE
         #734): entonces el navegador ya tiene la cookie de esa sesión nueva, y un
         rechazo tardío del token viejo no la borra.
         """

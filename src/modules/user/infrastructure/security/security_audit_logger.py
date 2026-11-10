@@ -284,6 +284,23 @@ class SecurityAuditLogger(ISecurityAuditLogger):
             device_id=device_id,
         )
 
+    def log_refresh_token_reuse_detected(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        device_id: str,
+        tokens_revoked_count: int,
+    ) -> None:
+        """Un robo de refresh token detectado (F-02)."""
+        get_security_logger().log_refresh_token_reuse_detected(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            device_id=device_id,
+            tokens_revoked_count=tokens_revoked_count,
+        )
+
     def log_unverified_account_claimed(
         self,
         user_id: str,

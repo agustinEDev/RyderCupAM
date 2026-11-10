@@ -69,6 +69,7 @@ from src.modules.competition.domain.services.reparto_de_partidas import RepartoI
 from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
     respuesta_con_jugadores,
 )
+from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
@@ -319,7 +320,10 @@ async def get_tee_groups(
     """200 con las partidas de la franja."""
     return await _responder(
         use_case.execute(
-            round_id, _quien(current_user), current_user.is_admin, email=current_user.email
+            round_id,
+            _quien(current_user),
+            current_user.is_admin,
+            email=correo_de_quien_mira(current_user),
         )
     )
 

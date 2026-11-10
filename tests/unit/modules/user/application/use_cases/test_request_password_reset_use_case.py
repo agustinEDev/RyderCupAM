@@ -6,7 +6,7 @@ Este archivo contiene tests que verifican:
 - Manejo de email no existente (timing attack prevention)
 - Envío de email con enlace de reseteo
 - Security logging completo
-- Delay artificial para prevenir enumeración
+- Sin retardo artificial: el correo sale en segundo plano (fase 3)
 
 Estructura:
 - TestRequestPasswordResetSuccess: Tests para flujo exitoso
@@ -25,6 +25,7 @@ from src.modules.user.application.use_cases.request_password_reset_use_case impo
     RequestPasswordResetUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -179,10 +180,11 @@ class TestRequestPasswordResetSuccess:
         # Verificar formato del enlace
         assert reset_link.startswith("http")
         assert "/reset-password/" in reset_link
-        # Verificar que contiene el token
+        # Verificar que contiene el token (la cuenta guarda su SHA-256, fase 3)
+        token = reset_link.rsplit("/", 1)[1]
         async with uow:
             saved_user = await uow.users.find_by_id(user.id)
-            assert saved_user.password_reset_token in reset_link
+            assert saved_user.password_reset_token == hash_del_enlace(token)
 
     async def test_reset_link_uses_the_injected_frontend_url(self, sample_user_data):
         """
@@ -217,12 +219,14 @@ class TestRequestPasswordResetSuccess:
 class TestRequestPasswordResetEmailNotFound:
     """Tests para el flujo cuando el email no existe"""
 
-    async def test_request_password_reset_with_nonexistent_email_applies_delay(self):
+    async def test_request_password_reset_with_nonexistent_email_returns_generic_message(self):
         """
-        Test: Email no existente aplica delay artificial (timing attack prevention)
+        Test: Email no existente, mensaje genérico. Ya sin retardo artificial: el correo
+        de quien sí existe sale en segundo plano (fase 3, B-2), así que no hay envío que
+        imitar (test_enlaces_y_freno_del_reset)
         Given: Email que NO existe en el sistema
         When: Se solicita reseteo
-        Then: Se aplica delay de 0.5s y se retorna mensaje genérico
+        Then: Se retorna mensaje genérico y no se envía nada
         """
         # Arrange
         uow = InMemoryUnitOfWork()
@@ -239,17 +243,10 @@ class TestRequestPasswordResetEmailNotFound:
         )
 
         # Act
-        import time
-
-        start_time = time.time()
         response = await use_case.execute(request_dto)
-        elapsed_time = time.time() - start_time
 
         # Assert
-        # 1. Verificar que se aplicó el delay (al menos 0.4s con tolerancia)
-        assert elapsed_time >= 0.4  # 0.5s de delay - tolerancia de 0.1s
-
-        # 2. Retorna el MISMO mensaje genérico
+        # 1. Retorna el MISMO mensaje genérico
         assert (
             response.message
             == "Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña."

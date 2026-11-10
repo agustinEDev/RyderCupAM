@@ -93,7 +93,7 @@ class LinkGoogleAccountUseCase:
             raise ReauthenticationRequiredError("Enter your current password first")
 
         google_info = await self._google_oauth_service.exchange_code_for_user_info(
-            request.authorization_code
+            request.authorization_code, code_verifier=request.code_verifier
         )
 
         # Lecturas y escritura en una sola transacción (previene TOCTOU)

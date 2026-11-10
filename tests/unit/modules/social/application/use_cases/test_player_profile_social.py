@@ -206,22 +206,18 @@ class TestNoAmigo:
         assert perfil.head_to_head is None
         assert perfil.games_together is None
 
-    async def test_si_me_bloqueo_no_veo_su_handicap(self, social_uow, user_uow, stats):
-        """Caso 3, del otro lado."""
+    async def test_g2_si_me_bloqueo_su_perfil_no_existe_para_mi(self, social_uow, user_uow, stats):
+        """
+        Given: Él me bloqueó (F-09, G2 de la fase 3: opción A de Agustín, 10 nov 2026)
+        When: Abro su perfil
+        Then: El mismo error que una cuenta que no existe: ni su nombre ni su foto
+        """
         yo = await _usuario(user_uow)
         el = await _usuario(user_uow, handicap=8.4)
-        await _amigos(social_uow, el, await _usuario(user_uow))
         await _bloqueo(social_uow, el, yo)
 
-        perfil = await _perfil(social_uow, user_uow, stats).execute(
-            str(yo.id.value), str(el.id.value)
-        )
-
-        assert perfil.handicap is None
-        assert perfil.friends_count == 0
-        # F (22 oct): me bloqueo el, no yo
-        assert perfil.blocked_by_me is False
-        assert perfil.friendship.status == "BLOCKED"
+        with pytest.raises(ProfileNotVisibleError, match="^Profile not found$"):
+            await _perfil(social_uow, user_uow, stats).execute(str(yo.id.value), str(el.id.value))
 
 
 class TestAmigo:
