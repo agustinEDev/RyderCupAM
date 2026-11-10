@@ -205,6 +205,7 @@ from src.modules.competition.domain.value_objects.ryder_cup_setup import (
 from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
     respuesta_con_jugadores,
 )
+from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import solo_quien_participa
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -449,7 +450,7 @@ async def get_schedule(
             request_dto,
             viewer_id=UserId(str(current_user.id)),
             viewer_is_admin=current_user.is_admin,
-            viewer_email=current_user.email,
+            viewer_email=correo_de_quien_mira(current_user),
         )
 
     except GetScheduleNotFoundError as e:

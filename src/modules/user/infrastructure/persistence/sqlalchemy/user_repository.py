@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -160,7 +162,12 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         return result.scalar_one_or_none()
 
     async def find_by_full_name(self, full_name: str) -> User | None:
-        """Busca un usuario por su nombre completo."""
+        """
+        Busca un usuario ACTIVO por su nombre completo.
+
+        La desactivada se descarta en la consulta (F7, fase 3): descartarla después
+        dejaba sin encontrar a la activa del mismo nombre, o fallaba con dos filas.
+        """
         # Separar el nombre completo en palabras para buscar
         name_parts = full_name.strip().split()
         if len(name_parts) < self.MIN_NAME_PARTS:
@@ -172,6 +179,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             last_name = " ".join(name_parts[i:])
 
             statement = select(User).filter(
+                User._is_active.is_(True),
                 func.lower(User._first_name) == func.lower(first_name),
                 func.lower(User._last_name) == func.lower(last_name),
             )
@@ -185,7 +193,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(
-        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        exclude_user_id: UserId | None = None,
+        exclude_user_ids: Collection[UserId] = (),
     ) -> list[User]:
         """
         Searches active users by partial name or alias match using ILIKE.
@@ -217,6 +229,10 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         )
         if exclude_user_id is not None:
             statement = statement.filter(User._id != str(exclude_user_id))
+        # Quienes bloquearon a quien busca (F-09), también en la consulta
+        if exclude_user_ids:
+            fuera = [str(u) for u in exclude_user_ids]
+            statement = statement.filter(User._id.not_in(fuera))  # type: ignore[union-attr]
         # Por apellido, nombre e id: sin orden, con más coincidencias que el
         # límite cada petición podía devolver otras distintas (/code-review)
         statement = statement.order_by(User._last_name, User._first_name, User._id).limit(limit)

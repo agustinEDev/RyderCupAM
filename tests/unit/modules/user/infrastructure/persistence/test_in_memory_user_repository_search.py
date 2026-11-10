@@ -217,3 +217,42 @@ async def test_search_with_many_matches_returns_them_by_surname_then_name():
         ("Ortega", "Bea"),
         ("Ortiz", "Ana"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_f7_el_nombre_completo_solo_encuentra_cuentas_activas():
+    """
+    GIVEN: Una cuenta desactivada y otra activa con el mismo nombre completo
+    WHEN: Se busca por ese nombre
+    THEN: Sale la activa: la desactivada se descarta en la propia búsqueda (F7)
+    """
+    repository = InMemoryUserRepository()
+    baja = build_user("Pepe", "Gemelo", "pepe-baja@example.com")
+    activa = build_user("Pepe", "Gemelo", "pepe@example.com")
+    baja.deactivate(deactivated_by_user_id=str(activa.id.value))
+    await repository.save(baja)
+    await repository.save(activa)
+
+    assert await repository.find_by_full_name("Pepe Gemelo") == activa
+    baja_sola = InMemoryUserRepository()
+    await baja_sola.save(baja)
+    assert await baja_sola.find_by_full_name("Pepe Gemelo") is None
+
+
+@pytest.mark.asyncio
+async def test_f2_la_busqueda_deja_fuera_los_ids_que_se_le_piden():
+    """
+    GIVEN: Tres cuentas con el mismo apellido
+    WHEN: Se busca dejando fuera a dos (quienes me bloquearon)
+    THEN: Solo sale la tercera, como en el repositorio real
+    """
+    repository = InMemoryUserRepository()
+    uno = build_user("Uno", "Fuera", "uno@example.com")
+    dos = build_user("Dos", "Fuera", "dos@example.com")
+    tres = build_user("Tres", "Fuera", "tres@example.com")
+    for user in (uno, dos, tres):
+        await repository.save(user)
+
+    results = await repository.search_by_partial_name("Fuera", exclude_user_ids={uno.id, dos.id})
+
+    assert [u.id for u in results] == [tres.id]

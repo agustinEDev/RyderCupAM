@@ -123,6 +123,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -444,7 +445,7 @@ async def list_enrollments(
             status=status_filter,
             viewer_id=viewer_id,
             viewer_is_admin=current_user.is_admin,
-            viewer_email=current_user.email,
+            viewer_email=correo_de_quien_mira(current_user),
         )
 
         # Entidades a DTOs, con los datos de cada usuario leídos en bloque

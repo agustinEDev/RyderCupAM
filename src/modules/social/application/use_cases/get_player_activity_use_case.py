@@ -3,6 +3,7 @@
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.social.application.bloqueos import me_bloqueo
 from src.modules.social.application.dto.profile_dto import ActivityEventDTO, FeedResponseDTO
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
@@ -88,6 +89,7 @@ class GetPlayerActivityUseCase:
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
     ) -> FeedResponseDTO:
+        """Su actividad, solo para amigos; 404 si no existe o si me bloqueó (F-09)."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
         limit = max(1, min(limit, MAX_PAGE_SIZE))
@@ -101,6 +103,9 @@ class GetPlayerActivityUseCase:
 
         if viewer_id != target_id:
             async with self._social_uow:
+                # Si me bloqueó, no existe para mí: el 404 de una cuenta que no está
+                if await me_bloqueo(self._social_uow.friendships, viewer_id, target_id):
+                    raise ProfileNotVisibleError("Profile not found")
                 if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
                     raise ActivityNotVisibleError("Only friends can see this player's activity")
 

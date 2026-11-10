@@ -78,6 +78,7 @@ class GetSharedQuickMatchUseCase:
     async def execute(
         self, quick_match_id_raw: str, viewer_id_raw: str
     ) -> SharedQuickMatchDetailResponseDTO:
+        """La partida en solo lectura, sin nombres ni ids de quien quien mira no puede ver."""
         viewer_id = UserId(viewer_id_raw)
 
         # Las unidades de trabajo, en serie: comparten sesion por debajo
@@ -98,6 +99,7 @@ class GetSharedQuickMatchUseCase:
             users = {u.id: u for u in await self._user_uow.users.find_by_ids(registered)}
 
         hidden_names: set[UserId] = set()
+        blocked: set[UserId] = set()
         if not is_participant:
             async with self._social_uow:
                 friends = set(await self._social_uow.friendships.find_friend_ids(viewer_id))
@@ -114,6 +116,7 @@ class GetSharedQuickMatchUseCase:
         )
         if not is_participant:
             self._hide_names(shared, quick_match, hidden_names)
+            self._hide_blocked_ids(shared, quick_match, blocked)
         return shared
 
     @staticmethod
@@ -149,3 +152,32 @@ class GetSharedQuickMatchUseCase:
         for assignment in shared.scoring_assignments:
             if assignment.scorer_participant_id in nameless:
                 assignment.scorer_name = None
+
+    @staticmethod
+    def _hide_blocked_ids(
+        shared: SharedQuickMatchDetailResponseDTO, quick_match, blocked: set[UserId]
+    ) -> None:
+        """
+        Sin `user_id` ni `handicap` el jugador con el que hay un bloqueo, en
+        cualquier sentido (F-09, fase 3 del plan a 9, 10 nov 2026).
+
+        No lo hace anónimo del todo, y se aceptó así (Agustín, 10 nov 2026). Quedan:
+        - su id: el `participant_id` de un registrado es su user_id
+          (`QuickMatchParticipant.for_user`), y sale también en `scorer_ids`, en
+          `hole_scores`, en `participant_strokes` y en el reparto de anotación;
+        - `creator_id`, el del creador, que el cliente exige;
+        - su hándicap, que se reconstruye con los golpes que recibe
+          (`participant_strokes`: `playing_handicap` y `strokes_by_hole`).
+        La protección real es que todo lo de quien te bloqueó (perfil, avatar,
+        actividad, partidas juntos, galería, búsqueda, solicitud) responde como
+        una cuenta que no existe (G2 y F2): con el id ya no se llega a él.
+        """
+        sin_id = {
+            p.participant_id.value
+            for p in quick_match.participants
+            if p.user_id is not None and p.user_id in blocked
+        }
+        for participant in shared.participants:
+            if participant.participant_id in sin_id:
+                participant.user_id = None
+                participant.handicap = None

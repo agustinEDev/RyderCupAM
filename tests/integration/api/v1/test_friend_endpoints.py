@@ -206,6 +206,7 @@ class TestBlockUser:
 
     @pytest.mark.asyncio
     async def test_block_prevents_future_requests(self, client: AsyncClient):
+        """Tras bloquear: el bloqueado recibe 404 al escribir; quien bloqueó, 403."""
         a = await create_authenticated_user(
             client, "friend_m@test.com", "P@ssw0rd123!", "Friend", "Mm"
         )
@@ -223,4 +224,12 @@ class TestBlockUser:
             "/api/v1/friends/requests", json={"addressee_id": a["user"]["id"]}
         )
 
+        # A quien bloquearon, quien le bloqueó no existe: el 404 de un destinatario
+        # que no está, sin pista del bloqueo (F-09, fase 3)
+        assert response.status_code == 404
+        set_auth_cookies(client, a["cookies"])
+        response = await client.post(
+            "/api/v1/friends/requests", json={"addressee_id": b["user"]["id"]}
+        )
+        # Quien bloqueó, el 403 de siempre
         assert response.status_code == 403

@@ -112,6 +112,17 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
             if f.status == FriendshipStatus.ACCEPTED and user_id in (f.requester_id, f.addressee_id)
         ]
 
+    async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
+        """Quienes bloquearon a `user_id`, solo en ese sentido, como el repositorio real."""
+        return [
+            f.blocked_by
+            for f in self._friendships.values()
+            if f.status == FriendshipStatus.BLOCKED
+            and user_id in (f.requester_id, f.addressee_id)
+            and f.blocked_by is not None
+            and f.blocked_by != user_id
+        ]
+
     async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:
         return [
             f.addressee_id if f.requester_id == user_id else f.requester_id

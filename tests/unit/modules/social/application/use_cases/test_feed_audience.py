@@ -15,7 +15,10 @@ import pytest
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
-from src.modules.social.application.exceptions import ActivityNotVisibleError
+from src.modules.social.application.exceptions import (
+    ActivityNotVisibleError,
+    ProfileNotVisibleError,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
@@ -297,7 +300,8 @@ class TestBloqueo:
 
         assert not (await _feed_de(social_uow, user_uow, otro)) & mios
         assert not (await _feed_de(social_uow, user_uow, yo)) & suyos
-        with pytest.raises(ActivityNotVisibleError):
+        # A quien bloquearon, la actividad de quien le bloqueó no existe: 404 (F-09)
+        with pytest.raises(ProfileNotVisibleError):
             await _actividad(social_uow, user_uow, otro, yo)
         with pytest.raises(ActivityNotVisibleError):
             await _actividad(social_uow, user_uow, yo, otro)

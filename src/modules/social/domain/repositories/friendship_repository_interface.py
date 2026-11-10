@@ -104,6 +104,13 @@ class FriendshipRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
+        """
+        Quienes bloquearon a `user_id`, solo en ese sentido (F-09): para ellos
+        no existe. A quienes bloqueó él no los incluye.
+        """
+
+    @abstractmethod
     async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:
         """
         Con quien hay un bloqueo, lo pusiera quien lo pusiera, en una sola

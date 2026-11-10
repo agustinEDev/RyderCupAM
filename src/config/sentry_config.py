@@ -63,9 +63,16 @@ def _quita_cabeceras_de_origen(event: Event) -> Event:
 
 
 # El cuerpo de estas rutas lleva datos de quien escribe (nombre, correo, mensaje), y
-# el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09)
-# También el registro (fase 3): nombre, correo y contraseña
-_RUTAS_SIN_CUERPO = ("/api/v1/support/contact", "/api/v1/auth/register")
+# el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09).
+# También el registro (fase 3): nombre, correo y contraseña. Y el canje con Google:
+# lleva el código de autorización y el code_verifier de PKCE, que juntos valen una
+# sesión mientras el código no caduque (F8, fase 3)
+_RUTAS_SIN_CUERPO = (
+    "/api/v1/support/contact",
+    "/api/v1/auth/register",
+    "/api/v1/auth/google",
+    "/api/v1/auth/google/link",
+)
 
 
 def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:

@@ -536,8 +536,12 @@ class TestInvitaciones:
         assert registro.avisos == [("invited", competition_id, invitado.id)]
 
     async def test_a3_invitar_por_correo_a_quien_tiene_cuenta_avisa(self, uow, user_uow, registro):
+        """Con el correo verificado: sin verificar no se ata ni se avisa (F-07)."""
         creador = await _usuario(user_uow, "org@test.com")
         invitado = await _usuario(user_uow, "inv@test.com")
+        invitado.confirm_email_ownership()
+        async with user_uow:
+            await user_uow.users.save(invitado)
         competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
 
         await SendInvitationByEmailUseCase(uow, user_uow, actividad=registro).execute(
@@ -635,9 +639,12 @@ class TestInvitaciones:
         assert registro.avisos == [("invitation_answered", invitacion.id, invitado.id)]
 
     async def test_c_responder_la_de_quien_no_tenia_cuenta_no_avisa(self, uow, user_uow, registro):
-        """Sin cuenta al invitarle no hubo aviso que retirar: responde por su correo."""
+        """Sin cuenta al invitarle no hubo aviso que retirar: responde por su correo (verificado)."""
         creador = await _usuario(user_uow, "org@test.com")
         invitado = await _usuario(user_uow, "nadie@test.com")
+        invitado.confirm_email_ownership()
+        async with user_uow:
+            await user_uow.users.save(invitado)
         competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
         invitacion = await self._invitacion(uow, competition_id, creador.id, None)
 

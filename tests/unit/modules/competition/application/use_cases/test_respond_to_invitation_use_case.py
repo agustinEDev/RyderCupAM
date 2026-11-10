@@ -441,9 +441,12 @@ class TestRespondToInvitationUseCase:
             await uc.execute(request)
 
     async def test_accept_by_email_match(self, comp_uow, user_uow):
-        """Invitee puede responder si el email coincide (sin invitee_user_id)."""
+        """Invitee puede responder si el email coincide (sin invitee_user_id), verificado (F-07)."""
         creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
+        invitee.confirm_email_ownership()
+        async with user_uow:
+            await user_uow.users.save(invitee)
         created = await self._create_active_competition(comp_uow, creator.id)
 
         # Invitacion sin invitee_user_id (solo email)

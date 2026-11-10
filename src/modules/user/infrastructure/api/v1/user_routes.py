@@ -17,7 +17,12 @@ from src.config.dependencies import (
     get_update_profile_use_case,
     get_update_security_use_case,
 )
-from src.config.rate_limit import NEW_EMAIL_REQUESTS_LIMIT, cabe, clave_de_usuario
+from src.config.rate_limit import (
+    NEW_EMAIL_REQUESTS_LIMIT,
+    USER_SEARCH_BY_EMAIL_LIMIT,
+    cabe,
+    clave_de_usuario,
+)
 from src.config.settings import settings
 from src.config.terms_guard import TERMS_EXEMPT_ROUTES
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -148,12 +153,27 @@ async def search_users_autocomplete(
     )
 
 
+DEMASIADAS_BUSQUEDAS = "TOO_MANY_USER_SEARCHES"
+# Sin el límite ni la ventana: no es asunto de quien llama
+_TEXTOS_DE_LA_BUSQUEDA = {
+    DEMASIADAS_BUSQUEDAS: "Has hecho demasiadas búsquedas por correo. Inténtalo más tarde.",
+}
+
+
 @router.get(
     "/search",
     response_model=FindUserResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Buscar usuario",
-    description="Busca un usuario por email o nombre completo y devuelve su ID y datos básicos.",
+    description=(
+        "Busca un usuario por email o nombre completo y devuelve su ID y datos básicos. "
+        "Una cuenta desactivada responde como un correo que no existe. Por correo, 20 "
+        "búsquedas por hora y usuario (429 con `error_code` TOO_MANY_USER_SEARCHES)."
+    ),
+    responses={
+        404: {"description": "No hay ninguna cuenta activa con ese correo o nombre."},
+        429: {"description": "`error_code` TOO_MANY_USER_SEARCHES: demasiadas por correo."},
+    },
     tags=["Users"],
 )
 async def find_user(
@@ -174,6 +194,15 @@ async def find_user(
     El correo del encontrado solo vuelve si se buscó por ese mismo correo o es
     uno mismo; vacío en otro caso (BE #531).
     """
+    # Por correo, cada búsqueda cuenta antes de buscar, encuentre o no (F-01b): 20 por
+    # hora y usuario. Por nombre no gasta este cupo
+    if email and not cabe(
+        USER_SEARCH_BY_EMAIL_LIMIT, "user-search-by-email", clave_de_usuario(str(current_user.id))
+    ):
+        return respuesta_con_codigo(
+            status.HTTP_429_TOO_MANY_REQUESTS, _TEXTOS_DE_LA_BUSQUEDA, DEMASIADAS_BUSQUEDAS
+        )
+
     try:
         # Validar que al menos un parámetro sea proporcionado
         if not email and not full_name:

@@ -522,6 +522,7 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
     SocialUnitOfWorkInterface,
 )
 from src.modules.social.infrastructure.adapters.amigos_adapter import AmigosAdapter
+from src.modules.social.infrastructure.adapters.bloqueos_adapter import BloqueosAdapter
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
 )
@@ -571,6 +572,7 @@ from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAviso
 from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
     IAvisoDeSesionCerrada,
 )
+from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.application.ports.google_oauth_service_interface import (
@@ -873,27 +875,6 @@ def get_register_user_use_case(
     )
 
 
-def get_find_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-) -> FindUserUseCase:
-    """
-    Proveedor del caso de uso FindUserUseCase.
-
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `FindUserUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
-    """
-    return FindUserUseCase(uow)
-
-
-def get_search_users_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-) -> SearchUsersUseCase:
-    """Proveedor del caso de uso SearchUsersUseCase."""
-    return SearchUsersUseCase(uow=uow)
-
-
 def get_update_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
@@ -1184,14 +1165,6 @@ def get_remove_avatar_use_case(
 ) -> RemoveAvatarUseCase:
     """Proveedor del caso de uso RemoveAvatarUseCase."""
     return RemoveAvatarUseCase(uow)
-
-
-def get_avatar_image_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
-) -> GetAvatarImageUseCase:
-    """Proveedor del caso de uso GetAvatarImageUseCase."""
-    return GetAvatarImageUseCase(uow, preset_provider)
 
 
 def get_my_avatar_upload_image_use_case(
@@ -1522,6 +1495,38 @@ def get_social_uow(
     3. Devuelve la instancia, cumpliendo con la interfaz `SocialUnitOfWorkInterface`.
     """
     return SQLAlchemySocialUnitOfWork(session)
+
+
+def get_bloqueos(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> BloqueosInterface:
+    """Quién bloqueó a quién, del módulo social, para `user` (F-09)."""
+    return BloqueosAdapter(social_uow)
+
+
+def get_avatar_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+    bloqueos: BloqueosInterface = Depends(get_bloqueos),
+) -> GetAvatarImageUseCase:
+    """Proveedor del caso de uso GetAvatarImageUseCase; con los bloqueos (F-09)."""
+    return GetAvatarImageUseCase(uow, preset_provider, bloqueos)
+
+
+def get_find_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    bloqueos: BloqueosInterface = Depends(get_bloqueos),
+) -> FindUserUseCase:
+    """Proveedor del caso de uso FindUserUseCase; sin quien me bloqueó (F-09)."""
+    return FindUserUseCase(uow, bloqueos)
+
+
+def get_search_users_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    bloqueos: BloqueosInterface = Depends(get_bloqueos),
+) -> SearchUsersUseCase:
+    """Proveedor del caso de uso SearchUsersUseCase; sin quien me bloqueó (F-09)."""
+    return SearchUsersUseCase(uow=uow, bloqueos=bloqueos)
 
 
 def get_amigos(

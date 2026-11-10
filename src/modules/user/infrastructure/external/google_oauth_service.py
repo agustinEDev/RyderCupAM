@@ -31,12 +31,18 @@ class GoogleOAuthService(IGoogleOAuthService):
     2. GET a Google userinfo endpoint para obtener datos del usuario
     """
 
-    async def exchange_code_for_user_info(self, authorization_code: str) -> GoogleUserInfo:
+    async def exchange_code_for_user_info(
+        self, authorization_code: str, code_verifier: str | None = None
+    ) -> GoogleUserInfo:
         """
         Intercambia un authorization code de Google por información del usuario.
 
         Args:
             authorization_code: Código de Google OAuth
+            code_verifier: El verifier PKCE (RFC 7636). Si viene, va a Google, que
+                rechaza el canje si no casa con el code_challenge de la petición del
+                código: el mismo error que un código malo. Opcional en esta release
+                (el front de hoy no lo manda); obligatorio a partir de la release 3
 
         Returns:
             GoogleUserInfo con datos del usuario
@@ -47,16 +53,16 @@ class GoogleOAuthService(IGoogleOAuthService):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # 1. Exchange code for tokens
-                token_response = await client.post(
-                    GOOGLE_TOKEN_URL,
-                    data={
-                        "code": authorization_code,
-                        "client_id": settings.GOOGLE_CLIENT_ID,
-                        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-                        "grant_type": "authorization_code",
-                    },
-                )
+                datos = {
+                    "code": authorization_code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                }
+                if code_verifier is not None:
+                    datos["code_verifier"] = code_verifier
+                token_response = await client.post(GOOGLE_TOKEN_URL, data=datos)
 
                 if token_response.status_code != HTTP_OK:
                     logger.warning(

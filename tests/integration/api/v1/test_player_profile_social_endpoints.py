@@ -118,27 +118,31 @@ class TestPerfilSocial:
         assert datos["games_together"] is None
 
     async def test_bloqueado_no_ve_el_handicap(self, client: AsyncClient):
-        """Caso 3: solo nombre y foto; el número de amigos llega a 0."""
+        """
+        Caso 3: quien bloqueó ve solo nombre y foto del otro (amigos a 0), para poder
+        desbloquearlo. Quien fue bloqueado no ve el perfil: 404 (G2, fase 3, 10 nov).
+        """
         yo = await _usuario(client, "ps_b1@test.com", "Ana")
         el = await _usuario(client, "ps_b2@test.com", "Luis")
-        await hacerse_amigos(client, el, await _usuario(client, "ps_b3@test.com", "Eva"))
-        set_auth_cookies(client, el["cookies"])
+        await hacerse_amigos(client, yo, await _usuario(client, "ps_b3@test.com", "Eva"))
+        set_auth_cookies(client, yo["cookies"])
         await client.post(
             "/api/v1/handicaps/update-manual",
-            json={"user_id": el["user"]["id"], "handicap": 14.2},
+            json={"user_id": yo["user"]["id"], "handicap": 14.2},
         )
         set_auth_cookies(client, el["cookies"])
         bloqueo = await client.post(f"/api/v1/friends/{yo['user']['id']}/block")
         assert bloqueo.status_code in (200, 201), bloqueo.text
 
-        datos = await _perfil(client, yo, el)
+        datos = await _perfil(client, el, yo)
 
         assert datos["friendship"]["status"] == "BLOCKED"
         assert datos["handicap"] is None
         assert datos["friends_count"] == 0
-        # F (22 oct): me bloqueo el; desde su lado, lo bloqueo el
-        assert datos["blocked_by_me"] is False
-        assert (await _perfil(client, el, yo))["blocked_by_me"] is True
+        assert datos["blocked_by_me"] is True
+        set_auth_cookies(client, yo["cookies"])
+        r = await client.get(f"/api/v1/users/{el['user']['id']}/profile")
+        assert r.status_code == 404
 
     async def test_un_amigo_ve_el_cara_a_cara_y_las_partidas_juntos(self, client: AsyncClient):
         """Caso 4: gano el singles (4 contra 5, scratch en un hoyo)."""
