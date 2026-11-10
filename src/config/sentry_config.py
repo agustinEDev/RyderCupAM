@@ -26,6 +26,7 @@ Configuración requerida:
 """
 
 import logging
+import re
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -62,7 +63,8 @@ def _quita_cabeceras_de_origen(event: Event) -> Event:
 
 # El cuerpo de estas rutas lleva datos de quien escribe (nombre, correo, mensaje), y
 # el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09)
-_RUTAS_SIN_CUERPO = ("/api/v1/support/contact",)
+# También el registro (fase 3): nombre, correo y contraseña
+_RUTAS_SIN_CUERPO = ("/api/v1/support/contact", "/api/v1/auth/register")
 
 
 def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
@@ -71,6 +73,24 @@ def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
     url = str(peticion.get("url") or "").split("?")[0]
     if url.endswith(_RUTAS_SIN_CUERPO):
         peticion.pop("data", None)
+    return event
+
+
+# El GET obsoleto de validar el enlace de restablecer lleva el token en la URL (fase 3,
+# B-4). Mientras exista (se quita en la 2.58.0), sale tachado en errores y transacciones
+_TOKEN_EN_LA_URL = re.compile(r"(/auth/validate-reset-token/)[^/?#\s]+")
+_TACHADO = r"\1[Filtered]"
+
+
+def _tacha_el_token_del_enlace(event: Event) -> Event:
+    """Tacha el token de la URL del GET obsoleto, en la petición y en el nombre."""
+    peticion = event.get("request")
+    url = peticion.get("url") if isinstance(peticion, dict) else None
+    if isinstance(peticion, dict) and isinstance(url, str):
+        peticion["url"] = _TOKEN_EN_LA_URL.sub(_TACHADO, url)
+    transaccion = event.get("transaction")
+    if isinstance(transaccion, str):
+        event["transaction"] = _TOKEN_EN_LA_URL.sub(_TACHADO, transaccion)
     return event
 
 
@@ -111,7 +131,9 @@ def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
 
 def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
     """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
-    return _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
+    return _tacha_el_token_del_enlace(
+        _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
+    )
 
 
 def before_send(event: Event, hint: Hint) -> Event | None:
@@ -133,6 +155,7 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     """
     _quita_cabeceras_de_origen(event)
     _quita_el_cuerpo_de_las_rutas_con_datos(event)
+    _tacha_el_token_del_enlace(event)
     _recorta_los_eventos_de_seguridad(event)
 
     # Filtrar health checks del endpoint "/"
