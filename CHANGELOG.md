@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.56.0] - 2026-11-10
+
+**Dependencias al día y dos tests intermitentes arreglados** (#778, #779, #780, #782). Sin
+migraciones, sin cambios visibles y sin cambios de contrato: no hace falta desplegar el
+frontend con ella.
+
+### Changed
+
+- **Dependencias de ejecución**: SQLAlchemy 2.1.8, python-multipart 0.0.33, tzfpy 2.1.2 y
+  sentry-sdk 2.74.0, con `requirements.lock` regenerado con sus hashes en la imagen base de
+  producción (#780). De desarrollo: ruff 0.17.4, pytest-asyncio 1.4.1.post1 y
+  cyclonedx-bom 8 (el SBOM del CI sigue saliendo igual).
+- **La imagen Docker ya no lleva ficheros Markdown** (`**/*.md` en la allow-list de
+  `.dockerignore`): ninguno se lee al ejecutar, y así no entran notas locales en las
+  imágenes construidas desde un working tree (#779).
+- **Comentarios y documentación apuntan a la fuente versionada de cada regla** (un ADR, una
+  página de `docs/` o el contrato de import-linter) en vez de a notas locales (#778).
+- **Las tareas de los avisos en segundo plano llevan nombre** (`aviso-de-nuevo-inicio`,
+  `aviso-de-intentos-fallidos`); el comportamiento es el mismo (#782).
+
+### Fixed
+
+- **Teardown intermitente de los tests de integración** (`ObjectInUseError` al borrar la BD
+  del test, #781): el login lanza avisos en segundo plano que abren su propia sesión, y el
+  fixture borraba la BD con su conexión abierta. Ahora espera a los avisos de su bucle (con
+  tope, nombrando el que se cuelgue) antes de soltarla; la limpieza termina aunque algo
+  falle. Las copias del helper de SQL de los tests pasan a uno común (#782).
+- **Tests intermitentes del log de seguridad**: un evento que un test dejaba en la cola se
+  escribía dentro de la captura del siguiente. Antes de cada test del log se vacían sus
+  hilos (#782).
+
 ## [2.55.0] - 2026-11-09
 
 **Fases 1 y 2 del plan para subir a 9 las notas de la auditoría de seguridad y calidad
