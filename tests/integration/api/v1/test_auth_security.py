@@ -13,7 +13,7 @@ from fastapi import status
 from httpx import AsyncClient
 
 from src.modules.user.infrastructure.api.v1 import auth_routes
-from tests.conftest import get_user_by_email
+from tests.conftest import token_de_verificacion_enviado
 
 
 @pytest.mark.asyncio
@@ -151,10 +151,8 @@ class TestAuthSecurityUserEnumeration:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener token y verificar
-        user = await get_user_by_email(client, user_data["email"])
-        verify_response = await client.post(
-            "/api/v1/auth/verify-email", json={"token": user.verification_token}
-        )
+        token = await token_de_verificacion_enviado(user_data["email"])
+        verify_response = await client.post("/api/v1/auth/verify-email", json={"token": token})
         assert verify_response.status_code == status.HTTP_200_OK
 
         # Act - Intentar reenviar verificación a usuario ya verificado

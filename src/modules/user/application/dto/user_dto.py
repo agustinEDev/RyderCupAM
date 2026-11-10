@@ -899,7 +899,7 @@ class ResetPasswordRequestDTO(BaseModel):
         ...,
         min_length=32,
         max_length=100,
-        description="Token de reseteo único recibido por email (válido 24 horas).",
+        description="Token de reseteo único recibido por email (válido 1 hora).",
     )
     new_password: str = Field(
         ...,
@@ -949,6 +949,17 @@ class ValidateResetTokenRequestDTO(BaseModel):
     token: str = Field(
         ..., min_length=32, max_length=100, description="Token de reseteo a validar."
     )
+
+
+class ValidateResetTokenBodyDTO(BaseModel):
+    """
+    El cuerpo de `POST /auth/validate-reset-token` (fase 3, C4): el token, fuera de la URL.
+
+    Sin la longitud exacta aquí: un token imposible responde 200 con valid=False, como
+    el GET (BE #453), no 422. Con tope, para no aceptar cuerpos enormes.
+    """
+
+    token: str = Field(..., max_length=512, description="Token de reseteo a validar.")
 
 
 class ValidateResetTokenResponseDTO(BaseModel):

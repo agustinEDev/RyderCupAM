@@ -12,6 +12,7 @@ Estructura:
 - TestResetPassword: Tests para el proceso completo de reseteo
 """
 
+import hashlib
 from datetime import datetime, timedelta
 
 import pytest
@@ -95,13 +96,13 @@ class TestGeneratePasswordResetToken:
         assert all(c.isalnum() or c in ["-", "_"] for c in token)
 
         # 3. Verificar que el token se almacenó en el usuario
-        assert user.password_reset_token == token
+        assert user.password_reset_token == hashlib.sha256(token.encode()).hexdigest()
 
-        # 4. Verificar que se estableció la fecha de expiración (24 horas desde ahora)
+        # 4. Verificar que se estableció la fecha de expiración (1 hora desde ahora, fase 3)
         assert user.reset_token_expires_at is not None
-        # Verificar que la expiración está entre 23.9 y 24.1 horas desde ahora (tolerancia de 6 minutos)
+        # Verificar que la expiración está a una hora de ahora (tolerancia de 6 minutos)
         now = datetime.now()
-        expected_expiration = now + timedelta(hours=24)
+        expected_expiration = now + timedelta(hours=1)
         time_diff = abs((user.reset_token_expires_at - expected_expiration).total_seconds())
         assert time_diff < 360  # Menos de 6 minutos de diferencia
 
@@ -148,7 +149,7 @@ class TestGeneratePasswordResetToken:
         assert first_token != second_token
 
         # 2. El token actual es el segundo
-        assert user.password_reset_token == second_token
+        assert user.password_reset_token == hashlib.sha256(second_token.encode()).hexdigest()
 
         # 3. La expiración se actualizó
         assert user.reset_token_expires_at != first_expiration
@@ -180,7 +181,7 @@ class TestGeneratePasswordResetToken:
 
         # Assert
         assert token is not None
-        assert user.password_reset_token == token
+        assert user.password_reset_token == hashlib.sha256(token.encode()).hexdigest()
 
         # Verificar evento con campos opcionales en None
         events = user.get_domain_events()
@@ -240,7 +241,7 @@ class TestCanResetPassword:
 
     def test_can_reset_password_returns_false_with_expired_token(self, sample_user_data):
         """
-        Test: Validar token expirado (>24 horas)
+        Test: Validar token expirado (> 1 hora)
         Given: Usuario con token expirado
         When: Se valida el token después de 25 horas
         Then: Retorna False

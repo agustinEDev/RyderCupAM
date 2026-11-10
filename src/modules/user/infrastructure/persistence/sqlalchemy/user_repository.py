@@ -6,6 +6,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.persistence.leidos_en_la_sesion import recordar, ya_leido
 
@@ -235,8 +236,12 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         return result.scalar_one()
 
     async def find_by_verification_token(self, token: str) -> User | None:
-        """Busca un usuario por su token de verificación."""
-        statement = select(User).filter_by(_verification_token=token)
+        """Busca un usuario por su token de verificación: por su SHA-256, que es lo que se
+        guarda (fase 3, C3). Un token guardado en claro antes del cambio no se encuentra."""
+        token_hash = _hash_del_enlace(token)
+        if token_hash is None:
+            return None
+        statement = select(User).filter_by(_verification_token=token_hash)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -251,9 +256,21 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             User encontrado o None si no existe
 
         Note:
+            - Busca por el SHA-256 del token, que es lo que se guarda (fase 3, C3)
             - Usa índice ix_users_password_reset_token para búsqueda rápida
             - NO valida expiración (esa lógica está en User.can_reset_password())
         """
-        statement = select(User).filter_by(_password_reset_token=token)
+        token_hash = _hash_del_enlace(token)
+        if token_hash is None:
+            return None
+        statement = select(User).filter_by(_password_reset_token=token_hash)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+
+def _hash_del_enlace(token: str) -> str | None:
+    """El SHA-256 con el que se guarda el token de un enlace; None si no hay token."""
+    try:
+        return TokenHash.from_token(token).value
+    except ValueError:
+        return None

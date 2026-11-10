@@ -54,7 +54,7 @@ class IEmailService(ABC):
             True si se envió correctamente, False en caso contrario
 
         Security:
-            - reset_link incluye token de 256 bits válido por 24 horas
+            - reset_link incluye token de 256 bits válido durante 1 hora
             - Email enviado solo si el usuario existe (previene enumeración)
             - Plantilla bilingüe (ES/EN)
         """
@@ -141,6 +141,18 @@ class IEmailService(ABC):
         """
         Avisa a la cuenta de que se ha vinculado (o desvinculado) un Google (BE #753): un
         Google vinculado da acceso a la cuenta.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_register_attempt_notice(self, to_email: str, user_name: str) -> bool:
+        """
+        Avisa al buzón de una cuenta de que alguien intentó registrarse con su correo
+        (fase 3, B2/B3): si fue él, que inicie sesión o restablezca la contraseña. Sin
+        token ni nada que dé acceso. Como mucho uno al día por cuenta (lo decide el caso
+        de uso).
 
         Returns:
             True si se envió correctamente

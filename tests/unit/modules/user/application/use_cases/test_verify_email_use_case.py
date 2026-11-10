@@ -9,6 +9,8 @@ Este archivo contiene tests que verifican:
 - Persistencia de cambios
 """
 
+import hashlib
+
 import pytest
 
 from src.modules.user.application.use_cases.verify_email_use_case import (
@@ -206,7 +208,10 @@ class TestVerifyEmailUseCase:
             email = Email("ana@test.com")
             unverified_user = await uow.users.find_by_email(email)
             assert unverified_user.email_verified is False
-            assert unverified_user.verification_token == real_token
+            assert (
+                unverified_user.verification_token
+                == hashlib.sha256(real_token.encode()).hexdigest()
+            )
 
     async def test_execute_success_clears_verification_token(self, uow: InMemoryUnitOfWork):
         """

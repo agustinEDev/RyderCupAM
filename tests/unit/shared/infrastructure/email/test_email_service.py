@@ -361,7 +361,9 @@ class TestTheButtonsGoWhereTheySay:
         assert _botones(cuerpo)[0] == enlace
         # El enlace a mano, por si el botón no funciona
         assert cuerpo.count(enlace) >= 3
-        assert "24 horas" in cuerpo and "24 hours" in cuerpo
+        # Vale una hora (fase 3, C2)
+        assert "1 hora" in cuerpo and "1 hour" in cuerpo
+        assert "24 horas" not in cuerpo and "24 hours" not in cuerpo
         assert enlace in texto
 
     @pytest.mark.asyncio

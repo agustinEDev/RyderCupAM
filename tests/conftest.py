@@ -642,10 +642,48 @@ def mock_external_services():
     mock_email.send_email_changed_notice = AsyncMock(return_value=True)
     mock_email.send_account_secured_notice = AsyncMock(return_value=True)
     mock_email.send_google_account_notice = AsyncMock(return_value=True)
+    # Y el aviso al dueño de un intento de registro con su correo (fase 3, B2)
+    mock_email.send_register_attempt_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
+    _CORREO_DEL_TEST["mock"] = mock_email
     with patch("src.config.dependencies.EmailService", return_value=mock_email):
         yield mock_email
+    _CORREO_DEL_TEST.pop("mock", None)
+
+
+# El mock de correo del test en curso: de él salen los tokens en claro de los enlaces,
+# que la BD ya no guarda (fase 3, solo su SHA-256)
+_CORREO_DEL_TEST: dict = {}
+
+
+async def token_de_verificacion_enviado(email: str) -> str:
+    """El token del último correo de verificación enviado a `email` (en claro).
+
+    Espera antes a los correos en segundo plano: el del registro sale así (fase 3).
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    await espera_los_avisos_pendientes(tope_s=10)
+    llamadas = [
+        c
+        for c in _CORREO_DEL_TEST["mock"].send_verification_email.await_args_list
+        if c.kwargs.get("to_email", c.args[0] if c.args else None) == email
+    ]
+    assert llamadas, f"No se envió ningún correo de verificación a {email}"
+    ultima = llamadas[-1]
+    return ultima.kwargs.get("verification_token") or ultima.args[2]
+
+
+def token_de_reset_enviado(email: str) -> str:
+    """El token del último enlace de restablecer enviado a `email` (en claro)."""
+    llamadas = [
+        c
+        for c in _CORREO_DEL_TEST["mock"].send_password_reset_email.await_args_list
+        if c.kwargs.get("to_email") == email
+    ]
+    assert llamadas, f"No se envió ningún enlace de restablecer a {email}"
+    return llamadas[-1].kwargs["reset_link"].rsplit("/", 1)[1]
 
 
 @pytest.fixture(autouse=True)

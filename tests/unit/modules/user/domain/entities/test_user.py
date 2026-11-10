@@ -8,6 +8,8 @@ Este archivo contiene tests que verifican:
 - Casos de borde y errores
 """
 
+import hashlib
+
 import pytest
 
 from src.modules.user.domain.entities.user import User
@@ -769,7 +771,8 @@ class TestUserEmailVerification:
         # Assert
         assert token is not None
         assert len(token) > 0
-        assert user.verification_token == token
+        # Se guarda su SHA-256, nunca el token (fase 3)
+        assert user.verification_token == hashlib.sha256(token.encode()).hexdigest()
         assert isinstance(token, str)
 
     def test_generate_verification_token_returns_unique_tokens(self):

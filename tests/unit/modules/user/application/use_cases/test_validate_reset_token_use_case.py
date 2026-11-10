@@ -192,7 +192,7 @@ class TestValidateResetTokenInvalid:
         assert response.valid is False
         assert (
             response.message
-            == "Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace."
+            == "Token de reseteo expirado. Los enlaces valen durante 1 hora. Solicita un nuevo enlace."
         )
 
     async def test_validate_reset_token_at_exact_expiration_boundary(self, sample_user_data):

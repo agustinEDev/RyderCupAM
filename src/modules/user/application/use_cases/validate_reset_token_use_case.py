@@ -88,8 +88,8 @@ class ValidateResetTokenUseCase:
                 valid=True,
                 message="Token válido. Puedes proceder con el reseteo de tu contraseña.",
             )
-        # Token expirado (> 24 horas)
+        # Token expirado (> 1 hora)
         return ValidateResetTokenResponseDTO(
             valid=False,
-            message="Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace.",
+            message="Token de reseteo expirado. Los enlaces valen durante 1 hora. Solicita un nuevo enlace.",
         )

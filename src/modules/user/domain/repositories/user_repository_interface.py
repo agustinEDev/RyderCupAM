@@ -263,8 +263,11 @@ class UserRepositoryInterface(ABC):
         """
         Busca un usuario por su token de verificación de email.
 
+        Se guarda el SHA-256 del token (fase 3): la implementación busca por el hash
+        del que llega. Uno guardado en claro antes del cambio no se encuentra.
+
         Args:
-            token (str): El token de verificación
+            token (str): El token de verificación, en claro (el del enlace)
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe
@@ -289,6 +292,7 @@ class UserRepositoryInterface(ABC):
             RepositoryError: Si ocurre un error de consulta
 
         Security:
+            - Busca por el SHA-256 del token, que es lo que se guarda (fase 3)
             - Solo busca tokens activos (no nulos)
             - NO valida expiración (esa lógica está en User.can_reset_password())
             - Usa índice único ix_users_password_reset_token para búsqueda rápida
