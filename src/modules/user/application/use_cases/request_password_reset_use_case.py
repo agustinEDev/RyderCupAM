@@ -6,12 +6,14 @@ Este endpoint es público y NO requiere autenticación.
 
 Security Features:
 - Timing attack prevention: Siempre retorna 200 OK con mensaje genérico
-- Rate limiting: 3 intentos/hora por email (configurado en SlowAPI)
+- Rate limiting: 3 intentos/hora por correo + red (la ruta, fase 3 H1) y como mucho 10
+  correos por cuenta en 24 horas, vengan de donde vengan (aquí, fase 3 H2)
 - Email injection prevention: Validación con Pydantic EmailStr
 - Security logging: Registra todas las solicitudes (exitosas y fallidas)
 """
 
 import asyncio
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
@@ -32,7 +34,7 @@ class RequestPasswordResetUseCase:
 
     Responsabilidades:
     - Buscar usuario por email (sin revelar si existe)
-    - Generar token de reseteo con expiración 24h
+    - Generar token de reseteo con expiración de 1 hora (se guarda su hash)
     - Enviar email con enlace de reseteo
     - Registrar evento de dominio para auditoría
     - Aplicar timing attack prevention
@@ -42,7 +44,9 @@ class RequestPasswordResetUseCase:
     - Mensaje genérico para prevenir enumeración de usuarios
     - Delay artificial si el email NO existe (evita timing attacks)
     - Token de 256 bits criptográficamente seguro
-    - Expiración automática en 24 horas
+    - Expiración automática en 1 hora
+    - Como mucho 10 correos por cuenta en 24 horas: por encima no se envía nada, el
+      enlace de antes sigue valiendo y la respuesta es la misma
     """
 
     # Delay en segundos para simular envío de email si el usuario no existe
@@ -136,14 +140,39 @@ class RequestPasswordResetUseCase:
                 email=request.email,
             )
 
-        # CASO 2: Email existe → Generar token y enviar email
-        # Generar token de reseteo (expiración 24h)
-        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
-
-        # Guardar usuario con token de reseteo
+        # CASO 2: Email existe → Generar token (1 h) y enviar email, si la cuenta no
+        # agotó sus 10 correos del día (H2). Contado sobre la fila bloqueada: dos
+        # peticiones a la vez no se pasan del tope
         async with self._uow:
-            await self._uow.users.save(user)
+            bloqueado = await self._uow.users.find_by_id_for_update(user.id)
+            cabe = bloqueado is not None and bloqueado.cuenta_un_correo_de_reset(datetime.now())
+            if cabe and bloqueado is not None:
+                user = bloqueado
+                token = user.generate_password_reset_token(
+                    ip_address=ip_address, user_agent=user_agent
+                )
+                await self._uow.users.save(user)
             # Commit automático al salir del contexto
+
+        if not cabe:
+            # Sin correo: el enlace de antes sigue valiendo, y la respuesta (y su tiempo,
+            # el mismo retardo que sin cuenta) no lo dice (H3)
+            await asyncio.sleep(self.FAKE_EMAIL_DELAY_SECONDS)
+            registra_sin_romper(
+                "Request password reset",
+                lambda: security_logger.log_password_reset_requested(
+                    user_id=str(user.id.value),
+                    email=request.email,
+                    success=False,
+                    failure_reason="Daily reset email limit reached (not revealed to client)",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
+            )
+            return RequestPasswordResetResponseDTO(
+                message="Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña.",
+                email=request.email,
+            )
 
         # Enviar email con enlace de reseteo (Mailgun)
         reset_link = self._build_reset_link(token)
