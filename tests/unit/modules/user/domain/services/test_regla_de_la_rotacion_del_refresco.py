@@ -6,7 +6,8 @@ La regla de la rotación del refresh token, en el dominio (F-02, tras la revisi�
   D1  vigente                                            | ROTA (A1)
   D2  sustituido dentro de 60 s (usado o no el sustituto)| SOLO_ACCESO (A2)
   D3  fuera del margen, sustituto sin usar, < 1 hora     | REANUDA (A3)
-  D4  fuera del margen, sustituto sin usar, > 1 hora     | ROBO
+  D4  fuera del margen, sustituto sin usar, > 1 hora     | REANUDACION_CADUCADA (rechazo
+                                                         |   sin alarma, Agustín 10 nov)
   D5  fuera del margen, sustituto ya usado               | ROBO (A4)
   D6  anulado por un A3 (nunca llegó al navegador)       | ROBO
   D7  sustituido con su sustituto revocado/caducado/ido  | YA_CERRADA
@@ -60,10 +61,16 @@ def test_d3_a_lost_response_within_the_hour_resumes(hace):
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDA
 
 
-def test_d4_after_one_hour_an_unused_substitute_is_a_theft():
+def test_d4_after_one_hour_an_unused_substitute_is_rejected_without_alarm():
     viejo, sustituto = _cadena(VENTANA_DE_LA_REANUDACION + timedelta(seconds=1))
 
     assert timedelta(hours=1) == VENTANA_DE_LA_REANUDACION
+    assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDACION_CADUCADA
+
+
+def test_d4_after_one_hour_a_used_substitute_is_still_a_theft():
+    viejo, sustituto = _cadena(timedelta(hours=2), usado=True)
+
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.ROBO
 
 

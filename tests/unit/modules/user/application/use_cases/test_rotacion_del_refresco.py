@@ -383,7 +383,8 @@ async def test_a4_other_devices_of_the_user_keep_their_session():
 async def test_a4_logs_a_high_security_event():
     """
     Given: Un robo detectado
-    Then: Al log de seguridad, con el usuario, el dispositivo y cuántos se revocaron
+    Then: Al log de seguridad, con el usuario, el dispositivo y cuántas sesiones vivas
+          se cerraron
     """
     e = await _escena()
 
@@ -393,7 +394,9 @@ async def test_a4_logs_a_high_security_event():
     datos = e.auditoria.log_refresh_token_reuse_detected.call_args.kwargs
     assert datos["user_id"] == str(e.usuario.id.value)
     assert datos["device_id"] == str(e.dispositivo.id.value)
-    assert datos["tokens_revoked_count"] == 3
+    # Las sesiones vivas que cerró: la vigente (las dos sustituidas también se revocan,
+    # pero son el historial de la misma sesión)
+    assert datos["tokens_revoked_count"] == 1
     assert datos["user_agent"] == IPHONE
 
 
@@ -618,7 +621,9 @@ async def test_a3_only_within_one_hour_of_the_replacement():
     """
     Given: El viejo sustituido hace 61 minutos con el sustituto sin usar
     When: Llega el viejo
-    Then: Robo, no A3: una respuesta perdida no tarda una hora en reintentarse
+    Then: No es A3 ni un robo (Agustín, 10 nov): rechazo SIN alarma, como el final
+          normal de una sesión (SESSION_ENDED): ni se revoca el dispositivo, ni log HIGH,
+          ni correo, ni se emite nada. El usuario vuelve a entrar
     """
     e = await _escena()
     await e.refresca(ORIGINAL)
@@ -626,8 +631,29 @@ async def test_a3_only_within_one_hour_of_the_replacement():
 
     rechazo = await e.rechazo(ORIGINAL)
 
-    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REUSED
-    assert not (await e.uow.user_devices.find_by_id(e.dispositivo.id)).is_active
+    assert rechazo.motivo is RefreshRejection.REPLACEMENT_WINDOW_EXPIRED
+    assert codigo_publico(rechazo.motivo) == "SESSION_ENDED"
+    assert (await e.uow.user_devices.find_by_id(e.dispositivo.id)).is_active
+    e.auditoria.log_refresh_token_reuse_detected.assert_not_called()
+    e.aviso.avisa.assert_not_awaited()
+    assert e.tokens.create_refresh_token.call_count == 1
+    assert not (await e.token("refresco-1")).revoked
+
+
+async def test_a3_after_one_hour_a_newer_login_keeps_the_cookie():
+    """
+    Given: El viejo sustituido hace 61 minutos (sustituto sin usar) y un login nuevo
+    When: Llega el viejo
+    Then: SESSION_REPLACED, como cualquier cookie vieja con una sesión más nueva (A5)
+    """
+    e = await _escena()
+    await e.refresca(ORIGINAL)
+    await e.hace(ORIGINAL, timedelta(minutes=61))
+    await e.otra_sesion_nueva()
+
+    rechazo = await e.rechazo(ORIGINAL)
+
+    assert rechazo.conserva_la_cookie is True
 
 
 async def test_a3_at_fifty_nine_minutes_it_still_resumes():

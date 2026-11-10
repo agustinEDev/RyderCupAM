@@ -68,6 +68,9 @@ class RefreshRejection(StrEnum):
     # cliente recibe SESSION_REPLACED; en el log cuenta como rechazo, como el
     # revocado de BE #734
     NEWER_SESSION_IN_BROWSER = "NEWER_SESSION_IN_BROWSER"
+    # Un token sustituido hace más de 1 h con el sustituto sin usar: ya no se reanuda,
+    # pero no es un robo (Agustín, 10 nov): el final normal, el usuario vuelve a entrar
+    REPLACEMENT_WINDOW_EXPIRED = "REPLACEMENT_WINDOW_EXPIRED"
 
 
 _FINAL_NORMAL = frozenset(
@@ -75,6 +78,7 @@ _FINAL_NORMAL = frozenset(
         RefreshRejection.REFRESH_TOKEN_MISSING,
         RefreshRejection.REFRESH_TOKEN_EXPIRED,
         RefreshRejection.SESSION_IDLE,
+        RefreshRejection.REPLACEMENT_WINDOW_EXPIRED,
     }
 )
 SESSION_ENDED = "SESSION_ENDED"
@@ -488,6 +492,8 @@ class RefreshAccessTokenUseCase:
         - ROBO → cierra la sesión del dispositivo (A4); gana a BE #734: un atacante
           con la cookie de dispositivo no esquiva la detección.
         - YA_CERRADA → rechazo REVOKED (se mira BE #734 como siempre).
+        - REANUDACION_CADUCADA → rechazo sin alarma, SESSION_ENDED (o SESSION_REPLACED
+          con un login más nuevo).
         - SOLO_ACCESO o REANUDA con el navegador en un login más nuevo →
           SESSION_REPLACED (A5): ni access ni refresh de la sesión vieja.
 
@@ -504,6 +510,12 @@ class RefreshAccessTokenUseCase:
             revocado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
             revocado.sustituido = (token.device_id, token.created_at)
             raise revocado
+        if paso is PasoDelRefresco.REANUDACION_CADUCADA:
+            # Sin alarma ni escrituras; como cualquier cookie vieja, conserva la cookie
+            # si el navegador ya tiene un login más nuevo (BE #734)
+            caducada = RefreshRejectedError(RefreshRejection.REPLACEMENT_WINDOW_EXPIRED)
+            caducada.sustituido = (token.device_id, token.created_at)
+            raise caducada
         if paso is not PasoDelRefresco.ROTA and await self._sesion_mas_nueva(
             token.device_id, token.created_at, request
         ):

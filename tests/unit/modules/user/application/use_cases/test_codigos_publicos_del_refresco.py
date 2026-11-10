@@ -9,6 +9,8 @@ motivo detallado se queda en el log de seguridad.
   #   motivo interno                                  | código público
   ----|------------------------------------------------|------------------
   P1  falta el token, caducó o 24 h sin uso            | SESSION_ENDED
+      o cookie sustituida hace más de 1 h sin usar su    |
+      sustituto (F-02, Agustín 10 nov: sin alarma)       |
   P2  inválido, no existe, revocado, cuenta borrada o  | SESSION_REJECTED
       desactivada                                      |
   P3  cada motivo interno tiene su código público      | ninguno se queda sin
@@ -25,6 +27,7 @@ FINAL_NORMAL = {
     RefreshRejection.REFRESH_TOKEN_MISSING,
     RefreshRejection.REFRESH_TOKEN_EXPIRED,
     RefreshRejection.SESSION_IDLE,
+    RefreshRejection.REPLACEMENT_WINDOW_EXPIRED,
 }
 
 
