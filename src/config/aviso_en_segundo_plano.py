@@ -54,9 +54,10 @@ async def espera_los_avisos_pendientes(tope_s: float | None = None) -> None:
     bucle = asyncio.get_running_loop()
     limite = None if tope_s is None else bucle.time() + tope_s
     while True:
-        for tarea in [t for t in _PENDIENTES if t.get_loop().is_closed()]:
+        # Sobre una copia: el callback que quita una tarea puede correr en otro hilo
+        for tarea in [t for t in tuple(_PENDIENTES) if t.get_loop().is_closed()]:
             _PENDIENTES.discard(tarea)
-        mias = [t for t in _PENDIENTES if t.get_loop() is bucle and not t.done()]
+        mias = [t for t in tuple(_PENDIENTES) if t.get_loop() is bucle and not t.done()]
         if not mias:
             return
         restante = None if limite is None else limite - bucle.time()
@@ -78,7 +79,8 @@ class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
         if not request.toca_avisar():
             return
-        tarea = asyncio.create_task(self._avisa(request))
+        # Con nombre: si un test se queda esperándola, el TimeoutError dice cuál es
+        tarea = asyncio.create_task(self._avisa(request), name="aviso-de-nuevo-inicio")
         _PENDIENTES.add(tarea)
         tarea.add_done_callback(_PENDIENTES.discard)
 
@@ -115,7 +117,7 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
         if not request.toca_avisar():
             return
-        tarea = asyncio.create_task(self._avisa(request))
+        tarea = asyncio.create_task(self._avisa(request), name="aviso-de-intentos-fallidos")
         _PENDIENTES.add(tarea)
         tarea.add_done_callback(_PENDIENTES.discard)
 
