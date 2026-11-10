@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.57.0] - 2026-11-10
+
+**Fase 3 del plan de seguridad, release 1 (backend)** (#786, #787, #788). Hallazgos F-01,
+F-01b, F-02, F-04, F-05, F-07, F-09, F-10, F-13 y la parte de backend de FE-02 de la
+auditoría del 9 nov. **Compatible con el frontend 2.72.0** (probado en el Kind con el front
+actual): no hace falta desplegar el front con ella; la release 2 del front y la 2.58.0 del
+backend completan la fase. Tres migraciones encadenadas (`b3d5f7a9c1e2`, `b7e9d1f3a5c8`),
+sin reescribir tablas. **Al desplegar**: los enlaces de verificar y de restablecer que
+estuvieran pendientes dejan de valer (hay que pedir otro); ninguna sesión se cae. Dos correos
+nuevos, revisados en el iPhone en modo oscuro.
+
+### Security
+
+- **El token de refresco se renueva en cada uso y se detecta su robo** (F-02, #786). Cada
+  refresco emite una cookie nueva con la misma caducidad absoluta (7 días desde el login).
+  Dos pestañas a la vez (60 s) no cuentan como robo; una respuesta perdida se acepta durante
+  1 hora si el sustituto no se usó, y pasada la hora la sesión termina sin alarma. Si vuelve
+  una cookie ya sustituida cuyo sustituto se usó, o un sustituto anulado: se revocan el
+  dispositivo y todos sus tokens, la respuesta es `SESSION_REJECTED`, se registra un evento
+  HIGH (a Sentry con su tope) y al usuario le llega «Hemos cerrado tu sesión en un
+  dispositivo por seguridad» (como mucho 10 al día). El cierre de sesión, revocar un
+  dispositivo y el cambio de contraseña ya no pueden dejar viva una sesión que refresca a la
+  vez (bloqueos en orden fijo; corrige un interbloqueo que daba 500).
+- **El registro no revela si un correo tiene cuenta** (F-01, #787): la misma respuesta 201,
+  con el mismo cuerpo y tiempo parecido, sea el correo nuevo, ya registrado (verificado o no)
+  o de una cuenta desactivada. La cuenta existente no se toca y a su dueño le llega «Alguien
+  ha intentado registrarse con tu correo» (como mucho uno al día). Los correos del registro,
+  del reenvío de la verificación y de «olvidé mi contraseña» salen en segundo plano.
+- **Enlaces de verificar y de restablecer más seguros** (F-04, F-05, F-10, #787): en la base
+  de datos solo se guarda su SHA-256; la verificación caduca a las 48 horas
+  (`VERIFICATION_TOKEN_EXPIRED`) y el restablecimiento a la hora, de un solo uso. Nuevo
+  `POST /auth/validate-reset-token` con el token en el cuerpo; el `GET` con el token en la URL
+  queda obsoleto (se quita en la 2.58.0) y su token se tacha en Sentry. El reenvío de la
+  verificación sin sesión (`POST /auth/resend-verification-link`) solo funciona con el enlace
+  caducado; con sesión, solo para el correo propio.
+- **Nadie puede impedir que otro restablezca su contraseña** (F-13, #787): 3 por hora por
+  correo y red y como mucho 10 correos al día por cuenta, con la misma respuesta; el cupo
+  vuelve a cero al entrar o al restablecer.
+- **Las invitaciones por correo solo valen con el correo verificado** (F-07, #788), en todos
+  los sitios donde dan acceso (lista, responder, competición privada, inscritos, horarios,
+  ficha e inscripción). Una invitación a una cuenta sin verificar no se ata a ella: el
+  organizador ve solo el correo.
+- **Búsqueda por correo limitada** (F-01b, #788): 20 por hora y usuario
+  (`TOO_MANY_USER_SEARCHES`); las cuentas desactivadas no se encuentran, tampoco por nombre.
+- **El bloqueo no deja rastro para quien fue bloqueado** (F-09, #788): perfil, avatar,
+  actividad, fotos y partidas juntos dan el mismo 404 que un usuario inexistente; no aparece
+  en las búsquedas y una solicitud de amistad da el mismo 404. Quien bloqueó sigue viendo el
+  perfil para poder desbloquear. En la partida compartida, el bloqueado va sin `user_id` ni
+  hándicap. Las cuentas desactivadas dan 404 en perfil y avatar.
+- **PKCE en Google, opcional en el backend** (FE-02, #788): el canje acepta `code_verifier`;
+  será obligatorio en la 2.58.0, cuando el front lo envíe. El cuerpo de las rutas de Google
+  ya no llega a Sentry.
+
+### Fixed
+
+- **La búsqueda por nombre completo daba 500** si una cuenta desactivada se llamaba igual que
+  una activa (#788).
+
+### Docs
+
+- **ADR-048**: registro sin enumeración, enlaces con hash y freno del restablecimiento, con
+  los riesgos aceptados. `docs/pendientes-de-release.md` recoge lo que hará la 2.58.0.
+
 ## [2.56.0] - 2026-11-10
 
 **Dependencias al día y dos tests intermitentes arreglados** (#778, #779, #780, #782). Sin
