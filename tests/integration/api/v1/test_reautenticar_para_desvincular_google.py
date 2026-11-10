@@ -44,7 +44,7 @@ def _csrf(client: AsyncClient) -> dict:
 
 async def _usuario(client: AsyncClient, email: str) -> dict:
     """Un usuario con contraseña, el correo verificado y su sesión puesta en el cliente."""
-    from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+    from tests.conftest import sql_en_la_bd_de_test as _sql
 
     datos = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
     await _sql("update users set email_verified = true where email = :e", e=email)

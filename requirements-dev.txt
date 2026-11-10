@@ -18,7 +18,7 @@
 # Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
 # nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
 # añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
-ruff==0.17.3
+ruff==0.17.4
 
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
@@ -35,7 +35,7 @@ import-linter==2.15
 mypy==2.4.1
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.1.6
+sqlalchemy[mypy]>=2.1.8
 
 # ================================
 # SEGURIDAD
@@ -103,7 +103,7 @@ respx==0.23.1
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
 # Actualizado a 1.4.1: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
-pytest-asyncio==1.4.1
+pytest-asyncio==1.4.1.post1
 
 # pytest-cov - Plugin de cobertura para pytest
 # Sin versión fijada, como estaba en requirements.txt: se mueve tal cual para no
@@ -131,7 +131,7 @@ radon>=6.0.1
 # cyclonedx-bom - Genera Software Bill of Materials (SBOM) en formato CycloneDX
 # Cumple con OWASP A08:2021 Software and Data Integrity Failures
 # Permite auditoría completa de la cadena de suministro de software
-cyclonedx-bom>=7.6.0
+cyclonedx-bom>=8.0.1
 
 # pip-tools - Herramientas para gestión de dependencias con pip
 # pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad

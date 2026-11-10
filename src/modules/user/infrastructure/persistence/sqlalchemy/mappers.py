@@ -155,8 +155,8 @@ class PasswordDecorator(TypeDecorator):
     """
     La contraseña hasheada como VARCHAR(255), y NULL como None: una cuenta solo Google
     no tiene. Con `composite()` la columna a NULL daba `Password(hashed_value=None)` y la
-    cuenta parecía tener contraseña (probador de la release, 8 nov 2026; regla del
-    CLAUDE.md: TypeDecorator para los Value Objects de una columna y opcionales).
+    cuenta parecía tener contraseña (probador de la release, 8 nov 2026; regla de docs/modules/user-management.md:
+    TypeDecorator para los Value Objects de una columna y opcionales).
     """
 
     impl = String(255)

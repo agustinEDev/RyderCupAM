@@ -246,7 +246,6 @@ Sustituye a la antigua v2.2.0 «AI & RAG Module» (LangChain + Pinecone + OpenAI
 
 - **ADRs:** `docs/architecture/decisions/ADR-*.md` (37 total)
 - **CHANGELOG:** `CHANGELOG.md`
-- **CLAUDE:** `CLAUDE.md` (contexto completo del proyecto)
 - **Database ERD:** `docs/DATABASE_ERD.md`
 - **Security:** `docs/SECURITY_IMPLEMENTATION.md`
 - **WHS:** https://www.usga.org/handicapping.html

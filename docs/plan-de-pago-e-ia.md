@@ -22,7 +22,7 @@ Las cifras son estimaciones del 26 oct 2026 con precios consultados ese día, no
 **Arquitectura** (ver la épica para el detalle):
 - Vectores en el **Postgres de Render que ya tenemos** con pgvector (~10–25 MB).
 - Embeddings con Voyage `voyage-3.5-lite`.
-- Respuesta con Claude: `claude-sonnet-5-5` en el plan de pago y `claude-haiku-5-5` en el gratuito y para reformular la pregunta. Caché de prompts para las instrucciones y las reglas básicas.
+- Respuesta con el modelo Sonnet 5.5 de Anthropic en el plan de pago y Haiku 5.5 en el gratuito y para reformular la pregunta. Caché de prompts para las instrucciones y las reglas básicas.
 - Un módulo `ai` con puertos y adaptadores, `POST /api/v1/ai/rules/query`, cupos en Postgres (no hay Redis), registros 90 días sin datos personales, y un juego de 80–120 preguntas reales para evaluarlo antes de cada release.
 
 **Fases:**

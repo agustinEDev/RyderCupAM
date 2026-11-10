@@ -128,7 +128,6 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 | Document | Description |
 |----------|-------------|
-| [CLAUDE.md](CLAUDE.md) | Complete project context for AI development |
 | [ROADMAP.md](ROADMAP.md) | Product roadmap and version planning |
 | [CHANGELOG.md](CHANGELOG.md) | Detailed version history |
 | [API.md](docs/API.md) | API endpoints reference |
@@ -632,7 +631,7 @@ git commit -S -m "feat: add amazing feature"
 git push origin feature/amazing-feature
 ```
 
-See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
+See [docs/](docs/) and the [ADRs](docs/architecture/decisions/) for complete development guidelines.
 
 ---
 

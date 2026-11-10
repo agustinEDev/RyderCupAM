@@ -22,3 +22,6 @@
 **/*.py[cod]
 **/*.log
 **/.DS_Store
+# Ningún Markdown: la app no lee ninguno al ejecutarse, y así no entran notas
+# locales que vivan dentro de src/ o alembic/ en un árbol de trabajo
+**/*.md

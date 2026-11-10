@@ -6,9 +6,9 @@
 #
 # Qué protegen, y de dónde sale cada regla:
 # - Capas: dentro de cada módulo, infrastructure puede importar application y
-#   domain; application solo domain; domain nada de las otras dos. Es la regla del
-#   CLAUDE.md "los casos de uso nunca importan de infrastructure" (refactor del
-#   16 nov 2025), que hasta ahora solo se comprobaba en revisión.
+#   domain; application solo domain; domain nada de las otras dos. La regla es que
+#   los casos de uso nunca importan de infrastructure (refactor del 16 nov 2025);
+#   hasta ahora solo se comprobaba en revisión y la vigila el contrato `layers`.
 # - Dominio puro: el dominio no conoce FastAPI, SQLAlchemy ni Pydantic.
 # - Entre módulos se comparte dominio (p. ej. MatchFormat), nunca infraestructura:
 #   cada módulo define sus propios decoradores de persistencia. Los imports

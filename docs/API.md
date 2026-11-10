@@ -843,7 +843,7 @@ PENDING_APPROVAL → APPROVED
 - `GolfCourseApprovedEvent` - Emitted when admin approves a course
 - `GolfCourseRejectedEvent` - Emitted when admin rejects a course
 
-**📋 See complete module:** `CLAUDE.md` (Golf Course Module section)
+**📋 See complete module:** `docs/architecture/decisions/ADR-032-golf-course-approval-workflow.md`
 
 ---
 

@@ -22,11 +22,14 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
 
 from main import app as fastapi_app
-from src.config.dependencies import get_db_session
-from tests.conftest import create_admin_user, create_authenticated_user, set_auth_cookies
+from tests.conftest import (
+    create_admin_user,
+    create_authenticated_user,
+    set_auth_cookies,
+    sql_en_la_bd_de_test,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,15 +38,6 @@ CLAVE = "ValidPassword123!"
 
 def _email(prefijo: str) -> str:
     return f"{prefijo}-{uuid.uuid4().hex[:8]}@example.com"
-
-
-async def _sql(sentencia: str, **parametros):
-    override = fastapi_app.dependency_overrides[get_db_session]
-    async for sesion in override():
-        resultado = await sesion.execute(text(sentencia), parametros)
-        await sesion.commit()
-        return resultado
-    return None
 
 
 async def _desactiva(client: AsyncClient, admin: dict, user_id: str, activa: bool = False):
@@ -138,7 +132,9 @@ async def test_c1_revocado_y_borrado_responden_igual(client: AsyncClient):
     client.cookies.clear()
     assert salida.status_code == 200, salida.text
     borrada = await create_authenticated_user(client, _email("bor"), CLAVE, "Bo", "Rrada")
-    await _sql("delete from refresh_tokens where user_id = :u", u=borrada["user"]["id"])
+    await sql_en_la_bd_de_test(
+        "delete from refresh_tokens where user_id = :u", u=borrada["user"]["id"]
+    )
 
     r1 = await _refresca(client, revocada)
     r2 = await _refresca(client, borrada)
@@ -160,7 +156,7 @@ async def test_c2_el_motivo_exacto_va_al_log_de_seguridad(client: AsyncClient, m
         SecurityLogger, "log_refresh_rejected", lambda self, **kw: apuntados.append(kw)
     )
     yo = await create_authenticated_user(client, _email("log"), CLAVE, "Luis", "Garcia")
-    await _sql("delete from refresh_tokens where user_id = :u", u=yo["user"]["id"])
+    await sql_en_la_bd_de_test("delete from refresh_tokens where user_id = :u", u=yo["user"]["id"])
 
     r = await _refresca(client, yo)
 
@@ -202,7 +198,7 @@ async def test_c4_un_final_normal_se_apunta_como_ended(client: AsyncClient, monk
     """
     apuntados = _apunta_los_rechazos(monkeypatch)
     yo = await create_authenticated_user(client, _email("cad"), CLAVE, "Ca", "Ducada")
-    await _sql(
+    await sql_en_la_bd_de_test(
         "update refresh_tokens set expires_at = now() - interval '1 hour' where user_id = :u",
         u=yo["user"]["id"],
     )
@@ -235,7 +231,9 @@ async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client:
     usuario = r.json()
     admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
     await _desactiva(client, admin, usuario["id"])
-    token = (await _sql("select verification_token from users where email = :e", e=email)).scalar()
+    token = (
+        await sql_en_la_bd_de_test("select verification_token from users where email = :e", e=email)
+    ).scalar()
     client.cookies.clear()
 
     r = await client.post("/api/v1/auth/verify-email", json={"token": token})
@@ -245,7 +243,9 @@ async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client:
     # Con su código, como Google, para que la app lo diga en su idioma (#750 punto 1)
     assert r.json()["error_code"] == "ACCOUNT_DEACTIVATED"
     assert "refresh_token" not in r.cookies and "access_token" not in r.cookies
-    verificado = (await _sql("select email_verified from users where email = :e", e=email)).scalar()
+    verificado = (
+        await sql_en_la_bd_de_test("select email_verified from users where email = :e", e=email)
+    ).scalar()
     assert verificado is True
 
 
@@ -262,7 +262,7 @@ async def test_c5_un_log_roto_no_cambia_el_401_del_refresco(client: AsyncClient,
 
     monkeypatch.setattr(SecurityLogger, "log_refresh_rejected", roto)
     yo = await create_authenticated_user(client, _email("roto"), CLAVE, "Ro", "To")
-    await _sql("delete from refresh_tokens where user_id = :u", u=yo["user"]["id"])
+    await sql_en_la_bd_de_test("delete from refresh_tokens where user_id = :u", u=yo["user"]["id"])
 
     r = await _refresca(client, yo)
 

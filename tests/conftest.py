@@ -1,4 +1,5 @@
 # tests/conftest.py
+import contextlib
 import os
 import sys
 import uuid
@@ -211,6 +212,51 @@ def _sin_la_rfeg_de_verdad() -> None:
     )
 
 
+# Lo más que se espera al trabajo en segundo plano de un test antes de soltar su BD
+_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S = 30
+
+
+async def _suelta_la_bd_de_test(admin_engine, test_engine, db_name: str) -> None:
+    """
+    La limpieza de la BD de un test: espera a los avisos en segundo plano, cierra los
+    motores, borra la BD y quita las sustituciones de la app.
+
+    Los avisos (el de nuevo inicio de sesión y el de intentos fallidos, BE #737 y #732)
+    no los espera el login y abren su propia sesión con la fábrica que el fixture
+    sustituye: si el test acababa antes que ellos, `DROP DATABASE` encontraba su
+    conexión abierta y fallaba con ObjectInUseError, a ratos en el CI (BE #781).
+    Esperar es lo limpio: terminar sus conexiones o `DROP ... WITH (FORCE)` escondería
+    un aviso colgado y lo dejaría fallar contra una BD que ya no existe.
+
+    Si la espera agota su tope, la limpieza se intenta igual (el motor, la BD y las
+    sustituciones no se quedan para el test siguiente) y sale el TimeoutError con los
+    avisos pendientes, no el error del DROP que provocan.
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    agotada: TimeoutError | None = None
+    try:
+        await espera_los_avisos_pendientes(tope_s=_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S)
+    except TimeoutError as error:
+        agotada = error
+    try:
+        try:
+            await test_engine.dispose()
+        finally:
+            try:
+                async with admin_engine.connect() as conn:
+                    await conn.execute(text(f"DROP DATABASE {db_name}"))
+            finally:
+                await admin_engine.dispose()
+                fastapi_app.dependency_overrides.clear()
+    except Exception as error:
+        if agotada is not None:
+            raise agotada from error
+        raise
+    if agotada is not None:
+        raise agotada
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """
@@ -277,84 +323,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
 
-    # Limpieza
-    await test_engine.dispose()
-
-    async with engine.connect() as conn:
-        await conn.execute(text(f"DROP DATABASE {db_name}"))
-    await engine.dispose()
-
-    fastapi_app.dependency_overrides.clear()
-
-
-@pytest_asyncio.fixture(scope="module")
-async def module_client() -> AsyncGenerator[AsyncClient, None]:
-    """
-    Fixture de cliente para tests a nivel de módulo.
-    Crea una base de datos que se reutiliza para todos los tests del módulo.
-
-    Scope: module (creado una vez por módulo de tests)
-    Uso: Para fixtures de usuario reutilizables (module_creator_user, etc.)
-    """
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    unique_id = str(uuid.uuid4())[:8]
-    db_name = f"test_db_module_{worker_id}_{unique_id}"
-
-    # URL base para conectarse a PostgreSQL
-    db_url_base = DATABASE_URL.rsplit("/", 1)[0]
-    if db_url_base.startswith(POSTGRESQL_PREFIX):
-        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
-
-    test_db_url = f"{db_url_base}/{db_name}"
-
-    # Motor para crear la base de datos
-    engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
-    async with engine.connect() as conn:
-        await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
-        await conn.execute(text(f"CREATE DATABASE {db_name}"))
-    await engine.dispose()
-
-    # Motor conectado a la base de datos de test
-    test_engine = create_async_engine(test_db_url)
-    async with test_engine.begin() as conn:
-        await conn.run_sync(metadata.create_all)
-        await seed_countries_and_adjacencies(conn)
-
-    test_session_local = async_sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
-    async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
-        async with test_session_local() as session:
-            yield session
-
-    fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
-    # Lo que corre fuera de la petición (el aviso de nuevo inicio, BE #737), también
-    fastapi_app.dependency_overrides[get_fabrica_de_sesiones] = lambda: test_session_local
-    _sin_la_rfeg_de_verdad()
-
-    test_client_id = f"test-module-{uuid.uuid4()}"
-
-    transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        headers={"X-Test-Client-ID": test_client_id},
-    ) as ac:
-        yield ac
-
-    # Limpieza
-    await test_engine.dispose()
-
-    async with engine.connect() as conn:
-        await conn.execute(text(f"DROP DATABASE {db_name}"))
-    await engine.dispose()
-
-    fastapi_app.dependency_overrides.clear()
+    await _suelta_la_bd_de_test(engine, test_engine, db_name)
 
 
 # ======================================================================================
@@ -706,64 +675,6 @@ def reset_rate_limits():
 
 
 # ======================================================================================
-# REUSABLE USER FIXTURES (Performance optimization)
-# ======================================================================================
-# Estos fixtures crean usuarios UNA VEZ por módulo de tests (scope="module")
-# y los reutilizan en todos los tests del módulo, ahorrando ~10-15s en total.
-#
-# IMPORTANTE: Estos usuarios NO deben modificarse en los tests (read-only).
-# Si un test necesita modificar un usuario, debe crear uno nuevo.
-
-
-@pytest_asyncio.fixture(scope="module")
-async def module_creator_user(module_client: AsyncClient) -> dict:
-    """
-    Usuario creador reutilizable para todo el módulo de tests.
-
-    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
-    Performance: Ahorra ~50ms por test (bcrypt hashing)
-
-    Returns:
-        Dict con user data y cookies de autenticación
-    """
-    return await create_authenticated_user(
-        module_client, "module_creator@test.com", "CreatorPass123!", "Module", "Creator"
-    )
-
-
-@pytest_asyncio.fixture(scope="module")
-async def module_player_user(module_client: AsyncClient) -> dict:
-    """
-    Usuario jugador reutilizable para todo el módulo de tests.
-
-    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
-    Performance: Ahorra ~50ms por test (bcrypt hashing)
-
-    Returns:
-        Dict con user data y cookies de autenticación
-    """
-    return await create_authenticated_user(
-        module_client, "module_player@test.com", "PlayerPass123!", "Module", "Player"
-    )
-
-
-@pytest_asyncio.fixture(scope="module")
-async def module_second_player(module_client: AsyncClient) -> dict:
-    """
-    Segundo usuario jugador reutilizable para tests que necesitan múltiples jugadores.
-
-    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
-    Performance: Ahorra ~50ms por test (bcrypt hashing)
-
-    Returns:
-        Dict con user data y cookies de autenticación
-    """
-    return await create_authenticated_user(
-        module_client, "module_player2@test.com", "Player2Pass123!", "Second", "Player"
-    )
-
-
-# ======================================================================================
 # COMPETITION MODULE FIXTURES
 # ======================================================================================
 
@@ -862,6 +773,18 @@ async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
 # Lo rellena la fixture `client` con la base de datos de ESTE test, que lleva el
 # id del worker de xdist: no hay una URL fija que se pueda leer del entorno
 _URL_DE_LA_BD_DE_TEST: dict[str, str] = {}
+
+
+async def sql_en_la_bd_de_test(sentencia: str, **parametros):
+    """Ejecuta SQL (con commit) en la BD del test, con la sesión que usa la app."""
+    override = fastapi_app.dependency_overrides[get_db_session]
+    # Cerrado al salir, no cuando lo recoja el GC: la sesión no se queda abierta
+    async with contextlib.aclosing(override()) as sesiones:
+        async for sesion in sesiones:
+            resultado = await sesion.execute(text(sentencia), parametros)
+            await sesion.commit()
+            return resultado
+    return None
 
 
 async def estado_en_bd(competition_id: str) -> str | None:

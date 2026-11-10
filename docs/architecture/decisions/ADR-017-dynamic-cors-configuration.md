@@ -95,7 +95,7 @@ FRONTEND_ORIGINS=https://www.rydercupfriends.com
 - ⚠️ Logs expose configuration (not sensitive, but visible)
 
 ### Mitigations
-- Clear documentation in `CLAUDE.md` and `RENDER_DEPLOYMENT.md`
+- Clear documentation in `README.md` (`FRONTEND_ORIGINS`)
 - Mandatory startup logs (`print(f"🔒 CORS...")`)
 - Validation in troubleshooting checklist
 

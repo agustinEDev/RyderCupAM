@@ -14,8 +14,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from main import app
 from src.config.dependencies import get_accept_terms_use_case, get_google_oauth_service
@@ -23,10 +21,10 @@ from src.modules.user.application.ports.google_oauth_service_interface import Go
 from src.modules.user.domain.services import terms_of_service
 from src.modules.user.domain.services.descripcion_del_dispositivo import ip_tapada
 from tests.conftest import (
-    _URL_DE_LA_BD_DE_TEST,
     create_admin_user,
     create_authenticated_user,
     set_auth_cookies,
+    sql_en_la_bd_de_test,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -38,13 +36,9 @@ PROTEGIDA = "/api/v1/users/me/stats"
 
 
 async def _sql(sql: str, params: dict | None = None):
-    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
-    try:
-        async with engine.begin() as conn:
-            resultado = await conn.execute(text(sql), params or {})
-            return resultado.all() if resultado.returns_rows else []
-    finally:
-        await engine.dispose()
+    """Las filas de una sentencia en la BD del test (con el helper de tests/conftest.py)."""
+    resultado = await sql_en_la_bd_de_test(sql, **(params or {}))
+    return resultado.all() if resultado.returns_rows else []
 
 
 async def _terminos_en_bd(email: str) -> tuple | None:

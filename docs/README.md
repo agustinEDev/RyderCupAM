@@ -201,7 +201,7 @@ kubectl get all -l component=database
 
 ### Documentación Adicional
 
-- **Backend (FastAPI):** Ver [CLAUDE.md](../CLAUDE.md)
+- **Backend (FastAPI):** Ver [README.md](../README.md)
 - **Frontend (React):** Ver [RyderCupWeb/README.md](../../RyderCupWeb/README.md)
 - **Kubernetes Oficial:** https://kubernetes.io/docs/
 

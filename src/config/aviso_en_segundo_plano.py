@@ -39,10 +39,32 @@ logger = logging.getLogger(__name__)
 _PENDIENTES: set[asyncio.Task[None]] = set()
 
 
-async def espera_los_avisos_pendientes() -> None:
-    """Espera a los avisos en marcha (para los tests)."""
-    while _PENDIENTES:
-        await asyncio.gather(*list(_PENDIENTES), return_exceptions=True)
+async def espera_los_avisos_pendientes(tope_s: float | None = None) -> None:
+    """
+    Espera a los avisos en marcha de ESTE bucle de eventos (para los tests; producción
+    no los espera, ni al apagar).
+
+    Los de un bucle ya cerrado (un test anterior que no los esperó) no van a acabar
+    nunca ni se pueden esperar desde aquí: se descartan. Con `tope_s`, si alguno no
+    acaba a tiempo lanza TimeoutError con sus nombres, sin cancelarlo (BE #781).
+
+    Raises:
+        TimeoutError: si pasado `tope_s` queda alguno en marcha
+    """
+    bucle = asyncio.get_running_loop()
+    limite = None if tope_s is None else bucle.time() + tope_s
+    while True:
+        # Sobre una copia: el callback que quita una tarea puede correr en otro hilo
+        for tarea in [t for t in tuple(_PENDIENTES) if t.get_loop().is_closed()]:
+            _PENDIENTES.discard(tarea)
+        mias = [t for t in tuple(_PENDIENTES) if t.get_loop() is bucle and not t.done()]
+        if not mias:
+            return
+        restante = None if limite is None else limite - bucle.time()
+        _, sin_acabar = await asyncio.wait(mias, timeout=restante)
+        if sin_acabar and limite is not None and bucle.time() >= limite:
+            nombres = ", ".join(sorted(t.get_name() for t in sin_acabar))
+            raise TimeoutError(f"Avisos en segundo plano sin acabar tras {tope_s} s: {nombres}")
 
 
 class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
@@ -57,7 +79,8 @@ class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
         if not request.toca_avisar():
             return
-        tarea = asyncio.create_task(self._avisa(request))
+        # Con nombre: si un test se queda esperándola, el TimeoutError dice cuál es
+        tarea = asyncio.create_task(self._avisa(request), name="aviso-de-nuevo-inicio")
         _PENDIENTES.add(tarea)
         tarea.add_done_callback(_PENDIENTES.discard)
 
@@ -94,7 +117,7 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
         if not request.toca_avisar():
             return
-        tarea = asyncio.create_task(self._avisa(request))
+        tarea = asyncio.create_task(self._avisa(request), name="aviso-de-intentos-fallidos")
         _PENDIENTES.add(tarea)
         tarea.add_done_callback(_PENDIENTES.discard)
 

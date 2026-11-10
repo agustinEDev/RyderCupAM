@@ -149,4 +149,4 @@ cp .env.example .env
 
 - **docker-compose.yml:** Configuración de servicios
 - **.env.example:** Plantilla de variables de entorno
-- **CLAUDE.md:** Documentación completa del proyecto
+- **docs/README.md:** Documentación completa del proyecto

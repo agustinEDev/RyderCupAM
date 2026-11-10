@@ -5,7 +5,7 @@
 
 **Date**: 2026-07-26
 **Scope**: `/Users/agustinestevezdominguez/Documents/RyderCupAm` @ `develop` (commit `cce8074`)
-**Auditor**: Automated audit (Claude Code agent), manual verification of every finding below
+**Auditor**: Automated audit, manual verification of every finding below
 
 ---
 
@@ -35,7 +35,7 @@ as follow-up issues.
 
 ## Methodology
 
-1. Read `CHANGELOG.md`, `ROADMAP.md`, `CLAUDE.md`, `README.md` (no `CONTRIBUTING.md` present) to
+1. Read `CHANGELOG.md`, `ROADMAP.md`, `README.md` (no `CONTRIBUTING.md` present) to
    learn documented conventions, architecture decisions (ADRs), and previously-known issues.
 2. **Security pass**: Snyk SCA scan; manual review of auth/authz (JWT, cookies, CSRF, RBAC,
    rate limiting), secrets handling (`.env` tracking, hardcoded-secret grep), and input
@@ -81,7 +81,7 @@ as follow-up issues.
   against a future regression.
 - **Suggested fix**: refactor `User` and `PasswordHistory` to the private-attribute +
   `@property` pattern already used by every other entity in the codebase. The 501 existing User
-  unit tests (per `CLAUDE.md`) provide strong regression coverage to do this safely; the
+  unit tests provide strong regression coverage to do this safely; the
   SQLAlchemy mapper for `users` already relies on `composite()`/direct attribute mapping for
   `email`/`password` (`mappers.py:157-158`) and will need the property setters preserved for
   imperative mapping to keep working (same pattern `Competition` already uses successfully).
@@ -116,7 +116,7 @@ as follow-up issues.
   and `update_competition_use_case.py:60` —
   `self._location_builder = LocationBuilder(self._uow.countries)`.
 - **Description**: violates rule #5 ("Domain services are injected via DI, never instantiated
-  inside use cases"). This is notable because `CLAUDE.md` documents a completed refactor (16 Nov
+  inside use cases"). This is notable because the project docs document a completed refactor (16 Nov
   2025, "Dependency Injection Refactoring… 100% Clean Architecture compliance") specifically to
   eliminate this pattern elsewhere in the codebase — these two call sites appear to predate or
   have been missed by that refactor.
@@ -153,7 +153,7 @@ as follow-up issues.
   `CompetitionStatus`/`EnrollmentStatus` enum VOs via SQLAlchemy `composite()` in the mapper
   properties. This is **not** a functional bug — type safety is preserved and rule #6 ("never
   plain string/int columns [for enum/VO fields] without a converter") is technically satisfied —
-  but it contradicts the project's own documented convention in `CLAUDE.md`'s "Handicap Value
+  but it contradicts the project's own documented convention in `docs/modules/user-management.md`'s "Handicap Value
   Object Mapping" ADR ("TypeDecorator: VOs de una sola columna… Composite: VOs de múltiples
   columnas"), and is inconsistent with `RoundStatus`/`MatchStatus`/`InvitationStatus` in the same
   file, which correctly use dedicated `*StatusDecorator` `TypeDecorator` classes.
@@ -168,7 +168,7 @@ as follow-up issues.
   identified.
 - Not filed as an issue: if strict layer purity is desired later, this could be wrapped behind
   an `IPasswordHasher` port with an infrastructure adapter; otherwise worth an explicit note in
-  `CLAUDE.md`'s architecture rules as an accepted exception.
+  the project's architecture rules as an accepted exception.
 
 ---
 
