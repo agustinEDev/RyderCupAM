@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 F-01b, F-02, F-04, F-05, F-07, F-09, F-10, F-13 y la parte de backend de FE-02 de la
 auditoría del 9 nov. **Compatible con el frontend 2.72.0** (probado en el Kind con el front
 actual): no hace falta desplegar el front con ella; la release 2 del front y la 2.58.0 del
-backend completan la fase. Tres migraciones encadenadas (`b3d5f7a9c1e2`, `b7e9d1f3a5c8`),
+backend completan la fase. Dos migraciones encadenadas (`b3d5f7a9c1e2`, `b7e9d1f3a5c8`),
 sin reescribir tablas. **Al desplegar**: los enlaces de verificar y de restablecer que
 estuvieran pendientes dejan de valer (hay que pedir otro); ninguna sesión se cae. Dos correos
 nuevos, revisados en el iPhone en modo oscuro.
