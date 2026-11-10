@@ -134,6 +134,11 @@ EXEMPT_PATHS: Final[set[str]] = {
     "/api/v1/auth/forgot-password",  # Public endpoint
     "/api/v1/auth/reset-password",  # Public endpoint (token in URL)
     "/api/v1/auth/verify-email",  # Public endpoint (token in URL)
+    # Los enlaces del correo, sin sesión (fase 3): validar el de restablecer y pedir otro
+    # de verificación desde la pantalla de «enlace caducado». Públicas, con su límite y
+    # la misma respuesta exista o no la cuenta
+    "/api/v1/auth/validate-reset-token",
+    "/api/v1/auth/resend-verification",
     "/api/v1/support/contact",  # Public endpoint - no existing session
     "/api/v1/auth/google",  # Public endpoint - Google OAuth login/register
 }
