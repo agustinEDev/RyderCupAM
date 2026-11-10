@@ -17,7 +17,7 @@ from tests.integration.test_activity_events_published_at_migration import (
     base_desechable,  # noqa: F401
 )
 
-ANTERIOR = "a2c4e6f8b0d1"
+ANTERIOR = "b3d5f7a9c1e2"
 ENLACES = "b7e9d1f3a5c8"
 EN_CLARO = "token-en-claro-de-antes-0123456789abcdef0123"
 HASH = hashlib.sha256(b"ya-con-hash").hexdigest()

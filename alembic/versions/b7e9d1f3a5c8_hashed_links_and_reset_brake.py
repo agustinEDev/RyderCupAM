@@ -19,7 +19,7 @@ Columnas nulas o con valor por defecto constante: en Postgres 11+ no reescriben 
 tabla. La release anterior sigue funcionando con la tabla migrada (no lee las nuevas).
 
 Revision ID: b7e9d1f3a5c8
-Revises: a2c4e6f8b0d1
+Revises: b3d5f7a9c1e2
 Create Date: 2026-11-10
 
 """
@@ -29,7 +29,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "b7e9d1f3a5c8"
-down_revision = "a2c4e6f8b0d1"
+down_revision = "b3d5f7a9c1e2"
 branch_labels = None
 depends_on = None
 
