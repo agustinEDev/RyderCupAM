@@ -1,4 +1,3 @@
-import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -35,6 +34,7 @@ from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
 from ..value_objects.password import Password
+from ..value_objects.token_hash import hash_del_enlace
 from ..value_objects.user_avatar_upload_id import UserAvatarUploadId
 from ..value_objects.user_id import UserId
 
@@ -72,12 +72,6 @@ AVATAR_MAX_STORED_UPLOADS = 5
 # Cuanto puede ir por delante la ultima visita al feed antes de darla por mala:
 # lo justo para el desfase entre relojes, no las horas de una zona horaria
 FEED_SEEN_FUTURE_TOLERANCE = timedelta(minutes=5)
-
-
-def _hash_del_token(token: str) -> str:
-    """El hash con el que se guarda el token de un enlace del correo (SHA-256): el del
-    correo pendiente, el de verificar y el de restablecer."""
-    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _como_password(contrasena: str | Password) -> Password:
@@ -976,7 +970,7 @@ class User:
         token = secrets.token_urlsafe(32)
         self._pending_email = str(nuevo.value)
         # Con hash: quien lea la BD no puede confirmar el cambio (auditoría OWASP)
-        self._pending_email_token = _hash_del_token(token)
+        self._pending_email_token = hash_del_enlace(token)
         self._pending_email_expires_at = ahora + timedelta(
             hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
         )
@@ -989,7 +983,7 @@ class User:
         if self._pending_email is None or not guardado:
             return False
         # En bytes: compare_digest con un str no ASCII lanzaba (un 500)
-        return secrets.compare_digest(guardado.encode(), _hash_del_token(token or "").encode())
+        return secrets.compare_digest(guardado.encode(), hash_del_enlace(token or "").encode())
 
     def confirm_email_change(self, token: str, ahora: datetime) -> None:
         """
@@ -1125,7 +1119,7 @@ class User:
             token: Token de verificación generado previamente
             ahora: La hora de referencia (por defecto, la de ahora)
         """
-        self._verification_token = _hash_del_token(token)
+        self._verification_token = hash_del_enlace(token)
         self._verification_token_expires_at = (
             ahora or datetime.now()
         ) + VERIFICATION_TOKEN_LIFETIME
@@ -1151,7 +1145,7 @@ class User:
 
         guardado = self.verification_token
         if not guardado or not secrets.compare_digest(
-            guardado.encode(), _hash_del_token(token or "").encode()
+            guardado.encode(), hash_del_enlace(token or "").encode()
         ):
             raise ValueError("Token de verificación inválido")
         caduca = self.verification_token_expires_at
@@ -1191,6 +1185,14 @@ class User:
             return False
         self._register_attempt_notice_at = ahora
         return True
+
+    def reinicia_el_cupo_de_reset(self) -> None:
+        """
+        Pone a cero el cupo de correos de restablecer (fase 3, M-2): la cuenta acaba de
+        demostrar que es suya (inicio de sesión o restablecimiento con éxito).
+        """
+        self._password_reset_emails_in_window = 0
+        self._password_reset_window_started_at = None
 
     def cuenta_un_correo_de_reset(self, ahora: datetime) -> bool:
         """
@@ -1264,7 +1266,7 @@ class User:
             str: El token en claro, para el enlace del correo
         """
         token = secrets.token_urlsafe(32)
-        self._password_reset_token = _hash_del_token(token)
+        self._password_reset_token = hash_del_enlace(token)
 
         now = ahora or datetime.now()
         expires_at = now + PASSWORD_RESET_TOKEN_LIFETIME
@@ -1305,7 +1307,7 @@ class User:
         # Se compara el hash (compare_digest, sin atajos por el tiempo): un token
         # guardado en claro antes del cambio no es el hash de nada que llegue
         if not secrets.compare_digest(
-            self.password_reset_token.encode(), _hash_del_token(token or "").encode()
+            self.password_reset_token.encode(), hash_del_enlace(token or "").encode()
         ):
             return False
 
@@ -1371,6 +1373,8 @@ class User:
         # Invalidar el token (uso único)
         self._password_reset_token = None
         self._reset_token_expires_at = None
+        # Demostró que el buzón es suyo: el cupo diario de correos, a cero (M-2)
+        self.reinicia_el_cupo_de_reset()
 
         # Actualizar timestamp
         now = datetime.now()
