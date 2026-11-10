@@ -237,3 +237,22 @@ async def test_f7_el_nombre_completo_solo_encuentra_cuentas_activas():
     baja_sola = InMemoryUserRepository()
     await baja_sola.save(baja)
     assert await baja_sola.find_by_full_name("Pepe Gemelo") is None
+
+
+@pytest.mark.asyncio
+async def test_f2_la_busqueda_deja_fuera_los_ids_que_se_le_piden():
+    """
+    GIVEN: Tres cuentas con el mismo apellido
+    WHEN: Se busca dejando fuera a dos (quienes me bloquearon)
+    THEN: Solo sale la tercera, como en el repositorio real
+    """
+    repository = InMemoryUserRepository()
+    uno = build_user("Uno", "Fuera", "uno@example.com")
+    dos = build_user("Dos", "Fuera", "dos@example.com")
+    tres = build_user("Tres", "Fuera", "tres@example.com")
+    for user in (uno, dos, tres):
+        await repository.save(user)
+
+    results = await repository.search_by_partial_name("Fuera", exclude_user_ids={uno.id, dos.id})
+
+    assert [u.id for u in results] == [tres.id]

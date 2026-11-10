@@ -102,6 +102,8 @@ def _escena(url: str) -> dict:
         }
         _aviso(conn, sin_verificar, "INVITED_TO_TOURNAMENT", escena["pendiente_sin_verificar"])
         _aviso(conn, sin_verificar, "BIRDIE", "grupo-1")
+        # Otro tipo con el mismo origen que la invitación: no es su «Te han invitado»
+        _aviso(conn, sin_verificar, "ENROLLED_IN_TOURNAMENT", escena["pendiente_sin_verificar"])
         _aviso(conn, verificada, "INVITED_TO_TOURNAMENT", escena["pendiente_verificada"])
     engine.dispose()
     return escena
@@ -122,8 +124,8 @@ def _atada(url: str, invitation_id: str) -> bool:
     return usuario is not None
 
 
-def _avisos(url: str) -> set[str]:
-    return {fila[0] for fila in _consulta(url, "SELECT source_match_id FROM activity_events")}
+def _avisos(url: str) -> set[tuple[str, str]]:
+    return set(_consulta(url, "SELECT type, source_match_id FROM activity_events"))
 
 
 def test_m1_a_m4_solo_se_desatan_las_pendientes_de_cuentas_sin_verificar(
@@ -142,7 +144,11 @@ def test_m1_a_m4_solo_se_desatan_las_pendientes_de_cuentas_sin_verificar(
     assert not _atada(base_desechable, escena["pendiente_sin_verificar"])
     assert _atada(base_desechable, escena["aceptada_sin_verificar"])
     assert _atada(base_desechable, escena["pendiente_verificada"])
-    assert _avisos(base_desechable) == {"grupo-1", escena["pendiente_verificada"]}
+    assert _avisos(base_desechable) == {
+        ("BIRDIE", "grupo-1"),
+        ("ENROLLED_IN_TOURNAMENT", escena["pendiente_sin_verificar"]),
+        ("INVITED_TO_TOURNAMENT", escena["pendiente_verificada"]),
+    }
 
 
 def test_m5_hacia_atras_no_se_vuelve_a_atar(base_desechable):  # noqa: F811
