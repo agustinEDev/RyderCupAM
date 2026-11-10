@@ -12,7 +12,11 @@ from main import app
 from src.config.dependencies import get_google_oauth_service
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.shared.infrastructure.logging.security_logger import SecurityLogger
-from tests.conftest import create_authenticated_user, set_auth_cookies
+from tests.conftest import (
+    create_authenticated_user,
+    set_auth_cookies,
+    token_de_reset_enviado,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -346,7 +350,6 @@ async def test_r1_resetting_after_an_email_change_takes_the_creator_google_away(
     When: La otra persona usa «Olvidé mi contraseña» con el enlace de su buzón
     Then: La cuenta queda verificada y sin aquel Google: ya no entra con él
     """
-    from tests.conftest import get_user_by_email
     from tests.integration.api.v1.test_terms_acceptance_endpoints import _sql
 
     antes, despues = "creador.cambio@example.com", "victima.cambio@example.com"
@@ -363,7 +366,7 @@ async def test_r1_resetting_after_an_email_change_takes_the_creator_google_away(
     )
     client.cookies.clear()
     await client.post("/api/v1/auth/forgot-password", json={"email": despues})
-    token = (await get_user_by_email(client, despues)).password_reset_token
+    token = await token_de_reset_enviado(despues)
 
     r = await client.post(
         "/api/v1/auth/reset-password", json={"token": token, "new_password": "OtraClave#2026segura"}

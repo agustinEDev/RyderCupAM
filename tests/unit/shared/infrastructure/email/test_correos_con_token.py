@@ -46,6 +46,11 @@ CORREOS = [
         lambda s: s.send_account_secured_notice("a@b.com", "Ana", "google"),
     ),
     (
+        "intento_de_registro",
+        False,
+        lambda s: s.send_register_attempt_notice("a@b.com", "Ana"),
+    ),
+    (
         "google",
         False,
         lambda s: s.send_google_account_notice("a@b.com", "Ana", True),
@@ -126,6 +131,7 @@ def test_e13b_every_email_of_the_app_is_in_the_list():
         "send_email_changed_notice",
         "send_account_secured_notice",
         "send_google_account_notice",
+        "send_register_attempt_notice",
         "send_new_login_notification",
         "send_failed_logins_notification",
         "send_session_closed_for_security_notice",

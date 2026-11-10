@@ -6,7 +6,7 @@ Este endpoint es público y NO requiere autenticación.
 
 Security Features:
 - Token de un solo uso (se invalida después del primer uso exitoso)
-- Validación estricta de expiración (24 horas)
+- Validación estricta de expiración (1 hora)
 - Password policy enforcement (OWASP ASVS V2.1: 12+ chars, complejidad completa)
 - Invalidación automática de TODAS las sesiones activas (refresh tokens revocados)
 - Security logging completo
@@ -61,7 +61,7 @@ class ResetPasswordUseCase:
     Security (OWASP A01, A02, A07):
     - Usuario no autenticado (endpoint público)
     - Token de un solo uso (se invalida después del primer uso)
-    - Validación estricta de expiración (< 24 horas)
+    - Validación estricta de expiración (1 hora)
     - Password policy: 12+ chars, complejidad completa, no en blacklist
     - Logout forzado en todos los dispositivos
     """

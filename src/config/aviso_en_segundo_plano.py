@@ -1,7 +1,9 @@
 """
 Los avisos de seguridad por correo, en segundo plano: el de «nuevo inicio de sesión»
-(BE #737), el de «intentos fallidos» (BE #732) y el de «sesión cerrada por seguridad»
-(F-02: robo de un refresh token; el refresco tampoco espera).
+(BE #737), el de «intentos fallidos» (BE #732), el de «sesión cerrada por seguridad»
+(F-02: robo de un refresh token; el refresco tampoco espera) y los correos del
+registro y del reenvío de la verificación (fase 3: la respuesta no espera al
+proveedor y tarda lo mismo exista o no el correo).
 
 El login contesta sin esperar al proveedor de correo: el aviso se lanza como una
 tarea del propio proceso, con su propia sesión de BD, porque la de la petición se
@@ -11,6 +13,7 @@ cierra al contestar. Si el proceso se reinicia justo entonces, ese correo se pie
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -24,8 +27,15 @@ from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAviso
 from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
     IAvisoDeSesionCerrada,
 )
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
+)
 from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.reenvio_de_verificacion_port import (
+    IReenvioDeVerificacion,
+    ReenvioDeVerificacion,
+)
 from src.modules.user.application.services.aviso_de_fallos_de_login import (
     AvisoDeFallosDeLogin,
 )
@@ -34,6 +44,9 @@ from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion impor
 )
 from src.modules.user.application.services.aviso_de_sesion_cerrada_por_seguridad import (
     AvisoDeSesionCerradaPorSeguridad,
+)
+from src.modules.user.application.services.envio_de_la_verificacion import (
+    EnvioDeLaVerificacion,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
@@ -145,6 +158,50 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         except Exception as e:
             # Solo el tipo: el mensaje puede llevar la dirección (OWASP A09)
             logger.error("Failed sign-ins notice failed in the background: %s", type(e).__name__)
+
+
+class CorreoEnSegundoPlano(ICorreoEnSegundoPlano):
+    """Lanza un correo del registro sin que la respuesta lo espere (fase 3, B1-B3)."""
+
+    def lanza(self, nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
+        """Lo lanza como tarea del proceso, registrada para que los tests la esperen."""
+        tarea = asyncio.create_task(self._envia(nombre, envio), name=nombre)
+        _PENDIENTES.add(tarea)
+        tarea.add_done_callback(_PENDIENTES.discard)
+
+    @staticmethod
+    async def _envia(nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
+        """El envío; un fallo se queda en el log, solo con su tipo (OWASP A09)."""
+        try:
+            await envio()
+        except Exception as e:
+            logger.error("Background email %s failed: %s", nombre, type(e).__name__)
+
+
+class ReenvioEnSegundoPlano(IReenvioDeVerificacion):
+    """Envía el enlace de verificación nuevo y, si sale, lo guarda; sin que la petición
+    espere (fase 3, revisión). Con su propia sesión de BD: la de la petición se cierra."""
+
+    def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
+        """Con la fábrica de sesiones y el servicio de correo."""
+        self._fabrica = fabrica
+        self._email_service = email_service
+
+    def lanza(self, datos: ReenvioDeVerificacion) -> None:
+        """Lo lanza como tarea del proceso, registrada para que los tests la esperen."""
+        tarea = asyncio.create_task(self._envia(datos), name="reenvio-de-verificacion")
+        _PENDIENTES.add(tarea)
+        tarea.add_done_callback(_PENDIENTES.discard)
+
+    async def _envia(self, datos: ReenvioDeVerificacion) -> None:
+        """El envío y el guardado; un fallo se queda en el log, solo con su tipo (A09)."""
+        try:
+            async with self._fabrica() as sesion:
+                await EnvioDeLaVerificacion(
+                    SQLAlchemyUnitOfWork(sesion), self._email_service
+                ).envia_y_guarda(datos)
+        except Exception as e:
+            logger.error("Verification resend failed in the background: %s", type(e).__name__)
 
 
 class AvisoDeSesionCerradaEnSegundoPlano(IAvisoDeSesionCerrada):

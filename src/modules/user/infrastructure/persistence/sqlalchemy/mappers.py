@@ -186,9 +186,17 @@ users_table = Table(
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
     Column("email_verified", Boolean, nullable=False, default=False),
+    # Los enlaces del correo, con el SHA-256 del token y su caducidad (fase 3, C1-C3)
     Column("verification_token", String(255), nullable=True),
+    Column("verification_token_expires_at", DateTime, nullable=True),
     Column("password_reset_token", String(255), nullable=True),
     Column("reset_token_expires_at", DateTime, nullable=True),
+    # El cupo diario de correos de restablecer (H2) y el último aviso de registro (B2)
+    Column(
+        "password_reset_emails_in_window", Integer, nullable=False, default=0, server_default="0"
+    ),
+    Column("password_reset_window_started_at", DateTime, nullable=True),
+    Column("register_attempt_notice_at", DateTime, nullable=True),
     # El correo nuevo, pendiente de confirmar desde su dirección (#749)
     Column("pending_email", String(255), nullable=True),
     Column("pending_email_token", String(255), nullable=True),
@@ -289,12 +297,18 @@ def start_mappers():
                 "_updated_at": users_table.c.updated_at,
                 "_email_verified": users_table.c.email_verified,
                 "_verification_token": users_table.c.verification_token,
+                "_verification_token_expires_at": users_table.c.verification_token_expires_at,
                 "_pending_email": users_table.c.pending_email,
                 "_pending_email_token": users_table.c.pending_email_token,
                 "_pending_email_expires_at": users_table.c.pending_email_expires_at,
                 "_country_code": users_table.c.country_code,
                 "_password_reset_token": users_table.c.password_reset_token,
                 "_reset_token_expires_at": users_table.c.reset_token_expires_at,
+                "_password_reset_emails_in_window": (users_table.c.password_reset_emails_in_window),
+                "_password_reset_window_started_at": (
+                    users_table.c.password_reset_window_started_at
+                ),
+                "_register_attempt_notice_at": users_table.c.register_attempt_notice_at,
                 "_failed_login_attempts": users_table.c.failed_login_attempts,
                 "_locked_until": users_table.c.locked_until,
                 "_failed_login_window_started_at": users_table.c.failed_login_window_started_at,

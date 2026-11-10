@@ -76,10 +76,8 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
         "accept_terms": True,
     }
     register_response = await client.post("/api/v1/auth/register", json=user_data)
-    assert register_response.status_code in [
-        status.HTTP_201_CREATED,
-        status.HTTP_409_CONFLICT,
-    ]
+    # Con el correo ya registrado también es 201: el registro no lo dice (fase 3)
+    assert register_response.status_code == status.HTTP_201_CREATED
 
     # Login to get tokens
     response = await client.post("/api/v1/auth/login", json=valid_user_credentials)

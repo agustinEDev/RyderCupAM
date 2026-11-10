@@ -1,19 +1,21 @@
+import hashlib
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 
 from src.config.dependencies import (
     get_current_user,
+    get_current_user_optional,
     get_login_user_use_case,
     get_logout_user_use_case,
     get_refresh_access_token_use_case,
     get_register_user_use_case,
     get_request_password_reset_use_case,
     get_resend_verification_email_use_case,
+    get_resend_verification_from_link_use_case,
     get_reset_password_use_case,
     get_unlock_account_use_case,
     get_validate_reset_token_use_case,
@@ -30,6 +32,7 @@ from src.config.rate_limit import (
     VALIDATE_RESET_TOKEN_LIMIT,
     VERIFY_EMAIL_LIMIT,
     count_or_refuse,
+    email_and_network_rate_limit_key,
     email_rate_limit_key,
     get_client_identifier,
     limiter,
@@ -51,11 +54,14 @@ from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetResponseDTO,
     ResendVerificationEmailRequestDTO,
     ResendVerificationEmailResponseDTO,
+    ResendVerificationFromLinkRequestDTO,
+    ResendVerificationFromLinkResponseDTO,
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
     UnlockAccountRequestDTO,
     UnlockAccountResponseDTO,
     UserResponseDTO,
+    ValidateResetTokenBodyDTO,
     ValidateResetTokenRequestDTO,
     ValidateResetTokenResponseDTO,
     VerifyEmailRequestDTO,
@@ -82,6 +88,7 @@ from src.modules.user.application.use_cases.request_password_reset_use_case impo
 )
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
+    ResendVerificationFromLinkUseCase,
 )
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
@@ -95,17 +102,18 @@ from src.modules.user.application.use_cases.validate_reset_token_use_case import
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
-from src.modules.user.domain.errors.user_errors import (
-    TermsAcceptanceRequiredError,
-    UserAlreadyExistsError,
-)
+from src.modules.user.domain.errors.user_errors import TermsAcceptanceRequiredError
 from src.modules.user.domain.exceptions import (
     AccountDeactivatedException,
     AccountLockedException,
     LoginAttemptsExceededException,
 )
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
+from src.modules.user.domain.exceptions.verification_token_expired_error import (
+    VerificationTokenExpiredError,
+)
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_de_la_cookie_de_dispositivo,
@@ -138,17 +146,12 @@ from src.shared.infrastructure.security.cookie_handler import (
 
 logger = logging.getLogger(__name__)
 
-# La restricción única del correo de users (la que pone Postgres a `unique=True`)
-RESTRICCION_DEL_CORREO = "users_email_key"
-
-
-def _es_el_correo_repetido(error: IntegrityError) -> bool:
-    """True si lo que saltó es la restricción única del correo de users."""
-    causa = getattr(error.orig, "__cause__", None)
-    nombre = getattr(causa, "constraint_name", None) or getattr(error.orig, "constraint_name", None)
-    if nombre:
-        return nombre == RESTRICCION_DEL_CORREO
-    return RESTRICCION_DEL_CORREO in str(error.orig)
+# El enlace de verificación caducado, con su texto fijo (BE #562)
+_TEXTO_DEL_ENLACE_CADUCADO = {
+    VerificationTokenExpiredError.error_code: VerificationTokenExpiredError.MENSAJE
+}
+# El mismo mensaje para todo token de restablecer imposible (BE #453)
+_ENLACE_DE_RESET_IMPOSIBLE = "Token de reseteo inválido o expirado. Solicita un nuevo enlace."
 
 
 router = APIRouter()
@@ -173,7 +176,13 @@ router = APIRouter()
     response_model=UserResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un nuevo usuario",
-    description="Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y opcionalmente código de país (ISO 3166-1 alpha-2).",
+    description=(
+        "Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y "
+        "opcionalmente código de país (ISO 3166-1 alpha-2). No dice si el correo ya tiene "
+        "cuenta (fase 3): con un correo ya registrado responde el mismo 201 con los datos "
+        "enviados (y un id que no se guarda), no toca esa cuenta y avisa a su buzón como "
+        "mucho una vez al día. Ya no hay 409."
+    ),
     tags=["Authentication"],
 )
 @limiter.limit(REGISTER_LIMIT, key_func=get_client_identifier)  # Anti-spam, por red
@@ -199,23 +208,6 @@ async def register_user(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(e),
-        ) from e
-    except UserAlreadyExistsError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
-    except IntegrityError as e:
-        # Dos altas a la vez con el mismo correo: las dos lo vieron libre y la base de
-        # datos paró a la segunda. Lo mismo que si hubiera llegado después (R1). Otra
-        # restricción no se esconde bajo «ya registrado»
-        if not _es_el_correo_repetido(e):
-            raise
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(
-                UserAlreadyExistsError(f"El email '{register_data.email}' ya está registrado.")
-            ),
         ) from e
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
@@ -687,7 +679,11 @@ async def refresh_access_token(
     ),
     tags=["Authentication"],
     responses={
-        400: {"description": "El enlace no vale: inválido, caducado o ya usado."},
+        400: {
+            "description": "El enlace no vale: inválido o ya usado. Si es el de la cuenta "
+            "pero pasaron sus 48 horas, `error_code` VERIFICATION_TOKEN_EXPIRED (para "
+            "ofrecer reenviarlo con /auth/resend-verification)."
+        },
         403: {"description": "`error_code` ACCOUNT_DEACTIVATED: verificada, pero desactivada."},
     },
 )
@@ -729,6 +725,12 @@ async def verify_email(
         return VerifyEmailResponseDTO(message="Email verified. Please sign in.")
     except HTTPException:
         raise
+    except VerificationTokenExpiredError as e:
+        # El enlace era el de la cuenta, pero pasaron sus 48 horas: la pantalla dice
+        # «enlace caducado» y ofrece reenviarlo (fase 3, C1)
+        return respuesta_con_codigo(
+            status.HTTP_400_BAD_REQUEST, _TEXTO_DEL_ENLACE_CADUCADO, e.error_code
+        )
     except ValueError as e:
         logger.warning(f"Email verification failed (expected): {type(e).__name__}")
         raise HTTPException(
@@ -746,8 +748,13 @@ async def verify_email(
     "/resend-verification",
     response_model=ResendVerificationEmailResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Reenviar email de verificación",
-    description="Genera un nuevo token de verificación y reenvía el email al usuario.",
+    summary="Reenviar email de verificación (con sesión)",
+    description=(
+        "Reenvía el enlace de verificación al correo de la cuenta con sesión (el aviso de la "
+        "app). Sin sesión, o con el correo de otra cuenta, responde lo mismo y no envía nada "
+        "(fase 3): sin sesión se pide otro con el enlace caducado, en "
+        "`POST /auth/resend-verification-link`."
+    ),
     tags=["Authentication"],
 )
 @limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red; el email va dentro
@@ -755,6 +762,7 @@ async def resend_verification_email(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
 ):
     """
     Endpoint para reenviar el email de verificación.
@@ -790,6 +798,12 @@ async def resend_verification_email(
     logger.info(f"Verification email resend requested for: {email_preview}")
 
     try:
+        # Solo el correo de la propia sesión (fase 3): con un correo ajeno, o sin sesión,
+        # nadie provoca el correo ni anula el enlace de otra cuenta
+        if current_user is None or str(current_user.email).lower() != (
+            resend_data.email.strip().lower()
+        ):
+            raise ValueError("Not the email of the signed-in account")
         await use_case.execute(resend_data.email)
         logger.info(f"Verification email resend successful for: {email_preview}")
     except ValueError as e:
@@ -817,6 +831,41 @@ async def resend_verification_email(
     )
 
 
+@router.post(
+    "/resend-verification-link",
+    response_model=ResendVerificationFromLinkResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Pedir otro enlace de verificación con el caducado (sin sesión)",
+    description=(
+        "Para la pantalla de «enlace caducado» (fase 3): con el token del enlace caducado "
+        "de una cuenta sin verificar, envía uno nuevo (vale 48 h; se guarda al salir el "
+        "correo). Con cualquier otro token, o con uno aún vigente, responde lo mismo sin "
+        "enviar nada. 3 por hora por enlace y red."
+    ),
+    tags=["Authentication"],
+)
+@limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red
+async def resend_verification_from_link(
+    request: Request,
+    datos: ResendVerificationFromLinkRequestDTO,
+    use_case: ResendVerificationFromLinkUseCase = Depends(
+        get_resend_verification_from_link_use_case
+    ),
+) -> ResendVerificationFromLinkResponseDTO:
+    """Pide otro enlace con el caducado; la respuesta no dice si se envió."""
+    count_or_refuse(
+        EMAIL_SENDING_PER_EMAIL_LIMIT,
+        "resend-verification-link",
+        f"{hash_del_enlace(datos.token)}:"
+        f"{hashlib.sha256(get_client_identifier(request).encode()).hexdigest()}",
+    )
+    try:
+        await use_case.execute(datos.token)
+    except ValueError as e:
+        logger.info("Verification link resend failed (expected): %s", type(e).__name__)
+    return ResendVerificationFromLinkResponseDTO()
+
+
 # ============================================================================
 # PASSWORD RESET ENDPOINTS
 # ============================================================================
@@ -831,7 +880,8 @@ async def resend_verification_email(
     Endpoint público para solicitar el reseteo de contraseña (flujo "Olvidé mi contraseña").
 
     Security Features:
-    - Rate limiting: 3 intentos/hora por email
+    - Rate limiting: 3 intentos/hora por correo + red (fase 3), y como mucho 10 correos
+      por cuenta en 24 horas (por encima no se envía, con la misma respuesta)
     - Timing attack prevention: Mensaje genérico sin revelar si el email existe
     - Email injection prevention: Validación con Pydantic EmailStr
     - Security logging: Todos los intentos registrados (exitosos y fallidos)
@@ -839,7 +889,7 @@ async def resend_verification_email(
     Flow:
     1. Usuario ingresa email en formulario /forgot-password
     2. Backend valida email (mensaje genérico si no existe)
-    3. Si existe: Genera token (24h) y envía email con enlace
+    3. Si existe: Genera token (1 hora) y envía email con enlace
     4. Si no existe: Delay artificial + mensaje genérico (previene enumeración)
 
     Response:
@@ -870,11 +920,12 @@ async def forgot_password(
         - Mensaje genérico previene enumeración de usuarios
         - Timing attack prevention con delay artificial
     """
-    # Rate limit por email (#273), desde cualquier red y exista o no el email
+    # 3/hora por correo + red (fase 3, H1), exista o no el correo: tres peticiones
+    # ajenas desde otra red ya no dejan al dueño sin su enlace (como el login, ADR-043)
     count_or_refuse(
         EMAIL_SENDING_PER_EMAIL_LIMIT,
         "forgot-password-email",
-        email_rate_limit_key(reset_data.email),
+        email_and_network_rate_limit_key(reset_data.email, get_client_identifier(request)),
     )
 
     # Extraer contexto de seguridad
@@ -904,7 +955,7 @@ async def forgot_password(
 
     Security Features:
     - Token de un solo uso (se invalida después del primer uso exitoso)
-    - Validación estricta de expiración (24 horas)
+    - Validación estricta de expiración (1 hora)
     - Password policy enforcement (OWASP ASVS V2.1: 12+ chars, complejidad completa)
     - Invalidación automática de TODAS las sesiones activas (logout forzado)
     - Email de confirmación enviado al usuario
@@ -975,12 +1026,51 @@ async def reset_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
+def _valida_el_token_de_reset(token: str) -> ValidateResetTokenRequestDTO | None:
+    """El token como lo pide el caso de uso, o None si su longitud es imposible."""
+    try:
+        return ValidateResetTokenRequestDTO(token=token)
+    except ValidationError:
+        return None
+
+
+@router.post(
+    "/validate-reset-token",
+    response_model=ValidateResetTokenResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Validar token de reseteo (OPCIONAL)",
+    description=(
+        "Valida el enlace de restablecer ANTES de mostrar el formulario, con el token en el "
+        "cuerpo (fase 3): en la URL acababa en los logs de acceso y del proxy. Siempre "
+        "200: `valid` dice si es el enlace vigente (1 hora, de un solo uso)."
+    ),
+    tags=["Authentication"],
+)
+@limiter.limit(VALIDATE_RESET_TOKEN_LIMIT, key_func=get_client_identifier)  # Por red
+async def validate_reset_token_from_body(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    datos: ValidateResetTokenBodyDTO,
+    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case),
+) -> ValidateResetTokenResponseDTO:
+    """Valida el token de restablecer que llega en el cuerpo (fase 3, C4)."""
+    request_dto = _valida_el_token_de_reset(datos.token)
+    if request_dto is None:
+        return ValidateResetTokenResponseDTO(valid=False, message=_ENLACE_DE_RESET_IMPOSIBLE)
+    return await use_case.execute(request_dto)
+
+
+# DEPRECATED (fase 3): el token va en la URL. El front pasa al POST de arriba; este GET se
+# quita en la release 2.58.0, cuando ningún front desplegado lo use
 @router.get(
     "/validate-reset-token/{token}",
     response_model=ValidateResetTokenResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Validar token de reseteo (OPCIONAL)",
+    summary="Validar token de reseteo (OPCIONAL, DEPRECATED)",
+    deprecated=True,
     description="""
+    DEPRECATED: usa `POST /auth/validate-reset-token` con el token en el cuerpo. Este GET
+    se quita en la 2.58.0.
+
     Endpoint público OPCIONAL para validar un token ANTES de mostrar el formulario.
 
     UX Benefits:
@@ -1025,13 +1115,9 @@ async def validate_reset_token(
     # Un token con una longitud imposible es un token inválido más: la ruta
     # promete 200 con valid=False, no un 500 (BE #453). Mismo mensaje que el
     # caso de uso, para que la longitud no revele nada distinto
-    try:
-        request_dto = ValidateResetTokenRequestDTO(token=token)
-    except ValidationError:
-        return ValidateResetTokenResponseDTO(
-            valid=False,
-            message="Token de reseteo inválido o expirado. Solicita un nuevo enlace.",
-        )
+    request_dto = _valida_el_token_de_reset(token)
+    if request_dto is None:
+        return ValidateResetTokenResponseDTO(valid=False, message=_ENLACE_DE_RESET_IMPOSIBLE)
 
     # Ejecutar use case
     response = await use_case.execute(request_dto)

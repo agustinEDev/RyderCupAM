@@ -14,6 +14,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.events.account_deactivated_event import AccountDeactivatedEvent
 from src.modules.user.domain.events.account_reactivated_event import AccountReactivatedEvent
 from src.modules.user.domain.value_objects.email import InvalidEmailError
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 
 
 class TestUserCreation:
@@ -769,7 +770,8 @@ class TestUserEmailVerification:
         # Assert
         assert token is not None
         assert len(token) > 0
-        assert user.verification_token == token
+        # Se guarda su SHA-256, nunca el token (fase 3)
+        assert user.verification_token == hash_del_enlace(token)
         assert isinstance(token, str)
 
     def test_generate_verification_token_returns_unique_tokens(self):

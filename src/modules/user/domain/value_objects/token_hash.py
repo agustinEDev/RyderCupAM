@@ -7,6 +7,15 @@ Value Object que encapsula el hash de un refresh token para almacenamiento segur
 import hashlib
 
 
+def hash_del_enlace(token: str) -> str:
+    """
+    El SHA-256 (hexadecimal) con el que se guarda el token de un enlace del correo:
+    verificar, restablecer y confirmar el correo nuevo (fase 3). Un solo sitio para la
+    entidad, que compara, y los repositorios, que buscan.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 class TokenHash:
     """
     Value Object para el hash de un Refresh Token.

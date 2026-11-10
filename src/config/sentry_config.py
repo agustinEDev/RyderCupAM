@@ -26,6 +26,8 @@ Configuración requerida:
 """
 
 import logging
+import re
+from typing import Any
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -62,7 +64,8 @@ def _quita_cabeceras_de_origen(event: Event) -> Event:
 
 # El cuerpo de estas rutas lleva datos de quien escribe (nombre, correo, mensaje), y
 # el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09)
-_RUTAS_SIN_CUERPO = ("/api/v1/support/contact",)
+# También el registro (fase 3): nombre, correo y contraseña
+_RUTAS_SIN_CUERPO = ("/api/v1/support/contact", "/api/v1/auth/register")
 
 
 def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
@@ -71,6 +74,35 @@ def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
     url = str(peticion.get("url") or "").split("?")[0]
     if url.endswith(_RUTAS_SIN_CUERPO):
         peticion.pop("data", None)
+    return event
+
+
+# El GET obsoleto de validar el enlace de restablecer lleva el token en la URL (fase 3,
+# B-4). Mientras exista (se quita en la 2.58.0), sale tachado en errores y transacciones
+_TOKEN_EN_LA_URL = re.compile(r"(/auth/validate-reset-token/)[^/?#\s]+")
+_TACHADO = r"\1[Filtered]"
+
+
+def _tacha_el_token_del_enlace(event: Event) -> Event:
+    """Tacha el token de la URL del GET obsoleto: petición, nombre y migas."""
+    peticion = event.get("request")
+    url = peticion.get("url") if isinstance(peticion, dict) else None
+    if isinstance(peticion, dict) and isinstance(url, str):
+        peticion["url"] = _TOKEN_EN_LA_URL.sub(_TACHADO, url)
+    transaccion = event.get("transaction")
+    if isinstance(transaccion, str):
+        event["transaction"] = _TOKEN_EN_LA_URL.sub(_TACHADO, transaccion)
+    # Y en las migas: la línea de acceso de uvicorn o una petición llevan la URL
+    migas: Any = event.get("breadcrumbs")
+    lista: Any = migas.get("values") if isinstance(migas, dict) else migas
+    for miga in [m for m in lista if isinstance(m, dict)] if isinstance(lista, list) else []:
+        if isinstance(miga.get("message"), str):
+            miga["message"] = _TOKEN_EN_LA_URL.sub(_TACHADO, miga["message"])
+        datos = miga.get("data")
+        if isinstance(datos, dict):
+            for clave, valor in datos.items():
+                if isinstance(valor, str):
+                    datos[clave] = _TOKEN_EN_LA_URL.sub(_TACHADO, valor)
     return event
 
 
@@ -111,7 +143,9 @@ def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
 
 def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
     """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
-    return _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
+    return _tacha_el_token_del_enlace(
+        _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
+    )
 
 
 def before_send(event: Event, hint: Hint) -> Event | None:
@@ -133,6 +167,7 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     """
     _quita_cabeceras_de_origen(event)
     _quita_el_cuerpo_de_las_rutas_con_datos(event)
+    _tacha_el_token_del_enlace(event)
     _recorta_los_eventos_de_seguridad(event)
 
     # Filtrar health checks del endpoint "/"

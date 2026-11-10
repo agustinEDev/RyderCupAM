@@ -2,7 +2,13 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, get_user_by_email
+from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+from tests.conftest import (
+    create_authenticated_user,
+    get_user_by_email,
+    token_de_reset_enviado,
+    token_de_verificacion_enviado,
+)
 
 # Marcar todos los tests para ejecutarse con asyncio
 pytestmark = pytest.mark.asyncio
@@ -37,9 +43,10 @@ class TestAuthRoutes:
         assert response_data["first_name"] == user_data["first_name"]
         assert "id" in response_data
 
-    async def test_register_user_fails_if_email_exists(self, client: AsyncClient):
+    async def test_register_with_an_existing_email_answers_the_same_201(self, client: AsyncClient):
         """
-        Verifica que el registro falla con un 409 Conflict si el email ya existe.
+        Con un email que ya existe ya no hay 409 (fase 3, F-01): el mismo 201 que un alta
+        nueva, sin decir que existe.
         """
         # Arrange: Primero, registrar un usuario.
         user_data = {
@@ -56,8 +63,9 @@ class TestAuthRoutes:
         second_response = await client.post("/api/v1/auth/register", json=user_data)
 
         # Assert
-        assert second_response.status_code == status.HTTP_409_CONFLICT
-        assert "ya está registrado" in second_response.json()["detail"]
+        assert second_response.status_code == status.HTTP_201_CREATED
+        assert "ya está registrado" not in second_response.text
+        assert second_response.json()["id"] != first_response.json()["id"]
 
     @pytest.mark.parametrize(
         ("password", "motivo"),
@@ -102,7 +110,7 @@ class TestAuthRoutes:
         email = "reset.policy@example.com"
         await create_authenticated_user(client, email, "V@l1dP@ss123!", "Reset", "Policy")
         await client.post("/api/v1/auth/forgot-password", json={"email": email})
-        token = (await get_user_by_email(client, email)).password_reset_token
+        token = await token_de_reset_enviado(email)
 
         response = await client.post(
             "/api/v1/auth/reset-password",
@@ -229,8 +237,7 @@ class TestAuthRoutes:
 
         # Obtener el token de verificación desde la BD (en un escenario real vendría por email)
 
-        user = await get_user_by_email(client, user_data["email"])
-        verification_token = user.verification_token
+        verification_token = await token_de_verificacion_enviado(user_data["email"])
 
         # Act - Verificar email
         verify_data = {"token": verification_token}
@@ -298,8 +305,7 @@ class TestAuthRoutes:
 
         # Obtener token y verificar primera vez
 
-        user = await get_user_by_email(client, user_data["email"])
-        verification_token = user.verification_token
+        verification_token = await token_de_verificacion_enviado(user_data["email"])
 
         verify_data = {"token": verification_token}
         first_verify = await client.post("/api/v1/auth/verify-email", json=verify_data)
@@ -316,7 +322,7 @@ class TestAuthRoutes:
         """
         Test: Reenviar email de verificación exitosamente
         Given: Un usuario registrado sin verificar
-        When: Se llama al endpoint con el email correcto
+        When: Con su sesión, se llama al endpoint con su email
         Then: Retorna 200 OK y se genera nuevo token
         """
         # Arrange - Registrar usuario
@@ -332,12 +338,20 @@ class TestAuthRoutes:
 
         # Obtener el token original
 
+        # La BD guarda el SHA-256 del token (fase 3): se compara ese hash
         user_before = await get_user_by_email(client, user_data["email"])
         original_token = user_before.verification_token
+        assert original_token is not None
 
-        # Act - Reenviar email de verificación (el mock de email está en conftest.py)
+        # Act - Reenviar email de verificación con sesión: el reenvío por correo es el de
+        # la propia cuenta (fase 3). Sale en segundo plano y se guarda al salir
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": user_data["email"], "password": user_data["password"]},
+        )
         resend_data = {"email": user_data["email"]}
         response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+        await espera_los_avisos_pendientes(tope_s=10)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -389,10 +403,8 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Verificar el email
-        from tests.conftest import get_user_by_email
 
-        user = await get_user_by_email(client, user_data["email"])
-        verification_token = user.verification_token
+        verification_token = await token_de_verificacion_enviado(user_data["email"])
 
         verify_data = {"token": verification_token}
         verify_response = await client.post("/api/v1/auth/verify-email", json=verify_data)

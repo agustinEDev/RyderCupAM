@@ -84,7 +84,7 @@ Hola {safe_user_name},
 
 ¡Bienvenido a Ryder Cup Friends!
 
-Para completar tu registro, por favor confirma tu dirección de correo electrónico haciendo clic en el siguiente enlace:
+Para completar tu registro, por favor confirma tu dirección de correo electrónico haciendo clic en el siguiente enlace (válido durante 48 horas):
 
 {verification_link}
 
@@ -99,7 +99,7 @@ Hello {safe_user_name},
 
 Welcome to Ryder Cup Friends!
 
-To complete your registration, please confirm your email address by clicking on the following link:
+To complete your registration, please confirm your email address by clicking on the following link (valid for 48 hours):
 
 {verification_link}
 
@@ -119,7 +119,8 @@ The Ryder Cup Friends Team
                     "Hola ",
                     negrita(safe_user_name),
                     ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
-                    "confirma que este correo es tuyo para activar la cuenta.",
+                    "confirma que este correo es tuyo para activar la cuenta. El enlace vale "
+                    "durante 48 horas.",
                 ),
                 aviso("¿No has creado tú esta cuenta? Ignora este correo y no pulses el botón."),
             ],
@@ -128,7 +129,8 @@ The Ryder Cup Friends Team
                 frase(
                     "Hi ",
                     negrita(safe_user_name),
-                    ", confirm your email to activate your RyderCupFriends account. ",
+                    ", confirm your email within 48 hours to activate your RyderCupFriends "
+                    "account. ",
                     negrita("Didn't create this account? "),
                     "Just ignore this email and don't click the button.",
                 ),
@@ -185,7 +187,7 @@ Hola {safe_user_name},
 
 Hemos recibido una solicitud para resetear la contraseña de tu cuenta en Ryder Cup Friends.
 
-Para establecer una nueva contraseña, haz clic en el siguiente enlace (válido por 24 horas):
+Para establecer una nueva contraseña, haz clic en el siguiente enlace (válido durante 1 hora):
 
 {reset_link}
 
@@ -202,7 +204,7 @@ Hello {safe_user_name},
 
 We received a request to reset the password for your Ryder Cup Friends account.
 
-To set a new password, click on the following link (valid for 24 hours):
+To set a new password, click on the following link (valid for 1 hour):
 
 {reset_link}
 
@@ -226,7 +228,7 @@ The Ryder Cup Friends Team
                     ", hemos recibido una petición para restablecer la contraseña de tu cuenta.",
                 ),
                 parrafo(
-                    "El enlace vale durante 24 horas. Al cambiar la contraseña se cierran "
+                    "El enlace vale durante 1 hora. Al cambiar la contraseña se cierran "
                     "todas tus sesiones abiertas."
                 ),
                 parrafo(
@@ -239,7 +241,7 @@ The Ryder Cup Friends Team
                 frase(
                     "Hi ",
                     negrita(safe_user_name),
-                    ", use this link within 24 hours to set a new password. "
+                    ", use this link within 1 hour to set a new password. "
                     "If you didn't ask for it, ignore this email.",
                 ),
                 Boton("Reset my password", reset_link),
@@ -511,6 +513,86 @@ If it wasn't you: {what_to_do} {restablecer}
             "We always send this when Google is linked or unlinked.",
         )
         return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_register_attempt_notice(self, to_email: str, user_name: str) -> bool:
+        """
+        El aviso de que alguien intentó registrarse con este correo (fase 3, B2/B3). El
+        registro ya no dice que el correo existe: se lo dice a su buzón, como mucho una
+        vez al día. Bilingüe (ES/EN), como los demás avisos de seguridad.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        entrar = f"{settings.FRONTEND_URL}/login"
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        subject = (
+            "Alguien ha intentado registrarse con tu correo - Ryder Cup Friends | "
+            "Someone tried to sign up with your email"
+        )
+        que_paso = (
+            "Alguien ha intentado registrarse con tu correo en RyderCupFriends, pero ya "
+            "tienes una cuenta con él. No hemos cambiado nada en tu cuenta."
+        )
+        que_hacer = (
+            "Si eras tú, inicia sesión (con tu contraseña o con Google) o, si no la "
+            "recuerdas, restablece la contraseña. Si no eras tú, no tienes que hacer nada."
+        )
+        que_paso_en = (
+            "Someone tried to sign up with your email at RyderCupFriends, but you already "
+            "have an account with it. Nothing has changed in your account."
+        )
+        que_hacer_en = (
+            "If it was you, sign in (with your password or with Google) or, if you don't "
+            "remember it, reset your password. If it wasn't you, you don't need to do anything."
+        )
+        text_body = f"""
+Hola {safe_user_name},
+
+{que_paso}
+
+{que_hacer}
+
+Iniciar sesión: {entrar}
+Restablecer la contraseña: {restablecer}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_user_name},
+
+{que_paso_en}
+
+{que_hacer_en}
+
+Sign in: {entrar}
+Reset your password: {restablecer}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Alguien ha intentado registrarse con tu correo · "
+            "Someone tried to sign up with your email",
+            etiqueta="Seguridad",
+            titulo="Alguien ha intentado registrarse con tu correo",
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), f". {que_paso}"),
+                parrafo(que_hacer),
+            ],
+            boton=Boton("Iniciar sesión", entrar),
+            otros_botones=[Boton("Restablecer la contraseña", restablecer)],
+            ingles=Ingles(
+                frase(negrita("Someone tried to sign up with your email."), f" {que_hacer_en}"),
+                Boton("Sign in", entrar),
+            ),
+            pie="Te llega porque alguien intentó registrarse con este correo; como mucho te "
+            "enviamos uno al día. You get this because someone tried to sign up with this "
+            "email; we send at most one a day.",
+        )
+        return await self._send_email(
+            f'"{safe_user_name}" <{to_email}>', subject, text_body, html_body
+        )
 
     async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
         """

@@ -737,6 +737,28 @@ class ResendVerificationEmailRequestDTO(BaseModel):
     )
 
 
+class ResendVerificationFromLinkRequestDTO(BaseModel):
+    """El cuerpo de `POST /auth/resend-verification-link` (fase 3): el enlace caducado."""
+
+    token: str = Field(
+        ...,
+        min_length=1,
+        max_length=512,
+        description="El token del enlace de verificación caducado (prueba de tener el buzón).",
+    )
+
+
+class ResendVerificationFromLinkResponseDTO(BaseModel):
+    """La respuesta, la misma tanto si se envió como si no."""
+
+    message: str = Field(
+        default=(
+            "If the link belongs to an account pending verification, a new one has been sent."
+        ),
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
+
+
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
 
@@ -904,7 +926,7 @@ class ResetPasswordRequestDTO(BaseModel):
         ...,
         min_length=32,
         max_length=100,
-        description="Token de reseteo único recibido por email (válido 24 horas).",
+        description="Token de reseteo único recibido por email (válido 1 hora).",
     )
     new_password: str = Field(
         ...,
@@ -954,6 +976,17 @@ class ValidateResetTokenRequestDTO(BaseModel):
     token: str = Field(
         ..., min_length=32, max_length=100, description="Token de reseteo a validar."
     )
+
+
+class ValidateResetTokenBodyDTO(BaseModel):
+    """
+    El cuerpo de `POST /auth/validate-reset-token` (fase 3, C4): el token, fuera de la URL.
+
+    Sin la longitud exacta aquí: un token imposible responde 200 con valid=False, como
+    el GET (BE #453), no 422. Con tope, para no aceptar cuerpos enormes.
+    """
+
+    token: str = Field(..., max_length=512, description="Token de reseteo a validar.")
 
 
 class ValidateResetTokenResponseDTO(BaseModel):

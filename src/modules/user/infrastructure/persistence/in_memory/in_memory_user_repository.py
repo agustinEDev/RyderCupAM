@@ -4,6 +4,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -194,15 +195,17 @@ class InMemoryUserRepository(UserRepositoryInterface):
         )
 
     async def find_by_verification_token(self, token: str) -> User | None:
-        """Busca un usuario por su token de verificación."""
+        """Busca un usuario por su token de verificación, por su SHA-256 (fase 3, C3)."""
+        token_hash = hash_del_enlace(token) if token else None
         for user in self._users.values():
-            if user.verification_token == token:
+            if token_hash is not None and user.verification_token == token_hash:
                 return user
         return None
 
     async def find_by_password_reset_token(self, token: str) -> User | None:
-        """Busca un usuario por su token de reseteo de contraseña."""
+        """Busca un usuario por su token de reseteo, por su SHA-256 (fase 3, C3)."""
+        token_hash = hash_del_enlace(token) if token else None
         for user in self._users.values():
-            if user.password_reset_token == token:
+            if token_hash is not None and user.password_reset_token == token_hash:
                 return user
         return None
