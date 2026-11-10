@@ -1,5 +1,4 @@
 # tests/conftest.py
-import asyncio
 import os
 import sys
 import uuid
@@ -216,23 +215,43 @@ def _sin_la_rfeg_de_verdad() -> None:
 _ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S = 30
 
 
-async def _espera_el_trabajo_en_segundo_plano() -> None:
+async def _suelta_la_bd_de_test(admin_engine, test_engine, db_name: str) -> None:
     """
-    Espera a los avisos que la petición dejó en marcha (el de nuevo inicio de sesión y
-    el de intentos fallidos, BE #737 y #732) antes de que el fixture suelte la BD.
+    La limpieza de la BD de un test: espera a los avisos en segundo plano, cierra los
+    motores, borra la BD y quita las sustituciones de la app.
 
-    El login contesta sin esperarlos y abren su propia sesión con la fábrica que el
-    fixture sustituye. Si el test acababa antes que ellos, `DROP DATABASE` encontraba su
-    conexión abierta y el teardown fallaba con ObjectInUseError, a ratos en el CI
-    (BE #781). Esperar es lo limpio: terminar sus conexiones o `DROP ... WITH (FORCE)`
-    escondería un aviso colgado y lo dejaría fallar contra una BD que ya no existe.
-    Con tope, para que un aviso colgado falle aquí con su nombre y no cuelgue la suite.
+    Los avisos (el de nuevo inicio de sesión y el de intentos fallidos, BE #737 y #732)
+    no los espera el login y abren su propia sesión con la fábrica que el fixture
+    sustituye: si el test acababa antes que ellos, `DROP DATABASE` encontraba su
+    conexión abierta y fallaba con ObjectInUseError, a ratos en el CI (BE #781).
+    Esperar es lo limpio: terminar sus conexiones o `DROP ... WITH (FORCE)` escondería
+    un aviso colgado y lo dejaría fallar contra una BD que ya no existe.
+
+    Si la espera agota su tope, la limpieza se intenta igual (el motor, la BD y las
+    sustituciones no se quedan para el test siguiente) y sale el TimeoutError con los
+    avisos pendientes, no el error del DROP que provocan.
     """
     from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 
-    await asyncio.wait_for(
-        espera_los_avisos_pendientes(), timeout=_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S
-    )
+    agotada: TimeoutError | None = None
+    try:
+        await espera_los_avisos_pendientes(tope_s=_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S)
+    except TimeoutError as error:
+        agotada = error
+    try:
+        await test_engine.dispose()
+        try:
+            async with admin_engine.connect() as conn:
+                await conn.execute(text(f"DROP DATABASE {db_name}"))
+        finally:
+            await admin_engine.dispose()
+            fastapi_app.dependency_overrides.clear()
+    except Exception as error:
+        if agotada is not None:
+            raise agotada from error
+        raise
+    if agotada is not None:
+        raise agotada
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -301,20 +320,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
 
-    # Limpieza: antes de soltar la BD, lo que la petición dejó en segundo plano con la
-    # fábrica de sesiones de este test (BE #781)
-    # Si la espera agota su tope, el resto de la limpieza se hace igual: el motor, la BD
-    # y las sustituciones no se quedan colgando para el test siguiente
-    try:
-        await _espera_el_trabajo_en_segundo_plano()
-    finally:
-        await test_engine.dispose()
-        try:
-            async with engine.connect() as conn:
-                await conn.execute(text(f"DROP DATABASE {db_name}"))
-        finally:
-            await engine.dispose()
-            fastapi_app.dependency_overrides.clear()
+    await _suelta_la_bd_de_test(engine, test_engine, db_name)
 
 
 # ======================================================================================
@@ -764,6 +770,16 @@ async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
 # Lo rellena la fixture `client` con la base de datos de ESTE test, que lleva el
 # id del worker de xdist: no hay una URL fija que se pueda leer del entorno
 _URL_DE_LA_BD_DE_TEST: dict[str, str] = {}
+
+
+async def sql_en_la_bd_de_test(sentencia: str, **parametros):
+    """Ejecuta SQL (con commit) en la BD del test, con la sesión que usa la app."""
+    override = fastapi_app.dependency_overrides[get_db_session]
+    async for sesion in override():
+        resultado = await sesion.execute(text(sentencia), parametros)
+        await sesion.commit()
+        return resultado
+    return None
 
 
 async def estado_en_bd(competition_id: str) -> str | None:

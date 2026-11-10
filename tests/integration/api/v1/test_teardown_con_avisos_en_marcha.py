@@ -18,8 +18,7 @@ from httpx import AsyncClient
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     AvisoDeNuevoInicioDeSesion,
 )
-from tests.conftest import create_authenticated_user
-from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+from tests.conftest import create_authenticated_user, sql_en_la_bd_de_test
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,19 +37,17 @@ async def test_the_teardown_waits_for_a_sign_in_notice_still_using_the_db(
           pytest marca ERROR en el teardown con ObjectInUseError)
     """
     en_marcha = asyncio.Event()
-    original = AvisoDeNuevoInicioDeSesion.avisa
 
-    async def lento(self, request):
+    async def lento(self, _request):
         # Coge una conexión de la BD del test y la retiene, como un aviso lento
         await self._paises.find_all_active()
         en_marcha.set()
         await asyncio.sleep(RETRASO_S)
-        await original(self, request)
 
     monkeypatch.setattr(AvisoDeNuevoInicioDeSesion, "avisa", lento)
     await create_authenticated_user(client, CORREO, CLAVE, "Ana", "Lenta")
     # Con el correo confirmado y sin la cookie del dispositivo, el login avisa
-    await _sql("update users set email_verified = true where email = :e", e=CORREO)
+    await sql_en_la_bd_de_test("update users set email_verified = true where email = :e", e=CORREO)
     client.cookies.clear()
 
     respuesta = await client.post("/api/v1/auth/login", json={"email": CORREO, "password": CLAVE})
