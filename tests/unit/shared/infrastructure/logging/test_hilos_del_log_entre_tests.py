@@ -11,7 +11,6 @@ evento aparece aquí.
 """
 
 import threading
-import time
 
 import pytest
 
@@ -19,17 +18,21 @@ from src.shared.infrastructure.logging import security_logger as modulo
 from src.shared.infrastructure.logging.security_logger import SecurityLogger
 
 _SUELTA_EL_EVENTO_S = 0.2
-_MARGEN_PARA_QUE_LLEGUE_TARDE_S = 1.0
+# Lo más que se espera a que el evento esté escrito: sin vaciar los hilos llega a los
+# 0,2 s; con el vaciado ya está escrito antes de empezar el test
+_ESPERA_MAXIMA_DEL_EVENTO_S = 5.0
 
 
 @pytest.fixture(scope="module")
 def evento_a_medio_escribir(tmp_path_factory):
     suelta = threading.Event()
+    escrito = threading.Event()
     emit_original = modulo._SalidaEstandar.emit
 
     def emit_lento(self, record):
         suelta.wait(timeout=5)
         emit_original(self, record)
+        escrito.set()
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(modulo, "_TOPE", modulo.TopeDeSentry())
@@ -46,13 +49,18 @@ def evento_a_medio_escribir(tmp_path_factory):
         )
         threading.Timer(_SUELTA_EL_EVENTO_S, suelta.set).start()
         try:
-            yield
+            yield escrito
         finally:
             suelta.set()
             audit.para()
 
 
 def test_nada_de_otro_test_llega_tarde_a_la_captura(evento_a_medio_escribir, capsys):
-    time.sleep(_MARGEN_PARA_QUE_LLEGUE_TARDE_S)
+    """
+    Given: El evento del fixture de módulo, que se escribe a los 0,2 s
+    When: Se espera a que esté escrito (señal de `emit_lento`, sin una espera fija)
+    Then: No está en la captura de este test: el fixture autouse lo vació y lo descartó
+    """
+    assert evento_a_medio_escribir.wait(timeout=_ESPERA_MAXIMA_DEL_EVENTO_S)
 
     assert capsys.readouterr().out == ""
