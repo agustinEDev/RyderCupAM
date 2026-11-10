@@ -21,6 +21,7 @@ F-01/F-04/F-05/F-10/F-13; tabla aprobada por Agustín).
   H1  forgot-password 3/hora por correo + red        | la 4.ª de esa red 429; otra red, 200
   H2  11.º correo de reset del día (redes distintas) | 200 igual, sin correo
   H3  correo sin cuenta                              | la misma respuesta
+  M2  iniciar sesión con contraseña                  | el cupo de 10 vuelve a cero
 """
 
 import hashlib
@@ -105,7 +106,10 @@ def _sin_lo_propio(cuerpo: dict) -> dict:
 
 
 async def _pide_reset(client: AsyncClient, email: str, red: dict):
-    return await client.post("/api/v1/auth/forgot-password", json={"email": email}, headers=red)
+    r = await client.post("/api/v1/auth/forgot-password", json={"email": email}, headers=red)
+    # El correo sale en segundo plano (fase 3, B-2)
+    await espera_los_avisos_pendientes(tope_s=10)
+    return r
 
 
 # --- B: el registro -------------------------------------------------------------------
@@ -479,3 +483,38 @@ async def test_h2_h3_the_eleventh_reset_email_of_the_day_is_not_sent(
     normal = {**respuestas[0].json(), "email": None}
     assert {**undecima.json(), "email": None} == normal
     assert {**sin_cuenta.json(), "email": None} == normal
+
+
+async def test_m2_signing_in_resets_the_daily_reset_quota(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Una cuenta que gastó sus 10 correos de restablecer del día
+    When: Inicia sesión con su contraseña y vuelve a pedir el enlace
+    Then: Sale el correo: iniciar sesión pone el cupo a cero (M-2)
+    """
+    email = _correo()
+    await _registra(client, email, CLAVE_DEL_DUENO, "Ana")
+    for i in range(10):
+        await _pide_reset(client, email, _red(f"red{i}"))
+    await _pide_reset(client, email, _red("red10"))
+
+    def enviados() -> int:
+        return sum(
+            1
+            for c in mock_external_services.send_password_reset_email.await_args_list
+            if c.kwargs["to_email"] == email
+        )
+
+    assert enviados() == 10
+    entra = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": CLAVE_DEL_DUENO},
+        headers=_red("login"),
+    )
+    assert entra.status_code == 200, entra.text
+    client.cookies.clear()
+
+    await _pide_reset(client, email, _red("red11"))
+
+    assert enviados() == 11
