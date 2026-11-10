@@ -17,7 +17,7 @@ dispositivos. Ahora lo decide el servidor, por dispositivo, al refrescar.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -93,6 +93,8 @@ class TestRefrescarSegunElUso:
         service.verify_refresh_token.return_value = {"sub": str(user.id.value), "type": "refresh"}
         service.create_access_token.return_value = "nuevo_access_token"
         service.create_csrf_token.return_value = "csrf"
+        # El refresco rota el refresh token (F-02)
+        service.create_refresh_token.return_value = "refresco-rotado"
         return service
 
     async def _refresca(
@@ -105,7 +107,10 @@ class TestRefrescarSegunElUso:
             RefreshToken.create(user.id, JWT, device_id=dispositivo.id if dispositivo else None)
         )
         caso = RefreshAccessTokenUseCase(
-            uow, token_service, security_audit=registro if registro is not None else MagicMock()
+            uow,
+            token_service,
+            security_audit=registro if registro is not None else MagicMock(),
+            aviso_de_cierre=AsyncMock(),
         )
         return await caso.execute(RefreshAccessTokenRequestDTO(), JWT)
 
@@ -192,7 +197,10 @@ class TestRefrescarSegunElUso:
 
         with pytest.raises(RefreshRejectedError) as rechazo:
             await RefreshAccessTokenUseCase(
-                uow, token_service, security_audit=SecurityAuditLogger()
+                uow,
+                token_service,
+                security_audit=SecurityAuditLogger(),
+                aviso_de_cierre=AsyncMock(),
             ).execute(RefreshAccessTokenRequestDTO(), JWT)
 
         assert rechazo.value.motivo is motivo

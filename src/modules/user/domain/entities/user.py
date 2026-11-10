@@ -1,4 +1,3 @@
-import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -7,6 +6,9 @@ from src.modules.user.domain.exceptions.email_change_exceptions import (
     EmailChangeInvalidError,
 )
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
+from src.modules.user.domain.exceptions.verification_token_expired_error import (
+    VerificationTokenExpiredError,
+)
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -32,6 +34,7 @@ from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
 from ..value_objects.password import Password
+from ..value_objects.token_hash import hash_del_enlace
 from ..value_objects.user_avatar_upload_id import UserAvatarUploadId
 from ..value_objects.user_id import UserId
 
@@ -50,6 +53,18 @@ MAX_FAILED_ATTEMPTS_PER_DAY = 150
 FAILED_ATTEMPTS_DAY_WINDOW = timedelta(hours=24)
 DAY_LOCKOUT = timedelta(hours=24)
 
+# Los enlaces del correo (fase 3, F-04/F-05/F-10): se guardan con su SHA-256, nunca en
+# claro, y caducan. La verificación vale 48 horas; restablecer la contraseña, una hora
+VERIFICATION_TOKEN_LIFETIME = timedelta(hours=48)
+PASSWORD_RESET_TOKEN_LIFETIME = timedelta(hours=1)
+# Registrarse con el correo de una cuenta verificada avisa al dueño, como mucho uno al
+# día por cuenta (fase 3, B2)
+REGISTER_ATTEMPT_NOTICE_INTERVAL = timedelta(hours=24)
+# «Olvidé mi contraseña»: como mucho 10 correos por cuenta en 24 horas, vengan de donde
+# vengan (fase 3, H2). Cada red tiene antes su 3/hora por correo (H1)
+MAX_PASSWORD_RESET_EMAILS_PER_DAY = 10
+PASSWORD_RESET_EMAILS_WINDOW = timedelta(hours=24)
+
 # Avatar Configuration
 AVATAR_PRESET_COUNT = 10
 AVATAR_MAX_STORED_UPLOADS = 5
@@ -57,11 +72,6 @@ AVATAR_MAX_STORED_UPLOADS = 5
 # Cuanto puede ir por delante la ultima visita al feed antes de darla por mala:
 # lo justo para el desfase entre relojes, no las horas de una zona horaria
 FEED_SEEN_FUTURE_TOLERANCE = timedelta(minutes=5)
-
-
-def _hash_del_token(token: str) -> str:
-    """El hash con el que se guarda el token del correo pendiente (SHA-256)."""
-    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _como_password(contrasena: str | Password) -> Password:
@@ -161,9 +171,13 @@ class User:
         updated_at: datetime | None = None,
         email_verified: bool = False,
         verification_token: str | None = None,
+        verification_token_expires_at: datetime | None = None,
         country_code: CountryCode | None = None,
         password_reset_token: str | None = None,
         reset_token_expires_at: datetime | None = None,
+        password_reset_emails_in_window: int = 0,
+        password_reset_window_started_at: datetime | None = None,
+        register_attempt_notice_at: datetime | None = None,
         pending_email: str | None = None,
         pending_email_token: str | None = None,
         pending_email_expires_at: datetime | None = None,
@@ -198,10 +212,16 @@ class User:
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._email_verified = email_verified
+        # Los dos enlaces, con su hash (fase 3, C3)
         self._verification_token = verification_token
+        self._verification_token_expires_at = verification_token_expires_at
         self._country_code = country_code
         self._password_reset_token = password_reset_token
         self._reset_token_expires_at = reset_token_expires_at
+        # El cupo diario de correos de restablecer (H2) y el último aviso de registro (B2)
+        self._password_reset_emails_in_window = password_reset_emails_in_window
+        self._password_reset_window_started_at = password_reset_window_started_at
+        self._register_attempt_notice_at = register_attempt_notice_at
         # El correo nuevo, hasta que se confirme desde la dirección nueva (#749)
         self._pending_email = pending_email
         self._pending_email_token = pending_email_token
@@ -276,7 +296,28 @@ class User:
 
     @property
     def verification_token(self) -> str | None:
+        """El SHA-256 del token del enlace de verificación, nunca el token."""
         return self._verification_token
+
+    @property
+    def verification_token_expires_at(self) -> datetime | None:
+        """Cuándo caduca el enlace de verificación (48 h tras generarlo)."""
+        return self._verification_token_expires_at
+
+    @property
+    def register_attempt_notice_at(self) -> datetime | None:
+        """Cuándo se avisó al dueño del último intento de registro con su correo."""
+        return self._register_attempt_notice_at
+
+    @property
+    def password_reset_emails_in_window(self) -> int:
+        """Los correos de restablecer enviados en la ventana de 24 h en curso."""
+        return self._password_reset_emails_in_window
+
+    @property
+    def password_reset_window_started_at(self) -> datetime | None:
+        """Cuándo empezó la ventana de 24 h de los correos de restablecer."""
+        return self._password_reset_window_started_at
 
     @property
     def country_code(self) -> CountryCode | None:
@@ -284,6 +325,7 @@ class User:
 
     @property
     def password_reset_token(self) -> str | None:
+        """El SHA-256 del token del enlace de restablecer, nunca el token."""
         return self._password_reset_token
 
     @property
@@ -750,6 +792,7 @@ class User:
         if not self.email_verified:
             self._email_verified = True
             self._verification_token = None
+            self._verification_token_expires_at = None
             self._updated_at = datetime.now()
 
     def claim_with_verified_oauth(self) -> bool:
@@ -927,7 +970,7 @@ class User:
         token = secrets.token_urlsafe(32)
         self._pending_email = str(nuevo.value)
         # Con hash: quien lea la BD no puede confirmar el cambio (auditoría OWASP)
-        self._pending_email_token = _hash_del_token(token)
+        self._pending_email_token = hash_del_enlace(token)
         self._pending_email_expires_at = ahora + timedelta(
             hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
         )
@@ -940,7 +983,7 @@ class User:
         if self._pending_email is None or not guardado:
             return False
         # En bytes: compare_digest con un str no ASCII lanzaba (un 500)
-        return secrets.compare_digest(guardado.encode(), _hash_del_token(token or "").encode())
+        return secrets.compare_digest(guardado.encode(), hash_del_enlace(token or "").encode())
 
     def confirm_email_change(self, token: str, ahora: datetime) -> None:
         """
@@ -961,6 +1004,7 @@ class User:
         self._email = Email(pendiente)
         self._email_verified = True
         self._verification_token = None
+        self._verification_token_expires_at = None
         self._password_reset_token = None
         self._reset_token_expires_at = None
         self.cancel_email_change()
@@ -1006,6 +1050,7 @@ class User:
         # El enlace de verificación del correo de antes tampoco vale para este, ni un
         # cambio de correo pendiente (lo sustituye este)
         self._verification_token = None
+        self._verification_token_expires_at = None
         self.cancel_email_change()
         # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
         # verificaría el nuevo sin que nadie lo haya demostrado (#749)
@@ -1045,56 +1090,76 @@ class User:
             )
         )
 
-    def generate_verification_token(self) -> str:
+    def generate_verification_token(self, ahora: datetime | None = None) -> str:
         """
-        Genera un token de verificación seguro para confirmar el email.
+        Genera el enlace de verificación del correo: vale 48 horas (fase 3, C1).
+
+        Se guarda su SHA-256, nunca el token (C3): quien lea la BD no puede verificar.
+
+        Args:
+            ahora: La hora de referencia (por defecto, la de ahora)
 
         Returns:
-            str: Token de verificación único
+            str: El token en claro, para el enlace del correo
         """
         token = secrets.token_urlsafe(32)
-        self._verification_token = token
+        self.set_verification_token(token, ahora=ahora)
         self._updated_at = datetime.now()
         return token
 
-    def set_verification_token(self, token: str) -> None:
+    def set_verification_token(self, token: str, ahora: datetime | None = None) -> None:
         """
-        Asigna un token de verificación ya generado externamente.
+        Apunta un token de verificación ya generado: su hash y 48 horas.
 
-        A diferencia de `generate_verification_token()`, este método no genera
-        el token internamente ni actualiza `updated_at`: solo persiste un token
-        creado previamente por el caller. Existe para casos de uso que necesitan
-        generar el token ANTES de enviarlo por email y solo guardarlo si el envío
-        tuvo éxito (ver `ResendVerificationEmailUseCase`), evitando que dicho caso
-        de uso escriba directamente sobre el estado privado de la entidad.
+        A diferencia de `generate_verification_token()`, no genera el token ni toca
+        `updated_at`. Existe para el reenvío, que genera el token, lo envía y solo
+        DESPUÉS, si el correo salió, lo guarda con esto (`EnvioDeLaVerificacion`): si el
+        envío falla, el enlace de antes sigue valiendo.
 
         Args:
             token: Token de verificación generado previamente
+            ahora: La hora de referencia (por defecto, la de ahora)
         """
-        self._verification_token = token
+        self._verification_token = hash_del_enlace(token)
+        self._verification_token_expires_at = (
+            ahora or datetime.now()
+        ) + VERIFICATION_TOKEN_LIFETIME
 
-    def verify_email(self, token: str) -> bool:
+    def verify_email(self, token: str, ahora: datetime | None = None) -> bool:
         """
         Verifica el email del usuario usando el token proporcionado.
 
         Args:
             token: Token de verificación
+            ahora: La hora de referencia (por defecto, la de ahora)
 
         Returns:
             bool: True si la verificación fue exitosa
 
         Raises:
-            ValueError: Si el email ya está verificado o el token es inválido
+            VerificationTokenExpiredError: Si el token es el suyo pero pasaron 48 horas
+            ValueError: Si el email ya está verificado o el token es inválido (otro, o
+                uno guardado en claro antes del cambio, o uno sin caducidad)
         """
         if self.email_verified:
             raise ValueError("El email ya está verificado")
 
-        if self.verification_token != token:
+        guardado = self.verification_token
+        if not guardado or not secrets.compare_digest(
+            guardado.encode(), hash_del_enlace(token or "").encode()
+        ):
             raise ValueError("Token de verificación inválido")
+        caduca = self.verification_token_expires_at
+        if caduca is None:
+            # Sin caducidad no se da por bueno (no lo escribe ningún camino actual)
+            raise ValueError("Token de verificación inválido")
+        if (ahora or datetime.now()) > caduca:
+            raise VerificationTokenExpiredError()
 
         # Token válido - proceder con verificación
         self._email_verified = True
         self._verification_token = None
+        self._verification_token_expires_at = None
         self._updated_at = datetime.now()
 
         # Emitir evento de dominio
@@ -1106,6 +1171,45 @@ class User:
             )
         )
 
+        return True
+
+    def reserva_el_aviso_de_registro(self, ahora: datetime) -> bool:
+        """
+        Reserva el aviso al dueño de que alguien se registró con su correo (fase 3, B2):
+        como mucho uno cada 24 horas por cuenta. Si cabe, apunta la hora.
+
+        Returns:
+            True si toca avisar (y queda apuntado); False si ya se avisó en las 24 h
+        """
+        ultimo = self._register_attempt_notice_at
+        if ultimo is not None and ahora - ultimo < REGISTER_ATTEMPT_NOTICE_INTERVAL:
+            return False
+        self._register_attempt_notice_at = ahora
+        return True
+
+    def reinicia_el_cupo_de_reset(self) -> None:
+        """
+        Pone a cero el cupo de correos de restablecer (fase 3, M-2): la cuenta acaba de
+        demostrar que es suya (inicio de sesión o restablecimiento con éxito).
+        """
+        self._password_reset_emails_in_window = 0
+        self._password_reset_window_started_at = None
+
+    def cuenta_un_correo_de_reset(self, ahora: datetime) -> bool:
+        """
+        Cuenta un correo de restablecer contra el cupo de la cuenta (fase 3, H2): 10 en
+        24 horas, vengan de la red que vengan. La ventana empieza en el primero.
+
+        Returns:
+            True si cabe (y queda contado); False si la cuenta agotó el cupo
+        """
+        inicio = self._password_reset_window_started_at
+        if inicio is None or ahora - inicio >= PASSWORD_RESET_EMAILS_WINDOW:
+            self._password_reset_window_started_at = ahora
+            self._password_reset_emails_in_window = 0
+        if self._password_reset_emails_in_window >= MAX_PASSWORD_RESET_EMAILS_PER_DAY:
+            return False
+        self._password_reset_emails_in_window += 1
         return True
 
     def is_email_verified(self) -> bool:
@@ -1143,41 +1247,30 @@ class User:
     # === Password Reset Methods ===
 
     def generate_password_reset_token(
-        self, ip_address: str | None = None, user_agent: str | None = None
+        self,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        ahora: datetime | None = None,
     ) -> str:
         """
-        Genera un token seguro de reseteo de contraseña con expiración de 24 horas.
+        Genera el enlace de restablecer la contraseña: vale una hora (fase 3, C2).
 
-        Este método:
-        1. Genera un token criptográficamente seguro (URL-safe, 32 bytes)
-        2. Establece la fecha de expiración a 24 horas desde ahora
-        3. Emite un PasswordResetRequestedEvent para auditoría
+        Se guarda su SHA-256, nunca el token (C3). Pedir otro sustituye al anterior,
+        que deja de valer. Emite un PasswordResetRequestedEvent para auditoría.
 
         Args:
             ip_address: IP desde donde se solicitó el reseteo (para auditoría)
             user_agent: User agent del navegador (para detección de anomalías)
+            ahora: La hora de referencia (por defecto, la de ahora)
 
         Returns:
-            str: Token de reseteo único y seguro
-
-        Security:
-            - Token generado con secrets.token_urlsafe() (CSPRNG)
-            - Expiración automática en 24 horas
-            - Evento de dominio registrado para auditoría (OWASP A09)
-            - IP y User-Agent capturados para análisis de seguridad
-
-        Ejemplo:
-            >>> user = User(...)
-            >>> token = user.generate_password_reset_token(ip_address="192.168.1.1")
-            >>> # Token válido por 24 horas
+            str: El token en claro, para el enlace del correo
         """
-        # Generar token seguro (mismo método que email verification)
         token = secrets.token_urlsafe(32)
-        self._password_reset_token = token
+        self._password_reset_token = hash_del_enlace(token)
 
-        # Establecer expiración a 24 horas desde ahora
-        now = datetime.now()
-        expires_at = now + timedelta(hours=24)
+        now = ahora or datetime.now()
+        expires_at = now + PASSWORD_RESET_TOKEN_LIFETIME
         self._reset_token_expires_at = expires_at
         self._updated_at = now
 
@@ -1195,49 +1288,34 @@ class User:
 
         return token
 
-    def can_reset_password(self, token: str) -> bool:
+    def can_reset_password(self, token: str, ahora: datetime | None = None) -> bool:
         """
-        Valida si un token de reseteo es válido y no ha expirado.
-
-        Validaciones:
-        1. El token coincide con el almacenado
-        2. El token no ha expirado (< 24 horas desde su generación)
-        3. Existe un token de reseteo activo
+        Si el token es el del enlace de restablecer vigente y no ha caducado (1 hora).
 
         Args:
-            token: Token de reseteo a validar
+            token: Token de reseteo a validar (en claro, el del enlace)
+            ahora: La hora de referencia (por defecto, la de ahora)
 
         Returns:
-            bool: True si el token es válido y está dentro del plazo de 24h
+            bool: True si es el suyo y está en plazo
 
         Raises:
-            ValueError: Si no hay token de reseteo activo
-
-        Security:
-            - Validación estricta de expiración (24 horas máximo)
-            - Prevención de timing attacks (verificación en orden constante)
-            - No revela información sobre la existencia del usuario
-
-        Ejemplo:
-            >>> user.generate_password_reset_token()
-            >>> user.can_reset_password(token)  # True (dentro de 24h)
-            >>> # Después de 25 horas...
-            >>> user.can_reset_password(token)  # False (expirado)
+            InvalidResetTokenError: Si no hay ninguna solicitud de reseteo activa
         """
-        # Validar que existe un token activo
         if not self.password_reset_token:
             raise InvalidResetTokenError("No hay ninguna solicitud de reseteo de contraseña activa")
 
-        # Validar que el token coincide (usando compare_digest para prevenir timing attacks)
-        if not secrets.compare_digest(self.password_reset_token, token):
+        # Se compara el hash (compare_digest, sin atajos por el tiempo): un token
+        # guardado en claro antes del cambio no es el hash de nada que llegue
+        if not secrets.compare_digest(
+            self.password_reset_token.encode(), hash_del_enlace(token or "").encode()
+        ):
             return False
 
-        # Validar que no ha expirado
         if not self.reset_token_expires_at:
             return False
 
-        now = datetime.now()
-        return now <= self.reset_token_expires_at
+        return (ahora or datetime.now()) <= self.reset_token_expires_at
 
     def reset_password(
         self,
@@ -1296,6 +1374,8 @@ class User:
         # Invalidar el token (uso único)
         self._password_reset_token = None
         self._reset_token_expires_at = None
+        # Demostró que el buzón es suyo: el cupo diario de correos, a cero (M-2)
+        self.reinicia_el_cupo_de_reset()
 
         # Actualizar timestamp
         now = datetime.now()

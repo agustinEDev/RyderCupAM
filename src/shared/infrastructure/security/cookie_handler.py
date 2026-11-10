@@ -193,7 +193,9 @@ def get_cookie_name() -> str:
 # =============================================================================
 
 
-def set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
+def set_refresh_token_cookie(
+    response: Response, refresh_token: str, max_age: int | None = None
+) -> None:
     """
     Establece una cookie httpOnly con el refresh token JWT.
 
@@ -210,6 +212,8 @@ def set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
     Args:
         response: Objeto Response de FastAPI donde se añadirá la cookie
         refresh_token: Refresh token JWT a almacenar en la cookie
+        max_age: Lo que le queda en segundos; por defecto, 7 días (el login). Un token
+            rotado dura lo que le quede a su sesión, no 7 días más (F-02)
 
     Example:
         >>> from fastapi import Response
@@ -233,7 +237,7 @@ def set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,  # ✅ Protección XSS
         secure=is_production(),  # ✅ HTTPS en producción
         samesite="lax",  # ✅ Protección CSRF
-        max_age=REFRESH_COOKIE_MAX_AGE,  # ✅ Expira en 7 días
+        max_age=REFRESH_COOKIE_MAX_AGE if max_age is None else max_age,
         path="/",  # ✅ Disponible en toda la app
         domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
     )

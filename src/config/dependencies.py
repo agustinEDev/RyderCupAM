@@ -9,7 +9,13 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.aviso_en_segundo_plano import (
+    AvisoDeFallosEnSegundoPlano,
+    AvisoDeSesionCerradaEnSegundoPlano,
+    AvisoEnSegundoPlano,
+    CorreoEnSegundoPlano,
+    ReenvioEnSegundoPlano,
+)
 from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.cupo_de_contacto import cupo_de_contacto
@@ -563,6 +569,9 @@ from src.modules.user.application.ports.avatar_preset_provider_interface import 
 )
 from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
+    IAvisoDeSesionCerrada,
+)
 from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
@@ -570,6 +579,9 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
+from src.modules.user.application.ports.reenvio_de_verificacion_port import (
+    IReenvioDeVerificacion,
+)
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
@@ -657,6 +669,7 @@ from src.modules.user.application.use_cases.request_password_reset_use_case impo
 )
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
+    ResendVerificationFromLinkUseCase,
 )
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
@@ -857,6 +870,8 @@ def get_register_user_use_case(
         handicap_service=handicap_service,
         email_service=email_service,
         security_audit=security_audit,
+        # Los correos del registro, sin que la respuesta los espere (fase 3)
+        correo_en_segundo_plano=CorreoEnSegundoPlano(),
     )
 
 
@@ -954,6 +969,15 @@ def get_aviso_de_nuevo_inicio_de_sesion(
     return AvisoEnSegundoPlano(fabrica, email_service)
 
 
+def get_aviso_de_sesion_cerrada(
+    email_service: IEmailService = Depends(get_email_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IAvisoDeSesionCerrada:
+    """El correo de «sesión cerrada por seguridad» al propio usuario, en segundo plano (F-02),
+    con el tope global de avisos."""
+    return AvisoDeSesionCerradaEnSegundoPlano(fabrica, email_service, cupo_de_avisos)
+
+
 def get_freno_del_login() -> IFrenoDelLogin:
     """El freno del login por correo y origen, uno para todo el proceso (BE #732)."""
     return freno_del_login
@@ -1019,14 +1043,18 @@ def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    aviso_de_cierre: IAvisoDeSesionCerrada = Depends(get_aviso_de_sesion_cerrada),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
     Con la Unit of Work (users + refresh_tokens + user_devices) y el servicio de
-    tokens. Ya no registra dispositivos: usa el de su token (BE #738).
+    tokens. Ya no registra dispositivos: usa el de su token (BE #738). Rota el refresh
+    token y, si detecta un robo, avisa al usuario en segundo plano (F-02).
     """
-    return RefreshAccessTokenUseCase(uow, token_service, security_audit=security_audit)
+    return RefreshAccessTokenUseCase(
+        uow, token_service, security_audit=security_audit, aviso_de_cierre=aviso_de_cierre
+    )
 
 
 def get_update_profile_use_case(
@@ -1331,20 +1359,30 @@ def get_verify_email_use_case(
     return VerifyEmailUseCase(uow)
 
 
+def get_reenvio_de_verificacion(
+    email_service: IEmailService = Depends(get_email_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IReenvioDeVerificacion:
+    """El reenvío del enlace de verificación: envía y después guarda, en segundo plano."""
+    return ReenvioEnSegundoPlano(fabrica, email_service)
+
+
 def get_resend_verification_email_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
+    reenvio: IReenvioDeVerificacion = Depends(get_reenvio_de_verificacion),
 ) -> ResendVerificationEmailUseCase:
-    """
-    Proveedor del caso de uso ResendVerificationEmailUseCase.
+    """El reenvío por correo, el de la cuenta con sesión (fase 3, revisión)."""
+    return ResendVerificationEmailUseCase(uow, email_service, reenvio=reenvio)
 
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Depende de `get_email_service` para envío de emails de verificación.
-    3. Crea una instancia de `ResendVerificationEmailUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
-    """
-    return ResendVerificationEmailUseCase(uow, email_service)
+
+def get_resend_verification_from_link_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
+    reenvio: IReenvioDeVerificacion = Depends(get_reenvio_de_verificacion),
+) -> ResendVerificationFromLinkUseCase:
+    """El reenvío sin sesión, con el enlace caducado como prueba (fase 3, revisión)."""
+    return ResendVerificationFromLinkUseCase(uow, email_service, reenvio=reenvio)
 
 
 def get_request_password_reset_use_case(
@@ -1366,6 +1404,8 @@ def get_request_password_reset_use_case(
         email_service,
         frontend_url=settings.FRONTEND_URL,
         security_audit=security_audit,
+        # El correo, sin que la respuesta lo espere (fase 3, B-2)
+        correo_en_segundo_plano=CorreoEnSegundoPlano(),
     )
 
 

@@ -6,7 +6,6 @@ from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
-from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -67,12 +66,12 @@ class TestRegisterUserUseCase:
             assert saved_user is not None
             assert str(saved_user.email) == request_dto.email
 
-    async def test_should_raise_error_when_email_already_exists(
+    async def test_an_existing_email_gets_the_same_response_and_is_not_touched(
         self, uow: InMemoryUnitOfWork, country_repository
     ):
         """
-        Verifica que se lanza la excepción UserAlreadyExistsError si se intenta
-        registrar un usuario con un email que ya existe.
+        Con un email que ya existe ya no se lanza UserAlreadyExistsError (fase 3, F-01):
+        la misma respuesta que un alta nueva, y la cuenta que ya existe, intacta.
         """
         # Arrange: Primero, creamos un usuario existente
         use_case = RegisterUserUseCase(uow, country_repository, security_audit=MagicMock())
@@ -94,9 +93,16 @@ class TestRegisterUserUseCase:
             last_name="User",
         )
 
-        # Act & Assert
-        with pytest.raises(UserAlreadyExistsError, match="ya está registrado"):
-            await use_case.execute(new_request_dto)
+        # Act
+        respuesta = await use_case.execute(new_request_dto)
+
+        # Assert
+        assert respuesta.email == "existing.user@example.com"
+        assert respuesta.first_name == "Another"
+        async with uow:
+            assert len(uow.users._users) == 1
+            (guardado,) = uow.users._users.values()
+            assert guardado.first_name == "Existing"
 
     async def test_should_register_user_with_manual_handicap_when_rfeg_returns_none(
         self, uow: InMemoryUnitOfWork, country_repository

@@ -7,7 +7,7 @@ sustituye:
 
 - con sesión, cada usuario tiene su contador, y cambiar de red no le da otro;
 - el login cuenta por email (antes de saber si existe) y, por red, solo los fallos;
-- forgot-password y resend-verification cuentan por email.
+- resend-verification cuenta por email; forgot-password, por email + red (fase 3).
 
 En los tests, X-Test-Client-ID hace de red: el fixture client pone uno por test.
 
@@ -228,12 +228,11 @@ class TestLoginCountsPerEmailAndFailuresPerNetwork:
 
 @pytest.mark.integration
 class TestEmailSendingCountsPerEmail:
-    """forgot-password y resend-verification: 3/hora por email, desde cualquier red."""
+    """resend-verification: 3/hora por email, desde cualquier red. forgot-password cuenta
+    por correo + red desde la fase 3 (H1): test_registro_y_enlaces."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "path", ["/api/v1/auth/forgot-password", "/api/v1/auth/resend-verification"]
-    )
+    @pytest.mark.parametrize("path", ["/api/v1/auth/resend-verification"])
     async def test_fourth_request_for_one_email_is_refused_from_any_network(
         self, client: AsyncClient, path: str
     ):

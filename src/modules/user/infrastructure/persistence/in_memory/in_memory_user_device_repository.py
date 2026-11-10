@@ -119,6 +119,10 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
                 return device
         return None
 
+    async def find_by_id_for_update(self, device_id: UserDeviceId) -> UserDevice | None:
+        """En memoria no hay transacciones: igual que find_by_id."""
+        return await self.find_by_id(device_id)
+
     async def find_active_by_user(self, user_id: UserId) -> list[UserDevice]:
         """
         Lista todos los dispositivos activos de un usuario.

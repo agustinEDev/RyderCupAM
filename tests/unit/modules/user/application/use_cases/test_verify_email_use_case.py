@@ -15,6 +15,7 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -206,7 +207,7 @@ class TestVerifyEmailUseCase:
             email = Email("ana@test.com")
             unverified_user = await uow.users.find_by_email(email)
             assert unverified_user.email_verified is False
-            assert unverified_user.verification_token == real_token
+            assert unverified_user.verification_token == hash_del_enlace(real_token)
 
     async def test_execute_success_clears_verification_token(self, uow: InMemoryUnitOfWork):
         """

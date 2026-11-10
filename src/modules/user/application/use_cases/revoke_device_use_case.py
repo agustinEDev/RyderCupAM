@@ -119,8 +119,10 @@ class RevokeDeviceUseCase:
             user_id = UserId(request.user_id)
             device_id = UserDeviceId.from_string(request.device_id)
 
-            # 2. Buscar dispositivo por ID
-            device = await self._uow.user_devices.find_by_id(device_id)
+            # 2. Buscar dispositivo por ID, con su fila bloqueada ANTES de tocar sus
+            # tokens: el orden de los refrescos (dispositivo → tokens, F-02). Al revés,
+            # un refresco a la vez se interbloqueaba con la revocación
+            device = await self._uow.user_devices.find_by_id_for_update(device_id)
             if not device:
                 raise ValueError(f"Dispositivo {request.device_id} no encontrado")
 

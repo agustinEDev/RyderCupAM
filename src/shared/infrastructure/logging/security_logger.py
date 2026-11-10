@@ -52,6 +52,7 @@ from ...domain.events.security_events import (
     PasswordResetRequestedAuditEvent,
     RateLimitExceededEvent,
     RefreshRejectedAuditEvent,
+    RefreshTokenReuseDetectedEvent,
     RefreshTokenRevokedEvent,
     RefreshTokenUsedEvent,
     SecurityAuditEvent,
@@ -1031,6 +1032,34 @@ class SecurityLogger:
             device_id=device_id,
         )
         self.log_security_event(event)
+
+    def log_refresh_token_reuse_detected(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        device_id: str,
+        tokens_revoked_count: int,
+    ) -> None:
+        """
+        Helper rápido: un refresh token sustituido reutilizado, un robo (F-02).
+
+        Args:
+            user_id: ID del usuario
+            ip_address: IP de quien llegó con el token viejo
+            user_agent: Su User-Agent
+            device_id: El dispositivo cuya sesión se cerró
+            tokens_revoked_count: Cuántos tokens se revocaron
+        """
+        self.log_security_event(
+            RefreshTokenReuseDetectedEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                device_id=device_id,
+                tokens_revoked_count=tokens_revoked_count,
+            )
+        )
 
     def log_password_reset_requested(
         self,

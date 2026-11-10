@@ -117,11 +117,10 @@ class TestRateLimitingRegister:
         for i in range(30):
             response = await client.post("/api/v1/auth/register", json=payloads[i])
             responses.append(response)
-            # Esperamos 201 (creado) o 409 (ya existe) o 400 (validación)
-            # Pero el rate limiter NO debe bloquear
+            # Esperamos 201 (también con un correo ya registrado, fase 3) o 400
+            # (validación). Pero el rate limiter NO debe bloquear
             assert response.status_code in [
                 201,
-                409,
                 400,
             ], f"Intento {i + 1} falló con {response.status_code}"
 

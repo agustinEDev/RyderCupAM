@@ -364,6 +364,9 @@ class LoginUserUseCase:
             return self._cambio_a_mitad(actual, comprobada)
 
         async def guarda() -> None:
+            # Con la fila bloqueada: entró con su contraseña, así que el cupo diario de
+            # correos de restablecer vuelve a cero (fase 3, M-2)
+            user.reinicia_el_cupo_de_reset()
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token)
 

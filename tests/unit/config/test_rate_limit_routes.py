@@ -30,6 +30,9 @@ from src.config.rate_limit import (
 ANONYMOUS_USER_KEYS = {
     "submit_hole_sample": get_hole_sample_rate_limit_key,
     "submit_hole_report": get_hole_sample_rate_limit_key,
+    # El reenvío por correo mira la sesión (opcional) solo para no enviar a un correo
+    # ajeno (fase 3); sigue contando por red, y además por correo dentro
+    "resend_verification_email": get_client_identifier,
 }
 
 

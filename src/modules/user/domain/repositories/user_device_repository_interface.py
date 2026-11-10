@@ -133,6 +133,14 @@ class UserDeviceRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def find_by_id_for_update(self, device_id: UserDeviceId) -> UserDevice | None:
+        """
+        El dispositivo con su fila bloqueada (SELECT … FOR UPDATE) hasta el final de la
+        transacción (F-02): los refrescos, el cierre de sesión y el robo de un mismo
+        dispositivo se ordenan, y quien espera lee la fila ya cambiada.
+        """
+
+    @abstractmethod
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:

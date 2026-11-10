@@ -14,7 +14,7 @@ class PasswordResetRequestedEvent(DomainEvent):
         user_id: ID del usuario que solicita el reseteo
         email: Email del usuario (para envío de notificación)
         requested_at: Timestamp de cuándo se solicitó el reseteo
-        reset_token_expires_at: Timestamp de expiración del token (24 horas desde requested_at)
+        reset_token_expires_at: Timestamp de expiración del token (1 hora desde requested_at, fase 3)
         ip_address: Dirección IP desde donde se hizo la solicitud (para auditoría)
         user_agent: User agent del navegador (para detección de anomalías)
 

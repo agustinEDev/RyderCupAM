@@ -68,7 +68,8 @@ async def _entra(client: AsyncClient, email: str) -> dict:
             "accept_terms": True,
         },
     )
-    assert alta.status_code in (status.HTTP_201_CREATED, status.HTTP_409_CONFLICT), alta.text
+    # Con el correo ya registrado también es 201: el registro no lo dice (fase 3)
+    assert alta.status_code == status.HTTP_201_CREATED, alta.text
     login = await client.post("/api/v1/auth/login", json={"email": email, "password": PASS})
     assert login.status_code == status.HTTP_200_OK, login.text
     return login.json()

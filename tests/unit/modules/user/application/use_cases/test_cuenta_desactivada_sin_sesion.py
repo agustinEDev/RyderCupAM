@@ -24,7 +24,7 @@ pasando las rutas de administración.
   S12 desactivar y reactivar, desde una IP y navegador| los dos quedan en el log con ellos
 """
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -140,7 +140,7 @@ async def test_s4_su_refresco_se_rechaza_por_cuenta_desactivada():
     async with uow:
         await uow.users.save(ana)
     refresco = RefreshAccessTokenUseCase(
-        uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+        uow, JWTTokenService(), security_audit=SecurityAuditLogger(), aviso_de_cierre=AsyncMock()
     )
 
     with pytest.raises(RefreshRejectedError) as rechazo:
@@ -210,7 +210,10 @@ async def test_s8_el_refresco_de_una_desactivada_revoca_ese_token():
 
     with pytest.raises(RefreshRejectedError):
         await RefreshAccessTokenUseCase(
-            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+            uow,
+            JWTTokenService(),
+            security_audit=SecurityAuditLogger(),
+            aviso_de_cierre=AsyncMock(),
         ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
 
     async with uow:
@@ -248,7 +251,10 @@ async def test_s10_con_el_token_ya_revocado_el_motivo_es_la_cuenta_desactivada()
 
     with pytest.raises(RefreshRejectedError) as rechazo:
         await RefreshAccessTokenUseCase(
-            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+            uow,
+            JWTTokenService(),
+            security_audit=SecurityAuditLogger(),
+            aviso_de_cierre=AsyncMock(),
         ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
     assert rechazo.value.motivo is RefreshRejection.USER_INACTIVE
 
@@ -264,7 +270,10 @@ async def test_s11_el_rechazo_lleva_el_usuario_para_el_log():
 
     with pytest.raises(RefreshRejectedError) as rechazo:
         await RefreshAccessTokenUseCase(
-            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+            uow,
+            JWTTokenService(),
+            security_audit=SecurityAuditLogger(),
+            aviso_de_cierre=AsyncMock(),
         ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
     assert rechazo.value.user_id == str(ana.id.value)
 

@@ -17,7 +17,12 @@ import uuid
 import pytest
 from httpx import AsyncClient, Response
 
-from tests.conftest import create_authenticated_user, get_user_by_email, set_auth_cookies
+from tests.conftest import (
+    create_authenticated_user,
+    get_user_by_email,
+    set_auth_cookies,
+    token_de_verificacion_enviado,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -39,7 +44,7 @@ async def _registrado(client: AsyncClient) -> tuple[str, str]:
     )
     assert r.status_code == 201, r.text
     client.cookies.clear()
-    return email, (await get_user_by_email(client, email)).verification_token
+    return email, await token_de_verificacion_enviado(email)
 
 
 def _pone_sesion(r: Response) -> list[str]:

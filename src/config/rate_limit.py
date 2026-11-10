@@ -95,6 +95,7 @@ DEFAULT_LIMIT_OVERRIDES = {
 # intentos ajenos dejaban al dueño en 429 (BE #732). Lo cuenta el freno del login
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
 FAILED_LOGINS_LIMIT = "30/minute"  # por red, solo intentos fallidos
+# resend-verification, por correo; forgot-password, por correo + red (fase 3, H1)
 EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
 # PATCH /users/security, por usuario (BE #753): cada petición prueba una contraseña, y
 # pedir un correo nuevo manda dos correos, uno a cualquier dirección, del cupo diario
@@ -245,6 +246,18 @@ def email_rate_limit_key(email: str) -> str:
     except InvalidEmailError:
         normalized = email.strip().lower()
     return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def email_and_network_rate_limit_key(email: str, red: str) -> str:
+    """
+    Clave de un correo desde una red (fase 3, H1): el freno de «Olvidé mi contraseña»
+    cuenta por correo + red, como el del login (ADR-043). Los dos, en hash.
+
+    Args:
+        email: El correo pedido
+        red: La red de quien pide (`get_client_identifier`)
+    """
+    return f"{email_rate_limit_key(email)}:{hashlib.sha256(red.encode()).hexdigest()}"
 
 
 def _exceeded(limit_value: str) -> RateLimitExceeded:

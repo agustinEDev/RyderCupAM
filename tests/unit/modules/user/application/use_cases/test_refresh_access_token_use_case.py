@@ -11,7 +11,7 @@ Arquitectura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -57,12 +57,16 @@ class TestRefreshAccessTokenUseCase:
         # create_access_token es SYNC (no async)
         service.create_access_token.return_value = "new_access_token_jwt"
         service.create_csrf_token.return_value = "csrf-del-servicio"
+        # El refresco rota el refresh token (F-02)
+        service.create_refresh_token.return_value = "refresco-rotado"
         return service
 
     @pytest.fixture
     def use_case(self, uow, token_service):
         """Fixture que proporciona el use case con dependencias mockeadas."""
-        return RefreshAccessTokenUseCase(uow, token_service, security_audit=SecurityAuditLogger())
+        return RefreshAccessTokenUseCase(
+            uow, token_service, security_audit=SecurityAuditLogger(), aviso_de_cierre=AsyncMock()
+        )
 
     @pytest.fixture
     def sample_user(self):
@@ -487,7 +491,7 @@ class TestRefreshAccessTokenUseCase:
         assert call_args is not None
         assert call_args[1]["data"]["sub"] == str(sample_user.id.value)
 
-    async def test_execute_does_not_modify_refresh_token(
+    async def test_execute_rotates_the_refresh_token_without_extending_it(
         self,
         use_case,
         uow,
@@ -497,13 +501,13 @@ class TestRefreshAccessTokenUseCase:
         refresh_token_entity,
     ):
         """
-        Test: execute() NO modifica el refresh token (no lo renueva automáticamente).
+        Test: execute() rota el refresh token (F-02): antes no lo renovaba.
 
         Given: Refresh token válido
         When: Se ejecuta el use case exitosamente
         Then:
-            - El refresh token en BD no cambia
-            - No se crea un nuevo refresh token
+            - El viejo sigue en la BD con su hash, sin revocar, pero sustituido
+            - El nuevo caduca a la vez que el viejo (no se alarga)
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -523,11 +527,13 @@ class TestRefreshAccessTokenUseCase:
         result = await use_case.execute(request, valid_refresh_token_jwt)
 
         # Then
-        assert result is not None
+        assert result.refresh_token == "refresco-rotado"
 
-        # Verificar que el refresh token NO cambió
         saved_token = await uow.refresh_tokens.find_by_token_hash(valid_refresh_token_jwt)
         assert saved_token is not None
         assert saved_token.token_hash.value == original_token_hash
-        assert saved_token.expires_at == original_expires_at
         assert saved_token.revoked is False
+        assert saved_token.is_replaced
+        nuevo = await uow.refresh_tokens.find_by_token_hash("refresco-rotado")
+        assert nuevo is not None
+        assert nuevo.expires_at == original_expires_at

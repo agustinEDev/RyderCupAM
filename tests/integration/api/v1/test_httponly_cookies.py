@@ -21,6 +21,7 @@ import pytest
 from httpx import AsyncClient
 
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO
+from tests.conftest import token_de_verificacion_enviado
 
 
 @pytest.mark.asyncio
@@ -221,10 +222,9 @@ class TestHttpOnlyCookies:
 
         # Obtener token de verificación desde la base de datos
         # (En tests, podemos acceder directamente a la BD)
-        from tests.conftest import get_user_by_email
 
-        user = await get_user_by_email(client, test_user_data["email"])
-        verification_token = user.verification_token
+        # El token en claro viaja en el correo; la BD guarda su SHA-256 (fase 3)
+        verification_token = await token_de_verificacion_enviado(test_user_data["email"])
         assert verification_token is not None
 
         # When: Verificar email

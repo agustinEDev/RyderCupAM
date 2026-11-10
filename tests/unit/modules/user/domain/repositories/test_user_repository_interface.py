@@ -173,6 +173,9 @@ class TestUserRepositoryInterface:
                 # Mock implementation - returns None for test
                 pass
 
+            async def lock_for_sessions(self, user_id: UserId):
+                pass
+
             async def find_by_id_for_update(self, user_id: UserId):
                 # Mock implementation - returns None for test
                 pass
