@@ -6,25 +6,31 @@ Implementa el patrón Session Timeout (OWASP A01/A02 - v1.8.0).
 Security Logging (v1.8.0): Registra uso de refresh tokens.
 CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 Dispositivos (BE #737, #738): usa y actualiza el dispositivo de su refresh token.
+Rotación (F-02): cada refresco sustituye el refresh token y detecta su reutilización.
 """
 
 import logging
 from datetime import datetime, timedelta
-from enum import StrEnum
+from enum import Enum, StrEnum
 
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    AvisoDeSesionCerradaRequestDTO,
 )
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
     RefreshAccessTokenResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
+    IAvisoDeSesionCerrada,
+)
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -50,6 +56,14 @@ class RefreshRejection(StrEnum):
     REFRESH_TOKEN_REVOKED = "REFRESH_TOKEN_REVOKED"  # nosec B105 - an error code
     USER_NOT_FOUND = "USER_NOT_FOUND"
     USER_INACTIVE = "USER_INACTIVE"  # desactivada por un administrador (BE #744)
+    # Un token ya sustituido, fuera del margen, cuyo sustituto ya se usó: dos sitios
+    # tienen la misma sesión (F-02, robo)
+    REFRESH_TOKEN_REUSED = "REFRESH_TOKEN_REUSED"  # nosec B105 - an error code
+    # Un token ya sustituido con el navegador en un login más nuevo (F-02 con BE #734):
+    # no se emite nada de la sesión vieja. Conserva siempre la cookie, así que el
+    # cliente recibe SESSION_REPLACED; en el log cuenta como rechazo, como el
+    # revocado de BE #734
+    NEWER_SESSION_IN_BROWSER = "NEWER_SESSION_IN_BROWSER"
 
 
 _FINAL_NORMAL = frozenset(
@@ -84,6 +98,14 @@ logger = logging.getLogger(__name__)
 VENTANA_DE_LA_SESION_NUEVA = timedelta(minutes=5)
 
 
+class _Paso(Enum):
+    """Qué hacer con un token que vale (F-02)."""
+
+    ROTA = "rota"  # vigente: refresh nuevo (A1)
+    REANUDA = "reanuda"  # respuesta perdida: rota otra vez y anula el sustituto (A3)
+    SOLO_ACCESO = "solo_acceso"  # dos pestañas: access nuevo, sin otro refresh (A2)
+
+
 class RefreshRejectedError(Exception):
     """La sesión no se renueva, con su motivo. La ruta responde 401."""
 
@@ -116,7 +138,7 @@ class RefreshAccessTokenUseCase:
     - Validar refresh token (JWT + base de datos)
     - Verificar que el usuario existe
     - Generar nuevo access token
-    - Mantener seguridad: NO renovar el refresh token automáticamente
+    - Rotar el refresh token y detectar su reutilización (F-02): ver `_paso`
 
     OWASP Coverage:
     - A01: Broken Access Control - Tokens de corta duración
@@ -130,6 +152,7 @@ class RefreshAccessTokenUseCase:
         token_service: ITokenService,
         *,
         security_audit: ISecurityAuditLogger,
+        aviso_de_cierre: IAvisoDeSesionCerrada,
     ):
         """
         Inicializa el caso de uso.
@@ -137,8 +160,11 @@ class RefreshAccessTokenUseCase:
         Args:
             uow: Unit of Work para acceso a repositorios (users, refresh_tokens, user_devices)
             token_service: Servicio para validación y generación de tokens JWT
+            security_audit: El log de auditoría de seguridad
+            aviso_de_cierre: El correo al usuario cuando se cierra una sesión por robo
         """
         self._security_audit = security_audit
+        self._aviso_de_cierre = aviso_de_cierre
         self._uow = uow
         self._token_service = token_service
 
@@ -203,7 +229,11 @@ class RefreshAccessTokenUseCase:
         except RefreshRejectedError as rechazo:
             # Con el usuario del token, para el log de seguridad (revisor de la PR)
             rechazo.user_id = rechazo.user_id or user_id_str
-            rechazo.conserva_la_cookie = await self._hay_una_sesion_mas_nueva(rechazo, request)
+            # Si ya se sabe que la conserva (un sustituido con un login más nuevo, F-02),
+            # no se vuelve a mirar
+            rechazo.conserva_la_cookie = rechazo.conserva_la_cookie or (
+                await self._hay_una_sesion_mas_nueva(rechazo, request)
+            )
             raise
 
     async def _del_token(
@@ -233,6 +263,26 @@ class RefreshAccessTokenUseCase:
         if rechazo.sustituido is None:
             return False
         dispositivo, creado = rechazo.sustituido
+        try:
+            async with self._uow:
+                return await self._sesion_mas_nueva(dispositivo, creado, request)
+        except Exception as error:
+            # Si falla, se borra como siempre y el rechazo es el mismo (#750 punto 2)
+            logger.error("Newer session check failed: %s", type(error).__name__)
+            return False
+
+    async def _sesion_mas_nueva(
+        self,
+        dispositivo: UserDeviceId | None,
+        creado: datetime,
+        request: RefreshAccessTokenRequestDTO,
+    ) -> bool:
+        """
+        La consulta de `_hay_una_sesion_mas_nueva`, dentro de la transacción del que
+        llama: la rotación la hace con la fila del token bloqueada (F-02), y abrir y
+        cerrar otra la soltaría. `creado` es el inicio de la sesión del token: los
+        sucesores lo heredan, así que la propia cadena nunca es «más nueva».
+        """
         dispositivos = {d for d in [dispositivo] if d is not None}
         for crudo in request.dispositivos_del_navegador:
             try:
@@ -241,25 +291,19 @@ class RefreshAccessTokenUseCase:
                 continue
         if not dispositivos:
             return False
-        try:
-            async with self._uow:
-                # Un dispositivo revocado no se sustituye, aunque otra cuenta de la cookie
-                # del navegador tenga una sesión más nueva (revisor de seguridad)
-                if dispositivo is not None:
-                    propio = await self._uow.user_devices.find_by_id(dispositivo)
-                    if propio is not None and not propio.is_active:
-                        return False
-                ahora = datetime.now()
-                # Solo una sesión reciente: la petición tardía llega segundos después del
-                # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)
-                desde = max(creado, ahora - VENTANA_DE_LA_SESION_NUEVA)
-                return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
-                    sorted(dispositivos, key=lambda d: str(d.value)), desde, ahora
-                )
-        except Exception as error:
-            # Si falla, se borra como siempre y el rechazo es el mismo (#750 punto 2)
-            logger.error("Newer session check failed: %s", type(error).__name__)
-            return False
+        # Un dispositivo revocado no se sustituye, aunque otra cuenta de la cookie
+        # del navegador tenga una sesión más nueva (revisor de seguridad)
+        if dispositivo is not None:
+            propio = await self._uow.user_devices.find_by_id(dispositivo)
+            if propio is not None and not propio.is_active:
+                return False
+        ahora = datetime.now()
+        # Solo una sesión reciente: la petición tardía llega segundos después del
+        # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)
+        desde = max(creado, ahora - VENTANA_DE_LA_SESION_NUEVA)
+        return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
+            sorted(dispositivos, key=lambda d: str(d.value)), desde, ahora
+        )
 
     async def _renueva(
         self,
@@ -272,7 +316,11 @@ class RefreshAccessTokenUseCase:
         user_id_str = str(user_id.value)
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
-        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+        # Con la fila bloqueada hasta el commit (F-02): otro refresco con el mismo token
+        # espera y luego lee lo que dejó este (un solo sustituto, sin robo falso)
+        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash_for_update(
+            refresh_token_jwt
+        )
         if not refresh_token_entity:
             # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_NOT_FOUND)
@@ -337,8 +385,21 @@ class RefreshAccessTokenUseCase:
                 ),
             )
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
-        # Refrescar es usar ESTE dispositivo, el del token (ver el método)
-        device_id = await self._usa_el_dispositivo(request, dispositivo)
+        # Qué toca con este token: rotar, reanudar o solo el acceso (F-02). Puede
+        # rechazar: un robo, o un sustituido con el navegador ya en un login más nuevo
+        ahora = datetime.now()
+        paso, sustituto = await self._paso(refresh_token_entity, dispositivo, user, request, ahora)
+
+        nuevo_refresco: tuple[str, int] | None = None
+        async with self._uow:
+            if paso is _Paso.REANUDA and sustituto is not None:
+                # El sustituto que nunca llegó al navegador no debe valer (A3)
+                sustituto.revoke()
+                await self._uow.refresh_tokens.save(sustituto)
+            if paso is not _Paso.SOLO_ACCESO:
+                nuevo_refresco = await self._rota(refresh_token_entity, user_id_str, ahora)
+            # Refrescar es usar ESTE dispositivo, el del token (ver el método)
+            device_id = await self._usa_el_dispositivo(request, dispositivo)
 
         # 6. Generar nuevo access token (15 minutos)
         # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737)
@@ -372,7 +433,104 @@ class RefreshAccessTokenUseCase:
             user=user_dto,
             message="Access token renovado exitosamente",
             device_id=device_id,
+            refresh_token=nuevo_refresco[0] if nuevo_refresco else None,
+            refresh_token_max_age=nuevo_refresco[1] if nuevo_refresco else None,
         )
+
+    async def _paso(
+        self,
+        token: RefreshToken,
+        dispositivo: UserDevice,
+        user: User,
+        request: RefreshAccessTokenRequestDTO,
+        ahora: datetime,
+    ) -> tuple[_Paso, RefreshToken | None]:
+        """
+        Qué toca con un token que vale (sin revocar ni caducar, F-02).
+
+        - Vigente → ROTA (A1), aunque el navegador tenga otro login: hoy se aceptaba.
+        - Sustituido, con su sustituto revocado o caducado → rechazo REVOKED (la
+          sesión ya se cerró por otra vía; se mira BE #734 como siempre).
+        - Sustituido fuera del margen y su sustituto ya usado → robo (A4); gana a BE
+          #734: un atacante con la cookie de dispositivo no esquiva la detección.
+        - Sustituido con el navegador en un login más nuevo → SESSION_REPLACED (A5):
+          ni access ni refresh de la sesión vieja.
+        - Sustituido dentro del margen → SOLO_ACCESO (A2), usado o no el sustituto.
+        - Sustituido fuera del margen, sustituto sin usar → REANUDA (A3).
+
+        El sustituto se lee con su fila bloqueada: si a la vez alguien lo está usando,
+        se espera y se ve usado.
+        """
+        if not token.is_replaced or token.replaced_by_id is None:
+            return _Paso.ROTA, None
+        sustituto = await self._uow.refresh_tokens.find_by_id_for_update(token.replaced_by_id)
+        if sustituto is None or sustituto.revoked or sustituto.is_expired():
+            revocado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
+            revocado.sustituido = (token.device_id, token.created_at)
+            raise revocado
+        dentro = token.en_el_margen(ahora)
+        if not dentro and sustituto.is_replaced:
+            await self._cierra_por_robo(dispositivo, user, request)
+        if await self._sesion_mas_nueva(token.device_id, token.created_at, request):
+            mas_nueva = RefreshRejectedError(RefreshRejection.NEWER_SESSION_IN_BROWSER)
+            mas_nueva.conserva_la_cookie = True
+            raise mas_nueva
+        if dentro:
+            return _Paso.SOLO_ACCESO, None
+        return _Paso.REANUDA, sustituto
+
+    async def _rota(
+        self, token: RefreshToken, user_id_str: str, ahora: datetime
+    ) -> tuple[str, int]:
+        """
+        Emite el sucesor de `token` (dentro de la transacción del que llama) y da su JWT
+        y lo que le queda en segundos: la misma caducidad absoluta, no 7 días más.
+        """
+        restante = token.expires_at - ahora
+        nuevo_jwt = self._token_service.create_refresh_token(
+            data={"sub": user_id_str}, expires_delta=restante
+        )
+        sucesor = token.sustituye(nuevo_jwt, ahora)
+        await self._uow.refresh_tokens.save(sucesor)
+        await self._uow.refresh_tokens.save(token)
+        return nuevo_jwt, max(int(restante.total_seconds()), 0)
+
+    async def _cierra_por_robo(
+        self, dispositivo: UserDevice, user: User, request: RefreshAccessTokenRequestDTO
+    ) -> None:
+        """
+        Robo (A4): revoca todos los tokens del dispositivo (la cadena entera, también
+        el vigente), lo deja en el log de seguridad (HIGH, a Sentry con su tope) y
+        avisa al usuario por correo en segundo plano. Ni el log ni el correo cambian
+        la respuesta: siempre lanza el rechazo REFRESH_TOKEN_REUSED.
+        """
+        async with self._uow:
+            revocados = await self._uow.refresh_tokens.revoke_all_for_device(dispositivo.id)
+        user_id_str = str(user.id.value)
+        device_id = str(dispositivo.id.value)
+        registra_sin_romper(
+            "Refresh reuse",
+            lambda: self._security_audit.log_refresh_token_reuse_detected(
+                user_id=user_id_str,
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
+                device_id=device_id,
+                tokens_revoked_count=revocados,
+            ),
+        )
+        try:
+            await self._aviso_de_cierre.avisa(
+                AvisoDeSesionCerradaRequestDTO(
+                    user_id=user_id_str,
+                    email=user.email.value,
+                    nombre=user.first_name,
+                    device_id=device_id,
+                    verificado=user.is_email_verified(),
+                )
+            )
+        except Exception as error:
+            logger.error("Session closed notice failed: %s", type(error).__name__)
+        raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REUSED)
 
     async def _usa_el_dispositivo(
         self, request: RefreshAccessTokenRequestDTO, dispositivo: UserDevice
@@ -381,16 +539,16 @@ class RefreshAccessTokenUseCase:
 
         El del token manda: antes se registraba otro por su cuenta (sin cookie y con IP
         nueva, uno nuevo y huérfano), y el `did` y la cookie apuntaban a dos distintos
-        (/code-review, BE #737). La ruta le vuelve a poner la cookie siempre.
+        (/code-review, BE #737). La ruta le vuelve a poner la cookie siempre. Dentro de
+        la transacción del que llama, con la rotación (F-02).
         """
-        async with self._uow:
-            dispositivo.update_last_used()
-            dispositivo.update_ip_address(request.ip_address or UNRESOLVED_IP_PLACEHOLDER)
-            dispositivo.update_country(request.country_code)
-            dispositivo.update_installed_app(request.installed_app)
-            if request.user_agent:
-                dispositivo.update_user_agent(request.user_agent)
-            await self._uow.user_devices.save(dispositivo)
+        dispositivo.update_last_used()
+        dispositivo.update_ip_address(request.ip_address or UNRESOLVED_IP_PLACEHOLDER)
+        dispositivo.update_country(request.country_code)
+        dispositivo.update_installed_app(request.installed_app)
+        if request.user_agent:
+            dispositivo.update_user_agent(request.user_agent)
+        await self._uow.user_devices.save(dispositivo)
         return str(dispositivo.id.value)
 
     async def _rechaza_si_no_vale(self, refresh_token_entity: RefreshToken) -> None:
