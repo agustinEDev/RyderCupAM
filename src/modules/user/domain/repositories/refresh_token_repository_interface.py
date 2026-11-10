@@ -122,7 +122,8 @@ class RefreshTokenRepositoryInterface(ABC):
             user_id: ID del usuario
 
         Returns:
-            Número de tokens revocados
+            Número de sesiones vivas revocadas: también revoca los tokens ya
+            sustituidos por la rotación, pero no los cuenta (F-02)
 
         Example:
             >>> # Usuario cambia contraseña -> invalidar todas las sesiones
@@ -206,7 +207,8 @@ class RefreshTokenRepositoryInterface(ABC):
             device_id: ID del dispositivo cuyos tokens se revocarán
 
         Returns:
-            Número de tokens revocados
+            Número de sesiones vivas revocadas: también revoca los tokens ya
+            sustituidos por la rotación, pero no los cuenta (F-02)
 
         Example:
             >>> # Usuario revoca su iPhone desde su Mac

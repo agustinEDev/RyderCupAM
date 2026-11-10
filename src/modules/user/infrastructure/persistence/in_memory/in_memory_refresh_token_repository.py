@@ -101,8 +101,8 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         count = 0
         for token in self._tokens.values():
             if token.user_id.value == user_id.value and not token.revoked:
+                count += 0 if token.is_replaced else 1
                 token.revoke()
-                count += 1
         return count
 
     async def delete_expired(self) -> int:
@@ -168,8 +168,8 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         count = 0
         for token in self._tokens.values():
             if token.device_id and token.device_id.value == device_id.value and not token.revoked:
+                count += 0 if token.is_replaced else 1
                 token.revoke()
-                count += 1
         return count
 
     async def hay_uno_vivo_mas_nuevo(

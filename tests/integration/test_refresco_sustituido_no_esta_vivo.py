@@ -148,3 +148,31 @@ async def test_v5_the_locked_read_sees_what_another_session_committed(client: As
         else:
             device = await primera.user_devices.find_by_id_for_update(dispositivo.id)
             assert device is not None and not device.is_active
+
+
+@pytest.mark.parametrize("tipo", ["memoria", "postgres"])
+@pytest.mark.parametrize("como", ["dispositivo", "usuario"])
+async def test_v6_revoking_counts_only_the_live_sessions(client: AsyncClient, tipo, como):
+    """
+    Given: Una sesión que ha rotado dos veces (dos sustituidos y uno vigente)
+    When: Se revocan los tokens del dispositivo o del usuario
+    Then: Se revocan los tres (una cookie vieja tampoco debe valer), pero el recuento,
+          el que va al log, es 1: las sesiones que estaban vivas
+    """
+    async with _uow(tipo) as uow:
+        usuario, dispositivo, viejo = await _escena(uow)
+        segundo = viejo.sustituye("segundo", datetime.now())
+        tercero = segundo.sustituye("tercero", datetime.now())
+        async with uow:
+            for token in (viejo, segundo, tercero):
+                await uow.refresh_tokens.save(token)
+
+        async with uow:
+            if como == "dispositivo":
+                revocados = await uow.refresh_tokens.revoke_all_for_device(dispositivo.id)
+            else:
+                revocados = await uow.refresh_tokens.revoke_all_for_user(usuario.id)
+            todos = await uow.refresh_tokens.find_all_by_user(usuario.id)
+
+    assert revocados == 1
+    assert len(todos) == 3
