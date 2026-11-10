@@ -1,5 +1,5 @@
 """
-La migración que desata las invitaciones de cuentas sin verificar (b3d5f7a9c1e2).
+La migración que desata las invitaciones de cuentas sin verificar (c8f0a2e4b6d9).
 
 Hasta la 2.56, invitar por correo a una dirección con cuenta SIN verificar ataba
 la invitación a esa cuenta (`invitee_user_id`), y por user_id la veía y la
@@ -24,7 +24,7 @@ from tests.integration.test_activity_events_published_at_migration import (
 )
 
 ANTERIOR = "a2c4e6f8b0d1"
-DESATA = "b3d5f7a9c1e2"
+DESATA = "c8f0a2e4b6d9"
 AHORA = datetime(2026, 11, 10, 12, 0)
 
 

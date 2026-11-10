@@ -13,7 +13,7 @@ Solo datos: un UPDATE y un DELETE acotados, compatibles con la versión anterior
 durante el despliegue (para ella, una invitación sin user_id es una a un correo).
 Hacia atrás no se vuelve a atar nada: no queda forma de saber cuáles eran.
 
-Revision ID: b3d5f7a9c1e2
+Revision ID: c8f0a2e4b6d9
 Revises: a2c4e6f8b0d1
 Create Date: 2026-11-10
 
@@ -21,7 +21,7 @@ Create Date: 2026-11-10
 
 from alembic import op
 
-revision = "b3d5f7a9c1e2"
+revision = "c8f0a2e4b6d9"
 down_revision = "a2c4e6f8b0d1"
 branch_labels = None
 depends_on = None
