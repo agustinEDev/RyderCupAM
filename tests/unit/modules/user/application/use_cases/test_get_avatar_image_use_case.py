@@ -25,12 +25,14 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 
 
 class Bloqueos(BloqueosInterface):
-    """Los bloqueos, a mano: `de[x]` son quienes bloquearon a x."""
+    """Los bloqueos, a mano: `de[x]` son quienes bloquearon a x. Apunta las preguntas."""
 
     def __init__(self, de: dict | None = None):
         self.de = de or {}
+        self.preguntas: list[tuple[UserId, UserId]] = []
 
     async def me_bloqueo(self, quien_mira: UserId, otro: UserId) -> bool:
+        self.preguntas.append((quien_mira, otro))
         return otro in self.de.get(quien_mira, set())
 
     async def quienes_me_bloquearon(self, quien_mira: UserId) -> frozenset[UserId]:
@@ -185,3 +187,46 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
         with pytest.raises(TypeError):
             await use_case.execute(str(dueno.id.value))  # type: ignore[call-arg]
+
+    async def test_4_el_dueno_no_pregunta_por_bloqueos(self, uow):
+        """
+        Given: El dueño pide su propio avatar
+        When: Se sirve
+        Then: Sin preguntar por bloqueos (nadie se bloquea a sí mismo)
+        """
+        dueno, _ = await self._escena(uow)
+        bloqueos = Bloqueos()
+        use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
+
+        await use_case.execute(str(dueno.id.value), viewer_id=str(dueno.id.value))
+
+        assert bloqueos.preguntas == []
+
+    async def test_4_un_usuario_que_no_existe_no_pregunta_por_bloqueos(self, uow):
+        """
+        Given: Un id que no es de nadie
+        When: Se pide su avatar
+        Then: UserNotFoundError sin preguntar por bloqueos
+        """
+        _, yo = await self._escena(uow)
+        bloqueos = Bloqueos()
+        use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
+
+        with pytest.raises(UserNotFoundError):
+            await use_case.execute(str(UserId.generate().value), viewer_id=str(yo.id.value))
+
+        assert bloqueos.preguntas == []
+
+    async def test_4_el_de_otro_pregunta_una_vez(self, uow):
+        """
+        Given: Pido el avatar de otro, que existe
+        When: Se sirve
+        Then: Una sola pregunta por bloqueos, de mí hacia él
+        """
+        dueno, yo = await self._escena(uow)
+        bloqueos = Bloqueos()
+        use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
+
+        await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
+
+        assert bloqueos.preguntas == [(yo.id, dueno.id)]

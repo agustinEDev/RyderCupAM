@@ -10,6 +10,8 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 from tests.conftest import create_admin_user, create_authenticated_user, set_auth_cookies
 
@@ -294,3 +296,49 @@ async def test_f2_la_busqueda_exacta_encuentra_a_quien_bloquee_yo(client: AsyncC
 
     assert r.status_code == 200, r.text
     assert r.json()["user_id"] == el["user"]["id"]
+
+
+# ------------------------------- /code-review: consultas de GET /users/{id}/avatar
+
+
+async def _consultas_del_avatar(client: AsyncClient, quien: dict, de: str) -> list[str]:
+    sentencias: list[str] = []
+
+    def _cuenta(conn, cursor, statement, *args):
+        sentencias.append(statement)
+
+    client.cookies.clear()
+    set_auth_cookies(client, quien["cookies"])
+    event.listen(Engine, "before_cursor_execute", _cuenta)
+    try:
+        await client.get(f"/api/v1/users/{de}/avatar")
+    finally:
+        event.remove(Engine, "before_cursor_execute", _cuenta)
+        client.cookies.clear()
+    return sentencias
+
+
+def _de_amistades(sentencias: list[str]) -> int:
+    return sum("friendships" in s for s in sentencias)
+
+
+async def test_4_el_avatar_solo_pregunta_por_bloqueos_cuando_hace_falta(client: AsyncClient):
+    """
+    Given: Ana y Luis, los dos con avatar
+    When: Ana pide el suyo, el de Luis y el de un id que no existe
+    Then: Una consulta de amistades solo para el de Luis; ninguna en los otros dos
+    """
+    yo = await _usuario(client, "Ana", avatar=2)
+    el = await _usuario(client, "Luis", avatar=4)
+
+    propio = await _consultas_del_avatar(client, yo, yo["user"]["id"])
+    ajeno = await _consultas_del_avatar(client, yo, el["user"]["id"])
+    inexistente = await _consultas_del_avatar(client, yo, str(uuid.uuid4()))
+
+    assert _de_amistades(propio) == 0
+    assert _de_amistades(ajeno) == 1
+    assert _de_amistades(inexistente) == 0
+    # El de otro, la sesión y su usuario más una sola de amistades; el de un id de
+    # nadie, la sesión y la búsqueda de su usuario
+    recuento = f"propio={len(propio)} ajeno={len(ajeno)} inexistente={len(inexistente)}"
+    assert len(ajeno) == len(inexistente) + 1, recuento

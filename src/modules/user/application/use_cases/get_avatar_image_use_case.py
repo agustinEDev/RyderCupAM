@@ -41,24 +41,27 @@ class GetAvatarImageUseCase:
 
     async def execute(self, user_id: str, *, viewer_id: str) -> tuple[bytes, str]:
         user_id_vo = UserId(user_id)
-        # Antes de leer el avatar, y en su propia unidad de trabajo: comparten sesión
-        if await self._bloqueos.me_bloqueo(UserId(viewer_id), user_id_vo):
-            raise UserNotFoundError(f"User with id {user_id} not found")
-
+        quien_mira = UserId(viewer_id)
         async with self._uow:
             user = await self._uow.users.find_by_id(user_id_vo)
-            if not user or not user.is_active:
-                raise UserNotFoundError(f"User with id {user_id} not found")
+        if not user or not user.is_active:
+            raise UserNotFoundError(f"User with id {user_id} not found")
 
-            if user.avatar_source == AvatarSource.NONE:
-                raise AvatarNotFoundError(f"User {user_id} has no avatar set")
+        # Solo si es de otro y existe: una consulta, fuera de la unidad de trabajo de
+        # usuarios (comparten sesión). El dueño y un id de nadie no la gastan
+        if user.id != quien_mira and await self._bloqueos.me_bloqueo(quien_mira, user.id):
+            raise UserNotFoundError(f"User with id {user_id} not found")
 
-            if user.avatar_source == AvatarSource.PRESET:
-                return self._preset_provider.get_preset_image(user.avatar_preset_id)
+        if user.avatar_source == AvatarSource.NONE:
+            raise AvatarNotFoundError(f"User {user_id} has no avatar set")
 
-            # AvatarSource.UPLOAD
+        if user.avatar_source == AvatarSource.PRESET:
+            return self._preset_provider.get_preset_image(user.avatar_preset_id)
+
+        # AvatarSource.UPLOAD
+        async with self._uow:
             upload = await self._uow.avatar_uploads.find_by_id(user.active_avatar_upload_id)
-            if not upload:
-                raise AvatarNotFoundError(f"User {user_id} avatar upload no longer exists")
+        if not upload:
+            raise AvatarNotFoundError(f"User {user_id} avatar upload no longer exists")
 
-            return upload.image_data, upload.content_type
+        return upload.image_data, upload.content_type
