@@ -12,7 +12,6 @@ Estructura:
 - TestResetPassword: Tests para el proceso completo de reseteo
 """
 
-import hashlib
 from datetime import datetime, timedelta
 
 import pytest
@@ -25,6 +24,7 @@ from src.modules.user.domain.events.password_reset_requested_event import (
     PasswordResetRequestedEvent,
 )
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 
 
 def _rebuild_user(user: User, **overrides) -> User:
@@ -96,7 +96,7 @@ class TestGeneratePasswordResetToken:
         assert all(c.isalnum() or c in ["-", "_"] for c in token)
 
         # 3. Verificar que el token se almacenó en el usuario
-        assert user.password_reset_token == hashlib.sha256(token.encode()).hexdigest()
+        assert user.password_reset_token == hash_del_enlace(token)
 
         # 4. Verificar que se estableció la fecha de expiración (1 hora desde ahora, fase 3)
         assert user.reset_token_expires_at is not None
@@ -149,7 +149,7 @@ class TestGeneratePasswordResetToken:
         assert first_token != second_token
 
         # 2. El token actual es el segundo
-        assert user.password_reset_token == hashlib.sha256(second_token.encode()).hexdigest()
+        assert user.password_reset_token == hash_del_enlace(second_token)
 
         # 3. La expiración se actualizó
         assert user.reset_token_expires_at != first_expiration
@@ -181,7 +181,7 @@ class TestGeneratePasswordResetToken:
 
         # Assert
         assert token is not None
-        assert user.password_reset_token == hashlib.sha256(token.encode()).hexdigest()
+        assert user.password_reset_token == hash_del_enlace(token)
 
         # Verificar evento con campos opcionales en None
         events = user.get_domain_events()

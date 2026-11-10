@@ -14,7 +14,6 @@ Estructura:
 - TestRequestPasswordResetSecurityFeatures: Tests de seguridad
 """
 
-import hashlib
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,6 +25,7 @@ from src.modules.user.application.use_cases.request_password_reset_use_case impo
     RequestPasswordResetUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -184,7 +184,7 @@ class TestRequestPasswordResetSuccess:
         token = reset_link.rsplit("/", 1)[1]
         async with uow:
             saved_user = await uow.users.find_by_id(user.id)
-            assert saved_user.password_reset_token == hashlib.sha256(token.encode()).hexdigest()
+            assert saved_user.password_reset_token == hash_del_enlace(token)
 
     async def test_reset_link_uses_the_injected_frontend_url(self, sample_user_data):
         """

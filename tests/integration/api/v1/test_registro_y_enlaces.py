@@ -24,13 +24,13 @@ F-01/F-04/F-05/F-10/F-13; tabla aprobada por Agustín).
   M2  iniciar sesión con contraseña                  | el cupo de 10 vuelve a cero
 """
 
-import hashlib
 import uuid
 
 import pytest
 from httpx import AsyncClient
 
 from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from tests.conftest import get_user_by_email, sql_en_la_bd_de_test
 
 pytestmark = pytest.mark.asyncio
@@ -41,7 +41,8 @@ NUEVA = "N3wS3cur3P@ss!"
 
 
 def _sha(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+    """El hash de un enlace, con el helper de producción (sin hashlib en los tests)."""
+    return hash_del_enlace(token)
 
 
 def _correo() -> str:

@@ -10,7 +10,6 @@ Este archivo contiene tests que verifican:
 - Persistencia de cambios
 """
 
-import hashlib
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,6 +19,7 @@ from src.modules.user.application.use_cases.resend_verification_email_use_case i
     ResendVerificationError,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -227,9 +227,7 @@ class TestResendVerificationEmailUseCase:
 
             user_after = await uow.users.find_by_email(Email("carlos@test.com"))
             assert user_after is not None
-            assert (
-                user_after.verification_token == hashlib.sha256(original_token.encode()).hexdigest()
-            )
+            assert user_after.verification_token == hash_del_enlace(original_token)
 
     async def test_execute_calls_email_service_with_correct_params(
         self, uow: InMemoryUnitOfWork, email_service_mock: MagicMock

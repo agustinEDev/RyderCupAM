@@ -19,7 +19,6 @@ DESPUÉS se guarda el enlace nuevo: si el envío falla, el de antes sigue valien
   S1  con sesión, su correo, falla el proveedor    | error y el enlace de antes intacto
 """
 
-import hashlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -34,6 +33,7 @@ from src.modules.user.application.use_cases.resend_verification_email_use_case i
     ResendVerificationFromLinkUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -44,7 +44,8 @@ CORREO = "ana@example.com"
 
 
 def _sha(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+    """El hash de un enlace, con el helper de producción (sin hashlib en los tests)."""
+    return hash_del_enlace(token)
 
 
 async def _ana(uow, hace=timedelta(hours=49)) -> tuple[User, str]:

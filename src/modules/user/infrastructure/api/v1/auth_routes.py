@@ -113,6 +113,7 @@ from src.modules.user.domain.exceptions.verification_token_expired_error import 
     VerificationTokenExpiredError,
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_de_la_cookie_de_dispositivo,
@@ -855,7 +856,7 @@ async def resend_verification_from_link(
     count_or_refuse(
         EMAIL_SENDING_PER_EMAIL_LIMIT,
         "resend-verification-link",
-        f"{hashlib.sha256(datos.token.encode()).hexdigest()}:"
+        f"{hash_del_enlace(datos.token)}:"
         f"{hashlib.sha256(get_client_identifier(request).encode()).hexdigest()}",
     )
     try:

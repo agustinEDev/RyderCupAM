@@ -6,7 +6,6 @@ migración los borra (sin el token en claro en la BD), deja los que ya son un ha
 añade la caducidad de la verificación, el aviso de registro y el cupo de restablecer.
 """
 
-import hashlib
 import uuid
 from datetime import datetime, timedelta
 
@@ -20,7 +19,8 @@ from tests.integration.test_activity_events_published_at_migration import (
 ANTERIOR = "b3d5f7a9c1e2"
 ENLACES = "b7e9d1f3a5c8"
 EN_CLARO = "token-en-claro-de-antes-0123456789abcdef0123"
-HASH = hashlib.sha256(b"ya-con-hash").hexdigest()
+# El SHA-256 de "ya-con-hash", escrito tal cual
+HASH = "47249f73f0c502b596946d1a19d679ed2b463da53d7fadcfc632291274fce6a2"
 
 
 def _usuario(conn, verificacion, reset) -> str:

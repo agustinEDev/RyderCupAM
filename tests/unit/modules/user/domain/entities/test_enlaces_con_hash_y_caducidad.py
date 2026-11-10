@@ -18,7 +18,6 @@ Los enlaces de verificación y de restablecer, con hash y caducidad (fase 3, F-0
   H2  correos de restablecer                       | 10 por cuenta en 24 h; el 11.º no
 """
 
-import hashlib
 from datetime import datetime, timedelta
 
 import pytest
@@ -34,13 +33,15 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.exceptions.verification_token_expired_error import (
     VerificationTokenExpiredError,
 )
+from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 
 AHORA = datetime(2026, 11, 10, 10, 0)
 NUEVA = "N3wS3cur3P@ss!"
 
 
 def _sha(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+    """El hash de un enlace, con el helper de producción (sin hashlib en los tests)."""
+    return hash_del_enlace(token)
 
 
 def _ana() -> User:
@@ -62,6 +63,17 @@ def test_the_lifetimes_are_the_approved_ones():
     assert timedelta(hours=1) == PASSWORD_RESET_TOKEN_LIFETIME
     assert timedelta(hours=24) == REGISTER_ATTEMPT_NOTICE_INTERVAL
     assert MAX_PASSWORD_RESET_EMAILS_PER_DAY == 10
+
+
+def test_c3_the_link_hash_is_sha256_in_hex():
+    """
+    Given: El helper con el que se guardan los enlaces
+    When: Se aplica a un texto conocido
+    Then: Da su SHA-256 en hexadecimal (valor fijo: los demás tests usan el helper)
+    """
+    assert hash_del_enlace("enlace-de-prueba") == (
+        "284a19351629779d5e7974ab8eeb201b4278abceb46bfb7ef460aea2fa7b4bf7"
+    )
 
 
 # --- C1 / C3: verificación ------------------------------------------------------------
