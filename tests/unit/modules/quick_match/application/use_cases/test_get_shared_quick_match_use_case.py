@@ -270,7 +270,9 @@ class TestNamesFollowTheActivityRule:
         detalle = await escena.ver()
 
         ocultos = [
-            p for p in detalle.participants if p.is_guest or p.user_id == escena.carlos.id.value
+            p
+            for p in detalle.participants
+            if p.is_guest or p.participant_id == escena.carlos.id.value
         ]
         assert len(ocultos) == 2
         for oculto in ocultos:
@@ -532,3 +534,60 @@ class TestReadsInBulk:
         await escena.ver()
 
         assert uno_a_uno == []
+
+
+# ==================== G1 (F-09): el bloqueado, sin user_id ni hándicap ====================
+
+
+class TestBlockedPlayerHasNoUserIdNorHandicap:
+    """
+    En la vista anónima, el jugador con el que hay un bloqueo va sin `user_id` ni
+    `handicap` (null), en cualquier sentido del bloqueo (fase 3 del plan a 9).
+    """
+
+    async def _con_handicap(self, escena) -> None:
+        for user in (escena.bea, escena.carlos):
+            user.update_handicap(14.2)
+            await _save_user(escena.user_uow, user)
+
+    @staticmethod
+    def _fila(detalle, user):
+        return next(p for p in detalle.participants if p.participant_id == user.id.value)
+
+    @pytest.mark.parametrize("lo_puso_quien_mira", [False, True], ids=["me-bloqueo", "le-bloquee"])
+    async def test_g1_el_bloqueado_va_sin_user_id_ni_handicap(self, escena, lo_puso_quien_mira):
+        """
+        Given: quien mira es amigo de Bea y hay un bloqueo con Carlos (de un lado o del otro)
+        When: ve la partida compartida
+        Then: Carlos va con user_id y handicap a null; Bea, con los suyos
+        """
+        await self._con_handicap(escena)
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+        if lo_puso_quien_mira:
+            await _block(escena.social_uow, escena.viewer.id, escena.carlos.id)
+        else:
+            await _block(escena.social_uow, escena.carlos.id, escena.viewer.id)
+
+        detalle = await escena.ver()
+
+        carlos = self._fila(detalle, escena.carlos)
+        bea = self._fila(detalle, escena.bea)
+        assert carlos.user_id is None
+        assert carlos.handicap is None
+        assert bea.user_id == escena.bea.id.value
+        assert bea.handicap == 14.2
+
+    async def test_g1_quien_la_jugo_ve_el_user_id_y_el_handicap_de_todos(self, escena):
+        """
+        Given: Bea jugó la partida y tiene un bloqueo con Carlos
+        When: Bea la ve
+        Then: Carlos va con su user_id y su hándicap: quien la jugó ve todo
+        """
+        await self._con_handicap(escena)
+        await _block(escena.social_uow, escena.bea.id, escena.carlos.id)
+
+        detalle = await escena.ver(escena.bea)
+
+        carlos = self._fila(detalle, escena.carlos)
+        assert carlos.user_id == escena.carlos.id.value
+        assert carlos.handicap == 14.2

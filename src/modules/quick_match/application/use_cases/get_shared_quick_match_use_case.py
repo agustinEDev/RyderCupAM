@@ -98,6 +98,7 @@ class GetSharedQuickMatchUseCase:
             users = {u.id: u for u in await self._user_uow.users.find_by_ids(registered)}
 
         hidden_names: set[UserId] = set()
+        blocked: set[UserId] = set()
         if not is_participant:
             async with self._social_uow:
                 friends = set(await self._social_uow.friendships.find_friend_ids(viewer_id))
@@ -114,6 +115,7 @@ class GetSharedQuickMatchUseCase:
         )
         if not is_participant:
             self._hide_names(shared, quick_match, hidden_names)
+            self._hide_blocked_ids(shared, quick_match, blocked)
         return shared
 
     @staticmethod
@@ -149,3 +151,27 @@ class GetSharedQuickMatchUseCase:
         for assignment in shared.scoring_assignments:
             if assignment.scorer_participant_id in nameless:
                 assignment.scorer_name = None
+
+    @staticmethod
+    def _hide_blocked_ids(
+        shared: SharedQuickMatchDetailResponseDTO, quick_match, blocked: set[UserId]
+    ) -> None:
+        """
+        Sin `user_id` ni `handicap` el jugador con el que hay un bloqueo, en
+        cualquier sentido (F-09, fase 3 del plan a 9, 10 nov 2026).
+
+        No lo hace anónimo del todo: el `participant_id` de un registrado es su
+        user_id (`QuickMatchParticipant.for_user`) y `creator_id` sigue siendo el
+        del creador, que el cliente exige. Se aceptó así (Agustín, 10 nov): la
+        protección real es que el perfil y el avatar de quien te bloqueó dan 404
+        (G2), y con el id ya no se llega a su nombre ni a su foto.
+        """
+        sin_id = {
+            p.participant_id.value
+            for p in quick_match.participants
+            if p.user_id is not None and p.user_id in blocked
+        }
+        for participant in shared.participants:
+            if participant.participant_id in sin_id:
+                participant.user_id = None
+                participant.handicap = None
