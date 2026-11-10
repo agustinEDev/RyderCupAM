@@ -72,6 +72,14 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
 
         return None
 
+    async def find_by_token_hash_for_update(self, token: str) -> RefreshToken | None:
+        """En memoria no hay transacciones: igual que find_by_token_hash."""
+        return await self.find_by_token_hash(token)
+
+    async def find_by_id_for_update(self, token_id: RefreshTokenId) -> RefreshToken | None:
+        """En memoria no hay transacciones: igual que find_by_id."""
+        return await self.find_by_id(token_id)
+
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los tokens de un usuario.
@@ -129,7 +137,10 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         return sum(
             1
             for token in self._tokens.values()
-            if token.user_id.value == user_id.value and not token.revoked and token.expires_at > now
+            if token.user_id.value == user_id.value
+            and not token.revoked
+            and not token.is_replaced
+            and token.expires_at > now
         )
 
     async def delete(self, token_id: RefreshTokenId) -> bool:
@@ -172,6 +183,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         return any(
             token.device_id in device_ids
             and not token.revoked
+            and not token.is_replaced
             and token.expires_at > ahora
             and token.created_at > creado_despues_de
             for token in self._tokens.values()
@@ -186,6 +198,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
             for token in self._tokens.values()
             if token.user_id == user_id
             and not token.revoked
+            and not token.is_replaced
             and token.expires_at > ahora
             and token.device_id is not None
         }

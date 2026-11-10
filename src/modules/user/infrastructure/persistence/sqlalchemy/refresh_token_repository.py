@@ -90,6 +90,34 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             # Token inválido, no puede hashearse
             return None
 
+    async def find_by_token_hash_for_update(self, token: str) -> RefreshToken | None:
+        """
+        El token por su hash con SELECT … FOR UPDATE (F-02): otro refresco con el mismo
+        token espera a que esta transacción acabe, y entonces lee la fila ya cambiada
+        (populate_existing: no la de la caché de la sesión).
+        """
+        try:
+            token_hash = TokenHash.from_token(token)
+        except ValueError:
+            return None
+        stmt = (
+            select(RefreshToken)
+            .where(refresh_tokens_table.c.token_hash == token_hash.value)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def find_by_id_for_update(self, token_id: RefreshTokenId) -> RefreshToken | None:
+        """El token por su id con SELECT … FOR UPDATE (el sustituto, F-02)."""
+        stmt = (
+            select(RefreshToken)
+            .where(refresh_tokens_table.c.id == str(token_id.value))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los refresh tokens de un usuario.
@@ -165,6 +193,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > datetime.now(),
             )
         )
@@ -226,6 +255,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > ahora,
                 refresh_tokens_table.c.device_id.is_not(None),
             )
@@ -244,6 +274,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             exists().where(
                 refresh_tokens_table.c.device_id.in_([str(d.value) for d in device_ids]),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > ahora,
                 refresh_tokens_table.c.created_at > creado_despues_de,
             )
