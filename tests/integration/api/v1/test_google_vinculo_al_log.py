@@ -33,7 +33,7 @@ def _google(email: str) -> None:
 
 
 async def _verifica(email: str) -> None:
-    from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+    from tests.conftest import sql_en_la_bd_de_test as _sql
 
     await _sql("update users set email_verified = true where email = :e", e=email)
 
@@ -239,7 +239,7 @@ async def test_a_deactivated_account_gets_its_own_code_on_google(client: AsyncCl
     Then: 403 con error_code ACCOUNT_DEACTIVATED, para que la app diga que está
           desactivada en vez de invitar a reintentar
     """
-    from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+    from tests.conftest import sql_en_la_bd_de_test as _sql
 
     email = "desactivada.google@example.com"
     await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")

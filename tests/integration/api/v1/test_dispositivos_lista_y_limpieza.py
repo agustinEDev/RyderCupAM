@@ -20,10 +20,10 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-from sqlalchemy import text
 
 from main import app as fastapi_app
 from src.config.dependencies import get_db_session
+from tests.conftest import sql_en_la_bd_de_test
 from tests.integration.api.v1.test_dispositivos_fiables import (
     SAFARI_IPHONE,
     SAFARI_MAC,
@@ -38,18 +38,8 @@ from tests.integration.api.v1.test_dispositivos_fiables import (
 pytestmark = pytest.mark.asyncio
 
 
-async def _sql(sentencia: str, **parametros):
-    """Una sentencia contra la base de datos del test."""
-    override = fastapi_app.dependency_overrides[get_db_session]
-    async for sesion in override():
-        resultado = await sesion.execute(text(sentencia), parametros)
-        await sesion.commit()
-        return resultado
-    return None
-
-
 async def _envejece_dispositivo(device_id: str, horas: float) -> None:
-    await _sql(
+    await sql_en_la_bd_de_test(
         "update user_devices set last_used_at = :t where id = :id",
         t=datetime.now() - timedelta(hours=horas),
         id=device_id,
@@ -123,36 +113,53 @@ async def test_p1_to_p5_cleanup_removes_old_devices_and_expired_tokens_only(clie
     _, _, _, otro_viejo, _ = await _dos_dispositivos(client, "p5")
     await _envejece_dispositivo(viejo, horas=31 * 24)
     await _envejece_dispositivo(otro_viejo, horas=29 * 24)
-    await _sql("update user_devices set is_active = false where id = :id", id=otro_viejo)
+    await sql_en_la_bd_de_test(
+        "update user_devices set is_active = false where id = :id", id=otro_viejo
+    )
     # Dos refrescos del dispositivo reciente: uno caducado hace 8 días, otro hace 6
-    await _sql(
+    await sql_en_la_bd_de_test(
         "update refresh_tokens set expires_at = :t where device_id = :id",
         t=datetime.now() - timedelta(days=8),
         id=reciente,
     )
     cuantos_antes = (
-        await _sql("select count(*) from refresh_tokens where device_id = :id", id=reciente)
+        await sql_en_la_bd_de_test(
+            "select count(*) from refresh_tokens where device_id = :id", id=reciente
+        )
     ).scalar()
     # P5: sus tokens no han caducado; la limpieza no los toca aunque esté revocado
     del_otro_viejo_antes = (
-        await _sql("select count(*) from refresh_tokens where device_id = :id", id=otro_viejo)
+        await sql_en_la_bd_de_test(
+            "select count(*) from refresh_tokens where device_id = :id", id=otro_viejo
+        )
     ).scalar()
 
     resumen = await LimpiezaDeSesiones(await _fabrica()).vuelta()
 
-    quedan = {r[0] for r in (await _sql("select cast(id as text) from user_devices")).fetchall()}
+    quedan = {
+        r[0]
+        for r in (
+            await sql_en_la_bd_de_test("select cast(id as text) from user_devices")
+        ).fetchall()
+    }
     assert viejo not in quedan, "P1: sin usar hace 31 días"
     assert reciente in quedan and otro_viejo in quedan, "P2/P5: menos de 30 días se quedan"
     assert (
-        await _sql("select count(*) from refresh_tokens where device_id = :id", id=viejo)
+        await sql_en_la_bd_de_test(
+            "select count(*) from refresh_tokens where device_id = :id", id=viejo
+        )
     ).scalar() == 0
     assert cuantos_antes >= 1
     assert (
-        await _sql("select count(*) from refresh_tokens where device_id = :id", id=reciente)
+        await sql_en_la_bd_de_test(
+            "select count(*) from refresh_tokens where device_id = :id", id=reciente
+        )
     ).scalar() == 0, "P3"
     assert del_otro_viejo_antes >= 1
     assert (
-        await _sql("select count(*) from refresh_tokens where device_id = :id", id=otro_viejo)
+        await sql_en_la_bd_de_test(
+            "select count(*) from refresh_tokens where device_id = :id", id=otro_viejo
+        )
     ).scalar() == del_otro_viejo_antes, "P5: sus tokens sin caducar se quedan"
     assert resumen.dispositivos >= 1 and resumen.tokens >= 1
 
@@ -176,7 +183,7 @@ async def test_p4_a_token_expired_less_than_7_days_ago_stays(client: AsyncClient
     from src.config.limpieza_de_sesiones import LimpiezaDeSesiones
 
     _, _, _, de_iphone, de_mac = await _dos_dispositivos(client, "p4")
-    await _sql(
+    await sql_en_la_bd_de_test(
         "update refresh_tokens set expires_at = :t where device_id = :id",
         t=datetime.now() - timedelta(days=6),
         id=de_iphone,
@@ -186,5 +193,7 @@ async def test_p4_a_token_expired_less_than_7_days_ago_stays(client: AsyncClient
 
     for dispositivo in (de_iphone, de_mac):
         assert (
-            await _sql("select count(*) from refresh_tokens where device_id = :id", id=dispositivo)
+            await sql_en_la_bd_de_test(
+                "select count(*) from refresh_tokens where device_id = :id", id=dispositivo
+            )
         ).scalar() == 1
