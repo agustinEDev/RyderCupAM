@@ -1,4 +1,5 @@
 # tests/conftest.py
+import asyncio
 import os
 import sys
 import uuid
@@ -211,6 +212,29 @@ def _sin_la_rfeg_de_verdad() -> None:
     )
 
 
+# Lo más que se espera al trabajo en segundo plano de un test antes de soltar su BD
+_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S = 30
+
+
+async def _espera_el_trabajo_en_segundo_plano() -> None:
+    """
+    Espera a los avisos que la petición dejó en marcha (el de nuevo inicio de sesión y
+    el de intentos fallidos, BE #737 y #732) antes de que el fixture suelte la BD.
+
+    El login contesta sin esperarlos y abren su propia sesión con la fábrica que el
+    fixture sustituye. Si el test acababa antes que ellos, `DROP DATABASE` encontraba su
+    conexión abierta y el teardown fallaba con ObjectInUseError, a ratos en el CI
+    (BE #781). Esperar es lo limpio: terminar sus conexiones o `DROP ... WITH (FORCE)`
+    escondería un aviso colgado y lo dejaría fallar contra una BD que ya no existe.
+    Con tope, para que un aviso colgado falle aquí con su nombre y no cuelgue la suite.
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    await asyncio.wait_for(
+        espera_los_avisos_pendientes(), timeout=_ESPERA_MAXIMA_DEL_SEGUNDO_PLANO_S
+    )
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """
@@ -277,7 +301,9 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
 
-    # Limpieza
+    # Limpieza: antes de soltar la BD, lo que la petición dejó en segundo plano con la
+    # fábrica de sesiones de este test (BE #781)
+    await _espera_el_trabajo_en_segundo_plano()
     await test_engine.dispose()
 
     async with engine.connect() as conn:
@@ -347,7 +373,9 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
 
-    # Limpieza
+    # Limpieza: antes de soltar la BD, lo que la petición dejó en segundo plano con la
+    # fábrica de sesiones de este test (BE #781)
+    await _espera_el_trabajo_en_segundo_plano()
     await test_engine.dispose()
 
     async with engine.connect() as conn:
