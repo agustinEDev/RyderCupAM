@@ -737,6 +737,28 @@ class ResendVerificationEmailRequestDTO(BaseModel):
     )
 
 
+class ResendVerificationFromLinkRequestDTO(BaseModel):
+    """El cuerpo de `POST /auth/resend-verification-link` (fase 3): el enlace caducado."""
+
+    token: str = Field(
+        ...,
+        min_length=1,
+        max_length=512,
+        description="El token del enlace de verificación caducado (prueba de tener el buzón).",
+    )
+
+
+class ResendVerificationFromLinkResponseDTO(BaseModel):
+    """La respuesta, la misma tanto si se envió como si no."""
+
+    message: str = Field(
+        default=(
+            "If the link belongs to an account pending verification, a new one has been sent."
+        ),
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
+
+
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
 

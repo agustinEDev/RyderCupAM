@@ -349,22 +349,3 @@ async def test_b2_forgot_password_without_email_does_not_wait_either(monkeypatch
 
     assert cola.pendientes == []
     assert esperas == []
-
-
-async def test_b2_resend_answers_without_waiting_for_the_email():
-    """
-    Given: Una cuenta sin verificar y el envío en segundo plano
-    When: Pide reenviar la verificación
-    Then: Vuelve sin haber enviado nada, con el hash del nuevo token ya guardado; el
-          correo que sale después lleva ese token
-    """
-    uow, correo, cola = InMemoryUnitOfWork(), _correo(), CorreoEnCola()
-    ana = await _ana(uow)
-
-    await ResendVerificationEmailUseCase(uow, correo, correo_en_segundo_plano=cola).execute(CORREO)
-
-    correo.send_verification_email.assert_not_awaited()
-    assert len(cola.pendientes) == 1
-    await cola.envia_todo()
-    enviado = correo.send_verification_email.await_args.kwargs["verification_token"]
-    assert ana.verification_token == _sha(enviado)

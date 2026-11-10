@@ -2,6 +2,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
+from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 from tests.conftest import (
     create_authenticated_user,
     get_user_by_email,
@@ -321,7 +322,7 @@ class TestAuthRoutes:
         """
         Test: Reenviar email de verificación exitosamente
         Given: Un usuario registrado sin verificar
-        When: Se llama al endpoint con el email correcto
+        When: Con su sesión, se llama al endpoint con su email
         Then: Retorna 200 OK y se genera nuevo token
         """
         # Arrange - Registrar usuario
@@ -342,9 +343,15 @@ class TestAuthRoutes:
         original_token = user_before.verification_token
         assert original_token is not None
 
-        # Act - Reenviar email de verificación (el mock de email está en conftest.py)
+        # Act - Reenviar email de verificación con sesión: el reenvío por correo es el de
+        # la propia cuenta (fase 3). Sale en segundo plano y se guarda al salir
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": user_data["email"], "password": user_data["password"]},
+        )
         resend_data = {"email": user_data["email"]}
         response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+        await espera_los_avisos_pendientes(tope_s=10)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK

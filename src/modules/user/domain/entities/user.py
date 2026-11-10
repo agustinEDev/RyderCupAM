@@ -1109,11 +1109,12 @@ class User:
 
     def set_verification_token(self, token: str, ahora: datetime | None = None) -> None:
         """
-        Apunta un token de verificación ya generado (y ya enviado): su hash y 48 horas.
+        Apunta un token de verificación ya generado: su hash y 48 horas.
 
         A diferencia de `generate_verification_token()`, no genera el token ni toca
-        `updated_at`. Existe para el reenvío, que genera el token ANTES de enviarlo
-        y solo lo guarda si el envío salió (ver `ResendVerificationEmailUseCase`).
+        `updated_at`. Existe para el reenvío, que genera el token, lo envía y solo
+        DESPUÉS, si el correo salió, lo guarda con esto (`EnvioDeLaVerificacion`): si el
+        envío falla, el enlace de antes sigue valiendo.
 
         Args:
             token: Token de verificación generado previamente

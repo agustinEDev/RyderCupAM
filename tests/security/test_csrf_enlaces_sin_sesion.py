@@ -1,7 +1,8 @@
 """
 Las rutas de los enlaces del correo se usan sin sesión (fase 3, H-1): con el CSRF
 encendido y sin cookie, `POST /auth/validate-reset-token` y `POST
-/auth/resend-verification` responden; antes daban 403. Son públicas, con su límite, y
+/auth/resend-verification-link` (pedir otro enlace con el caducado) responden; la
+primera daba 403. `/auth/resend-verification` (por correo) pide sesión y CSRF. Son públicas, con su límite, y
 responden lo mismo exista o no la cuenta: un sitio ajeno no consigue nada que no pueda
 pedir directamente.
 """
@@ -42,17 +43,17 @@ async def test_h1_validating_a_reset_link_works_without_a_session(client: AsyncC
 
 
 @pytest.mark.asyncio
-async def test_h1_resending_the_verification_works_without_a_session(client: AsyncClient):
+async def test_h1_resending_from_an_expired_link_works_without_a_session(client: AsyncClient):
     """
     Given: Un navegador sin sesión ni cookie CSRF (la pantalla de «enlace caducado»)
-    When: Pide reenviar la verificación
+    When: Pide otro enlace presentando el caducado
     Then: 200 con el mensaje genérico, no 403
     """
     client.cookies.clear()
 
     r = await client.post(
-        "/api/v1/auth/resend-verification",
-        json={"email": f"nadie-{uuid.uuid4().hex[:6]}@example.com"},
+        "/api/v1/auth/resend-verification-link",
+        json={"token": f"token-{uuid.uuid4().hex}"},
     )
 
     assert r.status_code == status.HTTP_200_OK, r.text
@@ -68,6 +69,21 @@ async def test_h1_other_routes_still_need_the_token(client: AsyncClient):
     client.cookies.clear()
 
     r = await client.post("/api/v1/auth/unlock-account", json={"user_id": str(uuid.uuid4())})
+
+    assert r.status_code == status.HTTP_403_FORBIDDEN
+    assert r.json()["error_code"] == "CSRF_VALIDATION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_h1_resending_by_email_is_no_longer_exempt(client: AsyncClient):
+    """
+    Given: Un navegador sin sesión ni cookie CSRF
+    When: Pide reenviar por correo (la forma con sesión, la del aviso de la app)
+    Then: 403 CSRF_VALIDATION_FAILED: ya no es pública
+    """
+    client.cookies.clear()
+
+    r = await client.post("/api/v1/auth/resend-verification", json={"email": "nadie@example.com"})
 
     assert r.status_code == status.HTTP_403_FORBIDDEN
     assert r.json()["error_code"] == "CSRF_VALIDATION_FAILED"

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -7,12 +8,14 @@ from pydantic import ValidationError
 
 from src.config.dependencies import (
     get_current_user,
+    get_current_user_optional,
     get_login_user_use_case,
     get_logout_user_use_case,
     get_refresh_access_token_use_case,
     get_register_user_use_case,
     get_request_password_reset_use_case,
     get_resend_verification_email_use_case,
+    get_resend_verification_from_link_use_case,
     get_reset_password_use_case,
     get_unlock_account_use_case,
     get_validate_reset_token_use_case,
@@ -51,6 +54,8 @@ from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetResponseDTO,
     ResendVerificationEmailRequestDTO,
     ResendVerificationEmailResponseDTO,
+    ResendVerificationFromLinkRequestDTO,
+    ResendVerificationFromLinkResponseDTO,
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
     UnlockAccountRequestDTO,
@@ -83,6 +88,7 @@ from src.modules.user.application.use_cases.request_password_reset_use_case impo
 )
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
+    ResendVerificationFromLinkUseCase,
 )
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
@@ -726,8 +732,13 @@ async def verify_email(
     "/resend-verification",
     response_model=ResendVerificationEmailResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Reenviar email de verificación",
-    description="Genera un nuevo token de verificación y reenvía el email al usuario.",
+    summary="Reenviar email de verificación (con sesión)",
+    description=(
+        "Reenvía el enlace de verificación al correo de la cuenta con sesión (el aviso de la "
+        "app). Sin sesión, o con el correo de otra cuenta, responde lo mismo y no envía nada "
+        "(fase 3): sin sesión se pide otro con el enlace caducado, en "
+        "`POST /auth/resend-verification-link`."
+    ),
     tags=["Authentication"],
 )
 @limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red; el email va dentro
@@ -735,6 +746,7 @@ async def resend_verification_email(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
 ):
     """
     Endpoint para reenviar el email de verificación.
@@ -770,6 +782,12 @@ async def resend_verification_email(
     logger.info(f"Verification email resend requested for: {email_preview}")
 
     try:
+        # Solo el correo de la propia sesión (fase 3): con un correo ajeno, o sin sesión,
+        # nadie provoca el correo ni anula el enlace de otra cuenta
+        if current_user is None or str(current_user.email).lower() != (
+            resend_data.email.strip().lower()
+        ):
+            raise ValueError("Not the email of the signed-in account")
         await use_case.execute(resend_data.email)
         logger.info(f"Verification email resend successful for: {email_preview}")
     except ValueError as e:
@@ -795,6 +813,41 @@ async def resend_verification_email(
         message="If the email address exists in our system, a verification email has been sent.",
         email=resend_data.email,
     )
+
+
+@router.post(
+    "/resend-verification-link",
+    response_model=ResendVerificationFromLinkResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Pedir otro enlace de verificación con el caducado (sin sesión)",
+    description=(
+        "Para la pantalla de «enlace caducado» (fase 3): con el token del enlace caducado "
+        "de una cuenta sin verificar, envía uno nuevo (vale 48 h; se guarda al salir el "
+        "correo). Con cualquier otro token, o con uno aún vigente, responde lo mismo sin "
+        "enviar nada. 3 por hora por enlace y red."
+    ),
+    tags=["Authentication"],
+)
+@limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red
+async def resend_verification_from_link(
+    request: Request,
+    datos: ResendVerificationFromLinkRequestDTO,
+    use_case: ResendVerificationFromLinkUseCase = Depends(
+        get_resend_verification_from_link_use_case
+    ),
+) -> ResendVerificationFromLinkResponseDTO:
+    """Pide otro enlace con el caducado; la respuesta no dice si se envió."""
+    count_or_refuse(
+        EMAIL_SENDING_PER_EMAIL_LIMIT,
+        "resend-verification-link",
+        f"{hashlib.sha256(datos.token.encode()).hexdigest()}:"
+        f"{hashlib.sha256(get_client_identifier(request).encode()).hexdigest()}",
+    )
+    try:
+        await use_case.execute(datos.token)
+    except ValueError as e:
+        logger.info("Verification link resend failed (expected): %s", type(e).__name__)
+    return ResendVerificationFromLinkResponseDTO()
 
 
 # ============================================================================

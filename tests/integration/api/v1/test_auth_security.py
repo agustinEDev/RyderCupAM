@@ -280,6 +280,11 @@ class TestAuthSecurityLogging:
             "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=valid_user)
+        # Con sesión: el reenvío por correo es el de la propia cuenta (fase 3)
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": valid_user["email"], "password": valid_user["password"]},
+        )
 
         # Clear previous logs
         caplog.clear()

@@ -199,12 +199,11 @@ class TestResendVerificationEmailUseCase:
 
     async def test_execute_when_email_service_fails_raises_error(self, uow: InMemoryUnitOfWork):
         """
-        Test: Error al enviar email lanza excepción (sin segundo plano)
+        Test: Error al enviar email lanza excepción y NO guarda token
         Given: Un usuario válido pero el servicio de email falla
         When: Se intenta reenviar la verificación
-        Then: Se lanza ValueError. El enlace nuevo ya está guardado (fase 3, B-2: se guarda
-              antes de lanzar el correo, que en la API sale en segundo plano), así que el
-              de antes deja de valer y hay que volver a pedirlo
+        Then: Se lanza ValueError y el enlace de antes sigue siendo el de la cuenta (el
+              nuevo solo se guarda si el correo sale, fase 3)
         """
         # Arrange - Mock del servicio de email para que falle
         email_service_mock_fail = MagicMock()
@@ -223,18 +222,13 @@ class TestResendVerificationEmailUseCase:
         ):
             await use_case.execute("carlos@test.com")
 
-        # El enlace guardado es el nuevo (el que no llegó), no el de antes
-        intentado = email_service_mock_fail.send_verification_email.await_args.kwargs[
-            "verification_token"
-        ]
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
 
             user_after = await uow.users.find_by_email(Email("carlos@test.com"))
             assert user_after is not None
-            assert user_after.verification_token == hashlib.sha256(intentado.encode()).hexdigest()
             assert (
-                user_after.verification_token != hashlib.sha256(original_token.encode()).hexdigest()
+                user_after.verification_token == hashlib.sha256(original_token.encode()).hexdigest()
             )
 
     async def test_execute_calls_email_service_with_correct_params(

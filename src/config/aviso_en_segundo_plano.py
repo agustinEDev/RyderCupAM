@@ -25,11 +25,18 @@ from src.modules.user.application.ports.correo_en_segundo_plano_port import (
 )
 from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.reenvio_de_verificacion_port import (
+    IReenvioDeVerificacion,
+    ReenvioDeVerificacion,
+)
 from src.modules.user.application.services.aviso_de_fallos_de_login import (
     AvisoDeFallosDeLogin,
 )
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     AvisoDeNuevoInicioDeSesion,
+)
+from src.modules.user.application.services.envio_de_la_verificacion import (
+    EnvioDeLaVerificacion,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
@@ -159,3 +166,29 @@ class CorreoEnSegundoPlano(ICorreoEnSegundoPlano):
             await envio()
         except Exception as e:
             logger.error("Background email %s failed: %s", nombre, type(e).__name__)
+
+
+class ReenvioEnSegundoPlano(IReenvioDeVerificacion):
+    """Envía el enlace de verificación nuevo y, si sale, lo guarda; sin que la petición
+    espere (fase 3, revisión). Con su propia sesión de BD: la de la petición se cierra."""
+
+    def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
+        """Con la fábrica de sesiones y el servicio de correo."""
+        self._fabrica = fabrica
+        self._email_service = email_service
+
+    def lanza(self, datos: ReenvioDeVerificacion) -> None:
+        """Lo lanza como tarea del proceso, registrada para que los tests la esperen."""
+        tarea = asyncio.create_task(self._envia(datos), name="reenvio-de-verificacion")
+        _PENDIENTES.add(tarea)
+        tarea.add_done_callback(_PENDIENTES.discard)
+
+    async def _envia(self, datos: ReenvioDeVerificacion) -> None:
+        """El envío y el guardado; un fallo se queda en el log, solo con su tipo (A09)."""
+        try:
+            async with self._fabrica() as sesion:
+                await EnvioDeLaVerificacion(
+                    SQLAlchemyUnitOfWork(sesion), self._email_service
+                ).envia_y_guarda(datos)
+        except Exception as e:
+            logger.error("Verification resend failed in the background: %s", type(e).__name__)
