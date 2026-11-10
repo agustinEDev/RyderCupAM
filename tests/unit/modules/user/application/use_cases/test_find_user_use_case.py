@@ -368,18 +368,16 @@ class TestCuentaDesactivada:
         )
         return user
 
-    @pytest.mark.parametrize(
-        "busqueda",
-        [{"email": "baja@example.com"}, {"full_name": "Baja User"}],
-        ids=["por-correo", "por-nombre"],
-    )
-    async def test_f2_desactivada_no_se_encuentra(self, busqueda):
+    async def test_f2_desactivada_no_se_encuentra_por_correo(self):
         """
         Given: Una cuenta desactivada
-        When: Se busca por su correo o por su nombre
-        Then: UserNotFoundError, como si no existiera
+        When: Se busca por su correo
+        Then: UserNotFoundError, como si no existiera. Por nombre la descarta el
+            propio repositorio (F7): ver test_in_memory_user_repository_search
         """
         use_case = FindUserUseCase(self._uow(self._desactivada()))
 
         with pytest.raises(UserNotFoundError):
-            await use_case.execute(FindUserRequestDTO(**busqueda), viewer_id=UserId(uuid4()))
+            await use_case.execute(
+                FindUserRequestDTO(email="baja@example.com"), viewer_id=UserId(uuid4())
+            )

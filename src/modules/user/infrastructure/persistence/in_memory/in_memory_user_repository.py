@@ -138,7 +138,8 @@ class InMemoryUserRepository(UserRepositoryInterface):
         full_name_lower = full_name.lower().strip()
         for user in self._users.values():
             user_full_name = f"{user.first_name} {user.last_name}".lower()
-            if user_full_name == full_name_lower:
+            # Solo activas, como el repositorio real (F7)
+            if user.is_active and user_full_name == full_name_lower:
                 return user
         return None
 

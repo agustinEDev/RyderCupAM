@@ -145,3 +145,38 @@ async def test_f3_el_resultado_sigue_igual(client: AsyncClient):
     assert r.status_code == status.HTTP_200_OK, r.text
     assert r.json()["user_id"] == otro["user"]["id"]
     assert r.json()["full_name"] == "Encontrado Correo"
+
+
+async def test_f7_por_nombre_sale_la_activa_aunque_haya_una_baja_con_el_mismo(
+    client: AsyncClient,
+):
+    """
+    Given: Una cuenta desactivada y otra activa con el mismo nombre completo
+    When: Se busca por ese nombre
+    Then: 200 con la activa: la baja se descarta en la consulta, no después (F7)
+    """
+    yo = await _usuario(client)
+    apellido = "Gem" + "".join(chr(ord("a") + int(c, 16) % 26) for c in uuid.uuid4().hex[:8])
+    baja = await create_authenticated_user(
+        client, f"gem-a-{uuid.uuid4().hex[:8]}@test.com", CLAVE, "Pepe", apellido
+    )
+    activa = await create_authenticated_user(
+        client, f"gem-b-{uuid.uuid4().hex[:8]}@test.com", CLAVE, "Pepe", apellido
+    )
+    admin = await create_admin_user(
+        client, f"admin-{uuid.uuid4().hex[:8]}@test.com", CLAVE, "Admin", "Test"
+    )
+    client.cookies.clear()
+    client.cookies.update(admin["cookies"])
+    r = await client.put(
+        f"/api/v1/admin/users/{baja['user']['id']}/active",
+        json={"is_active": False},
+        headers={"X-CSRF-Token": admin["cookies"].get("csrf_token", "")},
+    )
+    assert r.status_code == status.HTTP_204_NO_CONTENT, r.text
+    client.cookies.clear()
+
+    r = await _busca(client, yo, full_name=f"Pepe {apellido}")
+
+    assert r.status_code == status.HTTP_200_OK, r.text
+    assert r.json()["user_id"] == activa["user"]["id"]

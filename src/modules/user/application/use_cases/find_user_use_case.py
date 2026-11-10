@@ -52,7 +52,8 @@ class FindUserUseCase:
 
             # Si no se encontró por email, buscar por nombre completo
             if not user and request.full_name:
-                user = self._solo_activa(await self._user_finder.by_full_name(request.full_name))
+                # Solo activas, ya en la consulta del repositorio (F7)
+                user = await self._user_finder.by_full_name(request.full_name)
 
             # Si no se encuentra el usuario, lanzar excepción
             if not user:

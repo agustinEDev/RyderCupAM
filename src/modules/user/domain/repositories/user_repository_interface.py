@@ -144,7 +144,8 @@ class UserRepositoryInterface(ABC):
     @abstractmethod
     async def find_by_full_name(self, full_name: str) -> User | None:
         """
-        Busca un usuario por su nombre completo (first_name + last_name).
+        Busca un usuario ACTIVO por su nombre completo (first_name + last_name).
+        Las desactivadas no se encuentran (F7): se descartan en la consulta.
 
         Args:
             full_name (str): El nombre completo del usuario

@@ -152,7 +152,12 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         return result.scalar_one_or_none()
 
     async def find_by_full_name(self, full_name: str) -> User | None:
-        """Busca un usuario por su nombre completo."""
+        """
+        Busca un usuario ACTIVO por su nombre completo.
+
+        La desactivada se descarta en la consulta (F7, fase 3): descartarla después
+        dejaba sin encontrar a la activa del mismo nombre, o fallaba con dos filas.
+        """
         # Separar el nombre completo en palabras para buscar
         name_parts = full_name.strip().split()
         if len(name_parts) < self.MIN_NAME_PARTS:
@@ -164,6 +169,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             last_name = " ".join(name_parts[i:])
 
             statement = select(User).filter(
+                User._is_active.is_(True),
                 func.lower(User._first_name) == func.lower(first_name),
                 func.lower(User._last_name) == func.lower(last_name),
             )
