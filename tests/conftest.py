@@ -675,8 +675,14 @@ async def token_de_verificacion_enviado(email: str) -> str:
     return ultima.kwargs.get("verification_token") or ultima.args[2]
 
 
-def token_de_reset_enviado(email: str) -> str:
-    """El token del último enlace de restablecer enviado a `email` (en claro)."""
+async def token_de_reset_enviado(email: str) -> str:
+    """El token del último enlace de restablecer enviado a `email` (en claro).
+
+    Espera antes a los correos en segundo plano: el de restablecer sale así (fase 3).
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    await espera_los_avisos_pendientes(tope_s=10)
     llamadas = [
         c
         for c in _CORREO_DEL_TEST["mock"].send_password_reset_email.await_args_list

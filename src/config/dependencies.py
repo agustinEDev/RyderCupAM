@@ -1377,7 +1377,10 @@ def get_resend_verification_email_use_case(
     3. Crea una instancia de `ResendVerificationEmailUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ResendVerificationEmailUseCase(uow, email_service)
+    # El correo, sin que la respuesta lo espere (fase 3, B-2)
+    return ResendVerificationEmailUseCase(
+        uow, email_service, correo_en_segundo_plano=CorreoEnSegundoPlano()
+    )
 
 
 def get_request_password_reset_use_case(
@@ -1399,6 +1402,8 @@ def get_request_password_reset_use_case(
         email_service,
         frontend_url=settings.FRONTEND_URL,
         security_audit=security_audit,
+        # El correo, sin que la respuesta lo espere (fase 3, B-2)
+        correo_en_segundo_plano=CorreoEnSegundoPlano(),
     )
 
 

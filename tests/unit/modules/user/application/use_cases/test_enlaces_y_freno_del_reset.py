@@ -16,6 +16,7 @@ Los enlaces de verificación y de restablecer en los casos de uso (fase 3, F-04/
   H3  correo sin cuenta / con cuenta / sin cupo     | el mismo mensaje
 """
 
+import asyncio
 import hashlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -26,6 +27,9 @@ from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
     ResetPasswordRequestDTO,
     ValidateResetTokenRequestDTO,
+)
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
 )
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
@@ -72,11 +76,9 @@ async def _ana(uow: InMemoryUnitOfWork, verificada: bool = False) -> User:
 
 
 def _pedir(uow, correo) -> RequestPasswordResetUseCase:
-    caso = RequestPasswordResetUseCase(
+    return RequestPasswordResetUseCase(
         uow, correo, frontend_url="https://app.example", security_audit=MagicMock()
     )
-    caso.FAKE_EMAIL_DELAY_SECONDS = 0
-    return caso
 
 
 def _correo() -> MagicMock:
@@ -275,3 +277,94 @@ async def test_h3_same_message_with_and_without_account():
     )
 
     assert con.message == sin.message
+
+
+# --- B-2: los correos de restablecer y de reenvío, en segundo plano --------------------
+
+
+class CorreoEnCola(ICorreoEnSegundoPlano):
+    """Guarda los envíos en vez de lanzarlos: el test decide cuándo salen."""
+
+    def __init__(self):
+        self.pendientes: list = []
+
+    def lanza(self, nombre, envio) -> None:
+        self.pendientes.append(envio)
+
+    async def envia_todo(self) -> None:
+        pendientes, self.pendientes = self.pendientes, []
+        for envio in pendientes:
+            await envio()
+
+
+def _pedir_en_cola(uow, correo, cola) -> RequestPasswordResetUseCase:
+    return RequestPasswordResetUseCase(
+        uow,
+        correo,
+        frontend_url="https://app.example",
+        security_audit=MagicMock(),
+        correo_en_segundo_plano=cola,
+    )
+
+
+async def test_b2_forgot_password_answers_without_waiting_for_the_email():
+    """
+    Given: Una cuenta y el envío en segundo plano
+    When: Pide restablecer
+    Then: La respuesta vuelve sin haber enviado nada; el enlace guardado es el del
+          correo que sale después
+    """
+    uow, correo, cola = InMemoryUnitOfWork(), _correo(), CorreoEnCola()
+    ana = await _ana(uow)
+
+    await _pedir_en_cola(uow, correo, cola).execute(RequestPasswordResetRequestDTO(email=CORREO))
+
+    correo.send_password_reset_email.assert_not_awaited()
+    assert len(cola.pendientes) == 1
+    await cola.envia_todo()
+    assert ana.password_reset_token == _sha(_token_del_enlace(correo))
+
+
+@pytest.mark.parametrize("caso", ["sin cuenta", "sin cupo"])
+async def test_b2_forgot_password_without_email_does_not_wait_either(monkeypatch, caso):
+    """
+    Given: Un correo sin cuenta, o una cuenta sin cupo
+    When: Pide restablecer
+    Then: Nada en la cola y ninguna espera artificial (ya no hay correo que imitar)
+    """
+    uow, correo, cola = InMemoryUnitOfWork(), _correo(), CorreoEnCola()
+    ana = await _ana(uow)
+    if caso == "sin cupo":
+        for _ in range(10):
+            ana.cuenta_un_correo_de_reset(datetime.now())
+    esperas = []
+
+    async def espera(segundos):
+        esperas.append(segundos)
+
+    monkeypatch.setattr(asyncio, "sleep", espera)
+    email = CORREO if caso == "sin cupo" else "nadie@example.com"
+
+    await _pedir_en_cola(uow, correo, cola).execute(RequestPasswordResetRequestDTO(email=email))
+
+    assert cola.pendientes == []
+    assert esperas == []
+
+
+async def test_b2_resend_answers_without_waiting_for_the_email():
+    """
+    Given: Una cuenta sin verificar y el envío en segundo plano
+    When: Pide reenviar la verificación
+    Then: Vuelve sin haber enviado nada, con el hash del nuevo token ya guardado; el
+          correo que sale después lleva ese token
+    """
+    uow, correo, cola = InMemoryUnitOfWork(), _correo(), CorreoEnCola()
+    ana = await _ana(uow)
+
+    await ResendVerificationEmailUseCase(uow, correo, correo_en_segundo_plano=cola).execute(CORREO)
+
+    correo.send_verification_email.assert_not_awaited()
+    assert len(cola.pendientes) == 1
+    await cola.envia_todo()
+    enviado = correo.send_verification_email.await_args.kwargs["verification_token"]
+    assert ana.verification_token == _sha(enviado)

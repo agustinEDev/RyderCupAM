@@ -109,7 +109,7 @@ class TestAuthRoutes:
         email = "reset.policy@example.com"
         await create_authenticated_user(client, email, "V@l1dP@ss123!", "Reset", "Policy")
         await client.post("/api/v1/auth/forgot-password", json={"email": email})
-        token = token_de_reset_enviado(email)
+        token = await token_de_reset_enviado(email)
 
         response = await client.post(
             "/api/v1/auth/reset-password",

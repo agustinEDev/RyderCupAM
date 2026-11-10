@@ -7,6 +7,9 @@ Caso de uso para reenviar el email de verificación a un usuario.
 import logging
 import secrets
 
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -33,14 +36,23 @@ class ResendVerificationEmailUseCase:
     """
     Caso de uso para reenviar el email de verificación a un usuario.
 
-    Este caso de uso orquesta el proceso de regenerar el token de verificación
-    y reenviar el email al usuario que lo solicite.
+    Genera un enlace nuevo (vale 48 h; se guarda su hash y el anterior deja de valer) y
+    lo envía. Con el envío en segundo plano (fase 3, B-2) la respuesta no espera al
+    proveedor de correo: tarda lo mismo exista o no la cuenta.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService | None = None,
+        *,
+        correo_en_segundo_plano: ICorreoEnSegundoPlano | None = None,
+    ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._email_service = email_service
+        # Sin él (tests de antes), el correo se espera aquí y su fallo se dice
+        self._correo_en_segundo_plano = correo_en_segundo_plano
 
     async def execute(self, email: str) -> bool:
         """
@@ -50,66 +62,45 @@ class ResendVerificationEmailUseCase:
             email: Email del usuario al que reenviar la verificación
 
         Returns:
-            bool: True si el email se envió exitosamente
+            bool: True si el correo salió (o quedó lanzado en segundo plano)
 
         Raises:
-            ResendVerificationError: Si el email no existe o ya está verificado
+            ResendVerificationError: Si el email no existe, ya está verificado, no hay
+                servicio de correo o (sin segundo plano) el envío falla
         """
         if not email or email.strip() == "":
             raise ResendVerificationError("El email es requerido")
-
-        # Primera transacción: SOLO LECTURA - buscar usuario y validar
+        verification_token = secrets.token_urlsafe(32)
+        # Una transacción: la cuenta, sin verificar, y el hash del enlace nuevo
         async with self._uow:
-            # Buscar el usuario por email (convertir a Value Object)
             email_vo = Email(email)
             user = await self._user_finder.by_email(email_vo)
-
-            if not user:
+            if not user or user.is_email_verified():
                 raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
-
-            # Verificar si el email ya está verificado
-            if user.is_email_verified():
-                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
-
-            # Extraer datos necesarios ANTES de salir del contexto
-            # para evitar detached entity errors
+            if not self._email_service:
+                logger.error("Email service no está disponible")
+                raise ResendVerificationError("Servicio de email no disponible")
+            user.set_verification_token(verification_token)
+            await self._uow.users.save(user)
             user_id = user.id.value
             user_name = user.get_full_name()
-
-        # FUERA DE TRANSACCIÓN: Generar token sin mutar entidad
-        verification_token = secrets.token_urlsafe(32)
-
-        # PRIMERO: Enviar email (fuera de transacción porque es síncrono)
-        # Si esto falla, no se ha guardado nada en BD (no hay inconsistencia)
-        if not self._email_service:
-            logger.error("Email service no está disponible")
-            raise ResendVerificationError("Servicio de email no disponible")
-
-        email_sent = await self._email_service.send_verification_email(
-            to_email=email, user_name=user_name, verification_token=verification_token
-        )
-
-        if not email_sent:
-            logger.error("No se pudo enviar el email de verificación al usuario %s", user_id)
-            raise ResendVerificationError("Error al enviar el email de verificación")
-
-        # SEGUNDO: Solo si el email se envió correctamente, guardar el token en BD
-        async with self._uow:
-            # Re-buscar el usuario para tener una entidad attached y evitar race conditions
-            user = await self._user_finder.by_email(email_vo)
-            if not user:
-                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
-
-            # Verificar nuevamente que no esté verificado (evitar race conditions)
-            if user.is_email_verified():
-                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
-
-            # Asignar el token generado fuera de transacción
-            user.set_verification_token(verification_token)
-
-            await self._uow.users.save(user)
             # El context manager (__aexit__) hace commit automático
 
-        logger.info("Email de verificación reenviado correctamente al usuario %s", user_id)
+        email_service = self._email_service
 
+        async def envia() -> bool:
+            enviado = await email_service.send_verification_email(
+                to_email=email, user_name=user_name, verification_token=verification_token
+            )
+            if not enviado:
+                logger.error("No se pudo enviar el email de verificación al usuario %s", user_id)
+            return enviado
+
+        if self._correo_en_segundo_plano is not None:
+            self._correo_en_segundo_plano.lanza("reenvio-de-verificacion", envia)
+            return True
+
+        if not await envia():
+            raise ResendVerificationError("Error al enviar el email de verificación")
+        logger.info("Email de verificación reenviado correctamente al usuario %s", user_id)
         return True

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.config import dependencies as d
+from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 from src.modules.user.application.dto.user_dto import RequestPasswordResetRequestDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -42,6 +43,8 @@ async def test_el_enlace_de_reseteo_usa_el_frontend_url_de_la_configuracion(monk
     )
 
     await caso_de_uso.execute(RequestPasswordResetRequestDTO(email="enlace@test.com"))
+    # El correo sale en segundo plano (fase 3, B-2)
+    await espera_los_avisos_pendientes(tope_s=5)
 
     enlace = email_service.send_password_reset_email.call_args.kwargs["reset_link"]
     assert enlace.startswith("https://front.ejemplo.test/reset-password/")

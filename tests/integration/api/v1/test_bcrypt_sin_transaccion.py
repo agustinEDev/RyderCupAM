@@ -16,13 +16,12 @@ viva de SQLAlchemy esté dentro de una transacción.
 
 import importlib
 import weakref
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_authenticated_user, token_de_reset_enviado
 
 pytestmark = pytest.mark.asyncio
 
@@ -170,9 +169,7 @@ async def test_b2_3_a_password_change_hashes_with_no_transaction_open(client: As
     assert vigia.con_transaccion == []
 
 
-async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
-    client: AsyncClient, vigia, mock_external_services
-):
+async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(client: AsyncClient, vigia):
     """
     Given: Un enlace de restablecer válido
     When: Se usa con una contraseña nueva
@@ -181,11 +178,8 @@ async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
     await create_authenticated_user(client, "b24@example.com", CLAVE, "Ana", "Lopez")
     client.cookies.clear()
     await client.post("/api/v1/auth/forgot-password", json={"email": "b24@example.com"})
-    llamada = mock_external_services.send_password_reset_email.await_args
-    enlace = llamada.kwargs.get("reset_link") or llamada.args[1]
-    token = parse_qs(urlparse(enlace).query).get("token", [enlace.rstrip("/").rsplit("/", 1)[-1]])[
-        0
-    ]
+    # El correo sale en segundo plano (fase 3, B-2): el helper lo espera
+    token = await token_de_reset_enviado("b24@example.com")
     vigia.con_transaccion.clear()
     antes = vigia.bcrypts
 

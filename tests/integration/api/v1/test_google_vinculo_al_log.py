@@ -366,7 +366,7 @@ async def test_r1_resetting_after_an_email_change_takes_the_creator_google_away(
     )
     client.cookies.clear()
     await client.post("/api/v1/auth/forgot-password", json={"email": despues})
-    token = token_de_reset_enviado(despues)
+    token = await token_de_reset_enviado(despues)
 
     r = await client.post(
         "/api/v1/auth/reset-password", json={"token": token, "new_password": "OtraClave#2026segura"}

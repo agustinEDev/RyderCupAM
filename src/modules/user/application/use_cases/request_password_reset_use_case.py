@@ -12,12 +12,14 @@ Security Features:
 - Security logging: Registra todas las solicitudes (exitosas y fallidas)
 """
 
-import asyncio
 from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
     RequestPasswordResetResponseDTO,
+)
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
@@ -49,10 +51,6 @@ class RequestPasswordResetUseCase:
       enlace de antes sigue valiendo y la respuesta es la misma
     """
 
-    # Delay en segundos para simular envío de email si el usuario no existe
-    # Previene timing attacks que podrían revelar si el email existe
-    FAKE_EMAIL_DELAY_SECONDS = 0.5
-
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
@@ -60,6 +58,7 @@ class RequestPasswordResetUseCase:
         *,
         frontend_url: str,
         security_audit: ISecurityAuditLogger,
+        correo_en_segundo_plano: ICorreoEnSegundoPlano | None = None,
     ):
         """
         Inicializa el caso de uso.
@@ -74,6 +73,9 @@ class RequestPasswordResetUseCase:
         self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
+        # El correo sale sin que la respuesta lo espere (fase 3, B-2): así tarda lo mismo
+        # exista o no la cuenta, sin retardo artificial. Sin él (tests de antes), se espera
+        self._correo_en_segundo_plano = correo_en_segundo_plano
 
     async def execute(
         self, request: RequestPasswordResetRequestDTO
@@ -90,8 +92,8 @@ class RequestPasswordResetUseCase:
 
         Security Flow:
             1. Busca usuario por email
-            2. Si NO existe → Delay artificial + mensaje genérico + log + return
-            3. Si existe → Genera token + envía email + guarda + log + return
+            2. Si NO existe (o la cuenta agotó su cupo) → mensaje genérico + log
+            3. Si existe → Genera token + guarda + lanza el correo + log
             4. Ambos casos retornan el MISMO mensaje (previene enumeración)
 
         Example:
@@ -117,10 +119,6 @@ class RequestPasswordResetUseCase:
 
         # CASO 1: Email NO existe en el sistema
         if not user:
-            # Delay artificial para prevenir timing attacks
-            # (simula tiempo de envío de email)
-            await asyncio.sleep(self.FAKE_EMAIL_DELAY_SECONDS)
-
             # Security Logging: Solicitud fallida (email no existe)
             registra_sin_romper(
                 "Request password reset",
@@ -155,9 +153,7 @@ class RequestPasswordResetUseCase:
             # Commit automático al salir del contexto
 
         if not cabe:
-            # Sin correo: el enlace de antes sigue valiendo, y la respuesta (y su tiempo,
-            # el mismo retardo que sin cuenta) no lo dice (H3)
-            await asyncio.sleep(self.FAKE_EMAIL_DELAY_SECONDS)
+            # Sin correo: el enlace de antes sigue valiendo, y la respuesta no lo dice (H3)
             registra_sin_romper(
                 "Request password reset",
                 lambda: security_logger.log_password_reset_requested(
@@ -174,13 +170,20 @@ class RequestPasswordResetUseCase:
                 email=request.email,
             )
 
-        # Enviar email con enlace de reseteo (Mailgun)
+        # Enviar email con enlace de reseteo, en segundo plano si se puede (B-2)
         reset_link = self._build_reset_link(token)
-        await self._email_service.send_password_reset_email(
-            to_email=request.email,
-            reset_link=reset_link,
-            user_name=user.get_full_name(),
-        )
+        email_service = self._email_service
+        user_name = user.get_full_name()
+
+        async def envia() -> bool:
+            return await email_service.send_password_reset_email(
+                to_email=request.email, reset_link=reset_link, user_name=user_name
+            )
+
+        if self._correo_en_segundo_plano is not None:
+            self._correo_en_segundo_plano.lanza("enlace-de-restablecer", envia)
+        else:
+            await envia()
 
         # Security Logging: Solicitud exitosa
         registra_sin_romper(
