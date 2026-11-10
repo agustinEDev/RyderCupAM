@@ -90,8 +90,12 @@ class GetPlayerProfileUseCase:
         relacion, amigos, lo_bloquee = await self._relacion_y_amigos(viewer_id, target_id, propio)
         amigo = relacion.status == FriendshipStatus.ACCEPTED.value
         puede_ver_todo = propio or amigo
-        # Con un bloqueo de por medio, de un lado o del otro, solo nombre y foto
         bloqueado = relacion.status == FriendshipStatus.BLOCKED.value
+        # Si el otro me bloqueó, su perfil no existe para mí: el mismo 404 que una
+        # cuenta que no está (F-09, fase 3; opción A de Agustín, 10 nov 2026). Si lo
+        # bloqueé yo, solo nombre y foto: desde aquí se desbloquea
+        if bloqueado and not lo_bloquee:
+            raise ProfileNotVisibleError("Profile not found")
 
         # Fuera de la unidad de trabajo: las estadisticas abren las suyas, y
         # anidarlas sobre la misma sesion la cerraria antes de tiempo

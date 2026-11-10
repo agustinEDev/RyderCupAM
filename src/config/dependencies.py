@@ -1158,14 +1158,6 @@ def get_remove_avatar_use_case(
     return RemoveAvatarUseCase(uow)
 
 
-def get_avatar_image_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
-) -> GetAvatarImageUseCase:
-    """Proveedor del caso de uso GetAvatarImageUseCase."""
-    return GetAvatarImageUseCase(uow, preset_provider)
-
-
 def get_my_avatar_upload_image_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> GetMyAvatarUploadImageUseCase:
@@ -1482,6 +1474,15 @@ def get_social_uow(
     3. Devuelve la instancia, cumpliendo con la interfaz `SocialUnitOfWorkInterface`.
     """
     return SQLAlchemySocialUnitOfWork(session)
+
+
+def get_avatar_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> GetAvatarImageUseCase:
+    """Proveedor del caso de uso GetAvatarImageUseCase; con los bloqueos (F-09)."""
+    return GetAvatarImageUseCase(uow, preset_provider, social_uow)
 
 
 def get_amigos(
