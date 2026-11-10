@@ -538,16 +538,21 @@ def _refresco_rechazado(
     response_model=RefreshAccessTokenResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Renovar access token",
-    description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
+    description=(
+        "Genera un nuevo access token y rota el refresh token (cookies httpOnly): el nuevo "
+        "conserva la caducidad de la sesión."
+    ),
     tags=["Authentication"],
     responses={
         401: {
             "description": (
                 "La sesión no se renueva. `error_code`: SESSION_ENDED, el final normal "
                 "(sin sesión, caducada o 24 h sin uso), o SESSION_REJECTED, un rechazo "
-                "(sin decir por qué). Borra la cookie de refresh, salvo SESSION_REPLACED: "
-                "la cookie vieja de una petición tardía cuando el navegador ya tiene una "
-                "sesión nueva de hace menos de 5 minutos (no borra; el cliente reintenta)."
+                "(sin decir por qué; también al reutilizar un refresh ya sustituido, que "
+                "cierra la sesión de ese dispositivo). Borra la cookie de refresh, salvo "
+                "SESSION_REPLACED: la cookie vieja de una petición tardía cuando el "
+                "navegador ya tiene una sesión nueva de hace menos de 5 minutos (no "
+                "borra; el cliente reintenta)."
             ),
         }
     },
@@ -585,7 +590,8 @@ async def refresh_access_token(
     - Refresh token validado contra BD (previene reuso después de logout)
     - Refresh token hasheado en BD (previene robo en DB leak)
     - Access token de corta duración (15 min)
-    - Refresh token NO se renueva (debe durar hasta expiración o logout)
+    - Refresh token rotado en cada uso, sin alargar sus 7 días; reutilizar uno ya
+      sustituido cierra la sesión del dispositivo (F-02)
 
     NO requiere autenticación previa:
     - NO lleva header Authorization
@@ -641,6 +647,15 @@ async def refresh_access_token(
 
     # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
     set_csrf_cookie(response, refresh_response.csrf_token)
+
+    # El refresh token rotado (F-02), con lo que le queda a la sesión. Sin él (dos
+    # pestañas a la vez) no se toca: el navegador ya tiene el nuevo
+    if refresh_response.refresh_token:
+        set_refresh_token_cookie(
+            response,
+            refresh_response.refresh_token,
+            max_age=refresh_response.refresh_token_max_age,
+        )
 
     # La cookie del dispositivo se renueva en cada refresco (BE #737): sin esto
     # caducaba a los 7 días en Safari y la app creía que el dispositivo estaba revocado

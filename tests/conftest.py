@@ -644,6 +644,8 @@ def mock_external_services():
     mock_email.send_google_account_notice = AsyncMock(return_value=True)
     # Y el aviso al dueño de un intento de registro con su correo (fase 3, B2)
     mock_email.send_register_attempt_notice = AsyncMock(return_value=True)
+    # Y el de la sesión cerrada por seguridad (F-02, robo de un refresh token)
+    mock_email.send_session_closed_for_security_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     _CORREO_DEL_TEST["mock"] = mock_email

@@ -86,6 +86,13 @@ async def _todos_los_correos(servicio):
         "a@b.com", "Ana", "Copa", "c-1", "Hay una jornada en marcha."
     )
     htmls["programada"] = _enviado(servicio)[3]
+    servicio._send_email.reset_mock()
+
+    # El de la sesión cerrada por seguridad (F-02, caso A4)
+    await servicio.send_session_closed_for_security_notice(
+        "a@b.com", "Ana", "iPhone · Safari", "10 nov 2026, 12:30 (hora de España)", "España"
+    )
+    htmls["sesion_cerrada"] = _enviado(servicio)[3]
     return htmls
 
 
@@ -709,3 +716,51 @@ class TestCorreosDelCambioDeCorreo:
         assert "a***@trabajo.com" in cuerpo and "a***@trabajo.com" in texto
         assert "ana@trabajo.com" not in cuerpo and "ana@trabajo.com" not in texto
         assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+
+
+class TestTheSessionClosedForSecurityNotice:
+    """El aviso de la sesión cerrada por seguridad (F-02, caso A4)."""
+
+    @pytest.mark.asyncio
+    async def test_it_says_what_happened_in_both_languages(self, correo):
+        """
+        Qué pasó (cerramos la sesión de ese dispositivo), dónde y cuándo, en los dos
+        idiomas, y el botón a sus dispositivos
+        """
+        await correo.send_session_closed_for_security_notice(
+            "ana@gmail.com",
+            "Ana",
+            "iPhone · Safari",
+            "10 nov 2026, 12:30 (hora de España)",
+            "España",
+        )
+
+        destinatario, asunto, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "Hemos cerrado tu sesión en un dispositivo por seguridad" in asunto
+        assert "We signed you out of a device for security" in asunto
+        for parte in (texto, cuerpo):
+            assert "iPhone · Safari · España" in parte
+            assert "10 nov 2026, 12:30 (hora de España)" in parte
+            assert "cambia tu contraseña" in parte
+            assert "change your password" in parte
+        assert _botones(cuerpo)[0] == f"{WEB}/profile/devices"
+        assert f"{WEB}/profile/devices" in texto
+
+    @pytest.mark.asyncio
+    async def test_without_a_country_it_is_not_mentioned(self, correo):
+        await correo.send_session_closed_for_security_notice(
+            "ana@gmail.com", "Ana", "iPhone · Safari", "hoy", None
+        )
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "iPhone · Safari" in cuerpo and "None" not in cuerpo and "None" not in texto
+
+    @pytest.mark.asyncio
+    async def test_the_name_is_escaped(self, correo):
+        await correo.send_session_closed_for_security_notice(
+            "ana@gmail.com", "<b>Ana</b>", "iPhone", "hoy", None
+        )
+
+        _, _, _, cuerpo = _enviado(correo)
+        assert "<b>Ana</b>" not in cuerpo

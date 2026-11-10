@@ -56,6 +56,15 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def lock_for_sessions(self, user_id: UserId) -> None:
+        """
+        Bloqueo compartido de la fila del usuario (FOR KEY SHARE) para abrir, rotar o
+        cerrar sus sesiones (F-02). No choca con otros refrescos, pero sí con quien la
+        bloquea para cambiar la contraseña: así todos toman los bloqueos en el mismo
+        orden (cuenta → dispositivo → tokens) y no hay interbloqueos.
+        """
+
+    @abstractmethod
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         """
         Busca un usuario por su ID con bloqueo de fila (SELECT ... FOR UPDATE).

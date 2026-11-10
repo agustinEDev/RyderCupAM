@@ -474,3 +474,17 @@ class AvisoDeNuevoInicioRequestDTO(BaseModel):
     def toca_avisar(self) -> bool:
         """Si toca avisar: sin su cookie, con el correo confirmado y sin ser el alta."""
         return self.desconocido and self.verificado and not self.es_alta
+
+
+class AvisoDeSesionCerradaRequestDTO(BaseModel):
+    """Los datos del aviso de «sesión cerrada por seguridad» (robo de un refresh, F-02)."""
+
+    user_id: str
+    email: str
+    nombre: str
+    device_id: str
+    verificado: bool
+
+    def toca_avisar(self) -> bool:
+        """Solo a un correo confirmado, como los demás avisos de seguridad."""
+        return self.verificado

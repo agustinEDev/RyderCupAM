@@ -784,6 +784,82 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
 
         return await self._send_email(to_email, subject, text_body, html_body)
 
+    async def send_session_closed_for_security_notice(
+        self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Aviso de que hemos cerrado la sesión de un dispositivo por seguridad (F-02): su
+        refresh token se usó desde dos sitios a la vez.
+
+        Bilingüe (ES/EN), con la plantilla común. El botón lleva a la lista de
+        dispositivos.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        donde = f"{dispositivo} · {pais}" if pais else dispositivo
+        mis_dispositivos = f"{settings.FRONTEND_URL}/profile/devices"
+        subject = (
+            "Hemos cerrado tu sesión en un dispositivo por seguridad - Ryder Cup Friends | "
+            "We signed you out of a device for security"
+        )
+        text_body = f"""
+Hola {safe_user_name},
+
+Hemos cerrado tu sesión en un dispositivo por seguridad:
+
+{donde}
+{cuando}
+
+Esa sesión se estaba usando desde dos sitios a la vez, algo que puede pasar si alguien
+ha copiado tu sesión. En ese dispositivo tendrás que volver a iniciar sesión.
+
+Si no reconoces esta actividad, cambia tu contraseña y revisa tus dispositivos:
+{mis_dispositivos}
+
+---
+
+Hello {safe_user_name},
+
+We signed you out of a device for security: {donde}, {cuando}.
+That session was being used from two places at once, which can happen if someone copied
+your session. You will need to sign in again on that device.
+If you don't recognise this, change your password and review your devices: {mis_dispositivos}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Hemos cerrado tu sesión en un dispositivo · We signed you out of a device",
+            etiqueta="Seguridad",
+            titulo="Sesión cerrada por seguridad",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", hemos cerrado tu sesión en un dispositivo por seguridad:",
+                ),
+                parrafo(negrita(donde), " · ", cuando),
+                parrafo(
+                    "Esa sesión se estaba usando desde dos sitios a la vez, algo que puede "
+                    "pasar si alguien ha copiado tu sesión. En ese dispositivo tendrás que "
+                    "volver a iniciar sesión."
+                ),
+                aviso(
+                    negrita("¿No reconoces esta actividad? "),
+                    "Revisa tus dispositivos y cambia tu contraseña.",
+                ),
+            ],
+            boton=Boton("Revisar mis dispositivos", mis_dispositivos),
+            ingles=Ingles(
+                frase(
+                    negrita("We signed you out of a device for security"),
+                    f": {donde}. That session was being used from two places at once. "
+                    "If you don't recognise this, review your devices and change your password.",
+                ),
+                Boton("Review my devices", mis_dispositivos),
+            ),
+            pie="Te avisamos siempre que cerramos una sesión por seguridad. "
+            "We always let you know when we close a session for security.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
     async def send_failed_logins_notification(
         self,
         to_email: str,

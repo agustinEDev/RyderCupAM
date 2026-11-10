@@ -15,7 +15,7 @@ rama se quita: un token sin dispositivo es un token que no puede existir.
   T7  refresca un token sin dispositivo                | rechazado: REFRESH_TOKEN_INVALID
 """
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -67,11 +67,15 @@ async def _escena(con_dispositivo=True):
     tokens.refresh_token_expired.return_value = False
     tokens.create_access_token.return_value = "acceso"
     tokens.create_csrf_token.return_value = "csrf"
+    # El refresco rota el refresh token (F-02)
+    tokens.create_refresh_token.return_value = "refresco-rotado"
     return (
         uow,
         usuario,
         dispositivo,
-        RefreshAccessTokenUseCase(uow, tokens, security_audit=SecurityAuditLogger()),
+        RefreshAccessTokenUseCase(
+            uow, tokens, security_audit=SecurityAuditLogger(), aviso_de_cierre=AsyncMock()
+        ),
     )
 
 

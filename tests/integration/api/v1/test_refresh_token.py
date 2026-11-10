@@ -11,7 +11,7 @@ Tests incluidos:
 4. POST /refresh-token con token revocado (después de logout) retorna 401
 5. POST /refresh-token con token expirado retorna 401
 6. POST /refresh-token establece nueva cookie access_token (httpOnly)
-7. POST /refresh-token NO renueva el refresh token (mantiene el mismo)
+7. POST /refresh-token rota el refresh token solo en la cookie (F-02; antes no lo renovaba)
 
 Arquitectura:
 - Capa: Integration Tests
@@ -339,20 +339,20 @@ class TestRefreshTokenEndpoint:
         data = response.json()
         assert data["email"] == test_user_data["email"]
 
-    async def test_refresh_token_does_not_renew_refresh_token_itself(
+    async def test_refresh_token_rotates_the_refresh_token_in_the_cookie_only(
         self,
         client: AsyncClient,
         test_user_data: dict,
     ):
         """
-        Test: POST /refresh-token NO renueva el refresh token (solo access token).
+        Test: POST /refresh-token rota el refresh token (F-02), solo en la cookie.
 
         Given: Un usuario autenticado con refresh token
         When: El usuario renueva el access token
         Then:
-            - Response NO contiene nuevo refresh_token
-            - Response headers NO establecen nueva cookie refresh_token
-            - Solo se renueva el access token
+            - Response NO contiene refresh_token en el cuerpo
+            - Set-Cookie trae un refresh_token nuevo, distinto del del login
+            - Y el access_token renovado
         """
         # Given: Registrar y hacer login
         register_payload = RegisterUserRequestDTO(
@@ -371,31 +371,23 @@ class TestRefreshTokenEndpoint:
         login_response = await client.post("/api/v1/auth/login", json=login_payload)
         assert login_response.status_code == 200
 
-        # Guardar refresh token original del body
         original_refresh_token = login_response.json().get("refresh_token")
         assert original_refresh_token is not None
 
         # When: Renovar access token
         response = await client.post("/api/v1/auth/refresh-token")
 
-        # Then: Response NO contiene nuevo refresh_token
+        # Then: el cuerpo no lleva el refresh token
         assert response.status_code == 200
-        data = response.json()
-        assert "refresh_token" not in data, "refresh-token NO debe renovar el refresh token"
+        assert "refresh_token" not in response.json()
 
-        # Then: Set-Cookie NO establece nueva cookie refresh_token
-        set_cookie_header = response.headers.get("set-cookie", "")
-        # Debe contener access_token (renovado)
-        assert "access_token=" in set_cookie_header
-        # Pero NO debe contener refresh_token (no se renueva)
-        # Nota: httpx puede retornar múltiples Set-Cookie en un solo header o separados
-        # Verificamos que NO aparezca refresh_token en ninguno
-        all_set_cookies = response.headers.get_list("set-cookie")
-        for cookie in all_set_cookies:
-            if "refresh_token" in cookie:
-                # Si aparece, debe ser solo el access_token
-                # Esto no debería pasar, pero validamos por seguridad
-                pytest.fail("refresh_token NO debe ser renovado en /refresh-token")
+        # Then: la cookie sí, y es otro
+        set_cookies = response.headers.get_list("set-cookie")
+        assert any(c.startswith("access_token=") for c in set_cookies)
+        refrescos = [c for c in set_cookies if c.startswith("refresh_token=")]
+        assert len(refrescos) == 1
+        nuevo = refrescos[0].split(";", 1)[0].split("=", 1)[1]
+        assert nuevo and nuevo != original_refresh_token
 
     async def test_refresh_token_sets_new_access_token_cookie(
         self,
