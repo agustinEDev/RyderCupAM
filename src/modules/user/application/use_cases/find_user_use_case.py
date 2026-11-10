@@ -48,11 +48,11 @@ class FindUserUseCase:
 
             # Buscar por email si se proporciona
             if email_vo:
-                user = await self._user_finder.by_email(email_vo)
+                user = self._solo_activa(await self._user_finder.by_email(email_vo))
 
             # Si no se encontró por email, buscar por nombre completo
             if not user and request.full_name:
-                user = await self._user_finder.by_full_name(request.full_name)
+                user = self._solo_activa(await self._user_finder.by_full_name(request.full_name))
 
             # Si no se encuentra el usuario, lanzar excepción
             if not user:
@@ -73,3 +73,11 @@ class FindUserUseCase:
                 full_name=user.get_full_name(),
                 display_name=user.display_name,
             )
+
+    @staticmethod
+    def _solo_activa(user):
+        """
+        Una cuenta desactivada no se encuentra (F-01b): la misma respuesta que un
+        correo o un nombre que no existen, sin su nombre ni su id.
+        """
+        return user if user is not None and user.is_active else None

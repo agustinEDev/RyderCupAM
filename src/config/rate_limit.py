@@ -100,6 +100,9 @@ EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
 # pedir un correo nuevo manda dos correos, uno a cualquier dirección, del cupo diario
 SECURITY_CHANGES_LIMIT = "10/hour"
 NEW_EMAIL_REQUESTS_LIMIT = "3/hour"
+# GET /users/search?email=, por usuario (F-01b, fase 3 del plan a 9): con el de por
+# defecto (100/min) una cuenta probaba unos 144.000 correos al día y sacaba su nombre
+USER_SEARCH_BY_EMAIL_LIMIT = "20/hour"
 
 
 def _clave_de_red(ip: str) -> str:

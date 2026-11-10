@@ -341,3 +341,45 @@ class TestFindUserEmailPrivacy:
         )
 
         assert result.email == "otro@example.com"
+
+
+class TestCuentaDesactivada:
+    """F-01b: una cuenta desactivada responde como una que no existe."""
+
+    @staticmethod
+    def _uow(user):
+        uow = AsyncMock()
+        uow.users = AsyncMock()
+        uow.users.find_by_email.return_value = user
+        uow.users.find_by_full_name.return_value = user
+        uow.__aenter__ = AsyncMock(return_value=uow)
+        uow.__aexit__ = AsyncMock(return_value=None)
+        return uow
+
+    @staticmethod
+    def _desactivada():
+        user = User(
+            id=UserId(uuid4()),
+            email=Email("baja@example.com"),
+            password=Password.from_plain_text("s3cur3P@ssw0rd!"),
+            first_name="Baja",
+            last_name="User",
+            is_active=False,
+        )
+        return user
+
+    @pytest.mark.parametrize(
+        "busqueda",
+        [{"email": "baja@example.com"}, {"full_name": "Baja User"}],
+        ids=["por-correo", "por-nombre"],
+    )
+    async def test_f2_desactivada_no_se_encuentra(self, busqueda):
+        """
+        Given: Una cuenta desactivada
+        When: Se busca por su correo o por su nombre
+        Then: UserNotFoundError, como si no existiera
+        """
+        use_case = FindUserUseCase(self._uow(self._desactivada()))
+
+        with pytest.raises(UserNotFoundError):
+            await use_case.execute(FindUserRequestDTO(**busqueda), viewer_id=UserId(uuid4()))
