@@ -195,15 +195,11 @@ class UpdateSecurityUseCase:
         )
         await self._uow.password_history.save(password_history)
 
-        # Revocar todos los refresh tokens
-        refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
-        tokens_revoked_count = 0
-
-        for refresh_token in refresh_tokens:
-            if not refresh_token.revoked:
-                refresh_token.revoke()
-                await self._uow.refresh_tokens.save(refresh_token)
-                tokens_revoked_count += 1
+        # Revocar todos los refresh tokens, en bloque y tras bloquear sus dispositivos
+        # (la cuenta ya está bloqueada): un refresco a la vez espera, o termina antes y
+        # su sucesor también cae. Una lista leída antes dejaba vivo ese sucesor (F-02)
+        await self._uow.user_devices.lock_all_of_user(user_id_vo)
+        tokens_revoked_count = await self._uow.refresh_tokens.revoke_all_for_user(user_id_vo)
 
         return True, tokens_revoked_count
 

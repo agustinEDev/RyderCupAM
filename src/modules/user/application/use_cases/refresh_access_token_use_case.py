@@ -11,7 +11,7 @@ Rotación (F-02): cada refresco sustituye el refresh token y detecta su reutiliz
 
 import logging
 from datetime import datetime, timedelta
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
@@ -34,6 +34,10 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
+)
+from src.modules.user.domain.services.rotacion_del_refresco import (
+    PasoDelRefresco,
+    paso_del_refresco,
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
@@ -98,14 +102,6 @@ logger = logging.getLogger(__name__)
 VENTANA_DE_LA_SESION_NUEVA = timedelta(minutes=5)
 
 
-class _Paso(Enum):
-    """Qué hacer con un token que vale (F-02)."""
-
-    ROTA = "rota"  # vigente: refresh nuevo (A1)
-    REANUDA = "reanuda"  # respuesta perdida: rota otra vez y anula el sustituto (A3)
-    SOLO_ACCESO = "solo_acceso"  # dos pestañas: access nuevo, sin otro refresh (A2)
-
-
 class RefreshRejectedError(Exception):
     """La sesión no se renueva, con su motivo. La ruta responde 401."""
 
@@ -138,7 +134,8 @@ class RefreshAccessTokenUseCase:
     - Validar refresh token (JWT + base de datos)
     - Verificar que el usuario existe
     - Generar nuevo access token
-    - Rotar el refresh token y detectar su reutilización (F-02): ver `_paso`
+    - Rotar el refresh token y detectar su reutilización (F-02): ver `_paso` y la
+      regla del dominio `paso_del_refresco`
 
     OWASP Coverage:
     - A01: Broken Access Control - Tokens de corta duración
@@ -227,6 +224,9 @@ class RefreshAccessTokenUseCase:
         try:
             return await self._renueva(request, refresh_token_jwt, user_id)
         except RefreshRejectedError as rechazo:
+            # Los rechazos pueden dejar abierta la transacción con los FOR UPDATE de la
+            # cuenta, el dispositivo y el token: se sueltan ya, no al cerrar la sesión
+            await self._suelta_los_bloqueos()
             # Con el usuario del token, para el log de seguridad (revisor de la PR)
             rechazo.user_id = rechazo.user_id or user_id_str
             # Si ya se sabe que la conserva (un sustituido con un login más nuevo, F-02),
@@ -235,6 +235,13 @@ class RefreshAccessTokenUseCase:
                 await self._hay_una_sesion_mas_nueva(rechazo, request)
             )
             raise
+
+    async def _suelta_los_bloqueos(self) -> None:
+        """Rollback de lo que quede abierto (lo que había que guardar ya se confirmó)."""
+        try:
+            await self._uow.rollback()
+        except Exception as error:
+            logger.error("Refresh rollback failed: %s", type(error).__name__)
 
     async def _del_token(
         self, refresh_token_jwt: str
@@ -316,11 +323,7 @@ class RefreshAccessTokenUseCase:
         user_id_str = str(user_id.value)
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
-        # Con la fila bloqueada hasta el commit (F-02): otro refresco con el mismo token
-        # espera y luego lee lo que dejó este (un solo sustituto, sin robo falso)
-        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash_for_update(
-            refresh_token_jwt
-        )
+        refresh_token_entity = await self._bloquea(user_id, refresh_token_jwt)
         if not refresh_token_entity:
             # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_NOT_FOUND)
@@ -340,6 +343,8 @@ class RefreshAccessTokenUseCase:
                     await self._uow.refresh_tokens.save(refresh_token_entity)
             raise RefreshRejectedError(RefreshRejection.USER_INACTIVE)
 
+        ahora = datetime.now()
+        await self._robo_si_vuelve_un_anulado(refresh_token_entity, user, request, ahora)
         await self._rechaza_si_no_vale(refresh_token_entity)
 
         # 5. Toda sesión tiene dispositivo desde BE #737. Un token sin él es de antes
@@ -387,16 +392,16 @@ class RefreshAccessTokenUseCase:
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
         # Qué toca con este token: rotar, reanudar o solo el acceso (F-02). Puede
         # rechazar: un robo, o un sustituido con el navegador ya en un login más nuevo
-        ahora = datetime.now()
         paso, sustituto = await self._paso(refresh_token_entity, dispositivo, user, request, ahora)
 
         nuevo_refresco: tuple[str, int] | None = None
         async with self._uow:
-            if paso is _Paso.REANUDA and sustituto is not None:
-                # El sustituto que nunca llegó al navegador no debe valer (A3)
-                sustituto.revoke()
+            if paso is PasoDelRefresco.REANUDA and sustituto is not None:
+                # El sustituto que nunca llegó al navegador no debe valer; si vuelve,
+                # es un robo (A3)
+                sustituto.anula(ahora)
                 await self._uow.refresh_tokens.save(sustituto)
-            if paso is not _Paso.SOLO_ACCESO:
+            if paso is not PasoDelRefresco.SOLO_ACCESO:
                 nuevo_refresco = await self._rota(refresh_token_entity, user_id_str, ahora)
             # Refrescar es usar ESTE dispositivo, el del token (ver el método)
             device_id = await self._usa_el_dispositivo(request, dispositivo)
@@ -437,6 +442,38 @@ class RefreshAccessTokenUseCase:
             refresh_token_max_age=nuevo_refresco[1] if nuevo_refresco else None,
         )
 
+    async def _bloquea(self, user_id: UserId, refresh_token_jwt: str) -> RefreshToken | None:
+        """
+        Toma los bloqueos siempre en el mismo orden (F-02) y da el token bloqueado: la
+        cuenta (compartido: solo choca con un cambio de contraseña, que la bloquea
+        entera), el dispositivo (los refrescos, el cierre de sesión y el robo de un
+        dispositivo, en fila) y el token (quien espera lee lo que dejó el otro: un solo
+        sustituto, sin robo falso). Sin ciclos, no hay interbloqueos.
+        """
+        await self._uow.users.lock_for_sessions(user_id)
+        previo = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+        if previo is not None and previo.device_id is not None:
+            await self._uow.user_devices.find_by_id_for_update(previo.device_id)
+        return await self._uow.refresh_tokens.find_by_token_hash_for_update(refresh_token_jwt)
+
+    async def _robo_si_vuelve_un_anulado(
+        self,
+        token: RefreshToken,
+        user: User,
+        request: RefreshAccessTokenRequestDTO,
+        ahora: datetime,
+    ) -> None:
+        """
+        El sustituto anulado de una respuesta perdida no llegó nunca al navegador: si
+        alguien vuelve con él, tenía la sesión (robo, Agustín). Con el dispositivo ya
+        revocado, es un rechazo más (lo da `_rechaza_si_no_vale`).
+        """
+        if paso_del_refresco(token, None, ahora) is not PasoDelRefresco.ROBO:
+            return
+        dispositivo = await self._dispositivo_del_token(token)
+        if dispositivo is not None and dispositivo.is_active:
+            await self._cierra_por_robo(dispositivo, user, request)
+
     async def _paso(
         self,
         token: RefreshToken,
@@ -444,40 +481,36 @@ class RefreshAccessTokenUseCase:
         user: User,
         request: RefreshAccessTokenRequestDTO,
         ahora: datetime,
-    ) -> tuple[_Paso, RefreshToken | None]:
+    ) -> tuple[PasoDelRefresco, RefreshToken | None]:
         """
-        Qué toca con un token que vale (sin revocar ni caducar, F-02).
+        Aplica la regla del dominio (`paso_del_refresco`) a un token que vale.
 
-        - Vigente → ROTA (A1), aunque el navegador tenga otro login: hoy se aceptaba.
-        - Sustituido, con su sustituto revocado o caducado → rechazo REVOKED (la
-          sesión ya se cerró por otra vía; se mira BE #734 como siempre).
-        - Sustituido fuera del margen y su sustituto ya usado → robo (A4); gana a BE
-          #734: un atacante con la cookie de dispositivo no esquiva la detección.
-        - Sustituido con el navegador en un login más nuevo → SESSION_REPLACED (A5):
-          ni access ni refresh de la sesión vieja.
-        - Sustituido dentro del margen → SOLO_ACCESO (A2), usado o no el sustituto.
-        - Sustituido fuera del margen, sustituto sin usar → REANUDA (A3).
+        - ROBO → cierra la sesión del dispositivo (A4); gana a BE #734: un atacante
+          con la cookie de dispositivo no esquiva la detección.
+        - YA_CERRADA → rechazo REVOKED (se mira BE #734 como siempre).
+        - SOLO_ACCESO o REANUDA con el navegador en un login más nuevo →
+          SESSION_REPLACED (A5): ni access ni refresh de la sesión vieja.
 
         El sustituto se lee con su fila bloqueada: si a la vez alguien lo está usando,
         se espera y se ve usado.
         """
-        if not token.is_replaced or token.replaced_by_id is None:
-            return _Paso.ROTA, None
-        sustituto = await self._uow.refresh_tokens.find_by_id_for_update(token.replaced_by_id)
-        if sustituto is None or sustituto.revoked or sustituto.is_expired():
+        sustituto = None
+        if token.is_replaced and token.replaced_by_id is not None:
+            sustituto = await self._uow.refresh_tokens.find_by_id_for_update(token.replaced_by_id)
+        paso = paso_del_refresco(token, sustituto, ahora)
+        if paso is PasoDelRefresco.ROBO:
+            await self._cierra_por_robo(dispositivo, user, request)
+        if paso is PasoDelRefresco.YA_CERRADA:
             revocado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
             revocado.sustituido = (token.device_id, token.created_at)
             raise revocado
-        dentro = token.en_el_margen(ahora)
-        if not dentro and sustituto.is_replaced:
-            await self._cierra_por_robo(dispositivo, user, request)
-        if await self._sesion_mas_nueva(token.device_id, token.created_at, request):
+        if paso is not PasoDelRefresco.ROTA and await self._sesion_mas_nueva(
+            token.device_id, token.created_at, request
+        ):
             mas_nueva = RefreshRejectedError(RefreshRejection.NEWER_SESSION_IN_BROWSER)
             mas_nueva.conserva_la_cookie = True
             raise mas_nueva
-        if dentro:
-            return _Paso.SOLO_ACCESO, None
-        return _Paso.REANUDA, sustituto
+        return paso, sustituto
 
     async def _rota(
         self, token: RefreshToken, user_id_str: str, ahora: datetime
@@ -499,12 +532,18 @@ class RefreshAccessTokenUseCase:
         self, dispositivo: UserDevice, user: User, request: RefreshAccessTokenRequestDTO
     ) -> None:
         """
-        Robo (A4): revoca todos los tokens del dispositivo (la cadena entera, también
-        el vigente), lo deja en el log de seguridad (HIGH, a Sentry con su tope) y
-        avisa al usuario por correo en segundo plano. Ni el log ni el correo cambian
-        la respuesta: siempre lanza el rechazo REFRESH_TOKEN_REUSED.
+        Robo (A4): revoca el dispositivo y todos sus tokens (la cadena entera, también
+        el vigente) en una transacción, con su fila ya bloqueada; lo deja en el log de
+        seguridad (HIGH, a Sentry con su tope) y avisa al usuario por correo en
+        segundo plano. Revocar el dispositivo corta al instante el access del atacante
+        (se comprueba por su `did`) y cualquier sustituto que se colara choca con él
+        (Agustín). Ni el log ni el correo cambian la respuesta: siempre lanza el
+        rechazo REFRESH_TOKEN_REUSED.
         """
         async with self._uow:
+            if dispositivo.is_active:
+                dispositivo.revoke()
+                await self._uow.user_devices.save(dispositivo)
             revocados = await self._uow.refresh_tokens.revoke_all_for_device(dispositivo.id)
         user_id_str = str(user.id.value)
         device_id = str(dispositivo.id.value)

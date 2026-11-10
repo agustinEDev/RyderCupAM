@@ -14,7 +14,6 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
-from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -97,22 +96,14 @@ class LogoutUserUseCase:
         logout_time = datetime.now()
         user.record_logout(logout_time, token)
 
-        # 3. Los refresh tokens de ESTE dispositivo (BE #376): el que llega en la
-        # petición y los que ese dispositivo guarde de logins anteriores. Uno de
-        # otra persona no se toca, y sin token no hay sesión que cerrar aquí
-        refresh_tokens = await self._de_este_dispositivo(user_id_vo, request.refresh_token)
-        tokens_revoked_count = 0
-
-        # 4. Persistir cambios usando Unit of Work (Clean Architecture)
-        # CRÍTICO: Todas las operaciones dentro del contexto UoW para garantizar atomicidad
-        # Si algo falla, TODO se revierte (rollback). Si todo OK, TODO se guarda (commit).
+        # 3. y 4. Los refresh tokens de ESTE dispositivo (BE #376), en la misma
+        # transacción que el usuario: el que llega en la petición y todos los de su
+        # dispositivo (logins anteriores y la cadena de la rotación, F-02). Uno de otra
+        # persona no se toca, y sin token no hay sesión que cerrar aquí
         async with self._uow:
-            # Revocar tokens dentro de la transacción
-            for refresh_token in refresh_tokens:
-                if not refresh_token.revoked:
-                    refresh_token.revoke()
-                    await self._uow.refresh_tokens.save(refresh_token)
-                    tokens_revoked_count += 1
+            tokens_revoked_count = await self._cierra_este_dispositivo(
+                user_id_vo, request.refresh_token
+            )
 
             # Guardar usuario dentro de la misma transacción
             await self._uow.users.save(user)
@@ -144,18 +135,23 @@ class LogoutUserUseCase:
 
         return LogoutResponseDTO(message="Logout exitoso", logged_out_at=logout_time)
 
-    async def _de_este_dispositivo(
-        self, user_id: UserId, refresh_token_jwt: str | None
-    ) -> list[RefreshToken]:
+    async def _cierra_este_dispositivo(self, user_id: UserId, refresh_token_jwt: str | None) -> int:
+        """
+        Revoca en bloque los tokens del dispositivo del token que llega, con la cuenta
+        y el dispositivo bloqueados en el orden de los refrescos (F-02): un refresco a
+        la vez espera, o termina antes y su sucesor también se revoca. Devuelve cuántos.
+        """
         if not refresh_token_jwt:
-            return []
+            return 0
+        await self._uow.users.lock_for_sessions(user_id)
         actual = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
         if actual is None or actual.user_id != user_id:
-            return []
+            return 0
         if actual.device_id is None:
-            return [actual]
-        return [
-            token
-            for token in await self._uow.refresh_tokens.find_all_by_user(user_id)
-            if token.device_id == actual.device_id
-        ]
+            if actual.revoked:
+                return 0
+            actual.revoke()
+            await self._uow.refresh_tokens.save(actual)
+            return 1
+        await self._uow.user_devices.find_by_id_for_update(actual.device_id)
+        return await self._uow.refresh_tokens.revoke_all_for_device(actual.device_id)

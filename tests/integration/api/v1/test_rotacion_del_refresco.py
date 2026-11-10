@@ -369,3 +369,219 @@ async def test_c_the_old_cookie_and_its_substitute_at_once_never_leave_two_live(
     filas = await _de_su_dispositivo(cookies["device_id"])
     vivos = [f for f in filas if f["replaced_at"] is None and not f["revoked"]]
     assert len(vivos) <= 1
+
+
+# ------------------------------------------------- tras la revisión (Agustín, 10 nov)
+
+
+async def _dispositivo_activo(device_id: str) -> bool:
+    resultado = await sql_en_la_bd_de_test(
+        "SELECT is_active FROM user_devices WHERE id = :d", d=device_id
+    )
+    return bool(resultado.scalar())
+
+
+async def _vivos_del_usuario(email: str) -> int:
+    resultado = await sql_en_la_bd_de_test(
+        "SELECT count(*) FROM refresh_tokens t JOIN users u ON u.id = t.user_id "
+        "WHERE u.email = :e AND NOT t.revoked AND t.replaced_at IS NULL",
+        e=email,
+    )
+    return int(resultado.scalar())
+
+
+@pytest.fixture
+def refresco_lento(monkeypatch):
+    """
+    El refresco se para 0,3 s DENTRO de su transacción, con el sucesor ya insertado y
+    sin confirmar: así la otra petición de la carrera cae siempre en el peor momento.
+    """
+    from src.modules.user.application.use_cases import refresh_access_token_use_case as caso
+
+    original = caso.RefreshAccessTokenUseCase._usa_el_dispositivo
+    pausa = {"s": 0.3}
+
+    async def lento(self, request, dispositivo):
+        await asyncio.sleep(pausa["s"])
+        return await original(self, request, dispositivo)
+
+    monkeypatch.setattr(caso.RefreshAccessTokenUseCase, "_usa_el_dispositivo", lento)
+    return pausa
+
+
+async def _despues(segundos: float, peticion):
+    await asyncio.sleep(segundos)
+    return await peticion
+
+
+async def test_a4_the_attackers_access_token_stops_working_at_once(client: AsyncClient):
+    """
+    Given: El atacante tiene un access recién emitido (de la cadena robada)
+    When: Se detecta el robo
+    Then: Ese access da 401 al instante (el dispositivo queda revocado)
+    """
+    _, cookies = await _sesion(client, "a4b")
+    r1 = await _refresca(client, cookies["refresh_token"])
+    r2 = await _refresca(client, _cookie_de_refresco(r1))
+    acceso = dict(r2.cookies)["access_token"]
+    client.cookies.clear()
+    set_auth_cookies(client, {"access_token": acceso})
+    assert (await client.get("/api/v1/auth/current-user")).status_code == 200
+    client.cookies.clear()
+    await _atrasa_la_sustitucion(cookies["refresh_token"], timedelta(minutes=2))
+
+    robo = await _refresca(client, cookies["refresh_token"])
+
+    assert robo.status_code == 401
+    assert await _dispositivo_activo(cookies["device_id"]) is False
+    set_auth_cookies(client, {"access_token": acceso})
+    despues = await client.get("/api/v1/auth/current-user")
+    client.cookies.clear()
+    assert despues.status_code == 401
+
+
+async def test_a3_the_annulled_substitute_coming_back_is_a_theft(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Un A3 (respuesta perdida) que anuló el sustituto
+    When: Llega ese sustituto
+    Then: 401 SESSION_REJECTED, dispositivo revocado, nada vivo y el correo
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    email, cookies = await _sesion(client, "a3b")
+    await sql_en_la_bd_de_test("UPDATE users SET email_verified = TRUE WHERE email = :e", e=email)
+    perdido = _cookie_de_refresco(await _refresca(client, cookies["refresh_token"]))
+    await _atrasa_la_sustitucion(cookies["refresh_token"], timedelta(minutes=2))
+    assert (await _refresca(client, cookies["refresh_token"])).status_code == 200
+
+    r = await _refresca(client, perdido)
+    await espera_los_avisos_pendientes(tope_s=10)
+
+    assert r.status_code == 401
+    assert r.json()["error_code"] == "SESSION_REJECTED"
+    assert await _dispositivo_activo(cookies["device_id"]) is False
+    assert await _vivos_del_usuario(email) == 0
+    mock_external_services.send_session_closed_for_security_notice.assert_awaited_once()
+
+
+@pytest.mark.parametrize("vuelta", range(3))
+async def test_c_a_theft_racing_a_rotation_leaves_nothing_alive(
+    client: AsyncClient, vuelta, refresco_lento
+):
+    """
+    Given: Una cadena robada: la cookie vieja (fuera del margen) y la vigente
+    When: Llegan a la vez el robo (vieja) y un refresco con la vigente
+    Then: No sobrevive ningún token (tampoco uno insertado durante el A4) y el
+          dispositivo queda revocado
+    """
+    email, cookies = await _sesion(client, f"c4-{vuelta}")
+    segunda = _cookie_de_refresco(await _refresca(client, cookies["refresh_token"]))
+    tercera = _cookie_de_refresco(await _refresca(client, segunda))
+    await _atrasa_la_sustitucion(cookies["refresh_token"], timedelta(minutes=2))
+    client.cookies.clear()
+
+    # La rotación de la vigente empieza primero; el robo llega a mitad
+    await asyncio.gather(
+        client.post("/api/v1/auth/refresh-token", headers={"Cookie": f"refresh_token={tercera}"}),
+        _despues(
+            0.1,
+            client.post(
+                "/api/v1/auth/refresh-token",
+                headers={"Cookie": f"refresh_token={cookies['refresh_token']}"},
+            ),
+        ),
+    )
+
+    assert await _vivos_del_usuario(email) == 0
+    assert await _dispositivo_activo(cookies["device_id"]) is False
+
+
+@pytest.mark.parametrize("vuelta", range(3))
+async def test_c_logout_racing_a_refresh_leaves_nothing_alive(
+    client: AsyncClient, vuelta, refresco_lento
+):
+    """
+    Given: Una sesión
+    When: Cierra sesión y, a la vez, otra pestaña refresca con la misma cookie
+    Then: No queda ningún token vivo
+    """
+    email, cookies = await _sesion(client, f"c5-{vuelta}")
+    client.cookies.clear()
+    cabecera = "; ".join(f"{k}={v}" for k, v in cookies.items())
+
+    # El refresco empieza primero; el cierre llega con el sucesor sin confirmar
+    await asyncio.gather(
+        client.post(
+            "/api/v1/auth/refresh-token",
+            headers={"Cookie": f"refresh_token={cookies['refresh_token']}"},
+        ),
+        _despues(
+            0.1,
+            client.post(
+                "/api/v1/auth/logout",
+                json={},
+                headers={"Cookie": cabecera, "X-CSRF-Token": cookies["csrf_token"]},
+            ),
+        ),
+    )
+
+    assert await _vivos_del_usuario(email) == 0
+
+
+@pytest.fixture
+def refresco_parado_con_sus_bloqueos(monkeypatch):
+    """
+    El refresco se para 1,5 s con sus bloqueos ya tomados y ANTES de insertar el
+    sucesor: el peor momento para un cambio de contraseña (que bloquea la cuenta).
+    """
+    from src.modules.user.application.use_cases import refresh_access_token_use_case as caso
+
+    original = caso.RefreshAccessTokenUseCase._paso
+
+    async def parado(self, *args, **kwargs):
+        await asyncio.sleep(1.5)
+        return await original(self, *args, **kwargs)
+
+    monkeypatch.setattr(caso.RefreshAccessTokenUseCase, "_paso", parado)
+
+
+async def test_c_a_password_change_racing_a_refresh_leaves_nothing_alive(
+    client: AsyncClient, refresco_parado_con_sus_bloqueos
+):
+    """
+    Given: Una sesión
+    When: Una pestaña refresca y, con el refresco a medias, cambia la contraseña
+    Then: Ninguna de las dos falla (sin interbloqueo: los dos bloquean primero la cuenta,
+          luego el dispositivo y luego los tokens) y no queda ningún token vivo
+    """
+    email, cookies = await _sesion(client, "c6")
+    client.cookies.clear()
+    cabecera = "; ".join(f"{k}={v}" for k, v in cookies.items())
+
+    refresco, cambio = await asyncio.gather(
+        client.post(
+            "/api/v1/auth/refresh-token",
+            headers={"Cookie": f"refresh_token={cookies['refresh_token']}"},
+        ),
+        _despues(
+            0.3,
+            client.patch(
+                "/api/v1/users/security",
+                json={
+                    "current_password": CLAVE,
+                    "new_password": "OtraValida123!",
+                    "confirm_password": "OtraValida123!",
+                },
+                headers={"Cookie": cabecera, "X-CSRF-Token": cookies["csrf_token"]},
+            ),
+        ),
+        return_exceptions=True,
+    )
+
+    assert not isinstance(refresco, BaseException), refresco
+    assert not isinstance(cambio, BaseException), cambio
+    assert refresco.status_code < 500, refresco.text
+    assert cambio.status_code == 200, cambio.text
+    assert await _vivos_del_usuario(email) == 0

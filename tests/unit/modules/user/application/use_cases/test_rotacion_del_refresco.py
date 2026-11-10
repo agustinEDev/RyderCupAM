@@ -320,24 +320,6 @@ async def test_a3_at_sixty_one_seconds_it_is_already_a3():
     assert respuesta.refresh_token == "refresco-2"
 
 
-async def test_a3_the_annulled_substitute_no_longer_works():
-    """
-    Given: Un A3 que anuló el sustituto sin usar
-    When: Alguien llega después con ese sustituto
-    Then: Rechazado como revocado (SESSION_REJECTED), sin alarma de robo
-    """
-    e = await _escena()
-    await e.refresca(ORIGINAL)
-    await e.hace(ORIGINAL, timedelta(minutes=2))
-    await e.refresca(ORIGINAL)
-
-    rechazo = await e.rechazo("refresco-1")
-
-    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REVOKED
-    assert codigo_publico(rechazo.motivo) == SESSION_REJECTED
-    e.auditoria.log_refresh_token_reuse_detected.assert_not_called()
-
-
 # ---------------------------------------------------------------------------- A4
 
 
@@ -594,3 +576,120 @@ async def test_a7_a_token_from_before_the_rotation_is_rotated_on_first_use():
     respuesta = await e.refresca(ORIGINAL)
 
     assert respuesta.refresh_token == "refresco-1"
+
+
+# ------------------------------------------------- tras la revisión (Agustín, 10 nov)
+
+
+async def test_a4_the_theft_also_revokes_the_device():
+    """
+    Given: Un robo detectado
+    Then: El dispositivo queda revocado: el access del atacante deja de valer al
+          instante y un sustituto que se cuele choca con el dispositivo revocado
+    """
+    e = await _escena()
+
+    await _robo(e)
+
+    assert not (await e.uow.user_devices.find_by_id(e.dispositivo.id)).is_active
+
+
+async def test_a3_an_annulled_substitute_that_comes_back_is_a_theft():
+    """
+    Given: Un A3 que anuló el sustituto sin usar (no llegó al navegador)
+    When: Alguien llega después con ese sustituto anulado
+    Then: Robo: SESSION_REJECTED, dispositivo y tokens revocados, log HIGH y correo
+    """
+    e = await _escena()
+    await e.refresca(ORIGINAL)
+    await e.hace(ORIGINAL, timedelta(minutes=2))
+    await e.refresca(ORIGINAL)
+
+    rechazo = await e.rechazo("refresco-1")
+
+    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REUSED
+    assert all(t.revoked for t in await e.del_dispositivo())
+    assert not (await e.uow.user_devices.find_by_id(e.dispositivo.id)).is_active
+    e.auditoria.log_refresh_token_reuse_detected.assert_called_once()
+    e.aviso.avisa.assert_awaited_once()
+
+
+async def test_a3_only_within_one_hour_of_the_replacement():
+    """
+    Given: El viejo sustituido hace 61 minutos con el sustituto sin usar
+    When: Llega el viejo
+    Then: Robo, no A3: una respuesta perdida no tarda una hora en reintentarse
+    """
+    e = await _escena()
+    await e.refresca(ORIGINAL)
+    await e.hace(ORIGINAL, timedelta(minutes=61))
+
+    rechazo = await e.rechazo(ORIGINAL)
+
+    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REUSED
+    assert not (await e.uow.user_devices.find_by_id(e.dispositivo.id)).is_active
+
+
+async def test_a3_at_fifty_nine_minutes_it_still_resumes():
+    e = await _escena()
+    await e.refresca(ORIGINAL)
+    await e.hace(ORIGINAL, timedelta(minutes=59))
+
+    respuesta = await e.refresca(ORIGINAL)
+
+    assert respuesta.refresh_token == "refresco-2"
+
+
+async def test_review_attacker_first_then_victim_then_attacker_again():
+    """
+    El escenario de la revisión: el atacante usa T0 antes que la víctima.
+
+    Given: El atacante refresca con T0 robado y se queda con T1
+    When: La víctima llega con T0 (2 min después, T1 sin usar: parece una respuesta
+          perdida, A3) y luego el atacante usa T1
+    Then: Al volver T1 (anulado) salta la alarma y toda la cadena muere, también la
+          de la víctima (T2): los dos tienen que volver a entrar
+    """
+    e = await _escena()
+    await e.refresca(ORIGINAL)  # el atacante: T1
+    await e.hace(ORIGINAL, timedelta(minutes=2))
+    victima = await e.refresca(ORIGINAL)  # la víctima: A3, T2
+    assert victima.refresh_token == "refresco-2"
+
+    rechazo = await e.rechazo("refresco-1")  # el atacante vuelve con T1
+
+    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REUSED
+    assert await e.vivos() == []
+    assert codigo_publico((await e.rechazo("refresco-2")).motivo) == SESSION_REJECTED
+
+
+async def test_review_attacker_keeps_rotating_and_the_victim_sets_off_the_alarm():
+    """
+    Given: El atacante refrescó con T0 robado (T1) y luego con T1 (T2)
+    When: La víctima llega con T0
+    Then: Robo: la cadena del atacante muere (T2 rechazado) y el dispositivo, revocado
+    """
+    e = await _escena()
+    await e.refresca(ORIGINAL)
+    await e.refresca("refresco-1")
+    await e.hace(ORIGINAL, timedelta(minutes=2))
+
+    rechazo = await e.rechazo(ORIGINAL)
+
+    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_REUSED
+    assert codigo_publico((await e.rechazo("refresco-2")).motivo) == SESSION_REJECTED
+
+
+async def test_a_rejection_releases_its_locks():
+    """
+    Given: Un token revocado (el rechazo deja abierta la transacción del FOR UPDATE)
+    When: Se rechaza
+    Then: Se hace rollback explícito: los bloqueos no esperan al cierre de la sesión
+    """
+    e = await _escena()
+    e.original.revoke()
+    e.uow.rollback = AsyncMock(wraps=e.uow.rollback)
+
+    await e.rechazo(ORIGINAL)
+
+    e.uow.rollback.assert_awaited()

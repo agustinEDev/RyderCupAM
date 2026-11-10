@@ -984,8 +984,9 @@ def get_aviso_de_sesion_cerrada(
     email_service: IEmailService = Depends(get_email_service),
     fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
 ) -> IAvisoDeSesionCerrada:
-    """El correo de «sesión cerrada por seguridad» al propio usuario, en segundo plano (F-02)."""
-    return AvisoDeSesionCerradaEnSegundoPlano(fabrica, email_service)
+    """El correo de «sesión cerrada por seguridad» al propio usuario, en segundo plano (F-02),
+    con el tope global de avisos."""
+    return AvisoDeSesionCerradaEnSegundoPlano(fabrica, email_service, cupo_de_avisos)
 
 
 def get_freno_del_login() -> IFrenoDelLogin:
