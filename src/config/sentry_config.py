@@ -27,6 +27,7 @@ Configuración requerida:
 
 import logging
 import re
+from typing import Any
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -83,7 +84,7 @@ _TACHADO = r"\1[Filtered]"
 
 
 def _tacha_el_token_del_enlace(event: Event) -> Event:
-    """Tacha el token de la URL del GET obsoleto, en la petición y en el nombre."""
+    """Tacha el token de la URL del GET obsoleto: petición, nombre y migas."""
     peticion = event.get("request")
     url = peticion.get("url") if isinstance(peticion, dict) else None
     if isinstance(peticion, dict) and isinstance(url, str):
@@ -91,6 +92,17 @@ def _tacha_el_token_del_enlace(event: Event) -> Event:
     transaccion = event.get("transaction")
     if isinstance(transaccion, str):
         event["transaction"] = _TOKEN_EN_LA_URL.sub(_TACHADO, transaccion)
+    # Y en las migas: la línea de acceso de uvicorn o una petición llevan la URL
+    migas: Any = event.get("breadcrumbs")
+    lista: Any = migas.get("values") if isinstance(migas, dict) else migas
+    for miga in [m for m in lista if isinstance(m, dict)] if isinstance(lista, list) else []:
+        if isinstance(miga.get("message"), str):
+            miga["message"] = _TOKEN_EN_LA_URL.sub(_TACHADO, miga["message"])
+        datos = miga.get("data")
+        if isinstance(datos, dict):
+            for clave, valor in datos.items():
+                if isinstance(valor, str):
+                    datos[clave] = _TOKEN_EN_LA_URL.sub(_TACHADO, valor)
     return event
 
 

@@ -66,3 +66,24 @@ def test_b4_the_register_body_does_not_go_to_sentry():
 
     assert "data" not in sentry_config.before_send(_evento(url), {})["request"]
     assert "data" not in sentry_config.before_send_transaction(_evento(url), {})["request"]
+
+
+def test_b4_the_breadcrumbs_go_without_the_token():
+    """
+    Given: Un error con migas que llevan la URL del GET (la línea de acceso de uvicorn,
+           una petición HTTP) en el mensaje y en los datos
+    When: Pasa por before_send y por before_send_transaction
+    Then: Ninguna miga lleva el token
+    """
+    migas = {
+        "values": [
+            {"category": "uvicorn.access", "message": f'"GET {URL} HTTP/1.1" 200'},
+            {"category": "httplib", "data": {"url": URL, "method": "GET"}},
+        ]
+    }
+    lista = [{"message": f"GET {URL}"}]
+
+    error = sentry_config.before_send(_evento(URL, breadcrumbs=migas), {})
+    transaccion = sentry_config.before_send_transaction(_evento(URL, breadcrumbs=lista), {})
+
+    assert TOKEN not in str(error) and TOKEN not in str(transaccion)
