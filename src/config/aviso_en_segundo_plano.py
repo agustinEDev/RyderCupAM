@@ -1,6 +1,8 @@
 """
 Los avisos de seguridad por correo, en segundo plano: el de «nuevo inicio de sesión»
-(BE #737) y el de «intentos fallidos» (BE #732).
+(BE #737), el de «intentos fallidos» (BE #732) y los dos correos del registro (fase 3:
+la verificación y el aviso de intento de registro, para que la respuesta no espere al
+proveedor y tarde lo mismo exista o no el correo).
 
 El login contesta sin esperar al proveedor de correo: el aviso se lanza como una
 tarea del propio proceso, con su propia sesión de BD, porque la de la petición se
@@ -10,6 +12,7 @@ cierra al contestar. Si el proceso se reinicia justo entonces, ese correo se pie
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,6 +20,9 @@ from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioReques
 from src.modules.user.application.dto.user_dto import AvisoDeFallosRequestDTO
 from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
+)
 from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_fallos_de_login import (
@@ -135,3 +141,21 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         except Exception as e:
             # Solo el tipo: el mensaje puede llevar la dirección (OWASP A09)
             logger.error("Failed sign-ins notice failed in the background: %s", type(e).__name__)
+
+
+class CorreoEnSegundoPlano(ICorreoEnSegundoPlano):
+    """Lanza un correo del registro sin que la respuesta lo espere (fase 3, B1-B3)."""
+
+    def lanza(self, nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
+        """Lo lanza como tarea del proceso, registrada para que los tests la esperen."""
+        tarea = asyncio.create_task(self._envia(nombre, envio), name=nombre)
+        _PENDIENTES.add(tarea)
+        tarea.add_done_callback(_PENDIENTES.discard)
+
+    @staticmethod
+    async def _envia(nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
+        """El envío; un fallo se queda en el log, solo con su tipo (OWASP A09)."""
+        try:
+            await envio()
+        except Exception as e:
+            logger.error("Background email %s failed: %s", nombre, type(e).__name__)

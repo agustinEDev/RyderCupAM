@@ -94,11 +94,14 @@ async def test_b2_1_sign_up_hashes_with_no_transaction_open(client: AsyncClient,
     assert vigia.con_transaccion == []
 
 
-async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
+async def test_b2_1_a_taken_email_costs_the_same_bcrypt_outside_a_transaction(
+    client: AsyncClient, vigia
+):
     """
     Given: Un correo ya registrado
     When: Se intenta otra alta con él
-    Then: 409 sin gastar ningún bcrypt
+    Then: El mismo 201 y el mismo bcrypt que un alta nueva (fase 3: el tiempo no dice si
+          el correo existe), sin transacción abierta
     """
     datos = {
         "email": "b21.ocupado@example.com",
@@ -112,8 +115,9 @@ async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
 
     r = await client.post("/api/v1/auth/register", json=datos)
 
-    assert r.status_code == 409
-    assert vigia.bcrypts == antes
+    assert r.status_code == 201
+    assert vigia.bcrypts == antes + 1
+    assert vigia.con_transaccion == []
 
 
 @pytest.mark.parametrize(

@@ -1,8 +1,13 @@
 import logging
+from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     RegisterUserRequestDTO,
     UserResponseDTO,
+)
+from src.modules.user.application.ports.correo_en_segundo_plano_port import (
+    ICorreoEnSegundoPlano,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
@@ -10,10 +15,7 @@ from src.modules.user.application.services.registra_sin_romper import registra_s
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
-from src.modules.user.domain.errors.user_errors import (
-    TermsAcceptanceRequiredError,
-    UserAlreadyExistsError,
-)
+from src.modules.user.domain.errors.user_errors import TermsAcceptanceRequiredError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -38,6 +40,16 @@ class RegisterUserUseCase:
 
     Opcionalmente, puede buscar el hándicap inicial del usuario
     si se proporciona un HandicapService.
+
+    No dice si el correo ya tiene cuenta (fase 3, F-01): con un correo ocupado responde
+    lo mismo que con uno nuevo, con el mismo trabajo (el bcrypt y la RFEG), y la cuenta
+    que ya existe no se toca.
+    - Correo nuevo (B1): alta y correo de verificación.
+    - Cuenta activa, verificada (B2) o no (B3): aviso al buzón del correo, como mucho uno
+      al día. Sin verificar no se reenvía el enlace de verificación: verificaría una
+      cuenta con la contraseña de quien la creó; el aviso lleva a «Olvidé mi contraseña»,
+      que se la queda (ADR-045).
+    - Cuenta desactivada: nada más.
     """
 
     def __init__(
@@ -48,6 +60,7 @@ class RegisterUserUseCase:
         email_service: IEmailService | None = None,
         *,
         security_audit: ISecurityAuditLogger,
+        correo_en_segundo_plano: ICorreoEnSegundoPlano | None = None,
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
@@ -55,18 +68,14 @@ class RegisterUserUseCase:
         self._handicap_service = handicap_service
         self._email_service = email_service
         self._security_audit = security_audit
-
-    async def _rechaza_si_ocupado(self, email_vo: Email, email: str) -> None:
-        """La regla del correo ocupado, en un solo sitio (fase 1 y, otra vez, la 3)."""
-        if await self._user_finder.by_email(email_vo):
-            raise UserAlreadyExistsError(f"El email '{email}' ya está registrado.")
+        # Sin él (tests de antes), los correos se esperan aquí mismo
+        self._correo_en_segundo_plano = correo_en_segundo_plano
 
     async def _comprueba_lo_barato(self, request: RegisterUserRequestDTO) -> Email:
-        """El correo libre y el país, en su propia transacción ya cerrada al volver: con
-        el correo ocupado no se gasta ningún bcrypt (BE #283)."""
+        """El país, en su propia transacción ya cerrada al volver (BE #283). El correo
+        ocupado ya no corta aquí: se gasta el mismo bcrypt que con uno libre (fase 3)."""
         async with self._uow:
             email_vo = Email(request.email)
-            await self._rechaza_si_ocupado(email_vo, request.email)
             if request.country_code:
                 country_code_vo = CountryCode(request.country_code)
                 if not await self._country_repository.exists(country_code_vo):
@@ -81,10 +90,11 @@ class RegisterUserUseCase:
             request: DTO con la información para el registro.
 
         Returns:
-            DTO con la información del usuario recién creado.
+            DTO con la información del usuario recién creado. Con el correo ocupado, el
+            mismo DTO con los datos enviados y un id que no se guarda: la misma forma y
+            los mismos datos que un alta nueva.
 
         Raises:
-            UserAlreadyExistsError: Si el correo electrónico ya está en uso.
             TermsAcceptanceRequiredError: Si no trae accept_terms exactamente True.
         """
         # Sin consentimiento explícito no hay alta. La API ya da 422, pero el
@@ -155,16 +165,32 @@ class RegisterUserUseCase:
         verification_token = new_user.generate_verification_token()
 
         # Fase 3, en otra transacción: el correo, otra vez (alguien pudo registrarlo
-        # entretanto), y se guarda
-        async with self._uow:
-            await self._rechaza_si_ocupado(email_vo, request.email)
-            # 3. Guardar el usuario en el repositorio, y después su aceptación
-            # (la fila apunta al usuario: tiene que existir antes)
-            await self._uow.users.save(new_user)
-            await self._uow.flush()
-            await self._uow.terms_acceptances.save(terms_acceptance)
+        # entretanto), y se guarda solo si sigue libre
+        try:
+            guardado, avisa_a = await self._guarda_o_mira_el_ocupado(
+                email_vo, new_user, terms_acceptance
+            )
+        except Exception:
+            # Dos altas a la vez: las dos lo vieron libre y la base de datos paró a esta.
+            # Lo mismo que si hubiera llegado después; otro fallo no se esconde
+            if not await self._lo_ocupo_otra(email_vo, new_user):
+                raise
+            logger.info("Sign-up with an email already registered (concurrent)")
+            return UserResponseDTO.model_validate(new_user)
 
-            # El context manager (__aexit__) hace commit automático y publica eventos
+        if not guardado:
+            # Correo ocupado: ni alta ni verificación. Al buzón, su aviso si toca (B2/B3)
+            if avisa_a is not None and self._email_service is not None:
+                dueno_email, dueno_nombre = avisa_a
+                email_service = self._email_service
+                await self._envia(
+                    "aviso-de-intento-de-registro",
+                    lambda: email_service.send_register_attempt_notice(
+                        to_email=dueno_email, user_name=dueno_nombre
+                    ),
+                )
+            logger.info("Sign-up with an email already registered")
+            return UserResponseDTO.model_validate(new_user)
 
         # 3.5 Auditoría de seguridad: la aceptación de los Términos
         registra_sin_romper(
@@ -177,27 +203,83 @@ class RegisterUserUseCase:
             ),
         )
 
-        # 4. Enviar email de verificación
+        # 4. Enviar email de verificación (en segundo plano: la respuesta no lo espera,
+        # como el aviso de un correo ocupado)
         if self._email_service:
-            try:
-                email_sent = await self._email_service.send_verification_email(
+            email_service = self._email_service
+            nuevo_id = new_user.id.value
+            nombre = new_user.first_name
+
+            async def verificacion() -> bool:
+                enviado = await email_service.send_verification_email(
                     to_email=request.email,
-                    user_name=new_user.first_name,
+                    user_name=nombre,
                     verification_token=verification_token,
                 )
-                if not email_sent:
+                if not enviado:
                     logger.warning(
                         "No se pudo enviar el email de verificación para el usuario %s",
-                        new_user.id.value,
+                        nuevo_id,
                     )
-            except (ValueError, ConnectionError):
-                # Defensivo: el envío de la app no lanza (devuelve False), pero otro
-                # adaptador del puerto podría hacerlo
-                logger.exception(
-                    "Error al enviar email de verificación para el usuario %s",
-                    new_user.id.value,
-                )
-                # No fallar el registro si el email no se pudo enviar
+                return enviado
+
+            await self._envia("verificacion-del-registro", verificacion)
 
         # 5. Devolver la respuesta como DTO
         return UserResponseDTO.model_validate(new_user)
+
+    async def _guarda_o_mira_el_ocupado(
+        self, email_vo: Email, new_user: User, terms_acceptance: TermsAcceptance
+    ) -> tuple[bool, tuple[str, str] | None]:
+        """
+        Guarda el alta si el correo sigue libre. Si no, no toca la cuenta que lo tiene
+        salvo para apuntar su aviso (B2), con la fila bloqueada.
+
+        Returns:
+            (guardado, aviso): si se guardó el alta, y el (correo, nombre) del dueño si
+            toca avisarle (None si no: desactivada, o ya avisada en las 24 h)
+        """
+        async with self._uow:
+            ocupado = await self._user_finder.by_email(email_vo)
+            if ocupado is None:
+                # 3. Guardar el usuario en el repositorio, y después su aceptación
+                # (la fila apunta al usuario: tiene que existir antes)
+                await self._uow.users.save(new_user)
+                await self._uow.flush()
+                await self._uow.terms_acceptances.save(terms_acceptance)
+                # El context manager (__aexit__) hace commit automático
+                return True, None
+            # Verificada o no (B2 y B3, decidido por Agustín): el aviso a su buzón. A una
+            # desactivada, no: no puede iniciar sesión
+            if not ocupado.is_active or self._email_service is None:
+                return False, None
+            dueno = await self._uow.users.find_by_id_for_update(ocupado.id)
+            if dueno is None or not dueno.reserva_el_aviso_de_registro(datetime.now()):
+                return False, None
+            await self._uow.users.save(dueno)
+            return False, (str(dueno.email.value), dueno.first_name)
+
+    async def _lo_ocupo_otra(self, email_vo: Email, new_user: User) -> bool:
+        """Si tras un fallo al guardar el correo lo tiene OTRA cuenta (dos altas a la vez)."""
+        try:
+            async with self._uow:
+                ocupado = await self._user_finder.by_email(email_vo)
+        except Exception:
+            return False
+        return ocupado is not None and ocupado.id != new_user.id
+
+    async def _envia(self, nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
+        """Lanza un correo sin que la respuesta lo espere; sin el lanzador, lo espera aquí
+        (tests de antes). Un fallo del envío nunca rompe el registro."""
+
+        async def sin_romper() -> None:
+            try:
+                await envio()
+            except Exception as e:
+                # Solo el tipo: el mensaje puede llevar la dirección (OWASP A09)
+                logger.error("Sign-up email %s failed: %s", nombre, type(e).__name__)
+
+        if self._correo_en_segundo_plano is not None:
+            self._correo_en_segundo_plano.lanza(nombre, sin_romper)
+            return
+        await sin_romper()

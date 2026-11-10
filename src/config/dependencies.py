@@ -9,7 +9,11 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.aviso_en_segundo_plano import (
+    AvisoDeFallosEnSegundoPlano,
+    AvisoEnSegundoPlano,
+    CorreoEnSegundoPlano,
+)
 from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.cupo_de_contacto import cupo_de_contacto
@@ -855,6 +859,8 @@ def get_register_user_use_case(
         handicap_service=handicap_service,
         email_service=email_service,
         security_audit=security_audit,
+        # Los correos del registro, sin que la respuesta los espere (fase 3)
+        correo_en_segundo_plano=CorreoEnSegundoPlano(),
     )
 
 
