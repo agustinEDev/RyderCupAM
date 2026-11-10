@@ -31,9 +31,11 @@ The security review of phase 3 found (F-01, F-04, F-05, F-10, F-13):
    row locked; a deactivated account gets none. No new verification link is sent for an
    unverified account: it would verify an account whose password its creator knows; the
    reset link claims it instead (ADR-045). Two sign-ups at once: the second answers the
-   same `201`.
-2. **Emails leave in the background** (`ICorreoEnSegundoPlano`): the sign-up verification,
-   the sign-up notice, the reset link and the verification resend. The response never
+   same `201`, and the same notice as if it had arrived later (the unique violation
+reaches the use case as `EmailTakenConcurrentlyError`; any other error goes up).
+2. **Emails leave in the background**: the sign-up verification, the sign-up notice and
+   the reset link (`ICorreoEnSegundoPlano`), and the verification resend
+   (`IReenvioDeVerificacion`). The response never
    waits for the provider, so its time does not depend on the account existing; the
    artificial 0.5 s delay of "forgot password" is gone.
 3. **Links are stored as their SHA-256** and looked up by hash: verification (48 hours,
@@ -49,10 +51,20 @@ The security review of phase 3 found (F-01, F-04, F-05, F-10, F-13):
    is sent, the previous link stays valid and the answer is the same. The daily quota
    resets when the account proves it is its own: a successful sign-in (password or
    Google) or password reset.
-6. **The public link routes work without a session**: `POST /auth/validate-reset-token`
-   and `POST /auth/resend-verification` are exempt from CSRF, like `forgot-password`.
-   They change nothing an attacker could not request directly, and answer the same
-   whether the account exists or not.
+6. **Resending the verification link** (decided by Agustín):
+   - with a session (the app banner), `POST /auth/resend-verification {email}` as before,
+     only for the session's own email; without a session, or with another account's
+     email, the same answer and nothing is sent;
+   - without a session, `POST /auth/resend-verification-link {token}` with the EXPIRED
+     link of an unverified account, as proof of holding the mailbox. Any other token, or
+     a still valid one, gets the same answer and nothing is sent. 3 per hour per token
+     and network. Nobody can trigger the email with someone else's address, nor void
+     their link;
+   - the new link is saved only after the email leaves: if sending fails, the previous
+     link stays valid.
+7. **The public link routes work without a session**: `POST /auth/validate-reset-token`
+   and `POST /auth/resend-verification-link` are exempt from CSRF, like
+   `forgot-password`. The resend by email needs a session, so it keeps CSRF.
 
 ## Consequences
 
@@ -69,16 +81,21 @@ third party cannot keep the owner without a reset link from another network.
 - **M-2, the daily reset quota.** An attacker can spend an account's 10 reset emails of
   the day from several networks; the owner then gets none until 24 hours pass, or until
   they sign in or reset (which resets the quota). Accepted as the cost of the ceiling.
-- **B-1, residual timing.** A new account is an insert (user and terms acceptance); an
-  existing one is a read and at most one update. The difference is milliseconds, against
-  a bcrypt of hundreds; not measured as exploitable, not closed.
+- **B-1, residual timing.** Accepted, not closed; milliseconds against a bcrypt of
+  hundreds, not measured as exploitable:
+  - sign-up: a new account is an insert (user and terms acceptance); an existing one is a
+    read, and an update only when its notice is due (the branches without a write are
+    the fastest);
+  - forgot-password: an unknown email is one SELECT; an existing account is a
+    transaction with `SELECT ... FOR UPDATE` and an update.
 - **B-3, the staggered deploy window.** While 2.56 still serves next to 2.57, it can
   write a plaintext link after this migration ran; that link no longer works with 2.57
   and stays in the table. The 2.58.0 migration repeats the
   `UPDATE ... WHERE token !~ '^[0-9a-f]{64}$'` of both columns (see
-  `docs/pendientes-de-release.md`).
+  `docs/pendientes-de-release.md`). Also, during that window, links cross between
+  versions: a hashed link issued by 2.57 fails on a 2.56 instance and a plaintext one
+  issued by 2.56 fails on 2.57. Whoever hits it asks for another link.
 - An email sent in the background is lost if the process restarts right then; the user
-  can ask again. A resend that fails to send has already replaced the previous link.
-- The CSRF exemption of the resend route lets another site trigger a verification email
-  to an unverified address, as anyone can by calling the route; it stays limited per
-  network and per email.
+  can ask again (a lost resend leaves the previous link in place).
+- The CSRF exemption of the resend-by-link route lets another site trigger it, but only
+  with the expired link, which it does not have.
