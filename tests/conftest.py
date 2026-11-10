@@ -303,14 +303,18 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     # Limpieza: antes de soltar la BD, lo que la petición dejó en segundo plano con la
     # fábrica de sesiones de este test (BE #781)
-    await _espera_el_trabajo_en_segundo_plano()
-    await test_engine.dispose()
-
-    async with engine.connect() as conn:
-        await conn.execute(text(f"DROP DATABASE {db_name}"))
-    await engine.dispose()
-
-    fastapi_app.dependency_overrides.clear()
+    # Si la espera agota su tope, el resto de la limpieza se hace igual: el motor, la BD
+    # y las sustituciones no se quedan colgando para el test siguiente
+    try:
+        await _espera_el_trabajo_en_segundo_plano()
+    finally:
+        await test_engine.dispose()
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text(f"DROP DATABASE {db_name}"))
+        finally:
+            await engine.dispose()
+            fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -375,14 +379,18 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
 
     # Limpieza: antes de soltar la BD, lo que la petición dejó en segundo plano con la
     # fábrica de sesiones de este test (BE #781)
-    await _espera_el_trabajo_en_segundo_plano()
-    await test_engine.dispose()
-
-    async with engine.connect() as conn:
-        await conn.execute(text(f"DROP DATABASE {db_name}"))
-    await engine.dispose()
-
-    fastapi_app.dependency_overrides.clear()
+    # Si la espera agota su tope, el resto de la limpieza se hace igual: el motor, la BD
+    # y las sustituciones no se quedan colgando para el test siguiente
+    try:
+        await _espera_el_trabajo_en_segundo_plano()
+    finally:
+        await test_engine.dispose()
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text(f"DROP DATABASE {db_name}"))
+        finally:
+            await engine.dispose()
+            fastapi_app.dependency_overrides.clear()
 
 
 # ======================================================================================
