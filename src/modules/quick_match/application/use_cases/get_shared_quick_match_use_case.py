@@ -160,11 +160,16 @@ class GetSharedQuickMatchUseCase:
         Sin `user_id` ni `handicap` el jugador con el que hay un bloqueo, en
         cualquier sentido (F-09, fase 3 del plan a 9, 10 nov 2026).
 
-        No lo hace anónimo del todo: el `participant_id` de un registrado es su
-        user_id (`QuickMatchParticipant.for_user`) y `creator_id` sigue siendo el
-        del creador, que el cliente exige. Se aceptó así (Agustín, 10 nov): la
-        protección real es que el perfil y el avatar de quien te bloqueó dan 404
-        (G2), y con el id ya no se llega a su nombre ni a su foto.
+        No lo hace anónimo del todo, y se aceptó así (Agustín, 10 nov 2026). Quedan:
+        - su id: el `participant_id` de un registrado es su user_id
+          (`QuickMatchParticipant.for_user`), y sale también en `scorer_ids`, en
+          `hole_scores`, en `participant_strokes` y en el reparto de anotación;
+        - `creator_id`, el del creador, que el cliente exige;
+        - su hándicap, que se reconstruye con los golpes que recibe
+          (`participant_strokes`: `playing_handicap` y `strokes_by_hole`).
+        La protección real es que todo lo de quien te bloqueó (perfil, avatar,
+        actividad, partidas juntos, galería, búsqueda, solicitud) responde como
+        una cuenta que no existe (G2 y F2): con el id ya no se llega a él.
         """
         sin_id = {
             p.participant_id.value
