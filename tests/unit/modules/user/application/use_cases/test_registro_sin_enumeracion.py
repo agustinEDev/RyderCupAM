@@ -30,6 +30,7 @@ from src.modules.user.application.ports.correo_en_segundo_plano_port import (
 from src.modules.user.application.use_cases import register_user_use_case
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.errors.user_errors import EmailTakenConcurrentlyError
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -271,30 +272,42 @@ async def test_a_deactivated_account_gets_no_notice(verificada):
     correo.send_register_attempt_notice.assert_not_awaited()
 
 
-async def test_the_second_of_two_simultaneous_sign_ups_gets_the_same_response(monkeypatch):
+@pytest.mark.parametrize("la_otra", ["sin verificar", "verificada"])
+async def test_the_second_of_two_simultaneous_sign_ups_gets_the_same_response(monkeypatch, la_otra):
     """
     Given: Dos altas a la vez: la otra guarda el correo justo antes y la base de datos
-           para a esta al guardar
+           para a esta al guardar (la violación de unicidad, ya como error del dominio)
     When: Esta guarda
-    Then: La misma respuesta que cualquier correo ya registrado, sin error ni correos
+    Then: La misma respuesta que cualquier correo ya registrado, sin verificación; y lo
+          mismo que el camino de siempre: el aviso al buzón, con su tope de 24 h
     """
     uow, correo = InMemoryUnitOfWork(), _email_service()
     guarda = uow.users.save
+    otras = []
 
     async def la_otra_gana(_user):
         otra = User.create(
             first_name="Ana", last_name="Duena", email_str=CORREO, plain_password=CLAVE_DEL_DUENO
         )
+        if la_otra == "verificada":
+            otra.confirm_email_ownership()
+        otras.append(otra)
         await guarda(otra)
-        raise RuntimeError("duplicate key value violates unique constraint users_email_key")
+        monkeypatch.setattr(uow.users, "save", guarda)
+        raise EmailTakenConcurrentlyError("El correo ya está en uso.")
 
     monkeypatch.setattr(uow.users, "save", la_otra_gana)
 
     respuesta = await _caso(uow, correo).execute(_alta())
 
+    # El aviso sale ya en el alta que perdió la carrera
     assert respuesta.email == CORREO and respuesta.first_name == "Otro"
     correo.send_verification_email.assert_not_awaited()
-    correo.send_register_attempt_notice.assert_not_awaited()
+    correo.send_register_attempt_notice.assert_awaited_once_with(to_email=CORREO, user_name="Ana")
+    assert otras[0].register_attempt_notice_at is not None
+    # Y con su tope de 24 h: otra alta después, sin segundo aviso
+    await _caso(uow, correo).execute(_alta())
+    correo.send_register_attempt_notice.assert_awaited_once()
 
 
 async def test_a_failure_that_is_not_the_email_is_not_hidden(monkeypatch):

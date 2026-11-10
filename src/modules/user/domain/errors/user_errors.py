@@ -65,6 +65,18 @@ class UserAlreadyExistsError(UserDomainError):
     pass
 
 
+class EmailTakenConcurrentlyError(UserAlreadyExistsError):
+    """
+    El correo se lo llevó otra alta entre la comprobación y el guardado.
+
+    Lo lanza la unidad de trabajo al enviar el alta (`flush`) y chocar con la
+    restricción única del correo. El registro lo trata como cualquier correo ya
+    registrado (fase 3): la misma respuesta y el aviso al buzón.
+    """
+
+    pass
+
+
 class DuplicateEmailError(UserDomainError):
     """
     Excepción lanzada cuando se intenta usar un email que ya está en uso.

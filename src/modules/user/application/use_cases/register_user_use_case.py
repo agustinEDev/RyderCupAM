@@ -15,7 +15,10 @@ from src.modules.user.application.services.registra_sin_romper import registra_s
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
-from src.modules.user.domain.errors.user_errors import TermsAcceptanceRequiredError
+from src.modules.user.domain.errors.user_errors import (
+    EmailTakenConcurrentlyError,
+    TermsAcceptanceRequiredError,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -170,13 +173,12 @@ class RegisterUserUseCase:
             guardado, avisa_a = await self._guarda_o_mira_el_ocupado(
                 email_vo, new_user, terms_acceptance
             )
-        except Exception:
+        except EmailTakenConcurrentlyError:
             # Dos altas a la vez: las dos lo vieron libre y la base de datos paró a esta.
-            # Lo mismo que si hubiera llegado después; otro fallo no se esconde
-            if not await self._lo_ocupo_otra(email_vo, new_user):
-                raise
+            # Lo mismo que si hubiera llegado después, aviso incluido. Otro error sube
             logger.info("Sign-up with an email already registered (concurrent)")
-            return UserResponseDTO.model_validate(new_user)
+            async with self._uow:
+                guardado, avisa_a = False, await self._reserva_el_aviso(email_vo)
 
         if not guardado:
             # Correo ocupado: ni alta ni verificación. Al buzón, su aviso si toca (B2/B3)
@@ -249,24 +251,26 @@ class RegisterUserUseCase:
                 await self._uow.terms_acceptances.save(terms_acceptance)
                 # El context manager (__aexit__) hace commit automático
                 return True, None
-            # Verificada o no (B2 y B3, decidido por Agustín): el aviso a su buzón. A una
-            # desactivada, no: no puede iniciar sesión
-            if not ocupado.is_active or self._email_service is None:
-                return False, None
-            dueno = await self._uow.users.find_by_id_for_update(ocupado.id)
-            if dueno is None or not dueno.reserva_el_aviso_de_registro(datetime.now()):
-                return False, None
-            await self._uow.users.save(dueno)
-            return False, (str(dueno.email.value), dueno.first_name)
+            return False, await self._reserva_el_aviso(email_vo)
 
-    async def _lo_ocupo_otra(self, email_vo: Email, new_user: User) -> bool:
-        """Si tras un fallo al guardar el correo lo tiene OTRA cuenta (dos altas a la vez)."""
-        try:
-            async with self._uow:
-                ocupado = await self._user_finder.by_email(email_vo)
-        except Exception:
-            return False
-        return ocupado is not None and ocupado.id != new_user.id
+    async def _reserva_el_aviso(self, email_vo: Email) -> tuple[str, str] | None:
+        """
+        Con el correo ocupado, reserva el aviso a su buzón (B2/B3) con la fila bloqueada,
+        dentro de la transacción en curso. Verificada o no (decidido por Agustín); a una
+        desactivada, no: no puede iniciar sesión.
+
+        Returns:
+            (correo, nombre) del dueño si toca avisarle; None si no (desactivada, ya
+            avisada en las 24 h, o sin servicio de correo)
+        """
+        ocupado = await self._user_finder.by_email(email_vo)
+        if ocupado is None or not ocupado.is_active or self._email_service is None:
+            return None
+        dueno = await self._uow.users.find_by_id_for_update(ocupado.id)
+        if dueno is None or not dueno.reserva_el_aviso_de_registro(datetime.now()):
+            return None
+        await self._uow.users.save(dueno)
+        return str(dueno.email.value), dueno.first_name
 
     async def _envia(self, nombre: str, envio: Callable[[], Awaitable[object]]) -> None:
         """Lanza un correo sin que la respuesta lo espere; sin el lanzador, lo espera aquí
