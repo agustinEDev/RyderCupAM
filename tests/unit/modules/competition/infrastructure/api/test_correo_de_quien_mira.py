@@ -6,7 +6,7 @@ Toda ruta lo saca de `correo_de_quien_mira`: solo el verificado. Pasar
 invitaciones enviadas a esa dirección (listado, ficha, inscritos, horarios).
 """
 
-import re
+import ast
 from pathlib import Path
 from uuid import uuid4
 
@@ -42,19 +42,54 @@ def test_sin_verificar_no_da_ninguno():
     assert correo_de_quien_mira(_sesion(False)) is None
 
 
-def test_ninguna_ruta_pasa_el_correo_sin_verificar():
+def _correos_de_la_sesion(codigo: str) -> list[int]:
+    """
+    Las líneas donde se lee `.email` de un parámetro anotado como `UserResponseDTO`
+    (la sesión), se llame como se llame: `current_user`, `yo`, `usuario`...
+    """
+    lineas = []
+    for funcion in ast.walk(ast.parse(codigo)):
+        if not isinstance(funcion, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        argumentos = [*funcion.args.posonlyargs, *funcion.args.args, *funcion.args.kwonlyargs]
+        sesiones = {
+            a.arg
+            for a in argumentos
+            if a.annotation is not None and "UserResponseDTO" in ast.unparse(a.annotation)
+        }
+        lineas += [
+            nodo.lineno
+            for nodo in ast.walk(funcion)
+            if isinstance(nodo, ast.Attribute)
+            and nodo.attr == "email"
+            and isinstance(nodo.value, ast.Name)
+            and nodo.value.id in sesiones
+        ]
+    return lineas
+
+
+def test_ninguna_ruta_lee_el_correo_de_la_sesion():
     """
     Given: Las rutas de competition
-    When: Se buscan usos de `current_user.email`
-    Then: No hay ninguno: todas pasan por `correo_de_quien_mira`
+    When: Se busca, por el tipo y no por el nombre, dónde se lee el correo de la sesión
+    Then: En ningún sitio: todas pasan por `correo_de_quien_mira`
     """
     # Menos el propio ayudante, que es quien lo lee
     ficheros = sorted(f for f in RUTAS.glob("*.py") if f.name != "correo_de_quien_mira.py")
     assert ficheros, RUTAS
-    a_pelo = [
-        f"{f.name}:{n}"
-        for f in ficheros
-        for n, linea in enumerate(f.read_text().splitlines(), 1)
-        if re.search(r"current_user\.email\b(?!_verified)", linea)
-    ]
+    a_pelo = [f"{f.name}:{n}" for f in ficheros for n in _correos_de_la_sesion(f.read_text())]
     assert a_pelo == []
+
+
+def test_el_vigia_encuentra_el_correo_con_cualquier_nombre():
+    """
+    Given: Una ruta que lee el correo de la sesión con otro nombre de variable
+    When: Pasa el vigía
+    Then: La encuentra
+    """
+    codigo = (
+        "async def ruta(yo: UserResponseDTO = Depends(get_current_user)):\n"
+        "    return await caso(email=yo.email)\n"
+    )
+
+    assert _correos_de_la_sesion(codigo) == [2]
