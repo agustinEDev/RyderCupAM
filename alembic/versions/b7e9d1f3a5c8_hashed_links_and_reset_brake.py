@@ -11,6 +11,10 @@ Fase 3 (F-04/F-05/F-10/F-13, F-01):
 - `password_reset_emails_in_window` y `password_reset_window_started_at`: el cupo de 10
   correos de restablecer por cuenta en 24 h.
 
+Despliegue escalonado (ADR-048, B-3): mientras la 2.56 sigue sirviendo junto a la 2.57,
+puede escribir un enlace en claro después de esta migración. La migración de la 2.58.0
+repite los dos UPDATE de abajo (`docs/pendientes-de-release.md`).
+
 Columnas nulas o con valor por defecto constante: en Postgres 11+ no reescriben la
 tabla. La release anterior sigue funcionando con la tabla migrada (no lee las nuevas).
 
