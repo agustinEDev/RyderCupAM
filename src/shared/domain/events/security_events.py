@@ -312,6 +312,49 @@ class RefreshTokenRevokedEvent(SecurityAuditEvent):
         return base
 
 
+@dataclass(frozen=True)
+class RefreshTokenReuseDetectedEvent(SecurityAuditEvent):
+    """
+    Robo de un refresh token detectado (F-02): llegó un token ya sustituido, fuera del
+    margen de dos pestañas, cuyo sustituto ya se había usado. Dos sitios tienen la
+    misma sesión; se revocan todos los tokens de ese dispositivo.
+
+    Atributos:
+        device_id: El dispositivo cuya sesión se cerró
+        tokens_revoked_count: Cuántos tokens se revocaron (la cadena entera)
+    """
+
+    device_id: str = ""
+    tokens_revoked_count: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: HIGH, va a Sentry con el tope de su tipo."""
+        super().__post_init__()
+        if self.tokens_revoked_count < 0:
+            raise ValueError("tokens_revoked_count no puede ser negativo")
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    @property
+    def is_failure(self) -> bool:
+        """Es un fallo de seguridad: queda como rastro (WARNING)."""
+        return True
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"REFRESH TOKEN REUSE | {user_info} | device {self.device_id} | "
+            f"{self.tokens_revoked_count} revoked | IP: {self.ip_address}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con el dispositivo y los revocados."""
+        base = super().to_dict()
+        base.update(
+            {"device_id": self.device_id, "tokens_revoked_count": self.tokens_revoked_count}
+        )
+        return base
+
+
 # ============================================================================
 # ACCOUNT SECURITY EVENTS
 # ============================================================================
