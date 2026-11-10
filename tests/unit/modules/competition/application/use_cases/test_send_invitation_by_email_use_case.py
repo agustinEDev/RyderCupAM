@@ -59,14 +59,17 @@ class TestSendInvitationByEmailUseCase:
         return UserInMemoryUoW()
 
     async def _create_user(
-        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User", verified=True
     ):
+        """Con el correo verificado salvo que se diga: solo así se ata la invitación (F-07)."""
         user = User.create(
             first_name=first_name,
             last_name=last_name,
             email_str=email,
             plain_password="SecureP@ssw0rd123",
         )
+        if verified:
+            user.confirm_email_ownership()
         async with user_uow:
             await user_uow.users.save(user)
         return user
@@ -267,6 +270,92 @@ class TestSendInvitationByEmailUseCase:
         assert result.invitee_email == "invitee@test.com"
         assert result.invitee_user_id == invitee.id.value
         assert result.invitee_name == "Invitee Player"
+
+    async def test_f1_a_una_cuenta_sin_verificar_no_se_ata(self, comp_uow, user_uow):
+        """
+        Given: El correo es de una cuenta que NO ha verificado su dirección
+        When: El organizador invita a ese correo
+        Then: Queda «enviada a un correo»: sin user_id ni nombre (en la respuesta,
+            en la guardada y en el correo), y sin aviso en su Actividad
+        """
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        await self._create_user(
+            user_uow,
+            email="invitee@test.com",
+            first_name="Invitee",
+            last_name="Player",
+            verified=False,
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        correo = AsyncMock()
+        actividad = AsyncMock()
+
+        uc = SendInvitationByEmailUseCase(
+            comp_uow, user_uow, email_service=correo, actividad=actividad
+        )
+        result = await uc.execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="invitee@test.com",
+            )
+        )
+
+        assert result.invitee_user_id is None
+        assert result.invitee_name is None
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(InvitationId(result.id))
+        assert guardada.invitee_user_id is None
+        assert correo.send_invitation_email.call_args.kwargs["invitee_name"] is None
+        actividad.invited.assert_not_awaited()
+
+    async def test_f1_a_una_cuenta_verificada_se_ata_y_se_avisa(self, comp_uow, user_uow):
+        """
+        Given: El correo es de una cuenta verificada
+        When: El organizador invita a ese correo
+        Then: Se ata a la cuenta, con su nombre, y le sale en Actividad
+        """
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        actividad = AsyncMock()
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow, actividad=actividad)
+        result = await uc.execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="invitee@test.com",
+            )
+        )
+
+        assert result.invitee_user_id == invitee.id.value
+        actividad.invited.assert_awaited_once()
+
+    async def test_f1_sin_verificar_sigue_sin_poder_invitarse_a_si_mismo(self, comp_uow, user_uow):
+        """
+        Given: Un organizador sin verificar
+        When: Se invita a su propio correo
+        Then: SelfInvitationViolation, como siempre
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com", verified=False)
+        created = await self._create_active_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
+        with pytest.raises(SelfInvitationViolation):
+            await uc.execute(
+                SendInvitationByEmailRequestDTO(
+                    competition_id=created.id,
+                    inviter_id=creator.id.value,
+                    invitee_email="creator@test.com",
+                )
+            )
 
     async def test_should_send_invitation_to_unregistered_email(self, comp_uow, user_uow):
         """Happy path: invitacion a email no registrado (invitee_user_id=None)."""

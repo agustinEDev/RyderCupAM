@@ -76,6 +76,18 @@ class SendInvitationByEmailUseCase:
         if caducada is not None:
             await self._actividad.invitations_closed([caducada])
 
+    async def _cuenta_del_correo(self, invitee_email: str, inviter_id: UserId):
+        """La cuenta de ese correo, verificada o no, o None; nunca la de quien invita."""
+        async with self._user_uow:
+            try:
+                invitee_user = await self._user_uow.users.find_by_email(Email(invitee_email))
+            except ValueError:
+                invitee_user = None
+        # 5a. No self-invitation
+        if invitee_user and inviter_id == invitee_user.id:
+            raise SelfInvitationViolation("Cannot invite yourself to a competition.")
+        return invitee_user
+
     async def execute(
         self, request: SendInvitationByEmailRequestDTO, is_admin: bool = False
     ) -> InvitationResponseDTO:
@@ -116,28 +128,20 @@ class SendInvitationByEmailUseCase:
             # Con los equipos formados no podría aceptarse (30 oct 2026)
             await exigir_sin_equipos_formados(self._uow, competition.id)
 
-            # 4. Buscar user por email (puede no existir)
-            invitee_user_id = None
-            invitee_name = None
-            async with self._user_uow:
-                try:
-                    email_vo = Email(request.invitee_email)
-                    invitee_user = await self._user_uow.users.find_by_email(email_vo)
-                except ValueError:
-                    invitee_user = None
+            # 4 y 5a. Buscar user por email (puede no existir); no a uno mismo
+            invitee_user = await self._cuenta_del_correo(request.invitee_email, inviter_id)
+            # Solo se ata a una cuenta que ha verificado ese correo (F-07, fase 3): sin
+            # verificar, queda «enviada a un correo», sin su nombre ni aviso en
+            # Actividad, y la verá al verificar por el casado por correo
+            atada = invitee_user if invitee_user and invitee_user.email_verified else None
+            invitee_user_id = atada.id if atada else None
+            invitee_name = atada.display_name if atada else None
 
-                if invitee_user:
-                    invitee_user_id = invitee_user.id
-                    invitee_name = invitee_user.display_name
-
-                    # 5a. No self-invitation
-                    if inviter_id == invitee_user_id:
-                        raise SelfInvitationViolation("Cannot invite yourself to a competition.")
-
-            # 5b. Verificar no enrollment activo (ya dentro del UoW de competition)
-            if invitee_user_id:
+            # 5b. Verificar no enrollment activo (ya dentro del UoW de competition):
+            # con cuenta, verificada o no
+            if invitee_user:
                 existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
-                    invitee_user_id, competition_id
+                    invitee_user.id, competition_id
                 )
                 if existing_enrollment and existing_enrollment.is_approved():
                     raise AlreadyEnrolledInvitationViolation(

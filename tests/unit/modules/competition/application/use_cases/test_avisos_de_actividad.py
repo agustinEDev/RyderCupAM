@@ -536,8 +536,12 @@ class TestInvitaciones:
         assert registro.avisos == [("invited", competition_id, invitado.id)]
 
     async def test_a3_invitar_por_correo_a_quien_tiene_cuenta_avisa(self, uow, user_uow, registro):
+        """Con el correo verificado: sin verificar no se ata ni se avisa (F-07)."""
         creador = await _usuario(user_uow, "org@test.com")
         invitado = await _usuario(user_uow, "inv@test.com")
+        invitado.confirm_email_ownership()
+        async with user_uow:
+            await user_uow.users.save(invitado)
         competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
 
         await SendInvitationByEmailUseCase(uow, user_uow, actividad=registro).execute(

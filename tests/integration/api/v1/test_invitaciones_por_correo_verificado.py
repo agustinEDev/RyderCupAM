@@ -174,3 +174,66 @@ async def test_d1_dirigida_a_la_cuenta_sin_verificar_sigue_igual(client: AsyncCl
 
     assert [i["id"] for i in mias["invitations"]] == [enviada.json()["id"]]
     assert r.status_code == 200, r.text
+
+
+# ------------------------------------------------- F1 (revisión): el orden inverso
+
+
+async def _invitada_ya_registrada(client: AsyncClient) -> tuple[dict, dict, dict, dict, str]:
+    """Primero se registra (sin verificar) y DESPUÉS le invitan por su correo."""
+    sufijo = uuid.uuid4().hex[:8]
+    correo = f"antes-{sufijo}@test.com"
+    invitada = await _jugador(client, correo)
+    creador = await _jugador(client, f"org2-{sufijo}@test.com")
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    r = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations/by-email",
+        json={"invitee_email": correo},
+    )
+    assert r.status_code == 201, r.text
+    client.cookies.clear()
+    return invitada, creador, comp, r.json(), correo
+
+
+async def test_f1_registrada_sin_verificar_y_luego_invitada_no_la_ve(client: AsyncClient):
+    """
+    Given: Una cuenta sin verificar, y después la invitan a su correo
+    When: Mira sus invitaciones, el listado y la ficha, y la intenta aceptar
+    Then: No está en ningún sitio y aceptarla da 404; el organizador la ve
+        «enviada a un correo», sin user_id ni nombre
+    """
+    invitada, creador, comp, invitacion, correo = await _invitada_ya_registrada(client)
+
+    assert invitacion["invitee_user_id"] is None
+    assert invitacion["invitee_name"] is None
+    assert (await _mis_invitaciones(client, invitada))["invitations"] == []
+    assert comp["id"] not in await _listado(client, invitada)
+    assert (await _ficha(client, invitada, comp))["my_pending_invitation"] is None
+    r = await _responde(client, invitada, invitacion["id"], "ACCEPT")
+    assert r.status_code == 404, r.text
+    set_auth_cookies(client, creador["cookies"])
+    lista = await client.get(f"/api/v1/competitions/{comp['id']}/invitations")
+    assert lista.status_code == 200, lista.text
+    (suya,) = lista.json()["invitations"]
+    assert suya["invitee_email"] == correo
+    assert suya["invitee_user_id"] is None
+    assert suya["invitee_name"] is None
+
+
+async def test_f1_registrada_sin_verificar_al_verificar_la_ve_y_la_acepta(client: AsyncClient):
+    """
+    Given: La misma invitación, y la cuenta verifica su correo
+    When: Mira sus invitaciones y la acepta
+    Then: La ve y queda aceptada
+    """
+    invitada, _, comp, invitacion, correo = await _invitada_ya_registrada(client)
+
+    await _verifica(correo)
+
+    assert [i["id"] for i in (await _mis_invitaciones(client, invitada))["invitations"]] == [
+        invitacion["id"]
+    ]
+    assert comp["id"] in await _listado(client, invitada)
+    r = await _responde(client, invitada, invitacion["id"], "ACCEPT")
+    assert r.status_code == 200, r.text
