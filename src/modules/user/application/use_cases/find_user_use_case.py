@@ -21,6 +21,7 @@ class FindUserUseCase:
     """
 
     def __init__(self, uow: UserUnitOfWorkInterface, bloqueos: BloqueosInterface):
+        """Con los usuarios y los bloqueos (obligatorios: quien me bloqueó no se encuentra)."""
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         # Quien me bloqueó no se encuentra (F-09, /code-review de la fase 3)

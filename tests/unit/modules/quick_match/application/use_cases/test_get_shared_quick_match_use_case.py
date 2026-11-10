@@ -546,12 +546,14 @@ class TestBlockedPlayerHasNoUserIdNorHandicap:
     """
 
     async def _con_handicap(self, escena) -> None:
+        """Bea y Carlos con hándicap en su perfil."""
         for user in (escena.bea, escena.carlos):
             user.update_handicap(14.2)
             await _save_user(escena.user_uow, user)
 
     @staticmethod
     def _fila(detalle, user):
+        """La fila de ese jugador en la vista compartida."""
         return next(p for p in detalle.participants if p.participant_id == user.id.value)
 
     @pytest.mark.parametrize("lo_puso_quien_mira", [False, True], ids=["me-bloqueo", "le-bloquee"])

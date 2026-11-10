@@ -66,6 +66,7 @@ class GetPlayerProfileUseCase:
         self._shared_games = shared_games
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> PlayerProfileResponseDTO:
+        """El perfil según quién mira; 404 si no existe, está de baja o el otro me bloqueó."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
         propio = viewer_id == target_id

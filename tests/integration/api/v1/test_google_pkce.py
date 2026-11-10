@@ -23,11 +23,13 @@ CLAVE = "V@l1dP@ss123!"
 
 @pytest.fixture(autouse=True)
 def sin_google_de_verdad():
+    """Quita el doble de Google al acabar cada test."""
     yield
     app.dependency_overrides.pop(get_google_oauth_service, None)
 
 
 def _google(email: str) -> AsyncMock:
+    """Un Google falso que responde con ese correo verificado."""
     google = AsyncMock()
     google.exchange_code_for_user_info.return_value = GoogleUserInfo(
         google_user_id=f"google-{email}",
@@ -42,6 +44,7 @@ def _google(email: str) -> AsyncMock:
 
 
 async def _login(client: AsyncClient, **cuerpo):
+    """POST /auth/google con el código y lo que se añada al cuerpo."""
     return await client.post(
         "/api/v1/auth/google",
         json={"authorization_code": "code", **cuerpo},

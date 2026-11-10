@@ -20,12 +20,15 @@ pytestmark = pytest.mark.asyncio
 
 class _Bloqueos(BloqueosInterface):
     def __init__(self, me_bloquearon=()):
+        """Con quienes me bloquearon."""
         self.me_bloquearon = frozenset(me_bloquearon)
 
     async def me_bloqueo(self, quien_mira, otro):
+        """Si `otro` está entre quienes me bloquearon."""
         return otro in self.me_bloquearon
 
     async def quienes_me_bloquearon(self, quien_mira):
+        """Quienes me bloquearon."""
         return self.me_bloquearon
 
 

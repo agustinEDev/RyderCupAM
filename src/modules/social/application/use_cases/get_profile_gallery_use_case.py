@@ -43,6 +43,7 @@ class GetProfileGalleryUseCase:
         self._user_uow = user_uow
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> ProfileGalleryResponseDTO:
+        """Su galería, solo para amigos; 404 si no existe o si me bloqueó (F-09)."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
 

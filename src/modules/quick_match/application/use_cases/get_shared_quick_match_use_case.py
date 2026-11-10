@@ -78,6 +78,7 @@ class GetSharedQuickMatchUseCase:
     async def execute(
         self, quick_match_id_raw: str, viewer_id_raw: str
     ) -> SharedQuickMatchDetailResponseDTO:
+        """La partida en solo lectura, sin nombres ni ids de quien quien mira no puede ver."""
         viewer_id = UserId(viewer_id_raw)
 
         # Las unidades de trabajo, en serie: comparten sesion por debajo

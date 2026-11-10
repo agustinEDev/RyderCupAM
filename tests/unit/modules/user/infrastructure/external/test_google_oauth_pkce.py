@@ -29,6 +29,7 @@ CLIENTE = "src.modules.user.infrastructure.external.google_oauth_service.httpx.A
 
 
 def _cliente(token_status: int = HTTP_OK) -> AsyncMock:
+    """Un httpx falso: token con ese estado y userinfo bueno."""
     token = MagicMock(status_code=token_status, text="{}")
     token.json.return_value = {"access_token": "ya29.token"}
     userinfo = MagicMock(status_code=HTTP_OK)
@@ -48,6 +49,7 @@ def _cliente(token_status: int = HTTP_OK) -> AsyncMock:
 
 
 def _lo_que_se_mando(cliente: AsyncMock) -> dict:
+    """El cuerpo del POST al endpoint de tokens de Google."""
     return cliente.post.call_args.kwargs["data"]
 
 

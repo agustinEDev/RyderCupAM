@@ -27,6 +27,7 @@ class SearchUsersUseCase:
     MAX_RESULTS = 10
 
     def __init__(self, uow: UserUnitOfWorkInterface, bloqueos: BloqueosInterface):
+        """Con los usuarios y los bloqueos: quien me bloqueó no sale al buscar."""
         self._uow = uow
         self._bloqueos = bloqueos
 

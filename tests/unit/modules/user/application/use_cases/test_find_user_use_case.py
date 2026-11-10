@@ -23,12 +23,15 @@ class _Bloqueos(BloqueosInterface):
     """`me_bloquearon`: quienes bloquearon a quien busca."""
 
     def __init__(self, me_bloquearon=()):
+        """Con quienes bloquearon a quien busca."""
         self.me_bloquearon = set(me_bloquearon)
 
     async def me_bloqueo(self, quien_mira, otro):
+        """Si `otro` está entre quienes me bloquearon."""
         return otro in self.me_bloquearon
 
     async def quienes_me_bloquearon(self, quien_mira):
+        """Quienes me bloquearon."""
         return frozenset(self.me_bloquearon)
 
 
@@ -362,6 +365,7 @@ class TestCuentaDesactivada:
 
     @staticmethod
     def _uow(user):
+        """Una unidad de trabajo falsa que encuentra a ese usuario por correo y por nombre."""
         uow = AsyncMock()
         uow.users = AsyncMock()
         uow.users.find_by_email.return_value = user
@@ -372,6 +376,7 @@ class TestCuentaDesactivada:
 
     @staticmethod
     def _desactivada():
+        """Una cuenta desactivada."""
         user = User(
             id=UserId(uuid4()),
             email=Email("baja@example.com"),
@@ -402,6 +407,7 @@ class TestQuienMeBloqueo:
 
     @staticmethod
     def _uow(user):
+        """Una unidad de trabajo falsa que encuentra a ese usuario por correo y por nombre."""
         uow = AsyncMock()
         uow.users = AsyncMock()
         uow.users.find_by_email.return_value = user
@@ -412,6 +418,7 @@ class TestQuienMeBloqueo:
 
     @staticmethod
     def _otro():
+        """Otra cuenta activa."""
         return User(
             id=UserId(uuid4()),
             email=Email("otro@example.com"),

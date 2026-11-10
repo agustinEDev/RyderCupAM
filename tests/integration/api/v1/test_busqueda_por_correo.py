@@ -22,11 +22,13 @@ LIMITE = 20
 
 
 async def _usuario(client: AsyncClient, nombre: str = "Busca") -> dict:
+    """Un usuario nuevo con sesión."""
     email = f"busca-{uuid.uuid4().hex[:8]}@test.com"
     return await create_authenticated_user(client, email, CLAVE, nombre, "Correo")
 
 
 async def _busca(client: AsyncClient, quien: dict, **params) -> Response:
+    """GET /users/search con la sesión de `quien`."""
     client.cookies.clear()
     set_auth_cookies(client, quien["cookies"])
     r = await client.get("/api/v1/users/search", params=params)
@@ -35,6 +37,7 @@ async def _busca(client: AsyncClient, quien: dict, **params) -> Response:
 
 
 async def _agota(client: AsyncClient, quien: dict) -> None:
+    """Gasta las 20 búsquedas por correo de la hora (todas 404)."""
     for i in range(LIMITE):
         r = await _busca(client, quien, email=f"nadie-{i}@test.com")
         assert r.status_code == status.HTTP_404_NOT_FOUND, f"{i + 1}: {r.status_code} {r.text}"

@@ -89,6 +89,7 @@ class GetPlayerActivityUseCase:
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
     ) -> FeedResponseDTO:
+        """Su actividad, solo para amigos; 404 si no existe o si me bloqueó (F-09)."""
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
         limit = max(1, min(limit, MAX_PAGE_SIZE))

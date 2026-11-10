@@ -22,6 +22,7 @@ CLAVE = "P@ssw0rd123!"
 
 async def _usuario(client: AsyncClient, nombre: str, avatar: int | None = None) -> dict:
     # Apellido único (solo letras): la búsqueda por nombre completo no admite homónimos
+    """Un usuario con apellido único y, si se pide, un avatar predefinido."""
     apellido = "Bloqueo" + "".join(chr(ord("a") + int(c, 16) % 26) for c in uuid.uuid4().hex[:8])
     usuario = await create_authenticated_user(
         client, f"bq-{uuid.uuid4().hex[:8]}@test.com", CLAVE, nombre, apellido
@@ -39,6 +40,7 @@ async def _usuario(client: AsyncClient, nombre: str, avatar: int | None = None) 
 
 
 async def _bloquea(client: AsyncClient, quien: dict, a_quien: dict) -> None:
+    """`quien` bloquea a `a_quien`."""
     set_auth_cookies(client, quien["cookies"])
     r = await client.post(
         f"/api/v1/friends/{a_quien['user']['id']}/block",
@@ -49,6 +51,7 @@ async def _bloquea(client: AsyncClient, quien: dict, a_quien: dict) -> None:
 
 
 async def _pide(client: AsyncClient, quien: dict, ruta: str):
+    """Un GET con la sesión de `quien`."""
     client.cookies.clear()
     set_auth_cookies(client, quien["cookies"])
     r = await client.get(ruta)
@@ -57,6 +60,7 @@ async def _pide(client: AsyncClient, quien: dict, ruta: str):
 
 
 def _rutas(de: str) -> dict[str, str]:
+    """Las rutas de su perfil y su avatar."""
     return {
         "perfil": f"/api/v1/users/{de}/profile",
         "avatar": f"/api/v1/users/{de}/avatar",
@@ -185,6 +189,7 @@ async def test_f2_si_lo_bloquee_yo_lo_suyo_es_el_403_de_siempre(client: AsyncCli
 
 
 async def _solicitud(client: AsyncClient, quien: dict, a: str):
+    """Una solicitud de amistad de `quien` al id `a`."""
     client.cookies.clear()
     set_auth_cookies(client, quien["cookies"])
     r = await client.post(
@@ -232,6 +237,7 @@ async def test_f2_si_lo_bloquee_yo_la_solicitud_dice_el_bloqueo(client: AsyncCli
 
 
 async def _busca(client: AsyncClient, quien: dict, texto: str) -> set[str]:
+    """Los ids que devuelve el autocompletado a quien busca."""
     r = await _pide(client, quien, f"/api/v1/users/search-autocomplete?query={texto}")
     assert r.status_code == 200, r.text
     return {u["user_id"] for u in r.json()["users"]}
@@ -302,9 +308,11 @@ async def test_f2_la_busqueda_exacta_encuentra_a_quien_bloquee_yo(client: AsyncC
 
 
 async def _consultas_del_avatar(client: AsyncClient, quien: dict, de: str) -> list[str]:
+    """Las sentencias SQL de pedir ese avatar con la sesión de `quien`."""
     sentencias: list[str] = []
 
     def _cuenta(conn, cursor, statement, *args):
+        """Apunta cada sentencia."""
         sentencias.append(statement)
 
     client.cookies.clear()
@@ -319,6 +327,7 @@ async def _consultas_del_avatar(client: AsyncClient, quien: dict, de: str) -> li
 
 
 def _de_amistades(sentencias: list[str]) -> int:
+    """Cuántas de esas sentencias leen la tabla de amistades."""
     return sum("friendships" in s for s in sentencias)
 
 

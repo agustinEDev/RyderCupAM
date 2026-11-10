@@ -113,6 +113,7 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
         ]
 
     async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
+        """Quienes bloquearon a `user_id`, solo en ese sentido, como el repositorio real."""
         return [
             f.blocked_by
             for f in self._friendships.values()

@@ -87,6 +87,7 @@ class _Usuarios:
     sin_verificar: ClassVar[set] = set()
 
     async def find_by_id(self, user_id):
+        """Un usuario con género, hándicap y correo; verificado salvo los de la lista."""
         return SimpleNamespace(
             id=user_id,
             gender=Gender.MALE,

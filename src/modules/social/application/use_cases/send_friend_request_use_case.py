@@ -43,6 +43,7 @@ class SendFriendRequestUseCase:
         self._email_service = email_service
 
     async def execute(self, request: SendFriendRequestRequestDTO) -> FriendshipResponseDTO:
+        """Manda la solicitud; si el otro me bloqueó, el 404 de un destinatario que no existe."""
         requester_id = UserId(request.requester_id)
         addressee_id = UserId(request.addressee_id)
 

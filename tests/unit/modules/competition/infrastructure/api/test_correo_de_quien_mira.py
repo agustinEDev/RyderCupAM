@@ -19,6 +19,7 @@ RUTAS = Path(__file__).resolve().parents[6] / "src/modules/competition/infrastru
 
 
 def _sesion(verificado: bool) -> UserResponseDTO:
+    """Una sesión con el correo verificado o sin verificar."""
     return UserResponseDTO.model_construct(
         id=uuid4(), email="ana@test.com", email_verified=verificado
     )

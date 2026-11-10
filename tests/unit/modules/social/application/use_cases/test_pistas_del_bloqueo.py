@@ -57,15 +57,18 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def social_uow():
+    """Amistades en memoria."""
     return InMemorySocialUnitOfWork()
 
 
 @pytest.fixture
 def user_uow():
+    """Usuarios en memoria."""
     return InMemoryUserUnitOfWork()
 
 
 async def _usuario(user_uow) -> User:
+    """Un usuario guardado."""
     user = User.create(
         first_name="Luis",
         last_name="Perez",
@@ -78,6 +81,7 @@ async def _usuario(user_uow) -> User:
 
 
 async def _bloqueo(social_uow, quien: User, a_quien: User) -> None:
+    """`quien` bloquea a `a_quien`."""
     async with social_uow:
         await social_uow.friendships.add(
             Friendship.create_blocked(
@@ -87,11 +91,13 @@ async def _bloqueo(social_uow, quien: User, a_quien: User) -> None:
 
 
 def _actividad(social_uow, user_uow):
+    """Pedir la actividad del otro."""
     caso = GetPlayerActivityUseCase(social_uow, user_uow, AsyncMock())
     return lambda yo, el: caso.execute(str(yo.id.value), str(el.id.value))
 
 
 def _partidas(social_uow, user_uow):
+    """Pedir las partidas juntos."""
     compartidas = AsyncMock()
     compartidas.between.return_value = []
     caso = GetGamesTogetherUseCase(social_uow, user_uow, compartidas)
@@ -99,11 +105,13 @@ def _partidas(social_uow, user_uow):
 
 
 def _galeria(social_uow, user_uow):
+    """Pedir la galería del otro."""
     caso = GetProfileGalleryUseCase(social_uow, user_uow)
     return lambda yo, el: caso.execute(str(yo.id.value), str(el.id.value))
 
 
 def _solicitud(social_uow, user_uow):
+    """Mandarle una solicitud de amistad."""
     caso = SendFriendRequestUseCase(social_uow, user_uow)
     return lambda yo, el: caso.execute(
         SendFriendRequestRequestDTO(requester_id=yo.id.value, addressee_id=el.id.value)

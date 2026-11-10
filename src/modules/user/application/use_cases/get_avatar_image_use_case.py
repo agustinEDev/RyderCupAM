@@ -35,11 +35,13 @@ class GetAvatarImageUseCase:
     ):
         # Los bloqueos y quién mira, obligatorios: sin ellos no hay un «todos
         # pasan» por defecto que falle en abierto (revisión de la fase 3)
+        """Con los usuarios, los presets y los bloqueos, obligatorios."""
         self._uow = uow
         self._preset_provider = preset_provider
         self._bloqueos = bloqueos
 
     async def execute(self, user_id: str, *, viewer_id: str) -> tuple[bytes, str]:
+        """Los bytes del avatar; 404 si no existe, está de baja o su dueño bloqueó a quien mira."""
         user_id_vo = UserId(user_id)
         quien_mira = UserId(viewer_id)
         async with self._uow:

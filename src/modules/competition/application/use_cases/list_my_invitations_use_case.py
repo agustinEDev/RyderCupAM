@@ -41,6 +41,7 @@ class ListMyInvitationsUseCase:
         page: int = 1,
         limit: int = 20,
     ) -> PaginatedInvitationResponseDTO:
+        """Sus invitaciones por cuenta y, con el correo verificado, por correo (F-07); paginadas."""
         user_id_vo = UserId(user_id)
         offset = (page - 1) * limit
 

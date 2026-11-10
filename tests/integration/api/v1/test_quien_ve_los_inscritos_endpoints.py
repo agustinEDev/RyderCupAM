@@ -165,6 +165,7 @@ class _BastaError(Exception):
 
 
 async def test_14_la_agenda_sabe_quien_mira(client: AsyncClient):
+    """La agenda recibe quién mira y su correo verificado."""
     from main import app
     from src.config.dependencies import get_get_schedule_use_case
 
@@ -185,6 +186,7 @@ async def test_14_la_agenda_sabe_quien_mira(client: AsyncClient):
 
 
 async def test_la_lista_sabe_el_correo_de_quien_mira(client: AsyncClient):
+    """La lista de inscritos recibe el correo verificado de quien mira."""
     from main import app
     from src.config.dependencies import get_list_enrollments_use_case
 
@@ -204,6 +206,7 @@ async def test_la_lista_sabe_el_correo_de_quien_mira(client: AsyncClient):
 
 
 async def test_las_partidas_saben_el_correo_de_quien_mira(client: AsyncClient):
+    """Las partidas reciben el correo verificado de quien mira."""
     from main import app
     from src.config.dependencies import get_ver_partidas_use_case
 
@@ -278,6 +281,7 @@ async def test_13_la_ficha_trae_la_invitacion_pendiente_de_quien_mira(client: As
 
 
 async def test_13_tambien_la_que_se_mando_a_su_correo_antes_del_alta(client: AsyncClient):
+    """La invitada por correo antes del alta, ya verificada, la ve en la ficha."""
     creador = await _jugador(client, "Anfitriona")
     comp = await _privada(client, creador)
     set_auth_cookies(client, creador["cookies"])

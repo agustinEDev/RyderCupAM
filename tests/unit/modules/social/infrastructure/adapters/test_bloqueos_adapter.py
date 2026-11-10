@@ -20,6 +20,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _escena():
+    """Uno que me bloqueó, uno al que bloqueé y un amigo."""
     social_uow = InMemorySocialUnitOfWork()
     yo, me_bloqueo, le_bloquee, amigo = (UserId(uuid4()) for _ in range(4))
     async with social_uow:

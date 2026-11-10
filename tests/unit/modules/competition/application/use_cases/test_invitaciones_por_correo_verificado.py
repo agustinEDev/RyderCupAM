@@ -55,15 +55,18 @@ CORREO = "invitada@test.com"
 
 @pytest.fixture
 def comp_uow():
+    """Competiciones en memoria."""
     return CompetitionInMemoryUoW()
 
 
 @pytest.fixture
 def user_uow():
+    """Usuarios en memoria."""
     return UserInMemoryUoW()
 
 
 async def _usuario(user_uow, email: str, verificado: bool) -> User:
+    """Una cuenta guardada, con el correo verificado o sin verificar."""
     user = User.create(
         first_name="Ana",
         last_name="Lopez",
@@ -79,6 +82,7 @@ async def _usuario(user_uow, email: str, verificado: bool) -> User:
 
 
 async def _competicion(comp_uow, creator: User):
+    """Una competición activa del organizador."""
     create_uc = CreateCompetitionUseCase(
         comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
     )
@@ -109,6 +113,7 @@ async def _invitacion(comp_uow, competition_id, inviter: User, invitee_user: Use
 
 
 async def _escenario(comp_uow, user_uow, *, verificado: bool, por_cuenta: bool = False):
+    """Organizador, invitada y una invitación por correo (o a la cuenta)."""
     organizador = await _usuario(user_uow, "org@test.com", verificado=True)
     invitada = await _usuario(user_uow, CORREO, verificado=verificado)
     competicion = await _competicion(comp_uow, organizador)
@@ -119,10 +124,12 @@ async def _escenario(comp_uow, user_uow, *, verificado: bool, por_cuenta: bool =
 
 
 async def _lista(comp_uow, user_uow, user: User):
+    """Sus invitaciones."""
     return await ListMyInvitationsUseCase(comp_uow, user_uow).execute(user_id=str(user.id.value))
 
 
 async def _responde(comp_uow, user_uow, user: User, invitation: Invitation, action: str):
+    """Responde la invitación como ese usuario."""
     return await RespondToInvitationUseCase(comp_uow, user_uow).execute(
         RespondInvitationRequestDTO(
             invitation_id=invitation.id.value, user_id=user.id.value, action=action
@@ -131,6 +138,7 @@ async def _responde(comp_uow, user_uow, user: User, invitation: Invitation, acti
 
 
 async def _estado(comp_uow, invitation: Invitation) -> InvitationStatus:
+    """El estado guardado de la invitación."""
     async with comp_uow:
         guardada = await comp_uow.invitations.find_by_id(invitation.id)
     return guardada.status

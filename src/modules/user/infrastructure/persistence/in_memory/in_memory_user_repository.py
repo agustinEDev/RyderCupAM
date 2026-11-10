@@ -140,6 +140,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             self._users[user.id] = user
 
     async def find_by_full_name(self, full_name: str) -> User | None:
+        """La cuenta ACTIVA con ese nombre completo, como el repositorio real (F7)."""
         full_name_lower = full_name.lower().strip()
         for user in self._users.values():
             user_full_name = f"{user.first_name} {user.last_name}".lower()

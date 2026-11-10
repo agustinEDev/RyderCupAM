@@ -28,14 +28,17 @@ class Bloqueos(BloqueosInterface):
     """Los bloqueos, a mano: `de[x]` son quienes bloquearon a x. Apunta las preguntas."""
 
     def __init__(self, de: dict | None = None):
+        """Sin bloqueos salvo los que se digan."""
         self.de = de or {}
         self.preguntas: list[tuple[UserId, UserId]] = []
 
     async def me_bloqueo(self, quien_mira: UserId, otro: UserId) -> bool:
+        """Si `otro` bloqueó a `quien_mira`; apunta la pregunta."""
         self.preguntas.append((quien_mira, otro))
         return otro in self.de.get(quien_mira, set())
 
     async def quienes_me_bloquearon(self, quien_mira: UserId) -> frozenset[UserId]:
+        """Quienes bloquearon a `quien_mira`."""
         return frozenset(self.de.get(quien_mira, set()))
 
 
@@ -67,6 +70,7 @@ async def _make_saved_user(uow: InMemoryUnitOfWork) -> User:
 @pytest.mark.asyncio
 class TestGetAvatarImageUseCase:
     async def test_returns_preset_bytes_when_avatar_is_preset(self, uow):
+        """Un preset: sus bytes."""
         user = await _make_saved_user(uow)
         user.set_preset_avatar(7)
         await uow.users.save(user)
@@ -78,6 +82,7 @@ class TestGetAvatarImageUseCase:
         assert content_type == "image/jpeg"
 
     async def test_returns_upload_bytes_when_avatar_is_upload(self, uow):
+        """Una foto subida: sus bytes."""
         user = await _make_saved_user(uow)
         upload = UserAvatarUpload.create(user_id=user.id, image_data=b"my-photo-bytes")
         await uow.avatar_uploads.save(upload)
@@ -91,6 +96,7 @@ class TestGetAvatarImageUseCase:
         assert content_type == "image/jpeg"
 
     async def test_raises_when_user_has_no_avatar(self, uow):
+        """Sin avatar: AvatarNotFoundError."""
         user = await _make_saved_user(uow)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
@@ -98,6 +104,7 @@ class TestGetAvatarImageUseCase:
             await use_case.execute(str(user.id.value), viewer_id=VIEWER)
 
     async def test_raises_when_user_not_found(self, uow):
+        """Usuario inexistente: UserNotFoundError."""
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
         with pytest.raises(UserNotFoundError):
@@ -108,6 +115,7 @@ class TestGetAvatarImageUseCase:
 
 
 async def _otro(uow: InMemoryUnitOfWork, email: str) -> User:
+    """Otro usuario guardado."""
     user = User(
         id=UserId.generate(),
         email=Email(email),
@@ -128,6 +136,7 @@ class TestAvatarConBloqueoOCuentaDesactivada:
     """
 
     async def _escena(self, uow):
+        """El dueño con un preset y yo."""
         dueno = await _make_saved_user(uow)
         dueno.set_preset_avatar(3)
         await uow.users.save(dueno)

@@ -180,6 +180,7 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
 
     async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
         # Quien bloqueó está en `blocked_by`; él en cualquiera de las dos columnas
+        """Quienes bloquearon a `user_id` (`blocked_by` es el otro), en una consulta."""
         stmt = select(friendships_table.c.blocked_by).where(
             and_(
                 friendships_table.c.status == FriendshipStatus.BLOCKED,

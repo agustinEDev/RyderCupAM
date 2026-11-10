@@ -131,6 +131,7 @@ async def get_user_avatar_image(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetAvatarImageUseCase = Depends(get_avatar_image_use_case),
 ):
+    """El avatar de un usuario; 404 como inexistente si su dueño bloqueó a quien lo pide."""
     try:
         # Quien lo pide: si el dueño le bloqueó, 404 como si no existiera (F-09)
         image_bytes, content_type = await use_case.execute(

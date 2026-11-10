@@ -221,6 +221,7 @@ async def test_the_verified_email_is_checked_again_when_linking(
     import copy
 
     async def cambia_a_mitad(_code, code_verifier=None):
+        """El canje de Google, que a mitad le quita la verificación a la cuenta."""
         otra = copy.deepcopy(uow.users._users[existing_user.id])
         otra.change_email("otro.correo@example.com")
         uow.users._users[existing_user.id] = otra

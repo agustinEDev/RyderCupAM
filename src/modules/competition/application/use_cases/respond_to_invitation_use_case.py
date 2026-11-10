@@ -72,6 +72,7 @@ class RespondToInvitationUseCase:
         self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, request: RespondInvitationRequestDTO) -> RespondInvitationResponseDTO:
+        """Acepta o rechaza; una invitación a un correo sin verificar es como inexistente (F-07)."""
         invitation_id = InvitationId(request.invitation_id)
         current_user_id = UserId(request.user_id)
         action = request.action.upper()

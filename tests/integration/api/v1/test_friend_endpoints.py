@@ -206,6 +206,7 @@ class TestBlockUser:
 
     @pytest.mark.asyncio
     async def test_block_prevents_future_requests(self, client: AsyncClient):
+        """Tras bloquear: el bloqueado recibe 404 al escribir; quien bloqueó, 403."""
         a = await create_authenticated_user(
             client, "friend_m@test.com", "P@ssw0rd123!", "Friend", "Mm"
         )

@@ -27,14 +27,17 @@ CLAVE = "P@ssw0rd123!"
 
 
 async def _jugador(client: AsyncClient, email: str) -> dict:
+    """Un jugador con sesión, sin verificar."""
     return await create_authenticated_user(client, email, CLAVE, "Ana", "Correo")
 
 
 async def _verifica(email: str) -> None:
+    """Marca su correo como verificado en la BD de test."""
     await sql_en_la_bd_de_test("update users set email_verified = true where email = :e", e=email)
 
 
 async def _privada(client: AsyncClient, creador: dict) -> dict:
+    """Una competición privada del creador."""
     start = date.today() + timedelta(days=30)
     return await create_competition(
         client,
@@ -70,6 +73,7 @@ async def _invitada_por_correo(client: AsyncClient) -> tuple[dict, dict, dict, s
 
 
 async def _mis_invitaciones(client: AsyncClient, jugador: dict) -> dict:
+    """GET /invitations/me de ese jugador."""
     set_auth_cookies(client, jugador["cookies"])
     r = await client.get("/api/v1/invitations/me")
     assert r.status_code == 200, r.text
@@ -77,6 +81,7 @@ async def _mis_invitaciones(client: AsyncClient, jugador: dict) -> dict:
 
 
 async def _listado(client: AsyncClient, jugador: dict) -> set[str]:
+    """Los ids de las competiciones que ve en el listado."""
     set_auth_cookies(client, jugador["cookies"])
     r = await client.get("/api/v1/competitions")
     assert r.status_code == 200, r.text
@@ -84,6 +89,7 @@ async def _listado(client: AsyncClient, jugador: dict) -> set[str]:
 
 
 async def _ficha(client: AsyncClient, jugador: dict, comp: dict) -> dict:
+    """La ficha de la competición vista por ese jugador."""
     set_auth_cookies(client, jugador["cookies"])
     r = await client.get(f"/api/v1/competitions/{comp['id']}")
     assert r.status_code == 200, r.text
@@ -91,6 +97,7 @@ async def _ficha(client: AsyncClient, jugador: dict, comp: dict) -> dict:
 
 
 async def _responde(client: AsyncClient, jugador: dict, invitation_id: str, action: str):
+    """Acepta o rechaza la invitación con su sesión."""
     set_auth_cookies(client, jugador["cookies"])
     return await client.post(
         f"/api/v1/invitations/{invitation_id}/respond",
