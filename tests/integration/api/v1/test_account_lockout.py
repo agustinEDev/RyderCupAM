@@ -28,12 +28,10 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
 
-from main import app as fastapi_app
 from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
-from src.config.dependencies import get_db_session
 from src.config.rate_limit import limiter
+from tests.conftest import sql_en_la_bd_de_test
 
 pytestmark = pytest.mark.asyncio
 
@@ -48,15 +46,6 @@ def sin_cupo_por_minuto():
     limiter.enabled = False
     yield
     limiter.enabled = previous
-
-
-async def _sql(sentencia: str, **parametros):
-    override = fastapi_app.dependency_overrides[get_db_session]
-    async for sesion in override():
-        resultado = await sesion.execute(text(sentencia), parametros)
-        await sesion.commit()
-        return resultado
-    return None
 
 
 async def _registra(client: AsyncClient, prefijo: str, verificado: bool = False) -> str:
@@ -74,7 +63,9 @@ async def _registra(client: AsyncClient, prefijo: str, verificado: bool = False)
     )
     assert r.status_code == 201, r.text
     if verificado:
-        await _sql("update users set email_verified = true where email = :e", e=email)
+        await sql_en_la_bd_de_test(
+            "update users set email_verified = true where email = :e", e=email
+        )
     client.cookies.clear()
     return email
 

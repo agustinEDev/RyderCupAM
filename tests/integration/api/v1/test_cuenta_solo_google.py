@@ -9,8 +9,11 @@ Una cuenta solo-Google, por la API (probador de la release, 8 nov 2026).
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, set_auth_cookies
-from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+from tests.conftest import (
+    create_authenticated_user,
+    set_auth_cookies,
+    sql_en_la_bd_de_test as _sql,
+)
 
 pytestmark = pytest.mark.asyncio
 
