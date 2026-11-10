@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -175,7 +177,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(
-        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        exclude_user_id: UserId | None = None,
+        exclude_user_ids: Collection[UserId] = (),
     ) -> list[User]:
         """
         Searches active users by partial name or alias match using ILIKE.
@@ -207,6 +213,10 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         )
         if exclude_user_id is not None:
             statement = statement.filter(User._id != str(exclude_user_id))
+        # Quienes bloquearon a quien busca (F-09), también en la consulta
+        if exclude_user_ids:
+            fuera = [str(u) for u in exclude_user_ids]
+            statement = statement.filter(User._id.not_in(fuera))  # type: ignore[union-attr]
         # Por apellido, nombre e id: sin orden, con más coincidencias que el
         # límite cada petición podía devolver otras distintas (/code-review)
         statement = statement.order_by(User._last_name, User._first_name, User._id).limit(limit)

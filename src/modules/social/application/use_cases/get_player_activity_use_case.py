@@ -3,6 +3,7 @@
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.social.application.bloqueos import me_bloqueo
 from src.modules.social.application.dto.profile_dto import ActivityEventDTO, FeedResponseDTO
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
@@ -101,6 +102,9 @@ class GetPlayerActivityUseCase:
 
         if viewer_id != target_id:
             async with self._social_uow:
+                # Si me bloqueó, no existe para mí: el 404 de una cuenta que no está
+                if await me_bloqueo(self._social_uow.friendships, viewer_id, target_id):
+                    raise ProfileNotVisibleError("Profile not found")
                 if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
                     raise ActivityNotVisibleError("Only friends can see this player's activity")
 

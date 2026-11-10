@@ -3,6 +3,7 @@ from src.modules.user.application.dto.user_dto import (
     SearchUsersRequestDTO,
     SearchUsersResponseDTO,
 )
+from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -25,8 +26,9 @@ class SearchUsersUseCase:
     MIN_QUERY_LENGTH = 2
     MAX_RESULTS = 10
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, bloqueos: BloqueosInterface):
         self._uow = uow
+        self._bloqueos = bloqueos
 
     async def execute(self, request: SearchUsersRequestDTO) -> SearchUsersResponseDTO:
         """Quien busca (`viewer_id`) no sale en sus resultados (FE #938)."""
@@ -34,9 +36,16 @@ class SearchUsersUseCase:
         if not query or len(query.strip()) < self.MIN_QUERY_LENGTH:
             return SearchUsersResponseDTO(users=[])
 
+        quien = UserId(request.viewer_id)
+        # Quien me bloqueó no existe para mí (F-09): fuera en la propia consulta,
+        # sin ocupar huecos del límite. A quien bloqueé yo, sí lo encuentro
+        me_bloquearon = await self._bloqueos.quienes_me_bloquearon(quien)
         async with self._uow:
             users = await self._uow.users.search_by_partial_name(
-                query.strip(), limit=self.MAX_RESULTS, exclude_user_id=UserId(request.viewer_id)
+                query.strip(),
+                limit=self.MAX_RESULTS,
+                exclude_user_id=quien,
+                exclude_user_ids=me_bloquearon,
             )
 
             return SearchUsersResponseDTO(

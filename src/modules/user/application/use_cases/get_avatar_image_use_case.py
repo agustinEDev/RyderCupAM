@@ -12,12 +12,10 @@ existe para él: el mismo 404 que un usuario inexistente (F-09, fase 3 del plan 
 perfil le enseña nombre y foto para poder desbloquearlo.
 """
 
-from src.modules.social.domain.repositories.social_unit_of_work_interface import (
-    SocialUnitOfWorkInterface,
-)
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
     IAvatarPresetProvider,
 )
+from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
 from src.modules.user.domain.errors.user_errors import AvatarNotFoundError, UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -33,16 +31,18 @@ class GetAvatarImageUseCase:
         self,
         uow: UserUnitOfWorkInterface,
         preset_provider: IAvatarPresetProvider,
-        social_uow: SocialUnitOfWorkInterface | None = None,
+        bloqueos: BloqueosInterface,
     ):
+        # Los bloqueos y quién mira, obligatorios: sin ellos no hay un «todos
+        # pasan» por defecto que falle en abierto (revisión de la fase 3)
         self._uow = uow
         self._preset_provider = preset_provider
-        self._social_uow = social_uow
+        self._bloqueos = bloqueos
 
-    async def execute(self, user_id: str, viewer_id: str | None = None) -> tuple[bytes, str]:
+    async def execute(self, user_id: str, *, viewer_id: str) -> tuple[bytes, str]:
         user_id_vo = UserId(user_id)
         # Antes de leer el avatar, y en su propia unidad de trabajo: comparten sesión
-        if viewer_id is not None and await self._me_bloqueo(user_id_vo, UserId(viewer_id)):
+        if await self._bloqueos.me_bloqueo(UserId(viewer_id), user_id_vo):
             raise UserNotFoundError(f"User with id {user_id} not found")
 
         async with self._uow:
@@ -62,11 +62,3 @@ class GetAvatarImageUseCase:
                 raise AvatarNotFoundError(f"User {user_id} avatar upload no longer exists")
 
             return upload.image_data, upload.content_type
-
-    async def _me_bloqueo(self, dueno: UserId, quien_mira: UserId) -> bool:
-        """Si el dueño del avatar bloqueó a quien lo pide (no al revés)."""
-        if self._social_uow is None or dueno == quien_mira:
-            return False
-        async with self._social_uow:
-            relacion = await self._social_uow.friendships.find_by_pair(dueno, quien_mira)
-        return relacion is not None and relacion.is_blocked() and relacion.blocked_by == dueno

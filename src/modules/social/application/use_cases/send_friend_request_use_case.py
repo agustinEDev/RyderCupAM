@@ -58,6 +58,10 @@ class SendFriendRequestUseCase:
             existing = await self._uow.friendships.find_by_pair(requester_id, addressee_id)
 
             if existing is not None:
+                # Si me bloqueó, no existe para mí: lo mismo que un destinatario que no
+                # está, sin pista del bloqueo (F-09). Si le bloqueé yo, el 403 de siempre
+                if existing.is_blocked() and existing.blocked_by == addressee_id:
+                    raise AddresseeNotFoundError(f"User not found: {request.addressee_id}")
                 if existing.is_blocked():
                     raise BlockedUserViolation(
                         "Cannot send a friend request: a block exists between both users."

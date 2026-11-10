@@ -96,13 +96,14 @@ class TestSendFriendRequestUseCase:
             await use_case.execute(dto)
 
     async def test_blocked_relationship_raises(self, uow, user_uow):
+        """Quien bloqueó y escribe: el 403 del bloqueo. Al revés, ver test_pistas_del_bloqueo."""
         requester = await self._create_user(user_uow, "requester4@test.com")
         addressee = await self._create_user(user_uow, "addressee4@test.com")
 
         blocked = Friendship.create_blocked(
             id=FriendshipId.generate(),
-            blocker_id=addressee.id,
-            blocked_id=requester.id,
+            blocker_id=requester.id,
+            blocked_id=addressee.id,
         )
         async with uow:
             await uow.friendships.add(blocked)

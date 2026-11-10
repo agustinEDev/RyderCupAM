@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -143,7 +145,11 @@ class InMemoryUserRepository(UserRepositoryInterface):
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(
-        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        exclude_user_id: UserId | None = None,
+        exclude_user_ids: Collection[UserId] = (),
     ) -> list[User]:
         """
         Searches active users by partial name or alias match.
@@ -156,7 +162,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             return []
         results = []
         for user in self._users.values():
-            if not user.is_active or user.id == exclude_user_id:
+            if not user.is_active or user.id == exclude_user_id or user.id in exclude_user_ids:
                 continue
             full_name = f"{user.first_name} {user.last_name}".lower()
             alias = user.alias.lower() if user.alias else ""

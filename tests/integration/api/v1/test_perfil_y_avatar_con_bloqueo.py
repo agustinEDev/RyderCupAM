@@ -139,3 +139,118 @@ async def test_g3_cuenta_desactivada_da_404(client: AsyncClient, que: str):
     r = await _pide(client, yo, _rutas(el["user"]["id"])[que])
 
     assert r.status_code == 404, r.text
+
+
+# ------------------------------------- F2 (revisión): sin pistas del bloqueo
+
+LO_SUYO = ("activity", "games-together", "photos")
+
+
+@pytest.mark.parametrize("que", LO_SUYO)
+async def test_f2_si_me_bloqueo_lo_suyo_es_404_como_inexistente(client: AsyncClient, que: str):
+    """
+    Given: Luis me bloqueó
+    When: Pido su actividad, nuestras partidas juntos o su galería
+    Then: 404 con el mismo cuerpo que para un id que no existe
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, el, yo)
+
+    r = await _pide(client, yo, f"/api/v1/users/{el['user']['id']}/{que}")
+    inexistente = await _pide(client, yo, f"/api/v1/users/{uuid.uuid4()}/{que}")
+
+    assert r.status_code == inexistente.status_code == 404, r.text
+    assert r.json() == inexistente.json()
+
+
+@pytest.mark.parametrize("que", LO_SUYO)
+async def test_f2_si_lo_bloquee_yo_lo_suyo_es_el_403_de_siempre(client: AsyncClient, que: str):
+    """
+    Given: Bloqueé a Luis
+    When: Pido su actividad, nuestras partidas juntos o su galería
+    Then: El 403 de no ser amigos, como hoy
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, yo, el)
+
+    r = await _pide(client, yo, f"/api/v1/users/{el['user']['id']}/{que}")
+
+    assert r.status_code == 403, r.text
+
+
+async def _solicitud(client: AsyncClient, quien: dict, a: str):
+    client.cookies.clear()
+    set_auth_cookies(client, quien["cookies"])
+    r = await client.post(
+        "/api/v1/friends/requests",
+        json={"addressee_id": a},
+        headers={"X-CSRF-Token": quien["cookies"].get("csrf_token", "")},
+    )
+    client.cookies.clear()
+    return r
+
+
+async def test_f2_si_me_bloqueo_la_solicitud_es_como_a_alguien_que_no_existe(client: AsyncClient):
+    """
+    Given: Luis me bloqueó
+    When: Le mando una solicitud de amistad, y otra a un id que no existe
+    Then: Los dos 404, con el mismo texto (salvo el id)
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, el, yo)
+
+    r = await _solicitud(client, yo, el["user"]["id"])
+    otro_id = str(uuid.uuid4())
+    inexistente = await _solicitud(client, yo, otro_id)
+
+    assert r.status_code == inexistente.status_code == 404, r.text
+    assert r.json()["detail"].replace(el["user"]["id"], "X") == inexistente.json()[
+        "detail"
+    ].replace(otro_id, "X")
+
+
+async def test_f2_si_lo_bloquee_yo_la_solicitud_dice_el_bloqueo(client: AsyncClient):
+    """
+    Given: Bloqueé a Luis
+    When: Le mando una solicitud
+    Then: 403, como hoy
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, yo, el)
+
+    r = await _solicitud(client, yo, el["user"]["id"])
+
+    assert r.status_code == 403, r.text
+
+
+async def _busca(client: AsyncClient, quien: dict, texto: str) -> set[str]:
+    r = await _pide(client, quien, f"/api/v1/users/search-autocomplete?query={texto}")
+    assert r.status_code == 200, r.text
+    return {u["user_id"] for u in r.json()["users"]}
+
+
+async def test_f2_quien_me_bloqueo_no_sale_al_buscar_y_a_quien_bloquee_si(client: AsyncClient):
+    """
+    Given: Uno me bloqueó y yo bloqueé a otro, los dos con el mismo apellido
+    When: Busco por ese apellido
+    Then: Sale a quien bloqueé yo, no quien me bloqueó
+    """
+    # Solo letras: el registro no admite cifras en el apellido
+    apellido = "Bq" + "".join(chr(ord("a") + int(c, 16) % 26) for c in uuid.uuid4().hex[:8])
+    yo = await _usuario(client, "Ana")
+    me_bloqueo = await create_authenticated_user(
+        client, f"bq-a-{uuid.uuid4().hex[:8]}@test.com", CLAVE, "Uno", apellido
+    )
+    le_bloquee = await create_authenticated_user(
+        client, f"bq-b-{uuid.uuid4().hex[:8]}@test.com", CLAVE, "Otro", apellido
+    )
+    await _bloquea(client, me_bloqueo, yo)
+    await _bloquea(client, yo, le_bloquee)
+
+    encontrados = await _busca(client, yo, apellido)
+
+    assert encontrados == {le_bloquee["user"]["id"]}

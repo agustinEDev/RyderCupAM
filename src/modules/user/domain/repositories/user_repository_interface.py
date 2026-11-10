@@ -6,6 +6,7 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 
 from ..entities.user import User
 from ..value_objects.email import Email
@@ -158,7 +159,11 @@ class UserRepositoryInterface(ABC):
 
     @abstractmethod
     async def search_by_partial_name(
-        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        exclude_user_id: UserId | None = None,
+        exclude_user_ids: Collection[UserId] = (),
     ) -> list[User]:
         """
         Searches users whose first_name, last_name or alias partially matches the query (case-insensitive).

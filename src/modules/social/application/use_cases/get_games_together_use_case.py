@@ -1,5 +1,6 @@
 """Caso de Uso: Las partidas que has jugado con un amigo («ver mas»)."""
 
+from src.modules.social.application.bloqueos import me_bloqueo
 from src.modules.social.application.dto.head_to_head_dto import GamesTogetherPageDTO
 from src.modules.social.application.exceptions import (
     GamesTogetherNotVisibleError,
@@ -58,6 +59,9 @@ class GetGamesTogetherUseCase:
             return GamesTogetherPageDTO()
 
         async with self._social_uow:
+            # Si me bloqueó, no existe para mí: el 404 de una cuenta que no está
+            if await me_bloqueo(self._social_uow.friendships, viewer_id, target_id):
+                raise ProfileNotVisibleError("Profile not found")
             if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
                 raise GamesTogetherNotVisibleError(
                     "Only friends can see the games you played together"
