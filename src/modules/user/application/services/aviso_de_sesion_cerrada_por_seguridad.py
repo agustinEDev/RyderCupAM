@@ -17,7 +17,10 @@ from src.modules.user.application.dto.device_dto import AvisoDeSesionCerradaRequ
 from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
     IAvisoDeSesionCerrada,
 )
-from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
+from src.modules.user.application.ports.cupo_de_avisos_port import (
+    MOTIVO_SESION_CERRADA,
+    ICupoDeAvisos,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     cuando_en_espana,
@@ -34,9 +37,6 @@ from src.shared.domain.repositories.country_repository_interface import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Su hueco en el tope global de avisos
-MOTIVO_DEL_CUPO = "sesion_cerrada"
 
 
 class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
@@ -72,7 +72,7 @@ class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
             return
         if dispositivo is None or dispositivo.user_id != UserId(request.user_id):
             return
-        if not self._cupo.reserva(MOTIVO_DEL_CUPO):
+        if not self._cupo.reserva(MOTIVO_SESION_CERRADA):
             logger.warning("Session closed for security notice skipped: the budget is full")
             return
         enviado = False
@@ -95,4 +95,4 @@ class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
         finally:
             # Uno que no salió no gasta el tope
             if not enviado:
-                self._cupo.devuelve(MOTIVO_DEL_CUPO)
+                self._cupo.devuelve(MOTIVO_SESION_CERRADA)

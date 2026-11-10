@@ -15,7 +15,10 @@ from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
+from src.modules.user.application.ports.cupo_de_avisos_port import (
+    MOTIVO_SESION_CERRADA,
+    ICupoDeAvisos,
+)
 
 AVISOS_DE_RED_POR_HORA = 20
 AVISOS_DE_RED_POR_DIA = 30
@@ -23,7 +26,6 @@ AVISOS_GRAVES_POR_DIA = 10
 # Los de «sesión cerrada por seguridad» (F-02): los provoca quien tenga cookies robadas;
 # su propio hueco, para no gastar ni que les gasten los de los fallos
 AVISOS_DE_SESION_CERRADA_POR_DIA = 10
-SESION_CERRADA = "sesion_cerrada"
 UNA_HORA = timedelta(hours=1)
 UN_DIA = timedelta(hours=24)
 
@@ -42,7 +44,7 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
         """La cola de este motivo: la de red, la de sesiones cerradas o la de los graves."""
         if motivo == "red":
             return self._de_red
-        if motivo == SESION_CERRADA:
+        if motivo == MOTIVO_SESION_CERRADA:
             return self._sesiones_cerradas
         return self._graves
 
@@ -56,7 +58,7 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
             en_la_hora = sum(1 for t in enviados if t > ahora - UNA_HORA)
             if len(enviados) >= AVISOS_DE_RED_POR_DIA or en_la_hora >= AVISOS_DE_RED_POR_HORA:
                 return False
-        elif motivo == SESION_CERRADA:
+        elif motivo == MOTIVO_SESION_CERRADA:
             if len(enviados) >= AVISOS_DE_SESION_CERRADA_POR_DIA:
                 return False
         elif len(enviados) >= AVISOS_GRAVES_POR_DIA:

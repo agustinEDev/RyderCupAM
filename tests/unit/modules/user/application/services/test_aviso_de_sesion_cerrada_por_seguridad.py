@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 
 from src.modules.user.application.dto.device_dto import AvisoDeSesionCerradaRequestDTO
+from src.modules.user.application.ports.cupo_de_avisos_port import MOTIVO_SESION_CERRADA
 from src.modules.user.application.services.aviso_de_sesion_cerrada_por_seguridad import (
     AvisoDeSesionCerradaPorSeguridad,
 )
@@ -167,7 +168,7 @@ async def test_c6_a_full_budget_sends_nothing():
 
     await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
 
-    aviso.cupo.reserva.assert_called_once_with("sesion_cerrada")
+    aviso.cupo.reserva.assert_called_once_with(MOTIVO_SESION_CERRADA)
     correo.send_session_closed_for_security_notice.assert_not_awaited()
 
 
@@ -176,7 +177,7 @@ async def test_c6_a_sent_notice_keeps_its_slot():
 
     await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
 
-    aviso.cupo.reserva.assert_called_once_with("sesion_cerrada")
+    aviso.cupo.reserva.assert_called_once_with(MOTIVO_SESION_CERRADA)
     aviso.cupo.devuelve.assert_not_called()
 
 
@@ -190,4 +191,4 @@ async def test_c7_a_notice_that_did_not_go_out_gives_its_slot_back(fallo):
 
     await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
 
-    aviso.cupo.devuelve.assert_called_once_with("sesion_cerrada")
+    aviso.cupo.devuelve.assert_called_once_with(MOTIVO_SESION_CERRADA)

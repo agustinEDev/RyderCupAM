@@ -641,3 +641,96 @@ async def test_c_logout_racing_a_password_change_does_not_deadlock(
     assert salida.status_code == 200, salida.text
     assert cambio.status_code == 200, cambio.text
     assert await _vivos_del_usuario(email) == 0
+
+
+async def test_c8_revoking_the_device_racing_a_refresh_does_not_deadlock(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Una sesión en un dispositivo, y otra en un segundo dispositivo de la cuenta
+    When: Desde el segundo se revoca el primero y, con la revocación a medias (tokens ya
+          bloqueados), el primero refresca
+    Then: Ninguna de las dos falla (la revocación bloquea antes el dispositivo, en el
+          orden de los refrescos), el dispositivo queda revocado y nada suyo vivo
+    """
+    from src.modules.user.infrastructure.persistence.sqlalchemy import (
+        refresh_token_repository as repo,
+    )
+
+    email, cookies = await _sesion(client, "c8")
+    client.cookies.clear()
+    otro = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": CLAVE},
+        headers={
+            "X-Test-Client-ID": f"otro-{uuid.uuid4()}",
+            # Otro navegador: si no, la huella lo reconoce como el mismo dispositivo
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Firefox/131.0",
+        },
+    )
+    assert otro.status_code == 200, otro.text
+    del_otro = dict(otro.cookies)
+    client.cookies.clear()
+    assert del_otro["device_id"] != cookies["device_id"]
+    original = repo.SQLAlchemyRefreshTokenRepository.revoke_all_for_device
+    a_medias = asyncio.Event()
+
+    async def despacio(self, device_id):
+        revocados = await original(self, device_id)
+        a_medias.set()
+        await asyncio.sleep(1.5)
+        return revocados
+
+    monkeypatch.setattr(repo.SQLAlchemyRefreshTokenRepository, "revoke_all_for_device", despacio)
+    cabecera = "; ".join(f"{k}={v}" for k, v in del_otro.items())
+
+    async def cuando_este_a_medias(peticion):
+        await asyncio.wait_for(a_medias.wait(), timeout=10)
+        return await peticion
+
+    revocacion, refresco = await asyncio.gather(
+        client.delete(
+            f"/api/v1/users/me/devices/{cookies['device_id']}",
+            headers={"Cookie": cabecera, "X-CSRF-Token": del_otro["csrf_token"]},
+        ),
+        cuando_este_a_medias(
+            client.post(
+                "/api/v1/auth/refresh-token",
+                headers={"Cookie": f"refresh_token={cookies['refresh_token']}"},
+            )
+        ),
+        return_exceptions=True,
+    )
+
+    assert not isinstance(revocacion, BaseException), revocacion
+    assert not isinstance(refresco, BaseException), refresco
+    assert revocacion.status_code == 200, revocacion.text
+    assert refresco.status_code < 500, refresco.text
+    assert await _dispositivo_activo(cookies["device_id"]) is False
+    vivos = [f for f in await _de_su_dispositivo(cookies["device_id"]) if not f["revoked"]]
+    assert vivos == []
+
+
+async def test_row7_an_old_cookie_after_one_hour_ends_the_session_without_alarm(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Una cookie sustituida hace más de 1 hora cuyo sustituto nunca se usó
+    When: Llega
+    Then: 401 SESSION_ENDED (fin normal, sin alarma): el dispositivo sigue activo y no
+          hay correo
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    email, cookies = await _sesion(client, "f7")
+    await sql_en_la_bd_de_test("UPDATE users SET email_verified = TRUE WHERE email = :e", e=email)
+    await _refresca(client, cookies["refresh_token"])
+    await _atrasa_la_sustitucion(cookies["refresh_token"], timedelta(minutes=61))
+
+    r = await _refresca(client, cookies["refresh_token"])
+    await espera_los_avisos_pendientes(tope_s=10)
+
+    assert r.status_code == 401
+    assert r.json()["error_code"] == "SESSION_ENDED"
+    assert await _dispositivo_activo(cookies["device_id"]) is True
+    mock_external_services.send_session_closed_for_security_notice.assert_not_awaited()

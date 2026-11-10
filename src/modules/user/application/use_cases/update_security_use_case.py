@@ -196,9 +196,10 @@ class UpdateSecurityUseCase:
         await self._uow.password_history.save(password_history)
 
         # Revocar todos los refresh tokens, en bloque, con la cuenta ya bloqueada: cada
-        # refresco y cada cierre de sesión toman antes un bloqueo compartido de la
-        # cuenta, así que el cambio espera a los que estén en curso y los que lleguen
-        # después lo esperan a él; ningún sucesor queda vivo ni hay interbloqueo (F-02)
+        # refresco toma antes un bloqueo compartido de la cuenta, así que el cambio
+        # espera a los que estén en curso y los que lleguen después lo esperan a él;
+        # ningún sucesor queda vivo ni hay interbloqueo (F-02). El cierre de sesión no
+        # toca la fila de la cuenta: choca solo en los tokens, sin ciclo
         tokens_revoked_count = await self._uow.refresh_tokens.revoke_all_for_user(user_id_vo)
 
         return True, tokens_revoked_count

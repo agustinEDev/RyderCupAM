@@ -2,6 +2,9 @@
 
 from abc import ABC, abstractmethod
 
+# El motivo de los avisos de «sesión cerrada por seguridad» (F-02): su propio hueco
+MOTIVO_SESION_CERRADA = "sesion_cerrada"
+
 
 class ICupoDeAvisos(ABC):
     """Cuántos avisos de fallos caben en esta hora, en toda la app.

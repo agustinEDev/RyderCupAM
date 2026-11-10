@@ -115,13 +115,33 @@ def test_c6_las_sesiones_cerradas_tienen_su_propio_hueco():
     Then: El 11 no cabe, y ni gasta ni le gastan los de red ni los graves
     """
     from src.config.cupo_de_avisos import AVISOS_DE_SESION_CERRADA_POR_DIA
+    from src.modules.user.application.ports.cupo_de_avisos_port import (
+        MOTIVO_SESION_CERRADA,
+    )
 
     cupo = CupoDeAvisosEnMemoria(reloj=Reloj())
 
     assert AVISOS_DE_SESION_CERRADA_POR_DIA == 10
-    assert all(cupo.reserva("sesion_cerrada") for _ in range(10))
-    assert not cupo.reserva("sesion_cerrada")
+    assert all(cupo.reserva(MOTIVO_SESION_CERRADA) for _ in range(10))
+    assert not cupo.reserva(MOTIVO_SESION_CERRADA)
     assert cupo.reserva("respaldo")
     assert cupo.reserva("red")
-    cupo.devuelve("sesion_cerrada")
-    assert cupo.reserva("sesion_cerrada")
+    cupo.devuelve(MOTIVO_SESION_CERRADA)
+    assert cupo.reserva(MOTIVO_SESION_CERRADA)
+
+
+def test_c6_el_motivo_de_sesion_cerrada_no_cae_en_los_graves():
+    """
+    Given: Los graves del día ya gastados
+    When: Se reserva un aviso de sesión cerrada con la constante del puerto
+    Then: Cabe: su motivo existe en el cupo y no cae en el cubo de los graves
+    """
+    from src.modules.user.application.ports.cupo_de_avisos_port import (
+        MOTIVO_SESION_CERRADA,
+    )
+
+    cupo = CupoDeAvisosEnMemoria(reloj=Reloj())
+    assert all(cupo.reserva("respaldo") for _ in range(AVISOS_GRAVES_POR_DIA))
+    assert not cupo.reserva("respaldo")
+
+    assert cupo.reserva(MOTIVO_SESION_CERRADA)
