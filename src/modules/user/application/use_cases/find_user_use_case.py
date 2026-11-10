@@ -2,6 +2,7 @@ from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
     FindUserResponseDTO,
 )
+from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -19,9 +20,11 @@ class FindUserUseCase:
     de búsqueda y devuelve información básica del usuario encontrado.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, bloqueos: BloqueosInterface):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
+        # Quien me bloqueó no se encuentra (F-09, /code-review de la fase 3)
+        self._bloqueos = bloqueos
 
     async def execute(
         self, request: FindUserRequestDTO, *, viewer_id: UserId
@@ -42,38 +45,51 @@ class FindUserUseCase:
         Raises:
             UserNotFoundError: Si no se encuentra ningún usuario con los criterios dados.
         """
-        async with self._uow:
-            user = None
-            email_vo = Email(request.email) if request.email else None
+        user = None
+        email_vo = Email(request.email) if request.email else None
 
-            # Buscar por email si se proporciona
-            if email_vo:
+        # Buscar por email si se proporciona
+        if email_vo:
+            async with self._uow:
                 user = self._solo_activa(await self._user_finder.by_email(email_vo))
+            user = await self._sin_quien_me_bloqueo(user, viewer_id)
 
-            # Si no se encontró por email, buscar por nombre completo
-            if not user and request.full_name:
+        # Si no se encontró por email, buscar por nombre completo
+        if not user and request.full_name:
+            async with self._uow:
                 # Solo activas, ya en la consulta del repositorio (F7)
                 user = await self._user_finder.by_full_name(request.full_name)
+            user = await self._sin_quien_me_bloqueo(user, viewer_id)
 
-            # Si no se encuentra el usuario, lanzar excepción
-            if not user:
-                search_criteria = []
-                if request.email:
-                    search_criteria.append(f"email '{request.email}'")
-                if request.full_name:
-                    search_criteria.append(f"nombre completo '{request.full_name}'")
+        # Si no se encuentra el usuario, lanzar excepción
+        if not user:
+            search_criteria = []
+            if request.email:
+                search_criteria.append(f"email '{request.email}'")
+            if request.full_name:
+                search_criteria.append(f"nombre completo '{request.full_name}'")
 
-                criteria_str = " o ".join(search_criteria)
-                raise UserNotFoundError(f"No se encontró ningún usuario con {criteria_str}.")
+            criteria_str = " o ".join(search_criteria)
+            raise UserNotFoundError(f"No se encontró ningún usuario con {criteria_str}.")
 
-            # Eco de lo tecleado, o uno mismo
-            ve_correo = user.email == email_vo or user.id == viewer_id
-            return FindUserResponseDTO(
-                user_id=user.id.value,
-                email=user.email.value if ve_correo else "",
-                full_name=user.get_full_name(),
-                display_name=user.display_name,
-            )
+        # Eco de lo tecleado, o uno mismo
+        ve_correo = user.email == email_vo or user.id == viewer_id
+        return FindUserResponseDTO(
+            user_id=user.id.value,
+            email=user.email.value if ve_correo else "",
+            full_name=user.get_full_name(),
+            display_name=user.display_name,
+        )
+
+    async def _sin_quien_me_bloqueo(self, user, viewer_id: UserId):
+        """
+        Quien me bloqueó no se encuentra: la misma respuesta que un correo o un
+        nombre que no existen (F-09). A quien bloqueé yo, sí. Fuera de la unidad
+        de trabajo de usuarios: la de los bloqueos comparte su sesión.
+        """
+        if user is None or user.id == viewer_id:
+            return user
+        return None if await self._bloqueos.me_bloqueo(viewer_id, user.id) else user
 
     @staticmethod
     def _solo_activa(user):

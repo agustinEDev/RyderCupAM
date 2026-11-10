@@ -19,8 +19,10 @@ CLAVE = "P@ssw0rd123!"
 
 
 async def _usuario(client: AsyncClient, nombre: str, avatar: int | None = None) -> dict:
+    # Apellido único (solo letras): la búsqueda por nombre completo no admite homónimos
+    apellido = "Bloqueo" + "".join(chr(ord("a") + int(c, 16) % 26) for c in uuid.uuid4().hex[:8])
     usuario = await create_authenticated_user(
-        client, f"bq-{uuid.uuid4().hex[:8]}@test.com", CLAVE, nombre, "Bloqueo"
+        client, f"bq-{uuid.uuid4().hex[:8]}@test.com", CLAVE, nombre, apellido
     )
     if avatar is not None:
         set_auth_cookies(client, usuario["cookies"])
@@ -254,3 +256,41 @@ async def test_f2_quien_me_bloqueo_no_sale_al_buscar_y_a_quien_bloquee_si(client
     encontrados = await _busca(client, yo, apellido)
 
     assert encontrados == {le_bloquee["user"]["id"]}
+
+
+# --------------------------- /code-review: la búsqueda exacta tampoco le encuentra
+
+
+@pytest.mark.parametrize("por", ["email", "full_name"])
+async def test_f2_la_busqueda_exacta_no_encuentra_a_quien_me_bloqueo(client: AsyncClient, por: str):
+    """
+    Given: Luis me bloqueó
+    When: Le busco por su correo o por su nombre completo
+    Then: 404, como un correo o nombre que no existe
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, el, yo)
+    valor = el["user"]["email"] if por == "email" else f"Luis {el['user']['last_name']}"
+
+    r = await _pide(client, yo, f"/api/v1/users/search?{por}={valor}")
+
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.parametrize("por", ["email", "full_name"])
+async def test_f2_la_busqueda_exacta_encuentra_a_quien_bloquee_yo(client: AsyncClient, por: str):
+    """
+    Given: Bloqueé a Luis
+    When: Le busco por su correo o por su nombre completo
+    Then: Lo encuentro
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    await _bloquea(client, yo, el)
+    valor = el["user"]["email"] if por == "email" else f"Luis {el['user']['last_name']}"
+
+    r = await _pide(client, yo, f"/api/v1/users/search?{por}={valor}")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["user_id"] == el["user"]["id"]

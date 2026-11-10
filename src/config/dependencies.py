@@ -860,20 +860,6 @@ def get_register_user_use_case(
     )
 
 
-def get_find_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-) -> FindUserUseCase:
-    """
-    Proveedor del caso de uso FindUserUseCase.
-
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `FindUserUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
-    """
-    return FindUserUseCase(uow)
-
-
 def get_update_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
@@ -1485,6 +1471,14 @@ def get_avatar_image_use_case(
 ) -> GetAvatarImageUseCase:
     """Proveedor del caso de uso GetAvatarImageUseCase; con los bloqueos (F-09)."""
     return GetAvatarImageUseCase(uow, preset_provider, bloqueos)
+
+
+def get_find_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    bloqueos: BloqueosInterface = Depends(get_bloqueos),
+) -> FindUserUseCase:
+    """Proveedor del caso de uso FindUserUseCase; sin quien me bloqueó (F-09)."""
+    return FindUserUseCase(uow, bloqueos)
 
 
 def get_search_users_use_case(
