@@ -1,4 +1,5 @@
 # tests/conftest.py
+import contextlib
 import os
 import sys
 import uuid
@@ -239,13 +240,15 @@ async def _suelta_la_bd_de_test(admin_engine, test_engine, db_name: str) -> None
     except TimeoutError as error:
         agotada = error
     try:
-        await test_engine.dispose()
         try:
-            async with admin_engine.connect() as conn:
-                await conn.execute(text(f"DROP DATABASE {db_name}"))
+            await test_engine.dispose()
         finally:
-            await admin_engine.dispose()
-            fastapi_app.dependency_overrides.clear()
+            try:
+                async with admin_engine.connect() as conn:
+                    await conn.execute(text(f"DROP DATABASE {db_name}"))
+            finally:
+                await admin_engine.dispose()
+                fastapi_app.dependency_overrides.clear()
     except Exception as error:
         if agotada is not None:
             raise agotada from error
@@ -775,10 +778,12 @@ _URL_DE_LA_BD_DE_TEST: dict[str, str] = {}
 async def sql_en_la_bd_de_test(sentencia: str, **parametros):
     """Ejecuta SQL (con commit) en la BD del test, con la sesión que usa la app."""
     override = fastapi_app.dependency_overrides[get_db_session]
-    async for sesion in override():
-        resultado = await sesion.execute(text(sentencia), parametros)
-        await sesion.commit()
-        return resultado
+    # Cerrado al salir, no cuando lo recoja el GC: la sesión no se queda abierta
+    async with contextlib.aclosing(override()) as sesiones:
+        async for sesion in sesiones:
+            resultado = await sesion.execute(text(sentencia), parametros)
+            await sesion.commit()
+            return resultado
     return None
 
 
