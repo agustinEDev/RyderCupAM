@@ -4,6 +4,8 @@ adjunta el JSON de la petición a cada error, también con send_default_pii=Fals
 ahí van el nombre, el correo y el mensaje de quien escribe.
 """
 
+import pytest
+
 from src.config import sentry_config
 
 
@@ -65,3 +67,16 @@ def test_other_routes_keep_their_body_in_transactions_too():
     )
 
     assert evento["request"]["data"]["name"] == "Ana"
+
+
+@pytest.mark.parametrize("ruta", ["/api/v1/auth/google", "/api/v1/auth/google/link"])
+@pytest.mark.parametrize("hook", ["before_send", "before_send_transaction"])
+def test_f8_el_canje_de_google_sale_sin_el_cuerpo(ruta, hook):
+    """
+    Given: Un error o una transacción de POST /auth/google o /auth/google/link
+    When: Pasa por before_send o before_send_transaction
+    Then: Sale sin el cuerpo: lleva el código de Google y el code_verifier (F8)
+    """
+    evento = getattr(sentry_config, hook)(_evento(f"https://api.rydercupfriends.com{ruta}"), {})
+
+    assert "data" not in evento["request"]
