@@ -4,6 +4,9 @@ from src.modules.competition.application.dto.invitation_dto import (
     InvitationResponseDTO,
     PaginatedInvitationResponseDTO,
 )
+from src.modules.competition.application.services.correo_del_invitado import (
+    correo_del_invitado,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -44,10 +47,11 @@ class ListMyInvitationsUseCase:
         # Parsear status filter
         status_vo = InvitationStatus(status_filter) if status_filter else None
 
-        # Obtener email del usuario
+        # Su email, solo si esta verificado: las enviadas a una direccion que no
+        # ha demostrado suya no existen para el (F-07)
         async with self._user_uow:
             user = await self._user_uow.users.find_by_id(user_id_vo)
-            user_email = str(user.email) if user else None
+            user_email = correo_del_invitado(str(user.email), user.email_verified) if user else None
 
         # Datos intermedios para enrichment
         paginated = []

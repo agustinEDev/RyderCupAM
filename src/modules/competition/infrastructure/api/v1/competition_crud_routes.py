@@ -94,6 +94,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.location import InvalidLocationError
+from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -444,7 +445,7 @@ async def list_competitions(
                     status_filter,
                     search_name,
                     search_creator,
-                    viewer_email=current_user.email,
+                    viewer_email=correo_de_quien_mira(current_user),
                 )
             elif my_competitions is False:
                 competitions = await _get_all_competitions(
@@ -455,10 +456,13 @@ async def list_competitions(
                     search_creator,
                     viewer_id=str(current_user_id.value),
                     is_admin=current_user.is_admin,
-                    viewer_email=current_user.email,
+                    viewer_email=correo_de_quien_mira(current_user),
                 )
                 competitions = await _exclude_user_competitions(
-                    competitions, current_user_id, uow, viewer_email=current_user.email
+                    competitions,
+                    current_user_id,
+                    uow,
+                    viewer_email=correo_de_quien_mira(current_user),
                 )
             else:
                 competitions = await _get_all_competitions(
@@ -469,7 +473,7 @@ async def list_competitions(
                     search_creator,
                     viewer_id=str(current_user_id.value),
                     is_admin=current_user.is_admin,
-                    viewer_email=current_user.email,
+                    viewer_email=correo_de_quien_mira(current_user),
                 )
 
             result = await _map_competitions_to_dtos(
@@ -562,7 +566,11 @@ async def get_competition(
             # La invitación pendiente de quien mira, para aceptarla o rechazarla
             # desde la ficha: solo si aceptarla puede salir bien (27 oct 2026)
             pendiente = await invitacion_pendiente(
-                uow, competition, current_user_id, current_user.email, datetime.now()
+                uow,
+                competition,
+                current_user_id,
+                correo_de_quien_mira(current_user),
+                datetime.now(),
             )
             if se_le_ofrece_aceptar(
                 competition, pendiente, inscrito=dto.user_enrollment_status is not None
@@ -578,7 +586,7 @@ async def get_competition(
                 competition,
                 current_user_id,
                 es_admin=current_user.is_admin,
-                email=current_user.email,
+                email=correo_de_quien_mira(current_user),
                 invitado=None if competition.is_creator(current_user_id) else pendiente is not None,
             )
             dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
