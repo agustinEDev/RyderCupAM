@@ -342,3 +342,30 @@ async def test_c_simultaneous_retries_of_a_lost_response_issue_a_single_substitu
     filas = await _de_su_dispositivo(cookies["device_id"])
     vivos = [f for f in filas if f["replaced_at"] is None and not f["revoked"]]
     assert len(vivos) == 1
+
+
+@pytest.mark.parametrize("vuelta", range(3))
+async def test_c_the_old_cookie_and_its_substitute_at_once_never_leave_two_live(
+    client: AsyncClient, vuelta
+):
+    """
+    Given: Una cookie vieja sustituida hace 2 minutos, con su sustituto sin usar
+    When: Llegan a la vez la vieja y el sustituto (dos sitios con la misma sesión)
+    Then: Nunca quedan dos tokens vivos en el dispositivo: o la vieja reanuda y el
+          sustituto llega anulado, o el sustituto rota y la vieja es un robo
+    """
+    _, cookies = await _sesion(client, f"c3-{vuelta}")
+    sustituto = _cookie_de_refresco(await _refresca(client, cookies["refresh_token"]))
+    await _atrasa_la_sustitucion(cookies["refresh_token"], timedelta(minutes=2))
+    client.cookies.clear()
+
+    await asyncio.gather(
+        *[
+            client.post("/api/v1/auth/refresh-token", headers={"Cookie": f"refresh_token={c}"})
+            for c in (cookies["refresh_token"], sustituto)
+        ]
+    )
+
+    filas = await _de_su_dispositivo(cookies["device_id"])
+    vivos = [f for f in filas if f["replaced_at"] is None and not f["revoked"]]
+    assert len(vivos) <= 1

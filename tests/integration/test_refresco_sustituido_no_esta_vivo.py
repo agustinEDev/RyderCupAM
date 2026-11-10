@@ -114,3 +114,30 @@ async def test_v4_the_locked_reads_find_the_token(client: AsyncClient, tipo):
     assert por_hash is not None and por_hash.id == viejo.id
     assert por_id is not None and por_id.id == viejo.id
     assert ninguno is None and ninguno_id is None
+
+
+@pytest.mark.parametrize("por", ["hash", "id"])
+async def test_v5_the_locked_read_sees_what_another_session_committed(client: AsyncClient, por):
+    """
+    Given: Una sesión de BD que ya tenía el token cargado, y otra petición que lo sustituye
+           y confirma
+    When: La primera lo vuelve a leer con bloqueo
+    Then: Ve la fila nueva (sustituido), no la copia vieja de su caché: es lo que hace que
+          el segundo de dos refrescos a la vez no emita otro sustituto
+    """
+    async with _uow("postgres") as primera, _uow("postgres") as segunda:
+        _usuario, _dispositivo, viejo = await _escena(primera)
+        await primera.refresh_tokens.find_by_token_hash("viejo")
+        async with segunda:
+            suyo = await segunda.refresh_tokens.find_by_token_hash("viejo")
+            sucesor = suyo.sustituye("sucesor", datetime.now())
+            await segunda.refresh_tokens.save(sucesor)
+            await segunda.refresh_tokens.save(suyo)
+
+        if por == "hash":
+            releido = await primera.refresh_tokens.find_by_token_hash_for_update("viejo")
+        else:
+            releido = await primera.refresh_tokens.find_by_id_for_update(viejo.id)
+
+    assert releido is not None
+    assert releido.is_replaced
