@@ -585,3 +585,59 @@ async def test_c_a_password_change_racing_a_refresh_leaves_nothing_alive(
     assert refresco.status_code < 500, refresco.text
     assert cambio.status_code == 200, cambio.text
     assert await _vivos_del_usuario(email) == 0
+
+
+async def test_c_logout_racing_a_password_change_does_not_deadlock(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Una sesión
+    When: Cierra sesión y, con el cierre a medias (dispositivo y tokens ya bloqueados),
+          cambia la contraseña desde otra pestaña
+    Then: Las dos salen bien (sin interbloqueo: el cierre bloquea antes la cuenta, como
+          los refrescos) y no queda ningún token vivo
+    """
+    from src.modules.user.infrastructure.persistence.sqlalchemy import (
+        refresh_token_repository as repo,
+    )
+
+    original = repo.SQLAlchemyRefreshTokenRepository.revoke_all_for_device
+
+    async def despacio(self, device_id):
+        # Tras revocar (con las filas de los tokens ya bloqueadas) y antes de guardar el
+        # usuario: el peor momento para el cambio de contraseña
+        revocados = await original(self, device_id)
+        await asyncio.sleep(1.5)
+        return revocados
+
+    monkeypatch.setattr(repo.SQLAlchemyRefreshTokenRepository, "revoke_all_for_device", despacio)
+    email, cookies = await _sesion(client, "c7")
+    client.cookies.clear()
+    cabecera = "; ".join(f"{k}={v}" for k, v in cookies.items())
+
+    salida, cambio = await asyncio.gather(
+        client.post(
+            "/api/v1/auth/logout",
+            json={},
+            headers={"Cookie": cabecera, "X-CSRF-Token": cookies["csrf_token"]},
+        ),
+        _despues(
+            0.3,
+            client.patch(
+                "/api/v1/users/security",
+                json={
+                    "current_password": CLAVE,
+                    "new_password": "OtraValida123!",
+                    "confirm_password": "OtraValida123!",
+                },
+                headers={"Cookie": cabecera, "X-CSRF-Token": cookies["csrf_token"]},
+            ),
+        ),
+        return_exceptions=True,
+    )
+
+    assert not isinstance(salida, BaseException), salida
+    assert not isinstance(cambio, BaseException), cambio
+    assert salida.status_code == 200, salida.text
+    assert cambio.status_code == 200, cambio.text
+    assert await _vivos_del_usuario(email) == 0

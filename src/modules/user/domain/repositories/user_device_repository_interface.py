@@ -141,13 +141,6 @@ class UserDeviceRepositoryInterface(ABC):
         """
 
     @abstractmethod
-    async def lock_all_of_user(self, user_id: UserId) -> None:
-        """
-        Bloquea las filas de todos sus dispositivos, en orden de id (F-02): cerrar todas
-        sus sesiones (cambio de contraseña) espera a los refrescos en curso.
-        """
-
-    @abstractmethod
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:

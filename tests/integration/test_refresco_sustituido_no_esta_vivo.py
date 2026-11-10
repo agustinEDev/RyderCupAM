@@ -4,7 +4,9 @@ Un refresh token sustituido ya no es una sesión viva (F-02), en los dos reposit
   V1 «hay uno vivo más nuevo» (BE #734) no cuenta un sustituido
   V2 los dispositivos con sesión no cuentan uno que solo tiene sustituidos
   V3 el contador de sesiones activas no cuenta los sustituidos
-  V4 con bloqueo, se lee el token por su hash y por su id (y lo que no está, None)
+  V4 con bloqueo, se lee el token por su hash y el dispositivo por su id (y lo que no
+     está, None)
+  V5 la lectura con bloqueo ve lo que otra sesión acaba de confirmar
 """
 
 import contextlib
@@ -19,7 +21,7 @@ from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
-from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -100,23 +102,25 @@ async def test_v1_v2_v3_a_replaced_token_is_not_live(client: AsyncClient, tipo):
 async def test_v4_the_locked_reads_find_the_token(client: AsyncClient, tipo):
     """
     Given: Un token guardado
-    Then: Las lecturas con bloqueo lo encuentran por su hash y por su id; lo que no
-          está da None
+    Then: Las lecturas con bloqueo encuentran el token por su hash y su dispositivo por
+          su id; lo que no está da None
     """
     async with _uow(tipo) as uow:
-        _usuario, _dispositivo, viejo = await _escena(uow)
+        _usuario, dispositivo, viejo = await _escena(uow)
         async with uow:
             por_hash = await uow.refresh_tokens.find_by_token_hash_for_update("viejo")
-            por_id = await uow.refresh_tokens.find_by_id_for_update(viejo.id)
+            suyo = await uow.user_devices.find_by_id_for_update(dispositivo.id)
             ninguno = await uow.refresh_tokens.find_by_token_hash_for_update("otro")
-            ninguno_id = await uow.refresh_tokens.find_by_id_for_update(RefreshTokenId.generate())
+            ningun_dispositivo = await uow.user_devices.find_by_id_for_update(
+                UserDeviceId.generate()
+            )
 
     assert por_hash is not None and por_hash.id == viejo.id
-    assert por_id is not None and por_id.id == viejo.id
-    assert ninguno is None and ninguno_id is None
+    assert suyo is not None and suyo.id == dispositivo.id
+    assert ninguno is None and ningun_dispositivo is None
 
 
-@pytest.mark.parametrize("por", ["hash", "id"])
+@pytest.mark.parametrize("por", ["token", "dispositivo"])
 async def test_v5_the_locked_read_sees_what_another_session_committed(client: AsyncClient, por):
     """
     Given: Una sesión de BD que ya tenía el token cargado, y otra petición que lo sustituye
@@ -126,18 +130,21 @@ async def test_v5_the_locked_read_sees_what_another_session_committed(client: As
           el segundo de dos refrescos a la vez no emita otro sustituto
     """
     async with _uow("postgres") as primera, _uow("postgres") as segunda:
-        _usuario, _dispositivo, viejo = await _escena(primera)
+        _usuario, dispositivo, _viejo = await _escena(primera)
         await primera.refresh_tokens.find_by_token_hash("viejo")
+        await primera.user_devices.find_by_id(dispositivo.id)
         async with segunda:
             suyo = await segunda.refresh_tokens.find_by_token_hash("viejo")
             sucesor = suyo.sustituye("sucesor", datetime.now())
             await segunda.refresh_tokens.save(sucesor)
             await segunda.refresh_tokens.save(suyo)
+            del_otro = await segunda.user_devices.find_by_id(dispositivo.id)
+            del_otro.revoke()
+            await segunda.user_devices.save(del_otro)
 
-        if por == "hash":
+        if por == "token":
             releido = await primera.refresh_tokens.find_by_token_hash_for_update("viejo")
+            assert releido is not None and releido.is_replaced
         else:
-            releido = await primera.refresh_tokens.find_by_id_for_update(viejo.id)
-
-    assert releido is not None
-    assert releido.is_replaced
+            device = await primera.user_devices.find_by_id_for_update(dispositivo.id)
+            assert device is not None and not device.is_active

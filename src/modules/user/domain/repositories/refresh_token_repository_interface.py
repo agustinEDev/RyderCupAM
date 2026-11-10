@@ -87,10 +87,6 @@ class RefreshTokenRepositoryInterface(ABC):
         """
 
     @abstractmethod
-    async def find_by_id_for_update(self, token_id: RefreshTokenId) -> RefreshToken | None:
-        """El token por su id, con la fila bloqueada (el sustituto, F-02)."""
-
-    @abstractmethod
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los refresh tokens de un usuario.

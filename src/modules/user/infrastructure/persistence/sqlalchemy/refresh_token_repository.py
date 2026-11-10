@@ -108,16 +108,6 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
-    async def find_by_id_for_update(self, token_id: RefreshTokenId) -> RefreshToken | None:
-        """El token por su id con SELECT … FOR UPDATE (el sustituto, F-02)."""
-        stmt = (
-            select(RefreshToken)
-            .where(refresh_tokens_table.c.id == str(token_id.value))
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        return (await self._session.execute(stmt)).scalar_one_or_none()
-
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los refresh tokens de un usuario.

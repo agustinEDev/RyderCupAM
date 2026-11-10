@@ -491,12 +491,12 @@ class RefreshAccessTokenUseCase:
         - SOLO_ACCESO o REANUDA con el navegador en un login más nuevo →
           SESSION_REPLACED (A5): ni access ni refresh de la sesión vieja.
 
-        El sustituto se lee con su fila bloqueada: si a la vez alguien lo está usando,
-        se espera y se ve usado.
+        El sustituto es del mismo dispositivo, cuya fila ya está bloqueada: nadie lo
+        usa a la vez, y se lee tal como lo dejó el último refresco.
         """
         sustituto = None
         if token.is_replaced and token.replaced_by_id is not None:
-            sustituto = await self._uow.refresh_tokens.find_by_id_for_update(token.replaced_by_id)
+            sustituto = await self._uow.refresh_tokens.find_by_id(token.replaced_by_id)
         paso = paso_del_refresco(token, sustituto, ahora)
         if paso is PasoDelRefresco.ROBO:
             await self._cierra_por_robo(dispositivo, user, request)

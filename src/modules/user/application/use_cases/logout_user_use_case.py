@@ -137,13 +137,14 @@ class LogoutUserUseCase:
 
     async def _cierra_este_dispositivo(self, user_id: UserId, refresh_token_jwt: str | None) -> int:
         """
-        Revoca en bloque los tokens del dispositivo del token que llega, con la cuenta
-        y el dispositivo bloqueados en el orden de los refrescos (F-02): un refresco a
-        la vez espera, o termina antes y su sucesor también se revoca. Devuelve cuántos.
+        Revoca en bloque los tokens del dispositivo del token que llega, tras bloquear
+        el dispositivo como hacen los refrescos (F-02): un refresco a la vez espera, o
+        termina antes y su sucesor también se revoca. Devuelve cuántos. (La fila del
+        usuario no se toca: cerrar sesión solo apunta un evento, y no choca con un
+        cambio de contraseña.)
         """
         if not refresh_token_jwt:
             return 0
-        await self._uow.users.lock_for_sessions(user_id)
         actual = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
         if actual is None or actual.user_id != user_id:
             return 0

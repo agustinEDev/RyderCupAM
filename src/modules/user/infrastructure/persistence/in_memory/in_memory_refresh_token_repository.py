@@ -76,10 +76,6 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         """En memoria no hay transacciones: igual que find_by_token_hash."""
         return await self.find_by_token_hash(token)
 
-    async def find_by_id_for_update(self, token_id: RefreshTokenId) -> RefreshToken | None:
-        """En memoria no hay transacciones: igual que find_by_id."""
-        return await self.find_by_id(token_id)
-
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los tokens de un usuario.

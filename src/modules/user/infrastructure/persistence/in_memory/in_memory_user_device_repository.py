@@ -123,10 +123,6 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         """En memoria no hay transacciones: igual que find_by_id."""
         return await self.find_by_id(device_id)
 
-    async def lock_all_of_user(self, user_id: UserId) -> None:
-        """En memoria no hay transacciones que bloquear."""
-        return
-
     async def find_active_by_user(self, user_id: UserId) -> list[UserDevice]:
         """
         Lista todos los dispositivos activos de un usuario.

@@ -127,15 +127,6 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
             UserDevice, device_id, with_for_update=True, populate_existing=True
         )
 
-    async def lock_all_of_user(self, user_id: UserId) -> None:
-        """SELECT … FOR UPDATE de todos sus dispositivos, en orden de id (F-02)."""
-        await self._session.execute(
-            select(user_devices_table.c.id)
-            .where(user_devices_table.c.user_id == str(user_id.value))
-            .order_by(user_devices_table.c.id)
-            .with_for_update()
-        )
-
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:
