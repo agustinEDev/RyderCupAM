@@ -4,6 +4,8 @@ La migración de la rotación del refresh token (F-02, caso A7) sobre tokens de 
   M1 al subir, los tokens que ya había siguen igual y quedan vigentes (columnas nulas):
      ninguna sesión cae al desplegar
   M2 bajar quita las columnas y deja los tokens
+  M3 bajar revoca antes los sustituidos: la release anterior no los distingue y los
+     aceptaría (una cookie vieja volvería a valer)
 """
 
 import uuid
@@ -87,3 +89,31 @@ def test_m2_the_downgrade_drops_the_columns_and_keeps_the_tokens(base_desechable
     engine.dispose()
     assert "replaced_at" not in columnas and "replaced_by_id" not in columnas
     assert quedan == 1
+
+
+def test_m3_the_downgrade_revokes_the_replaced_tokens(base_desechable):  # noqa: F811
+    _alembic(base_desechable, "upgrade", ROTACION)
+    vigente = _token_de_antes(base_desechable)
+    sustituido = _token_de_antes(base_desechable)
+    engine = create_engine(base_desechable)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE refresh_tokens SET replaced_at = now(), replaced_by_id = :v WHERE id = :id"
+            ),
+            {"v": vigente, "id": sustituido},
+        )
+    engine.dispose()
+
+    _alembic(base_desechable, "downgrade", ANTERIOR)
+
+    engine = create_engine(base_desechable)
+    with engine.connect() as conn:
+        filas = dict(
+            conn.execute(
+                text("SELECT id, revoked FROM refresh_tokens WHERE id IN (:a, :b)"),
+                {"a": vigente, "b": sustituido},
+            ).all()
+        )
+    engine.dispose()
+    assert filas == {vigente: False, sustituido: True}

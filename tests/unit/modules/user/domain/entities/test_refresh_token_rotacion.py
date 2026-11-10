@@ -128,3 +128,25 @@ def test_r6_replacing_again_points_to_the_last_successor():
     assert original.replaced_by_id == segundo.id
     assert original.replaced_at == AHORA
     assert original.en_el_margen(AHORA + timedelta(seconds=30))
+
+
+def test_r7_annulling_revokes_and_marks_it():
+    """
+    Given: El sustituto de una respuesta perdida
+    When: Se anula (A3)
+    Then: Queda revocado y marcado como anulado, para reconocerlo si vuelve
+    """
+    token = _token()
+
+    token.anula(AHORA)
+
+    assert token.revoked
+    assert token.is_annulled
+    assert token.annulled_at == AHORA
+
+
+def test_r7_a_revoked_token_is_not_annulled():
+    token = _token()
+    token.revoke()
+
+    assert not token.is_annulled

@@ -121,6 +121,8 @@ refresh_tokens_table = Table(
     # tokens de antes de la rotación, que se rotan en su primer uso)
     Column("replaced_at", DateTime, nullable=True),
     Column("replaced_by_id", RefreshTokenIdDecorator, nullable=True),
+    # El sustituto anulado de una respuesta perdida (A3): si vuelve, es un robo
+    Column("annulled_at", DateTime, nullable=True),
 )
 
 
@@ -156,5 +158,6 @@ def start_mappers():
                 "_revoked_at": refresh_tokens_table.c.revoked_at,
                 "_replaced_at": refresh_tokens_table.c.replaced_at,
                 "_replaced_by_id": refresh_tokens_table.c.replaced_by_id,
+                "_annulled_at": refresh_tokens_table.c.annulled_at,
             },
         )

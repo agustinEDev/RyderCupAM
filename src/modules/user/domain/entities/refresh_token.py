@@ -45,6 +45,8 @@ class RefreshToken:
         revoked_at: Fecha/hora de revocación (si aplica)
         replaced_at: Cuándo se sustituyó por su sucesor (None: vigente)
         replaced_by_id: Su último sucesor (None: vigente)
+        annulled_at: Cuándo se anuló: el sustituto de una respuesta perdida, que nunca
+            llegó al navegador (F-02, A3). Si vuelve, alguien lo tenía: robo
     """
 
     def __init__(
@@ -59,6 +61,7 @@ class RefreshToken:
         revoked_at: datetime | None = None,
         replaced_at: datetime | None = None,
         replaced_by_id: RefreshTokenId | None = None,
+        annulled_at: datetime | None = None,
     ):
         """
         Inicializa un RefreshToken.
@@ -83,6 +86,7 @@ class RefreshToken:
         self._revoked_at = revoked_at
         self._replaced_at = replaced_at
         self._replaced_by_id = replaced_by_id
+        self._annulled_at = annulled_at
 
     @property
     def id(self) -> RefreshTokenId:
@@ -164,6 +168,24 @@ class RefreshToken:
         self._replaced_at = ahora
         self._replaced_by_id = sucesor.id
         return sucesor
+
+    @property
+    def annulled_at(self) -> datetime | None:
+        """Cuándo se anuló (A3); None si no."""
+        return self._annulled_at
+
+    @property
+    def is_annulled(self) -> bool:
+        """Si es el sustituto anulado de una respuesta perdida (A3)."""
+        return self._annulled_at is not None
+
+    def anula(self, ahora: datetime) -> None:
+        """
+        Anula el sustituto de una respuesta perdida (A3): queda revocado y marcado, para
+        reconocerlo como robo si alguien llega con él (F-02, tras la revisión).
+        """
+        self.revoke()
+        self._annulled_at = ahora
 
     def en_el_margen(self, ahora: datetime) -> bool:
         """Si se sustituyó hace como mucho MARGEN_DE_LA_SUSTITUCION (60 s incluidos)."""
