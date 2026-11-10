@@ -4,8 +4,9 @@ El correo «Hemos cerrado tu sesión en un dispositivo por seguridad» (F-02, ca
 Cuando llega un refresh token ya sustituido cuyo sustituto ya se usó, dos sitios tienen
 la misma sesión: se revocan los tokens de ese dispositivo y se avisa al usuario con
 qué dispositivo era, cuándo y desde qué país, y un botón para revisar sus dispositivos.
-Como los demás avisos de seguridad, nunca a un correo sin confirmar. Un fallo al
-enviarlo nunca tumba el refresco.
+Como los demás avisos de seguridad, nunca a un correo sin confirmar, y con el tope
+global de avisos (`cupo_de_avisos`, su propio hueco): los provoca quien tenga cookies
+robadas. Un fallo al enviarlo nunca tumba el refresco y devuelve su hueco.
 """
 
 import logging
@@ -16,6 +17,7 @@ from src.modules.user.application.dto.device_dto import AvisoDeSesionCerradaRequ
 from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
     IAvisoDeSesionCerrada,
 )
+from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     cuando_en_espana,
@@ -33,6 +35,9 @@ from src.shared.domain.repositories.country_repository_interface import (
 
 logger = logging.getLogger(__name__)
 
+# Su hueco en el tope global de avisos
+MOTIVO_DEL_CUPO = "sesion_cerrada"
+
 
 class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
     """Manda el correo de la sesión cerrada por seguridad, si toca."""
@@ -42,11 +47,13 @@ class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
         uow: UserUnitOfWorkInterface,
         email_service: IEmailService,
         paises: CountryRepositoryInterface,
+        cupo: ICupoDeAvisos,
         reloj: Callable[[], datetime] = datetime.now,
     ):
         self._uow = uow
         self._email_service = email_service
         self._paises = paises
+        self._cupo = cupo
         self._reloj = reloj
 
     async def avisa(self, request: AvisoDeSesionCerradaRequestDTO) -> None:
@@ -54,13 +61,22 @@ class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
         if not request.toca_avisar():
             return
         try:
+            # Por id, no `find_by_id_and_user`: ese solo da los activos, y el robo acaba
+            # de revocar este
             async with self._uow:
-                dispositivo = await self._uow.user_devices.find_by_id_and_user(
-                    device_id=UserDeviceId.from_string(request.device_id),
-                    user_id=UserId(request.user_id),
+                dispositivo = await self._uow.user_devices.find_by_id(
+                    UserDeviceId.from_string(request.device_id)
                 )
-            if dispositivo is None:
-                return
+        except Exception as e:
+            logger.error("Session closed for security notice failed: %s", type(e).__name__)
+            return
+        if dispositivo is None or dispositivo.user_id != UserId(request.user_id):
+            return
+        if not self._cupo.reserva(MOTIVO_DEL_CUPO):
+            logger.warning("Session closed for security notice skipped: the budget is full")
+            return
+        enviado = False
+        try:
             enviado = await self._email_service.send_session_closed_for_security_notice(
                 to_email=request.email,
                 user_name=request.nombre,
@@ -76,3 +92,7 @@ class AvisoDeSesionCerradaPorSeguridad(IAvisoDeSesionCerrada):
             # Solo el tipo: el mensaje de un proveedor de correo puede llevar la
             # dirección (OWASP A09)
             logger.error("Session closed for security notice failed: %s", type(e).__name__)
+        finally:
+            # Uno que no salió no gasta el tope
+            if not enviado:
+                self._cupo.devuelve(MOTIVO_DEL_CUPO)

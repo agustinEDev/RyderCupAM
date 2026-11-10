@@ -8,10 +8,12 @@ El correo «Hemos cerrado tu sesión en un dispositivo por seguridad» (F-02, ca
   C3  el dispositivo ya no existe               | no (y no lanza)
   C4  falla el envío o el proveedor lanza       | no lanza: el refresco no depende de él
   C5  sin país                                  | el correo no lo menciona
+  C6  el cupo global de avisos está lleno        | no: lo provoca un atacante
+  C7  no sale                                    | devuelve su hueco del cupo
 """
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -52,7 +54,10 @@ async def _escena(pais: str | None = "ES"):
     await uow.user_devices.save(iphone)
     correo = AsyncMock()
     correo.send_session_closed_for_security_notice.return_value = True
-    aviso = AvisoDeSesionCerradaPorSeguridad(uow, correo, _Paises(), reloj=lambda: AHORA)
+    cupo = Mock()
+    cupo.reserva.return_value = True
+    aviso = AvisoDeSesionCerradaPorSeguridad(uow, correo, _Paises(), cupo, reloj=lambda: AHORA)
+    aviso.cupo = cupo
     return usuario, iphone, correo, aviso
 
 
@@ -97,6 +102,19 @@ async def test_c2_an_unconfirmed_email_gets_nothing():
     correo.send_session_closed_for_security_notice.assert_not_awaited()
 
 
+async def test_c1_the_device_was_just_revoked_by_the_theft():
+    """
+    Given: El robo acaba de revocar el dispositivo
+    Then: El correo sale igual, con su nombre
+    """
+    usuario, iphone, correo, aviso = await _escena()
+    iphone.revoke()
+
+    await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
+
+    correo.send_session_closed_for_security_notice.assert_awaited_once()
+
+
 async def test_c3_a_missing_device_sends_nothing():
     """
     Given: Un dispositivo que ya no está (o es de otro usuario)
@@ -137,3 +155,39 @@ async def test_c5_without_a_country_it_is_not_mentioned():
     await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
 
     assert correo.send_session_closed_for_security_notice.await_args.kwargs["pais"] is None
+
+
+async def test_c6_a_full_budget_sends_nothing():
+    """
+    Given: El cupo global de avisos de sesión cerrada está lleno
+    Then: No se manda (los provoca quien tenga cookies robadas)
+    """
+    usuario, iphone, correo, aviso = await _escena()
+    aviso.cupo.reserva.return_value = False
+
+    await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
+
+    aviso.cupo.reserva.assert_called_once_with("sesion_cerrada")
+    correo.send_session_closed_for_security_notice.assert_not_awaited()
+
+
+async def test_c6_a_sent_notice_keeps_its_slot():
+    usuario, iphone, _correo, aviso = await _escena()
+
+    await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
+
+    aviso.cupo.reserva.assert_called_once_with("sesion_cerrada")
+    aviso.cupo.devuelve.assert_not_called()
+
+
+@pytest.mark.parametrize("fallo", ["devuelve_false", "lanza"])
+async def test_c7_a_notice_that_did_not_go_out_gives_its_slot_back(fallo):
+    usuario, iphone, correo, aviso = await _escena()
+    if fallo == "lanza":
+        correo.send_session_closed_for_security_notice.side_effect = RuntimeError("caído")
+    else:
+        correo.send_session_closed_for_security_notice.return_value = False
+
+    await aviso.avisa(_peticion(usuario, str(iphone.id.value)))
+
+    aviso.cupo.devuelve.assert_called_once_with("sesion_cerrada")

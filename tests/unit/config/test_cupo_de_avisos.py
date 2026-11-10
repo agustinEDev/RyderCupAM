@@ -105,3 +105,23 @@ def test_c5_los_graves_tienen_su_hueco(grave):
 
     assert all(cupo.reserva(grave) for _ in range(10))
     assert not cupo.reserva(grave)
+
+
+def test_c6_las_sesiones_cerradas_tienen_su_propio_hueco():
+    """
+    Given: El aviso de sesión cerrada por seguridad (F-02), que provoca quien tenga una
+           cookie robada
+    When: Se gastan sus 10 del día
+    Then: El 11 no cabe, y ni gasta ni le gastan los de red ni los graves
+    """
+    from src.config.cupo_de_avisos import AVISOS_DE_SESION_CERRADA_POR_DIA
+
+    cupo = CupoDeAvisosEnMemoria(reloj=Reloj())
+
+    assert AVISOS_DE_SESION_CERRADA_POR_DIA == 10
+    assert all(cupo.reserva("sesion_cerrada") for _ in range(10))
+    assert not cupo.reserva("sesion_cerrada")
+    assert cupo.reserva("respaldo")
+    assert cupo.reserva("red")
+    cupo.devuelve("sesion_cerrada")
+    assert cupo.reserva("sesion_cerrada")

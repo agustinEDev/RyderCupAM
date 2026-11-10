@@ -150,10 +150,16 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
 class AvisoDeSesionCerradaEnSegundoPlano(IAvisoDeSesionCerrada):
     """Lanza el aviso de la sesión cerrada por seguridad sin que el refresco lo espere (F-02)."""
 
-    def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
-        """Con la fábrica de sesiones y el servicio de correo."""
+    def __init__(
+        self,
+        fabrica: async_sessionmaker[AsyncSession],
+        email_service: IEmailService,
+        cupo: ICupoDeAvisos,
+    ):
+        """Con la fábrica de sesiones, el servicio de correo y el tope global de avisos."""
         self._fabrica = fabrica
         self._email_service = email_service
+        self._cupo = cupo
 
     async def avisa(self, request: AvisoDeSesionCerradaRequestDTO) -> None:
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
@@ -171,6 +177,7 @@ class AvisoDeSesionCerradaEnSegundoPlano(IAvisoDeSesionCerrada):
                     SQLAlchemyUnitOfWork(sesion),
                     self._email_service,
                     SQLAlchemyCountryRepository(sesion),
+                    self._cupo,
                 )
                 await aviso.avisa(request)
         except Exception as e:
