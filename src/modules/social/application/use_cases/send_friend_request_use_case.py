@@ -60,7 +60,7 @@ class SendFriendRequestUseCase:
             if existing is not None:
                 # Si me bloqueó, no existe para mí: lo mismo que un destinatario que no
                 # está, sin pista del bloqueo (F-09). Si le bloqueé yo, el 403 de siempre
-                if existing.is_blocked() and existing.blocked_by == addressee_id:
+                if existing.bloqueado_por(addressee_id):
                     raise AddresseeNotFoundError(f"User not found: {request.addressee_id}")
                 if existing.is_blocked():
                     raise BlockedUserViolation(

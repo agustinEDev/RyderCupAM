@@ -31,6 +31,9 @@ from src.modules.social.application.use_cases.get_games_together_use_case import
 from src.modules.social.application.use_cases.get_player_activity_use_case import (
     GetPlayerActivityUseCase,
 )
+from src.modules.social.application.use_cases.get_player_profile_use_case import (
+    GetPlayerProfileUseCase,
+)
 from src.modules.social.application.use_cases.get_profile_gallery_use_case import (
     GetProfileGalleryUseCase,
 )
@@ -40,6 +43,7 @@ from src.modules.social.application.use_cases.send_friend_request_use_case impor
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.exceptions.social_violations import BlockedUserViolation
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
+from src.modules.social.domain.value_objects.friendship_status import FriendshipStatus
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
 )
@@ -167,3 +171,51 @@ async def test_b5_si_lo_bloquee_yo_la_solicitud_dice_el_bloqueo(social_uow, user
 
     with pytest.raises(BlockedUserViolation):
         await _solicitud(social_uow, user_uow)(yo, el)
+
+
+async def _bloqueo_sin_autor(social_uow, a: User, b: User) -> None:
+    """Una fila BLOCKED con `blocked_by` NULL: el CHECK de la tabla la admite."""
+    async with social_uow:
+        await social_uow.friendships.add(
+            Friendship.reconstruct(
+                id=FriendshipId(uuid4()),
+                requester_id=a.id,
+                addressee_id=b.id,
+                status=FriendshipStatus.BLOCKED,
+                blocked_by=None,
+            )
+        )
+
+
+async def test_b6_bloqueo_sin_autor_el_perfil_se_ve_como_hoy(social_uow, user_uow):
+    """
+    Given: Una fila BLOCKED sin `blocked_by` entre los dos
+    When: Abro su perfil
+    Then: Se ve (nadie me bloqueó: la misma regla que en lo demás), con el bloqueo
+        y sin «lo bloqueé yo», como antes de esta release
+    """
+    yo, el = await _usuario(user_uow), await _usuario(user_uow)
+    await _bloqueo_sin_autor(social_uow, el, yo)
+    stats = AsyncMock()
+
+    perfil = await GetPlayerProfileUseCase(social_uow, user_uow, stats).execute(
+        str(yo.id.value), str(el.id.value)
+    )
+
+    assert perfil.friendship.status == "BLOCKED"
+    assert perfil.blocked_by_me is False
+
+
+@pytest.mark.parametrize("que", sorted(LO_SUYO))
+async def test_b6_bloqueo_sin_autor_lo_demas_es_el_403_de_siempre(social_uow, user_uow, que):
+    """
+    Given: Una fila BLOCKED sin `blocked_by`
+    When: Pido su actividad, nuestras partidas juntos o su galería
+    Then: El 403 de no ser amigos: nadie me bloqueó
+    """
+    yo, el = await _usuario(user_uow), await _usuario(user_uow)
+    await _bloqueo_sin_autor(social_uow, el, yo)
+    crea, error_de_siempre = LO_SUYO[que]
+
+    with pytest.raises(error_de_siempre):
+        await crea(social_uow, user_uow)(yo, el)

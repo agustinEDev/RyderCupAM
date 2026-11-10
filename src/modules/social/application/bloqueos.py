@@ -20,4 +20,4 @@ async def me_bloqueo(
     if quien_mira == otro:
         return False
     relacion = await friendships.find_by_pair(quien_mira, otro)
-    return relacion is not None and relacion.is_blocked() and relacion.blocked_by == otro
+    return relacion is not None and relacion.bloqueado_por(otro)
