@@ -15,11 +15,17 @@ from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
+from src.modules.user.application.ports.cupo_de_avisos_port import (
+    MOTIVO_SESION_CERRADA,
+    ICupoDeAvisos,
+)
 
 AVISOS_DE_RED_POR_HORA = 20
 AVISOS_DE_RED_POR_DIA = 30
 AVISOS_GRAVES_POR_DIA = 10
+# Los de «sesión cerrada por seguridad» (F-02): los provoca quien tenga cookies robadas;
+# su propio hueco, para no gastar ni que les gasten los de los fallos
+AVISOS_DE_SESION_CERRADA_POR_DIA = 10
 UNA_HORA = timedelta(hours=1)
 UN_DIA = timedelta(hours=24)
 
@@ -32,10 +38,15 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
         self._reloj = reloj
         self._de_red: deque[datetime] = deque()
         self._graves: deque[datetime] = deque()
+        self._sesiones_cerradas: deque[datetime] = deque()
 
     def _de(self, motivo: str) -> deque[datetime]:
-        """La cola de este motivo: la de red, o la de los graves."""
-        return self._de_red if motivo == "red" else self._graves
+        """La cola de este motivo: la de red, la de sesiones cerradas o la de los graves."""
+        if motivo == "red":
+            return self._de_red
+        if motivo == MOTIVO_SESION_CERRADA:
+            return self._sesiones_cerradas
+        return self._graves
 
     def reserva(self, motivo: str) -> bool:
         """Reserva un aviso de este motivo; False si su tope está lleno."""
@@ -46,6 +57,9 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
         if motivo == "red":
             en_la_hora = sum(1 for t in enviados if t > ahora - UNA_HORA)
             if len(enviados) >= AVISOS_DE_RED_POR_DIA or en_la_hora >= AVISOS_DE_RED_POR_HORA:
+                return False
+        elif motivo == MOTIVO_SESION_CERRADA:
+            if len(enviados) >= AVISOS_DE_SESION_CERRADA_POR_DIA:
                 return False
         elif len(enviados) >= AVISOS_GRAVES_POR_DIA:
             return False
@@ -62,6 +76,7 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
         """Todo a cero (para los tests)."""
         self._de_red.clear()
         self._graves.clear()
+        self._sesiones_cerradas.clear()
 
 
 # El de la app: uno para todo el proceso

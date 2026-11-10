@@ -90,6 +90,24 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             # Token inválido, no puede hashearse
             return None
 
+    async def find_by_token_hash_for_update(self, token: str) -> RefreshToken | None:
+        """
+        El token por su hash con SELECT … FOR UPDATE (F-02): otro refresco con el mismo
+        token espera a que esta transacción acabe, y entonces lee la fila ya cambiada
+        (populate_existing: no la de la caché de la sesión).
+        """
+        try:
+            token_hash = TokenHash.from_token(token)
+        except ValueError:
+            return None
+        stmt = (
+            select(RefreshToken)
+            .where(refresh_tokens_table.c.token_hash == token_hash.value)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def find_all_by_user(self, user_id: UserId) -> list[RefreshToken]:
         """
         Busca todos los refresh tokens de un usuario.
@@ -126,11 +144,9 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
             )
             .values(revoked=True, revoked_at=datetime.now())
+            .returning(refresh_tokens_table.c.replaced_at)
         )
-
-        result = await self._session.execute(stmt)
-        await self._session.flush()
-        return result.rowcount or 0
+        return await self._revoca_y_cuenta_las_vivas(stmt)
 
     async def delete_expired(self) -> int:
         """
@@ -165,6 +181,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > datetime.now(),
             )
         )
@@ -211,11 +228,19 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 revoked=True,
                 revoked_at=datetime.now(),
             )
+            .returning(refresh_tokens_table.c.replaced_at)
         )
+        return await self._revoca_y_cuenta_las_vivas(stmt)
 
+    async def _revoca_y_cuenta_las_vivas(self, stmt) -> int:
+        """
+        Revoca todas las filas (también las sustituidas: una cookie vieja no debe volver
+        a valer) y cuenta solo las que eran una sesión viva, sin sustituir (F-02): el
+        recuento va al log, y las sustituidas son el historial de la misma sesión.
+        """
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount or 0
+        return sum(1 for (sustituido_en,) in result.all() if sustituido_en is None)
 
     async def device_ids_with_live_tokens(
         self, user_id: UserId, ahora: datetime
@@ -226,6 +251,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > ahora,
                 refresh_tokens_table.c.device_id.is_not(None),
             )
@@ -244,6 +270,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             exists().where(
                 refresh_tokens_table.c.device_id.in_([str(d.value) for d in device_ids]),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.replaced_at.is_(None),
                 refresh_tokens_table.c.expires_at > ahora,
                 refresh_tokens_table.c.created_at > creado_despues_de,
             )

@@ -77,6 +77,23 @@ class IEmailService(ABC):
         """
 
     @abstractmethod
+    async def send_session_closed_for_security_notice(
+        self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Avisa al usuario de que hemos cerrado su sesión en un dispositivo por seguridad
+        (F-02): su refresh token se usó desde dos sitios, con un botón para revisar sus
+        dispositivos.
+
+        Args:
+            to_email: El email del usuario
+            user_name: Su nombre
+            dispositivo: Lo que es, ya en texto («iPhone · Safari»)
+            cuando: La fecha y la hora, ya en texto y en hora de España
+            pais: El país aproximado, o None
+        """
+
+    @abstractmethod
     async def send_failed_logins_notification(
         self,
         to_email: str,

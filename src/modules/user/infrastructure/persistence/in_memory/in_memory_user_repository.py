@@ -22,6 +22,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
     async def find_by_id(self, user_id: UserId) -> User | None:
         return self._users.get(user_id)
 
+    async def lock_for_sessions(self, user_id: UserId) -> None:
+        # En memoria no hay concurrencia real de transacciones que bloquear.
+        return None
+
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         # En memoria no hay concurrencia real de transacciones que bloquear.
         return self._users.get(user_id)

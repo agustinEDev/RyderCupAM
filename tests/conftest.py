@@ -642,6 +642,8 @@ def mock_external_services():
     mock_email.send_email_changed_notice = AsyncMock(return_value=True)
     mock_email.send_account_secured_notice = AsyncMock(return_value=True)
     mock_email.send_google_account_notice = AsyncMock(return_value=True)
+    # Y el de la sesión cerrada por seguridad (F-02, robo de un refresh token)
+    mock_email.send_session_closed_for_security_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):

@@ -255,6 +255,17 @@ class ISecurityAuditLogger(ABC):
         """Sesiones revocadas, con su motivo."""
 
     @abstractmethod
+    def log_refresh_token_reuse_detected(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        device_id: str,
+        tokens_revoked_count: int,
+    ) -> None:
+        """Un refresh token sustituido reutilizado (robo, F-02): sesión del dispositivo cerrada."""
+
+    @abstractmethod
     def log_unverified_account_claimed(
         self,
         user_id: str,

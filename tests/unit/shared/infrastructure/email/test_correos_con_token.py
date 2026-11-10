@@ -56,6 +56,13 @@ CORREOS = [
         lambda s: s.send_new_login_notification("a@b.com", "Ana", "iPhone", "hoy", "ES"),
     ),
     (
+        "sesion_cerrada",
+        False,
+        lambda s: s.send_session_closed_for_security_notice(
+            "a@b.com", "Ana", "iPhone", "hoy", "ES"
+        ),
+    ),
+    (
         "intentos",
         False,
         lambda s: s.send_failed_logins_notification("a@b.com", "Ana", "red", "hoy", "ES", 10, 30),
@@ -121,6 +128,7 @@ def test_e13b_every_email_of_the_app_is_in_the_list():
         "send_google_account_notice",
         "send_new_login_notification",
         "send_failed_logins_notification",
+        "send_session_closed_for_security_notice",
         "send_invitation_email",
         "send_friend_request_email",
         "send_handicaps_pending_email",

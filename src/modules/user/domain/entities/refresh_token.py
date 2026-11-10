@@ -11,6 +11,10 @@ from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
+# Dos pestañas refrescan a la vez con la misma cookie: la segunda llega con el token
+# que la primera acaba de sustituir. Dentro de este margen no es un robo (F-02, A2)
+MARGEN_DE_LA_SUSTITUCION = timedelta(seconds=60)
+
 
 class RefreshToken:
     """
@@ -24,6 +28,11 @@ class RefreshToken:
     - Usado en /refresh-token para obtener nuevo access token
     - Revocado en logout o cambio de contraseña
     - Expirado después de 7 días (o configurado)
+    - Sustituido en cada refresco por su sucesor (rotación, F-02): no se borra ni se
+      revoca, porque hace falta para distinguir dos pestañas, una respuesta perdida y
+      un robo. El sucesor es de la misma sesión: hereda la caducidad absoluta y el
+      inicio (`created_at`), así que «una sesión más nueva» (BE #734) sigue siendo un
+      login más nuevo y nunca la propia cadena
 
     Attributes:
         id: Identificador único del refresh token
@@ -34,6 +43,10 @@ class RefreshToken:
         created_at: Fecha/hora de creación
         revoked: Si el token ha sido revocado manualmente
         revoked_at: Fecha/hora de revocación (si aplica)
+        replaced_at: Cuándo se sustituyó por su sucesor (None: vigente)
+        replaced_by_id: Su último sucesor (None: vigente)
+        annulled_at: Cuándo se anuló: el sustituto de una respuesta perdida, que nunca
+            llegó al navegador (F-02, A3). Si vuelve, alguien lo tenía: robo
     """
 
     def __init__(
@@ -46,6 +59,9 @@ class RefreshToken:
         created_at: datetime | None = None,
         revoked: bool = False,
         revoked_at: datetime | None = None,
+        replaced_at: datetime | None = None,
+        replaced_by_id: RefreshTokenId | None = None,
+        annulled_at: datetime | None = None,
     ):
         """
         Inicializa un RefreshToken.
@@ -68,6 +84,9 @@ class RefreshToken:
         self._created_at = created_at or datetime.now()
         self._revoked = revoked
         self._revoked_at = revoked_at
+        self._replaced_at = replaced_at
+        self._replaced_by_id = replaced_by_id
+        self._annulled_at = annulled_at
 
     @property
     def id(self) -> RefreshTokenId:
@@ -108,6 +127,71 @@ class RefreshToken:
     def device_id(self) -> UserDeviceId | None:
         """Retorna el ID del dispositivo asociado."""
         return self._device_id
+
+    @property
+    def replaced_at(self) -> datetime | None:
+        """Cuándo se sustituyó por su sucesor; None si es el vigente de su sesión."""
+        return self._replaced_at
+
+    @property
+    def replaced_by_id(self) -> RefreshTokenId | None:
+        """Su último sucesor; None si es el vigente de su sesión."""
+        return self._replaced_by_id
+
+    @property
+    def is_replaced(self) -> bool:
+        """Si ya se sustituyó (rotó) por un sucesor."""
+        return self._replaced_at is not None
+
+    def sustituye(self, token: str, ahora: datetime) -> "RefreshToken":
+        """
+        Rota: crea el sucesor con el JWT `token` y marca este como sustituido por él.
+
+        El sucesor es de la misma sesión: mismo usuario y dispositivo, la misma
+        caducidad absoluta (7 días desde el login: no se alarga) y el mismo inicio. Si
+        este ya estaba sustituido (la respuesta se perdió, F-02 A3), apunta al nuevo y
+        el margen empieza otra vez.
+
+        Raises:
+            ValueError: si está revocado (una sesión cerrada no se reanuda)
+        """
+        if self._revoked:
+            raise ValueError("A revoked refresh token cannot be replaced")
+        sucesor = RefreshToken(
+            id=RefreshTokenId.generate(),
+            user_id=self._user_id,
+            token_hash=TokenHash.from_token(token),
+            expires_at=self._expires_at,
+            device_id=self._device_id,
+            created_at=self._created_at,
+        )
+        self._replaced_at = ahora
+        self._replaced_by_id = sucesor.id
+        return sucesor
+
+    @property
+    def annulled_at(self) -> datetime | None:
+        """Cuándo se anuló (A3); None si no."""
+        return self._annulled_at
+
+    @property
+    def is_annulled(self) -> bool:
+        """Si es el sustituto anulado de una respuesta perdida (A3)."""
+        return self._annulled_at is not None
+
+    def anula(self, ahora: datetime) -> None:
+        """
+        Anula el sustituto de una respuesta perdida (A3): queda revocado y marcado, para
+        reconocerlo como robo si alguien llega con él (F-02, tras la revisión).
+        """
+        self.revoke()
+        self._annulled_at = ahora
+
+    def en_el_margen(self, ahora: datetime) -> bool:
+        """Si se sustituyó hace como mucho MARGEN_DE_LA_SUSTITUCION (60 s incluidos)."""
+        if self._replaced_at is None:
+            return False
+        return ahora - self._replaced_at <= MARGEN_DE_LA_SUSTITUCION
 
     @classmethod
     def create(

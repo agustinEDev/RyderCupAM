@@ -9,7 +9,11 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.aviso_en_segundo_plano import (
+    AvisoDeFallosEnSegundoPlano,
+    AvisoDeSesionCerradaEnSegundoPlano,
+    AvisoEnSegundoPlano,
+)
 from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.cupo_de_contacto import cupo_de_contacto
@@ -562,6 +566,9 @@ from src.modules.user.application.ports.avatar_preset_provider_interface import 
 )
 from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.aviso_de_sesion_cerrada_port import (
+    IAvisoDeSesionCerrada,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.application.ports.google_oauth_service_interface import (
@@ -973,6 +980,15 @@ def get_aviso_de_nuevo_inicio_de_sesion(
     return AvisoEnSegundoPlano(fabrica, email_service)
 
 
+def get_aviso_de_sesion_cerrada(
+    email_service: IEmailService = Depends(get_email_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IAvisoDeSesionCerrada:
+    """El correo de «sesión cerrada por seguridad» al propio usuario, en segundo plano (F-02),
+    con el tope global de avisos."""
+    return AvisoDeSesionCerradaEnSegundoPlano(fabrica, email_service, cupo_de_avisos)
+
+
 def get_freno_del_login() -> IFrenoDelLogin:
     """El freno del login por correo y origen, uno para todo el proceso (BE #732)."""
     return freno_del_login
@@ -1038,14 +1054,18 @@ def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    aviso_de_cierre: IAvisoDeSesionCerrada = Depends(get_aviso_de_sesion_cerrada),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
     Con la Unit of Work (users + refresh_tokens + user_devices) y el servicio de
-    tokens. Ya no registra dispositivos: usa el de su token (BE #738).
+    tokens. Ya no registra dispositivos: usa el de su token (BE #738). Rota el refresh
+    token y, si detecta un robo, avisa al usuario en segundo plano (F-02).
     """
-    return RefreshAccessTokenUseCase(uow, token_service, security_audit=security_audit)
+    return RefreshAccessTokenUseCase(
+        uow, token_service, security_audit=security_audit, aviso_de_cierre=aviso_de_cierre
+    )
 
 
 def get_update_profile_use_case(

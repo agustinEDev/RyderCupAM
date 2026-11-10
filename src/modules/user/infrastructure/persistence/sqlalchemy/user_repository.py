@@ -7,6 +7,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import users_table
 from src.shared.infrastructure.persistence.leidos_en_la_sesion import recordar, ya_leido
 
 
@@ -35,6 +36,14 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         if usuario is not None:
             recordar(self._session, User, user_id, usuario)
         return usuario
+
+    async def lock_for_sessions(self, user_id: UserId) -> None:
+        """SELECT … FOR KEY SHARE de la fila del usuario (ver la interfaz, F-02)."""
+        await self._session.execute(
+            select(users_table.c.id)
+            .where(users_table.c.id == str(user_id.value))
+            .with_for_update(read=True, key_share=True)
+        )
 
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         """
