@@ -14,3 +14,8 @@ Lo que una release deja dicho para otra. Se borra la línea al hacerlo.
   `verification_token = NULL WHERE verification_token !~ '^[0-9a-f]{64}$'` y
   `password_reset_token = NULL, reset_token_expires_at = NULL WHERE password_reset_token
   !~ '^[0-9a-f]{64}$'`.
+- **Quitar los tokens del cuerpo** de las respuestas de login, registro, Google y refresco, y
+  dejar de aceptar `Authorization: Bearer` (F-03). Antes tiene que estar en producción el
+  front que ya no los lee (`ApiAuthRepository.js`).
+- **`code_verifier` obligatorio** en el canje de Google (login y vincular), cuando el front ya
+  lo envíe (FE-02).
