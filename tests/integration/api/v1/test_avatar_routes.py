@@ -78,7 +78,7 @@ class TestSetAndGetActiveAvatar:
         assert image_response.content == preset_image_response.content
 
     @pytest.mark.asyncio
-    async def test_user_without_avatar_returns_404(self, client: AsyncClient):
+    async def test_user_without_avatar_returns_204(self, client: AsyncClient):
         user = await create_authenticated_user(
             client, "avatar_none@test.com", "P@ssw0rd123!", "Avatar", "None"
         )
@@ -87,7 +87,9 @@ class TestSetAndGetActiveAvatar:
 
         response = await client.get(f"/api/v1/users/{user_id}/avatar")
 
-        assert response.status_code == 404
+        # Sin avatar, 204 sin cuerpo (2.59.0, BE #793)
+        assert response.status_code == 204
+        assert response.content == b""
 
 
 class TestUploadAvatar:
@@ -211,4 +213,4 @@ class TestAvatarUploadHistoryAndSwitching:
 
         user_id = user["user"]["id"]
         image_response = await client.get(f"/api/v1/users/{user_id}/avatar")
-        assert image_response.status_code == 404
+        assert image_response.status_code == 204
