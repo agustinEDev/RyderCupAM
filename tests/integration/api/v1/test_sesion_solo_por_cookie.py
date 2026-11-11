@@ -239,21 +239,11 @@ def test_c7_the_schema_declares_the_cookie_not_bearer():
 
 async def test_a1_the_old_get_to_validate_a_reset_link_is_gone(client: AsyncClient):
     """
-    Given: Un enlace de restablecer recién pedido
+    Given: Un token de restablecer con la forma de uno de verdad
     When: Se valida por el GET viejo, con el token en la ruta
     Then: 404: la ruta ya no existe
     """
-    email = "a1-get-viejo@example.com"
-    await _alta(client, email)
-    token = "a" * 64
-    await sql_en_la_bd_de_test(
-        "update users set password_reset_token = :t, "
-        "reset_token_expires_at = now() + interval '1 hour' where email = :e",
-        t=token,
-        e=email,
-    )
-
-    r = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+    r = await client.get(f"/api/v1/auth/validate-reset-token/{'a' * 43}")
 
     assert r.status_code == 404
 

@@ -4,7 +4,7 @@ Sentry User Context Middleware
 Middleware para capturar contexto de usuario en eventos de Sentry.
 
 Funcionalidad:
-- Extrae JWT token de cookies o headers (Authorization)
+- Extrae el JWT de la cookie httpOnly de acceso (desde la 2.58.0, solo de ahí)
 - Decodifica el token para obtener el user_id
 - Establece contexto de usuario en Sentry (sentry_sdk.set_user)
 - Silencioso: Si falla la decodificación, continúa sin usuario (request anónimo)

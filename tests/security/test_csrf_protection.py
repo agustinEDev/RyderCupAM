@@ -82,8 +82,8 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
     # Login to get tokens
     response = await client.post("/api/v1/auth/login", json=valid_user_credentials)
 
-    if response.status_code != status.HTTP_200_OK:
-        pytest.skip(f"No se pudo autenticar usuario de prueba (status: {response.status_code})")
+    # Sin login no hay nada que probar: falla, no se salta
+    assert response.status_code == status.HTTP_200_OK, response.text
 
     # Los tokens de sesión llegan solo en las cookies (2.58.0); el CSRF, también en el
     # cuerpo. Si faltan, falla: saltarse en silencio dejaría sin probar el CSRF
