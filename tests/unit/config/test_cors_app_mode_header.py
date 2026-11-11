@@ -19,3 +19,14 @@ def test_cors_allows_the_app_mode_header():
 
     assert "X-App-Mode" in cabeceras
     assert "X-CSRF-Token" in cabeceras
+
+
+def test_cors_no_longer_allows_the_authorization_header():
+    """
+    Given: La configuración CORS de la API (2.58.0: la sesión va solo en la cookie)
+    When: Se miran las cabeceras permitidas
+    Then: No incluye Authorization: la API ya no la lee y el front no la manda
+    """
+    cabeceras = [c.lower() for c in get_cors_config()["allow_headers"]]
+
+    assert "authorization" not in cabeceras

@@ -100,14 +100,14 @@ class TestCORSConfiguration:
         Test: Preflight request (OPTIONS) funciona correctamente
 
         Given: Un cliente hace OPTIONS request (preflight CORS)
-        When: Solicita hacer POST con Authorization header
+        When: Solicita hacer POST con las cabeceras que manda el front
         Then: Response incluye headers CORS correctos
         """
         # Arrange
         headers = {
             "Origin": "http://localhost:5173",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "authorization,content-type",
+            "Access-Control-Request-Headers": "content-type,x-csrf-token",
         }
 
         # Act
