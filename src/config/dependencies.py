@@ -742,7 +742,7 @@ from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
-from src.shared.infrastructure.security.cookie_handler import read_access_token
+from src.shared.infrastructure.security.cookie_handler import COOKIE_NAME, read_access_token
 from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
@@ -1189,7 +1189,7 @@ def get_avatar_preset_image_use_case(
 # El esquema de seguridad de OpenAPI: la cookie httpOnly del access token, la única
 # forma de autenticarse desde la 2.58.0 (F-03). auto_error=False: la falta de sesión
 # la decide get_current_user, con su 401 de siempre
-security = APIKeyCookie(name="access_token", auto_error=False)
+security = APIKeyCookie(name=COOKIE_NAME, auto_error=False)
 
 
 async def get_current_user(

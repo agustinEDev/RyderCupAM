@@ -421,7 +421,7 @@ async def logout_user(
         logout_request: DTO de logout (renombrado de 'request' para evitar conflicto)
         response: Response de FastAPI (para eliminar cookies)
         current_user: Usuario autenticado obtenido del token
-        credentials: Credenciales con el token JWT (opcional con cookies)
+        credentials: La cookie de sesión, solo para declararla en OpenAPI
         use_case: Caso de uso de logout
 
     Returns:
@@ -429,7 +429,8 @@ async def logout_user(
     """
     user_id = str(current_user.id)
 
-    # Obtener token: prioridad cookie, luego header (la regla de get_current_user)
+    # El token de la cookie (la regla de get_current_user, que ya exigió que esté).
+    # La comprobación solo acota el tipo: sin cookie no se llega aquí
     token = read_access_token(request)
 
     if not token:

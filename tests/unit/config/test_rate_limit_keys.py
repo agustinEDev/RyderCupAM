@@ -84,11 +84,11 @@ def test_a_bearer_header_alone_keys_on_the_network():
     assert user_id not in key
 
 
-def test_cookie_wins_over_bearer_header_like_get_current_user():
+def test_a_bearer_header_does_not_change_the_cookie_user():
     """
-    Given: La cookie de A y la cabecera de B
+    Given: La cookie de A y una cabecera Bearer de B
     When: Se calcula la clave
-    Then: Cuenta A, la misma prioridad con la que get_current_user autentica
+    Then: Cuenta A: la cabecera no se lee (2.58.0), como en get_current_user
     """
     user_a, user_b = str(uuid4()), str(uuid4())
 
