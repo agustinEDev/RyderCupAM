@@ -22,10 +22,10 @@ from httpx import AsyncClient
 from main import app
 from src.config.dependencies import get_handicap_service
 from src.config.rate_limit import limiter
-from src.modules.user.infrastructure.external.mock_handicap_service import (
+from tests.conftest import create_authenticated_user
+from tests.fakes.mock_handicap_service import (
     MockHandicapService,
 )
-from tests.conftest import create_authenticated_user
 
 PASSWORD = "P@ssw0rd123!"
 

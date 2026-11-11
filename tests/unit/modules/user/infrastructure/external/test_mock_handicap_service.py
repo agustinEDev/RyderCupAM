@@ -4,7 +4,7 @@ Tests for MockHandicapService
 
 import pytest
 
-from src.modules.user.infrastructure.external.mock_handicap_service import (
+from tests.fakes.mock_handicap_service import (
     MockHandicapService,
 )
 
