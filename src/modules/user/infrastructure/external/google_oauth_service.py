@@ -32,17 +32,16 @@ class GoogleOAuthService(IGoogleOAuthService):
     """
 
     async def exchange_code_for_user_info(
-        self, authorization_code: str, code_verifier: str | None = None
+        self, authorization_code: str, code_verifier: str
     ) -> GoogleUserInfo:
         """
         Intercambia un authorization code de Google por información del usuario.
 
         Args:
             authorization_code: Código de Google OAuth
-            code_verifier: El verifier PKCE (RFC 7636). Si viene, va a Google, que
-                rechaza el canje si no casa con el code_challenge de la petición del
-                código: el mismo error que un código malo. Opcional en esta release
-                (el front de hoy no lo manda); obligatorio a partir de la release 3
+            code_verifier: El verifier PKCE (RFC 7636), obligatorio desde la 2.58.0. Va
+                a Google, que rechaza el canje si no casa con el code_challenge de la
+                petición del código: el mismo error que un código malo
 
         Returns:
             GoogleUserInfo con datos del usuario
@@ -59,9 +58,8 @@ class GoogleOAuthService(IGoogleOAuthService):
                     "client_secret": settings.GOOGLE_CLIENT_SECRET,
                     "redirect_uri": settings.GOOGLE_REDIRECT_URI,
                     "grant_type": "authorization_code",
+                    "code_verifier": code_verifier,
                 }
-                if code_verifier is not None:
-                    datos["code_verifier"] = code_verifier
                 token_response = await client.post(GOOGLE_TOKEN_URL, data=datos)
 
                 if token_response.status_code != HTTP_OK:

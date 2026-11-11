@@ -80,7 +80,7 @@ async def _pon_handicap(client: AsyncClient, user: dict, handicap: float) -> Non
     response = await client.post(
         "/api/v1/handicaps/update-manual",
         json={"user_id": user["user"]["id"], "handicap": handicap},
-        headers={"Authorization": f"Bearer {user['token']}"},
+        headers={"Cookie": f"access_token={user['token']}"},
     )
     assert response.status_code == 200, response.text
 

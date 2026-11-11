@@ -30,7 +30,7 @@ NUEVO = "pendiente.nuevo@example.com"
 
 async def _pide(client: AsyncClient, correos, viejo=VIEJO, nuevo=NUEVO):
     datos = await create_authenticated_user(client, viejo, CLAVE, "Ana", "Lopez")
-    cabecera = {"Authorization": f"Bearer {datos['token']}"}
+    cabecera = {"Cookie": f"access_token={datos['token']}"}
     r = await client.patch(
         "/api/v1/users/security",
         json={"current_password": CLAVE, "new_email": nuevo},
@@ -180,7 +180,7 @@ async def test_another_accounts_session_cannot_confirm_my_change(
     )
     luis = await create_authenticated_user(client, "luis.otro@example.com", CLAVE, "Luis", "Otro")
 
-    r = await _confirma(client, {"Authorization": f"Bearer {luis['token']}"}, token)
+    r = await _confirma(client, {"Cookie": f"access_token={luis['token']}"}, token)
 
     assert r.status_code == 400
     assert r.json()["error_code"] == "EMAIL_CHANGE_INVALID"

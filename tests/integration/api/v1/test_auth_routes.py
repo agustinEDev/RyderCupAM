@@ -119,7 +119,7 @@ class TestAuthRoutes:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json()["error_code"] == "PASSWORD_NO_SYMBOL"
-        sigue = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+        sigue = await client.post("/api/v1/auth/validate-reset-token", json={"token": token})
         assert sigue.json()["valid"] is True
 
     async def test_reset_with_an_unknown_token_carries_its_code(self, client: AsyncClient):
@@ -176,7 +176,7 @@ class TestAuthRoutes:
             client, "logout.test@example.com", "V@l1dP@ss123!", "Logout", "Test"
         )
         token = auth_data["token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Cookie": f"access_token={token}"}
 
         # Act: Hacer logout
         logout_data = {}  # LogoutRequestDTO está vacío en Fase 1
@@ -208,7 +208,7 @@ class TestAuthRoutes:
         """
         # Arrange
         invalid_token = "invalid-jwt-token"
-        headers = {"Authorization": f"Bearer {invalid_token}"}
+        headers = {"Cookie": f"access_token={invalid_token}"}
         logout_data = {}
 
         # Act: Intentar logout con token inválido
@@ -489,11 +489,11 @@ class TestValidateResetTokenMalformed:
     async def test_a_malformed_token_is_just_invalid(self, client: AsyncClient, token: str):
         """
         GIVEN: Un token de reseteo que no existe, con cualquier longitud
-        WHEN: Se valida con GET /api/v1/auth/validate-reset-token/{token}
+        WHEN: Se valida con POST /api/v1/auth/validate-reset-token
         THEN: 200 con valid=False y el mismo mensaje que cualquier token
               inválido: la longitud no revela nada distinto
         """
-        response = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+        response = await client.post("/api/v1/auth/validate-reset-token", json={"token": token})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == {"valid": False, "message": self.MENSAJE_INVALIDO}

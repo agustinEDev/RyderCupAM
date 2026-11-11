@@ -71,7 +71,9 @@ class TestGoogleOAuthService:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class.return_value = mock_client
 
-        result = await service.exchange_code_for_user_info("valid-auth-code")
+        result = await service.exchange_code_for_user_info(
+            "valid-auth-code", code_verifier="v" * 43
+        )
 
         assert isinstance(result, GoogleUserInfo)
         assert result.google_user_id == "google-12345"
@@ -93,7 +95,7 @@ class TestGoogleOAuthService:
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ValueError, match="Invalid or expired"):
-            await service.exchange_code_for_user_info("bad-code")
+            await service.exchange_code_for_user_info("bad-code", code_verifier="v" * 43)
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
     async def test_exchange_code_fails_on_missing_access_token(self, mock_client_class, service):
@@ -108,7 +110,7 @@ class TestGoogleOAuthService:
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ValueError, match="did not return an access token"):
-            await service.exchange_code_for_user_info("code-no-token")
+            await service.exchange_code_for_user_info("code-no-token", code_verifier="v" * 43)
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
     async def test_exchange_code_fails_on_userinfo_error(
@@ -127,7 +129,7 @@ class TestGoogleOAuthService:
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ValueError, match="Failed to retrieve user information"):
-            await service.exchange_code_for_user_info("code-userinfo-fail")
+            await service.exchange_code_for_user_info("code-userinfo-fail", code_verifier="v" * 43)
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
     async def test_exchange_code_fails_on_missing_required_fields(
@@ -151,7 +153,7 @@ class TestGoogleOAuthService:
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ValueError, match="missing required fields"):
-            await service.exchange_code_for_user_info("code-missing-fields")
+            await service.exchange_code_for_user_info("code-missing-fields", code_verifier="v" * 43)
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
     async def test_exchange_code_handles_missing_optional_fields(
@@ -181,7 +183,7 @@ class TestGoogleOAuthService:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class.return_value = mock_client
 
-        result = await service.exchange_code_for_user_info("code-minimal")
+        result = await service.exchange_code_for_user_info("code-minimal", code_verifier="v" * 43)
 
         assert result.google_user_id == "google-minimal"
         assert result.email == "minimal@gmail.com"
@@ -201,7 +203,7 @@ class TestGoogleOAuthService:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class.return_value = mock_client
 
-        await service.exchange_code_for_user_info("test-code")
+        await service.exchange_code_for_user_info("test-code", code_verifier="v" * 43)
 
         # Verificar que se llamó al token URL
         mock_client.post.assert_called_once()
@@ -290,6 +292,6 @@ async def test_only_a_json_true_counts_as_a_verified_email(
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client_class.return_value = mock_client
 
-    info = await service.exchange_code_for_user_info("code")
+    info = await service.exchange_code_for_user_info("code", code_verifier="v" * 43)
 
     assert info.email_verified is verificado

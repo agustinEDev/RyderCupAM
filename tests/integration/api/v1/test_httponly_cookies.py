@@ -75,7 +75,7 @@ class TestHttpOnlyCookies:
         # Then: Verificar respuesta
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data  # LEGACY: token en body
+        assert "access_token" not in data  # Solo en la cookie (2.58.0)
 
         # Then: Verificar cookie httpOnly en headers
         set_cookie_header = response.headers.get("set-cookie")

@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.58.0] - 2026-11-11
+
+**Fase 3 del plan de seguridad, release 3 (backend)** (#791). Cierra la fase: hallazgo F-03
+y la parte final de FE-02 de la auditoría del 9 nov. **Requiere el frontend 2.73.0**, que ya
+está en producción desde el 11 nov y no lee ni manda nada de lo que se quita. Sin migraciones.
+**Cambio de contrato de la API** (etiqueta `api-breaking`): quien no use el front 2.73.0 deja
+de poder entrar con Google y de autenticarse con `Authorization: Bearer`.
+
+### Security
+
+- **La sesión viaja solo en cookies httpOnly** (F-03): el login, el login con Google y la
+  renovación ya no devuelven `access_token`, `refresh_token` ni `token_type` en el cuerpo ni
+  en el esquema; solo el `csrf_token`. Un script inyectado ya no tiene credenciales que leer.
+- **`Authorization: Bearer` ya no autentica**: la cookie es la única forma de identificarse
+  (también para el límite de peticiones, el CSRF y el usuario de Sentry). El esquema de la API
+  declara la cookie en vez de HTTP bearer, y el CORS ya no permite esa cabecera.
+- **PKCE obligatorio con Google** (FE-02): sin `code_verifier`, entrar o vincular con Google
+  responde 422 sin llegar a canjear el código.
+
+### Removed
+
+- **`GET /auth/validate-reset-token/{token}`** (obsoleto desde la 2.57.0) y su tachado en
+  Sentry; queda `POST /auth/validate-reset-token` con el token en el cuerpo.
+- La migración prevista para repetir la anulación de enlaces en claro: comprobado en
+  producción (solo lectura) que no queda ninguno, y la 2.57.0 solo guarda hashes.
+
+### Tests
+
+- Los tests se autentican con la cookie de sesión; la fixture de seguridad del CSRF falla en
+  vez de saltarse si le falta un token. Unitarios 9546, seguridad 64, integración 1616;
+  10 mutaciones, todas muertas. Kind contra el front 2.73.0: 27 casos.
+
 ## [2.57.0] - 2026-11-10
 
 **Fase 3 del plan de seguridad, release 1 (backend)** (#786, #787, #788). Hallazgos F-01,

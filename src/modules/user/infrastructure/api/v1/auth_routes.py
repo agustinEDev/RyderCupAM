@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
 from src.config.dependencies import (
@@ -256,13 +255,11 @@ async def login_user(
 
     1. **Access Token (15 minutos)**:
        - httpOnly cookie: access_token
-       - Response body: access_token (LEGACY - compatibilidad)
        - Usado para acceder a recursos protegidos
        - Corta duración para máxima seguridad
 
     2. **Refresh Token (7 días)**:
        - httpOnly cookie: refresh_token
-       - Response body: refresh_token (LEGACY - compatibilidad)
        - Usado solo en endpoint /refresh-token
        - Larga duración para mejor UX (sin re-login)
 
@@ -273,10 +270,8 @@ async def login_user(
     - Refresh token hasheado en BD (no texto plano)
     - Access token de corta duración (15 min)
 
-    Migration Path:
-    - v1.8.0 (actual): Dual support (cookies + body)
-    - v1.9.0: Deprecation warning en docs
-    - v2.0.0: BREAKING CHANGE - Solo cookies
+    Los tokens van solo en las cookies desde la 2.58.0 (F-03): el cuerpo lleva el
+    usuario y el token CSRF, nunca el access ni el refresh token.
 
     Args:
         request: Request de FastAPI (requerido por SlowAPI rate limiting)
@@ -285,7 +280,7 @@ async def login_user(
         use_case: Caso de uso de login
 
     Returns:
-        LoginResponseDTO con access_token, refresh_token y datos del usuario
+        LoginResponseDTO: los datos del usuario y el token CSRF (los tokens, en cookies)
 
     Raises:
         HTTPException 401: Si las credenciales son incorrectas
@@ -351,8 +346,7 @@ async def login_user(
     # recorta a 7 días las de una API en otra dirección) y deja este delante (BE #737)
     pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
-    # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
-    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
+    # Los tokens no salen en el cuerpo: el DTO los excluye (F-03)
     return login_response
 
 
@@ -370,8 +364,7 @@ async def get_current_user_endpoint(
     """
     Endpoint para obtener información del usuario actual.
 
-    Requiere autenticación mediante token JWT en el header:
-    Authorization: Bearer <token>
+    Requiere la cookie httpOnly de la sesión (access_token).
     """
     return current_user
 
@@ -389,7 +382,7 @@ async def logout_user(
     logout_request: LogoutRequestDTO,
     response: Response,
     current_user: UserResponseDTO = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: ARG001 - declara el esquema Bearer en OpenAPI
+    credentials: str | None = Depends(security),  # noqa: ARG001 - declara la cookie en OpenAPI
     use_case: LogoutUserUseCase = Depends(get_logout_user_use_case),
 ):
     """
@@ -428,7 +421,7 @@ async def logout_user(
         logout_request: DTO de logout (renombrado de 'request' para evitar conflicto)
         response: Response de FastAPI (para eliminar cookies)
         current_user: Usuario autenticado obtenido del token
-        credentials: Credenciales con el token JWT (opcional con cookies)
+        credentials: La cookie de sesión, solo para declararla en OpenAPI
         use_case: Caso de uso de logout
 
     Returns:
@@ -436,7 +429,8 @@ async def logout_user(
     """
     user_id = str(current_user.id)
 
-    # Obtener token: prioridad cookie, luego header (la regla de get_current_user)
+    # El token de la cookie (la regla de get_current_user, que ya exigió que esté).
+    # La comprobación solo acota el tipo: sin cookie no se llega aquí
     token = read_access_token(request)
 
     if not token:
@@ -583,7 +577,7 @@ async def refresh_access_token(
     2. Frontend llama a /refresh-token (cookie refresh_token enviada automáticamente)
     3. Backend valida refresh token (JWT + BD)
     4. Backend genera nuevo access token (15 min)
-    5. Backend retorna nuevo access token (httpOnly cookie + body)
+    5. Backend pone el nuevo access token en su cookie httpOnly (no en el cuerpo)
     6. Frontend reintenta request original con nuevo access token
 
     Security (OWASP A01/A02/A07):
@@ -604,7 +598,7 @@ async def refresh_access_token(
         use_case: Caso de uso de refresh token
 
     Returns:
-        RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
+        RefreshAccessTokenResponseDTO: los datos del usuario y el token CSRF nuevo
 
     Returns (401):
         `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED, que borran la
@@ -662,8 +656,7 @@ async def refresh_access_token(
     # caducaba a los 7 días en Safari y la app creía que el dispositivo estaba revocado
     pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
 
-    # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
-    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
+    # El access token no sale en el cuerpo: el DTO lo excluye (F-03)
     return refresh_response
 
 
@@ -1057,72 +1050,6 @@ async def validate_reset_token_from_body(
     if request_dto is None:
         return ValidateResetTokenResponseDTO(valid=False, message=_ENLACE_DE_RESET_IMPOSIBLE)
     return await use_case.execute(request_dto)
-
-
-# DEPRECATED (fase 3): el token va en la URL. El front pasa al POST de arriba; este GET se
-# quita en la release 2.58.0, cuando ningún front desplegado lo use
-@router.get(
-    "/validate-reset-token/{token}",
-    response_model=ValidateResetTokenResponseDTO,
-    status_code=status.HTTP_200_OK,
-    summary="Validar token de reseteo (OPCIONAL, DEPRECATED)",
-    deprecated=True,
-    description="""
-    DEPRECATED: usa `POST /auth/validate-reset-token` con el token en el cuerpo. Este GET
-    se quita en la 2.58.0.
-
-    Endpoint público OPCIONAL para validar un token ANTES de mostrar el formulario.
-
-    UX Benefits:
-    - Detecta token expirado ANTES de que el usuario escriba nueva contraseña
-    - Redirige a /forgot-password si el token es inválido (mejor experiencia)
-    - Muestra formulario solo si el token es válido
-
-    Security:
-    - NO requiere autenticación (endpoint público)
-    - NO revela información sobre el usuario (solo retorna valid: bool)
-    - Rate limiting: 10 intentos/hora por IP
-
-    Flow sin validación previa:
-    1. Usuario hace clic → Formulario → Envía → "Token expirado" (mala UX)
-
-    Flow con validación previa:
-    1. Usuario hace clic → Validación → Si expirado: Redirige con mensaje
-    2. Si válido: Muestra formulario → Envía → SUCCESS
-    """,
-    tags=["Authentication"],
-)
-@limiter.limit(VALIDATE_RESET_TOKEN_LIMIT, key_func=get_client_identifier)  # Por red
-async def validate_reset_token(
-    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
-    token: str,
-    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case),
-) -> ValidateResetTokenResponseDTO:
-    """
-    Valida un token de reseteo antes de mostrar el formulario.
-
-    Args:
-        token: Token de reseteo a validar (path parameter)
-        use_case: Caso de uso inyectado por FastAPI
-
-    Returns:
-        ValidateResetTokenResponseDTO con valid=True/False y mensaje
-
-    Note:
-        - SIEMPRE retorna 200 OK (nunca 404)
-        - NO incluye email del usuario por seguridad
-    """
-    # Un token con una longitud imposible es un token inválido más: la ruta
-    # promete 200 con valid=False, no un 500 (BE #453). Mismo mensaje que el
-    # caso de uso, para que la longitud no revele nada distinto
-    request_dto = _valida_el_token_de_reset(token)
-    if request_dto is None:
-        return ValidateResetTokenResponseDTO(valid=False, message=_ENLACE_DE_RESET_IMPOSIBLE)
-
-    # Ejecutar use case
-    response = await use_case.execute(request_dto)
-
-    return response
 
 
 # ============================================================================

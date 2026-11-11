@@ -145,7 +145,9 @@ async def test_a2_google_unlinked_mid_login_gets_no_session():
     registro, dispositivo = _registro_que_a_la_vez(uow, ana, le_quitan_el_google)
 
     with pytest.raises(ValueError):
-        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await _google(uow, registro).execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
     await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
 
@@ -161,7 +163,9 @@ async def test_a3_deactivated_mid_google_login_gets_403_and_no_session():
     registro, dispositivo = _registro_que_a_la_vez(uow, ana, la_desactivan)
 
     with pytest.raises(AccountDeactivatedException):
-        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await _google(uow, registro).execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
     await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
 
@@ -218,7 +222,9 @@ async def test_b3_google_locks_a_verified_account_too_before_linking():
         device_id="550e8400-e29b-41d4-a716-446655440099", is_new_device=True, message="Nuevo"
     )
 
-    await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+    await _google(uow, registro).execute(
+        GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+    )
 
     assert ana.id in pedidos
 
@@ -294,7 +300,9 @@ async def test_a2_google_relinked_to_another_account_mid_login_gets_no_session()
     registro, dispositivo = _registro_que_a_la_vez(uow, ana, pasa_a_otra)
 
     with pytest.raises(ValueError, match="Google unlinked during sign-in"):
-        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await _google(uow, registro).execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
     await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
 
@@ -331,7 +339,9 @@ async def test_two_first_google_sign_ins_at_once_do_not_link_twice():
         device_id="550e8400-e29b-41d4-a716-446655440099", is_new_device=True, message="Nuevo"
     )
 
-    await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+    await _google(uow, registro).execute(
+        GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+    )
 
     vinculos = [v for v in uow.oauth_accounts._accounts.values() if v.user_id == ana.id]
     assert len(vinculos) == 1
@@ -376,6 +386,8 @@ async def test_a_google_linked_to_another_account_meanwhile_is_a_plain_refusal()
     registro = AsyncMock()
 
     with pytest.raises(ValueError, match="Google account already linked to another user"):
-        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await _google(uow, registro).execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
     assert [v for v in uow.oauth_accounts._accounts.values() if v.user_id == ana.id] == []

@@ -20,14 +20,14 @@ class GoogleLoginRequestDTO(BaseModel):
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
     )
-    code_verifier: str | None = Field(
-        default=None,
+    code_verifier: str = Field(
+        ...,
         min_length=43,
         max_length=128,
         pattern=r"^[A-Za-z0-9\-._~]+$",
         description=(
             "PKCE (RFC 7636): el verifier del code_challenge con el que se pidió el "
-            "código. Opcional en esta release; obligatorio a partir de la release 3."
+            "código. Obligatorio desde la 2.58.0."
         ),
     )
     # Campos inyectados por la ruta (no vienen del body)
@@ -52,13 +52,14 @@ class GoogleLoginRequestDTO(BaseModel):
 class GoogleLoginResponseDTO(BaseModel):
     """Response DTO para login/registro con Google."""
 
-    access_token: str = Field(..., description="Token JWT de acceso (15 minutos)")
-    refresh_token: str = Field(..., description="Token JWT de renovación (7 días)")
+    # Los tokens, solo para las cookies httpOnly de la ruta: ni en el cuerpo ni en el
+    # esquema (F-03, 2.58.0)
+    access_token: str = Field(..., exclude=True)
+    refresh_token: str = Field(..., exclude=True)
     csrf_token: str = Field(
         ...,
         description="Token CSRF para double-submit (vale lo que el refresh token más 1 h; su cookie dura 15 minutos)",
     )
-    token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer')")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado")
     is_new_user: bool = Field(
         default=False,
@@ -89,14 +90,14 @@ class LinkGoogleAccountRequestDTO(BaseModel):
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
     )
-    code_verifier: str | None = Field(
-        default=None,
+    code_verifier: str = Field(
+        ...,
         min_length=43,
         max_length=128,
         pattern=r"^[A-Za-z0-9\-._~]+$",
         description=(
             "PKCE (RFC 7636): el verifier del code_challenge con el que se pidió el "
-            "código. Opcional en esta release; obligatorio a partir de la release 3."
+            "código. Obligatorio desde la 2.58.0."
         ),
     )
     # Para el log de seguridad (#750 punto 3): la ruta los pone siempre desde la

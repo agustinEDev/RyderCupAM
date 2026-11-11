@@ -16,7 +16,6 @@ Arquitectura:
 import os
 
 from fastapi import Request, Response
-from fastapi.security.utils import get_authorization_scheme_param
 
 # Nombres de las cookies
 COOKIE_NAME = "access_token"  # Access token (15 min)
@@ -151,25 +150,19 @@ def delete_auth_cookie(response: Response) -> None:
 
 def read_access_token(request: Request) -> str | None:
     """
-    Lee el access token de una petición: primero la cookie httpOnly, después la
-    cabecera Authorization: Bearer (legacy).
+    Lee el access token de una petición: solo la cookie httpOnly.
+
+    Desde la 2.58.0 (F-03) la cabecera Authorization: Bearer no cuenta: el front
+    no la manda, y un token que JavaScript pudiera leer es lo que se quiere evitar.
 
     Es la única regla de dónde viene el token: la usan get_current_user para
-    autenticar y el rate limit para saber de quién es la petición, así que los dos
-    ven siempre al mismo usuario (RyderCupAM#273).
+    autenticar, el rate limit para saber de quién es la petición, el CSRF y Sentry,
+    así que todos ven siempre al mismo usuario (RyderCupAM#273).
 
     Returns:
-        El token, o None si no hay ninguno
+        El token, o None si no hay cookie
     """
-    token = request.cookies.get(COOKIE_NAME)
-    if token:
-        return token
-
-    # El mismo parser que HTTPBearer, con el que get_current_user lee la cabecera
-    scheme, credentials = get_authorization_scheme_param(request.headers.get("Authorization"))
-    if scheme.lower() == "bearer" and credentials:
-        return credentials
-    return None
+    return request.cookies.get(COOKIE_NAME) or None
 
 
 def get_cookie_name() -> str:

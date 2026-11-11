@@ -160,7 +160,7 @@ async def test_b2_3_a_password_change_hashes_with_no_transaction_open(client: As
     r = await client.patch(
         "/api/v1/users/security",
         json={"current_password": CLAVE, "new_password": NUEVA, "confirm_password": NUEVA},
-        headers={"Authorization": f"Bearer {datos['token']}"},
+        headers={"Cookie": f"access_token={datos['token']}"},
     )
 
     assert r.status_code == 200, r.text
@@ -239,7 +239,7 @@ async def test_b2_3_an_email_only_change_hashes_with_no_transaction_open(
     r = await client.patch(
         "/api/v1/users/security",
         json={"current_password": CLAVE, "new_email": "b23.nuevo@example.com"},
-        headers={"Authorization": f"Bearer {datos['token']}"},
+        headers={"Cookie": f"access_token={datos['token']}"},
     )
 
     assert r.status_code == 200, r.text

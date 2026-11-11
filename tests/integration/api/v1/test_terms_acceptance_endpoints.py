@@ -131,7 +131,9 @@ class TestAltaConGoogle:
         )
         app.dependency_overrides[get_google_oauth_service] = lambda: google
 
-        respuesta = await client.post("/api/v1/auth/google", json={"authorization_code": "code"})
+        respuesta = await client.post(
+            "/api/v1/auth/google", json={"authorization_code": "code", "code_verifier": "v" * 43}
+        )
 
         assert respuesta.status_code == 200
         assert respuesta.json()["user"]["terms_accepted"] is False
@@ -320,9 +322,13 @@ class TestGoogleConUsuarioExistente:
         assert antes[1] == terms_of_service.current_terms_version()
         _google(email)
 
-        vincula = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+        vincula = await client.post(
+            "/api/v1/auth/google", json={"authorization_code": "c1", "code_verifier": "v" * 43}
+        )
         client.cookies.clear()
-        vinculada = await client.post("/api/v1/auth/google", json={"authorization_code": "c2"})
+        vinculada = await client.post(
+            "/api/v1/auth/google", json={"authorization_code": "c2", "code_verifier": "v" * 43}
+        )
 
         assert vincula.status_code == 200
         assert vincula.json()["is_new_user"] is False
@@ -352,7 +358,8 @@ class TestGoogleConUsuarioExistente:
             headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
         )
         respuesta = await client.post(
-            "/api/v1/auth/google/link", json={"authorization_code": "code"}
+            "/api/v1/auth/google/link",
+            json={"authorization_code": "code", "code_verifier": "v" * 43},
         )
 
         assert respuesta.status_code == 200

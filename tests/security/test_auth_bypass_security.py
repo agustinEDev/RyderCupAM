@@ -84,7 +84,7 @@ class TestInvalidTokensRejected:
         ]
 
         for token in invalid_tokens:
-            headers = {"Authorization": f"Bearer {token}"}
+            headers = {"Cookie": f"access_token={token}"}
             response = await client.post(
                 "/api/v1/competitions",
                 headers=headers,
@@ -118,7 +118,7 @@ class TestInvalidTokensRejected:
         # Token JWT con exp en el pasado (generado con SECRET_KEY incorrecta)
         expired_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.invalid"
 
-        headers = {"Authorization": f"Bearer {expired_token}"}
+        headers = {"Cookie": f"access_token={expired_token}"}
         response = await client.post(
             "/api/v1/competitions",
             headers=headers,
@@ -165,7 +165,7 @@ class TestTokenManipulationPrevented:
             # IMPORTANTE: Limpiar cookies y headers para usar solo el token modificado
             client.cookies.clear()
             client.headers.clear()
-            client.headers.update({"Authorization": f"Bearer {modified_token}"})
+            client.headers.update({"Cookie": f"access_token={modified_token}"})
 
             response = await client.post(
                 "/api/v1/competitions",
@@ -198,7 +198,7 @@ class TestTokenManipulationPrevented:
         # {"alg":"none","typ":"JWT"}.{"sub":"123","name":"Hacker"}
         none_alg_token = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ."
 
-        headers = {"Authorization": f"Bearer {none_alg_token}"}
+        headers = {"Cookie": f"access_token={none_alg_token}"}
         response = await client.post(
             "/api/v1/competitions",
             headers=headers,

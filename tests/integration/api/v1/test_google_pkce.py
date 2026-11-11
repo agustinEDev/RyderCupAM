@@ -1,8 +1,8 @@
 """
 PKCE en el login y en vincular Google, por la API (FE-02, fase 3 del plan a 9).
 
-El `code_verifier` del cuerpo, OPCIONAL en esta release (obligatorio en la 3), llega
-al canje del código; sin él, como hoy; mal formado, 422 sin gastar el código.
+El `code_verifier` del cuerpo, obligatorio desde la 2.58.0, llega al canje del código;
+sin él o mal formado, 422 sin gastar el código (sin él: `test_sesion_solo_por_cookie`).
 """
 
 from unittest.mock import AsyncMock
@@ -52,22 +52,18 @@ async def _login(client: AsyncClient, **cuerpo):
     )
 
 
-@pytest.mark.parametrize("con_verifier", [False, True], ids=["sin", "con"])
-async def test_login_pasa_el_verifier_al_canje(client: AsyncClient, con_verifier: bool):
+async def test_login_pasa_el_verifier_al_canje(client: AsyncClient):
     """
-    Given: Un login con Google, con o sin code_verifier
+    Given: Un login con Google con su code_verifier
     When: Se canjea el código
-    Then: Entra, y el canje recibe el verifier (o None sin él)
+    Then: Entra, y el canje recibe el verifier
     """
-    google = _google(f"pkce-login-{con_verifier}@gmail.com")
-    cuerpo = {"code_verifier": VERIFIER} if con_verifier else {}
+    google = _google("pkce-login@gmail.com")
 
-    r = await _login(client, **cuerpo)
+    r = await _login(client, code_verifier=VERIFIER)
 
     assert r.status_code == 200, r.text
-    google.exchange_code_for_user_info.assert_awaited_once_with(
-        "code", code_verifier=VERIFIER if con_verifier else None
-    )
+    google.exchange_code_for_user_info.assert_awaited_once_with("code", code_verifier=VERIFIER)
 
 
 async def test_login_con_un_verifier_mal_formado_da_422_sin_canjear(client: AsyncClient):

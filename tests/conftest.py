@@ -458,12 +458,9 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
     login_response = await client.post("/api/v1/auth/login", json=login_data)
     assert login_response.status_code == 200
 
-    response_data = login_response.json()
-    access_token = response_data["access_token"]
-    user_info = response_data["user"]
-
-    # Agregar el token al cliente como header por defecto
-    client.headers.update({"Authorization": f"Bearer {access_token}"})
+    # El token llega solo en la cookie (2.58.0), y el cliente ya la guarda
+    access_token = login_response.cookies["access_token"]
+    user_info = login_response.json()["user"]
 
     return client, {"token": access_token, "user": user_info, "credentials": user_data}
 
@@ -521,7 +518,8 @@ async def create_authenticated_user(
     )
     assert login_response.status_code == 200
 
-    token = login_response.json()["access_token"]
+    # El access token, de su cookie: ya no viene en el cuerpo (2.58.0)
+    token = login_response.cookies["access_token"]
     user_info = login_response.json()["user"]
 
     # Capturar cookies HTTPOnly del response (como lo haría el navegador)
@@ -1092,7 +1090,7 @@ async def create_admin_user(
     assert login_response.status_code == 200
 
     # Actualizar con el nuevo token y cookies que incluyen is_admin=True
-    admin_data["token"] = login_response.json()["access_token"]
+    admin_data["token"] = login_response.cookies["access_token"]
     admin_data["user"] = login_response.json()["user"]
     admin_data["cookies"] = dict(login_response.cookies)
 

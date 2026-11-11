@@ -172,8 +172,8 @@ class TestRateLimitingHandicap:
         if login_response.status_code != 200:
             pytest.skip("No se pudo autenticar usuario para test de handicap rate limiting")
 
-        token = login_response.json().get("access_token")
-        auth_headers = {"Authorization": f"Bearer {token}"}
+        token = login_response.cookies.get("access_token")
+        auth_headers = {"Cookie": f"access_token={token}"}
         own_id = login_response.json()["user"]["id"]
 
         # Limpiar rate limiter después del setup de autenticación
@@ -251,8 +251,8 @@ class TestRateLimitingCompetition:
         if login_response.status_code != 200:
             pytest.skip("No se pudo autenticar usuario para test de competition rate limiting")
 
-        token = login_response.json().get("access_token")
-        auth_headers = {"Authorization": f"Bearer {token}"}
+        token = login_response.cookies.get("access_token")
+        auth_headers = {"Cookie": f"access_token={token}"}
 
         # Limpiar rate limiter después del setup de autenticación
         limiter.reset()

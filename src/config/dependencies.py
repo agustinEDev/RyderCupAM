@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyCookie
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import (
@@ -742,7 +742,7 @@ from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
-from src.shared.infrastructure.security.cookie_handler import read_access_token
+from src.shared.infrastructure.security.cookie_handler import COOKIE_NAME, read_access_token
 from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
@@ -1186,45 +1186,33 @@ def get_avatar_preset_image_use_case(
     return GetAvatarPresetImageUseCase(preset_provider)
 
 
-# Esquema de seguridad HTTP Bearer para Swagger
-# IMPORTANTE: auto_error=False permite que el endpoint no falle si no hay header Authorization
-# Esto es necesario para el middleware dual (cookies + headers)
-security = HTTPBearer(auto_error=False)
+# El esquema de seguridad de OpenAPI: la cookie httpOnly del access token, la única
+# forma de autenticarse desde la 2.58.0 (F-03). auto_error=False: la falta de sesión
+# la decide get_current_user, con su 401 de siempre
+security = APIKeyCookie(name=COOKIE_NAME, auto_error=False)
 
 
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: ARG001 - declara el esquema Bearer en OpenAPI; el token lo lee read_access_token
+    credentials: str | None = Depends(security),  # noqa: ARG001 - declara la cookie en OpenAPI; el token lo lee read_access_token
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO:
     """
     Dependencia para obtener el usuario actual desde el token JWT.
 
-    FASE TRANSITORIA (v1.8.0 - v2.0.0):
-    Soporta autenticación dual para migración gradual del frontend:
+    El token sale solo de la cookie httpOnly "access_token" (F-03, 2.58.0): JavaScript
+    no puede leerla, y la cabecera Authorization: Bearer ya no autentica.
 
-    1. **httpOnly Cookie** (PRIORIDAD 1 - Recomendado):
-       - Intenta leer JWT desde cookie "access_token"
-       - Protección contra XSS (JavaScript no puede leerla)
-
-    2. **Authorization Header** (PRIORIDAD 2 - LEGACY - Fallback):
-       - Si no hay cookie, lee desde header "Authorization: Bearer <token>"
-       - Permite compatibilidad con frontend actual (localStorage)
-       - TODO (v2.0.0): Eliminar soporte para headers cuando frontend migre
-
-    Flujo de Autenticación:
-    1. Extrae token desde cookie O header (prioridad a cookie)
+    Flujo:
+    1. Lee el token de la cookie (read_access_token, la misma regla que el rate
+       limit, el CSRF y Sentry)
     2. Verifica y decodifica el token JWT
     3. Busca el usuario en la base de datos
     4. Retorna el usuario autenticado
 
-    Security Improvements (OWASP A01/A02):
-    - httpOnly cookie: JavaScript NO puede leer el token (previene XSS)
-    - Fallback a headers: Compatibilidad backward sin breaking changes
-
     Args:
         request: Request de FastAPI (para leer cookies)
-        credentials: Credenciales del header Authorization (opcional ahora)
+        credentials: La cookie, solo para declararla en OpenAPI
         uow: Unit of Work para acceso a datos
 
     Raises:
@@ -1238,11 +1226,11 @@ async def get_current_user(
         async def protected_route(current_user: UserResponseDTO = Depends(get_current_user)):
             return {"message": f"Hello {current_user.email}"}
     """
-    # Cookie httpOnly primero y, si no hay, Authorization: Bearer (LEGACY). La misma
-    # regla con la que el rate limit decide de quién es la petición (#273)
+    # Solo la cookie httpOnly (2.58.0). La misma regla con la que el rate limit decide
+    # de quién es la petición (#273)
     token = read_access_token(request)
 
-    # Si no hay token en ninguno de los dos lugares, rechazar autenticación
+    # Sin cookie no hay sesión
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1330,7 +1318,7 @@ async def get_current_user(
 
 async def get_current_user_optional(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: str | None = Depends(security),
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO | None:
     """

@@ -16,8 +16,8 @@ F-01/F-04/F-05/F-10/F-13; tabla aprobada por Agustín).
   C3  token en claro de antes (verificar / reset)    | enlace no válido
   C2  restablecer pasada 1 h                         | 400 RESET_TOKEN_INVALID
   C2  pedir otro enlace anula el anterior; uso único | 400 RESET_TOKEN_INVALID
-  C4  POST /validate-reset-token con el cuerpo       | valid True / False; el GET sigue,
-                                                     |   marcado deprecated
+  C4  POST /validate-reset-token con el cuerpo       | valid True / False (el GET se
+                                                     |   quitó en la 2.58.0)
   H1  forgot-password 3/hora por correo + red        | la 4.ª de esa red 429; otra red, 200
   H2  11.º correo de reset del día (redes distintas) | 200 igual, sin correo
   H3  correo sin cuenta                              | la misma respuesta
@@ -407,29 +407,6 @@ async def test_c4_validate_by_post_with_the_token_in_the_body(
         "update users set password_reset_token = :t where email = :e", t=viejo, e=email
     )
     assert await valida(viejo) is False
-
-
-async def test_c4_the_get_still_works_and_is_deprecated(
-    client: AsyncClient, mock_external_services
-):
-    """
-    Given: Un enlace de restablecer vigente
-    When: Se valida por el GET de siempre y se mira el OpenAPI
-    Then: El GET sigue respondiendo; en el OpenAPI, deprecated; el POST, no
-    """
-    email = _correo()
-    await _registra(client, email)
-    await _pide_reset(client, email, _red("reset"))
-    token = _token_de_reset(mock_external_services, email)
-
-    r = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
-
-    assert r.status_code == 200 and r.json()["valid"] is True
-    from main import app
-
-    rutas = app.openapi()["paths"]
-    assert rutas["/api/v1/auth/validate-reset-token/{token}"]["get"].get("deprecated") is True
-    assert not rutas["/api/v1/auth/validate-reset-token"]["post"].get("deprecated")
 
 
 # --- H: el freno de «Olvidé mi contraseña» ----------------------------------------------

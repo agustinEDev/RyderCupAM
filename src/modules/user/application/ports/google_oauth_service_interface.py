@@ -29,15 +29,14 @@ class IGoogleOAuthService(ABC):
 
     @abstractmethod
     async def exchange_code_for_user_info(
-        self, authorization_code: str, code_verifier: str | None = None
+        self, authorization_code: str, code_verifier: str
     ) -> GoogleUserInfo:
         """
         Intercambia un authorization code de Google por información del usuario.
 
         Args:
             authorization_code: Código de autorización de Google (del frontend)
-            code_verifier: El verifier PKCE del code_challenge, si el cliente lo usó.
-                Opcional en esta release; obligatorio a partir de la release 3
+            code_verifier: El verifier PKCE del code_challenge (obligatorio desde la 2.58.0)
 
         Returns:
             GoogleUserInfo con datos del usuario de Google

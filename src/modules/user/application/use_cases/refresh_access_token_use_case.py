@@ -438,7 +438,6 @@ class RefreshAccessTokenUseCase:
         return RefreshAccessTokenResponseDTO(
             access_token=new_access_token,
             csrf_token=csrf_token,
-            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
             message="Access token renovado exitosamente",
             device_id=device_id,

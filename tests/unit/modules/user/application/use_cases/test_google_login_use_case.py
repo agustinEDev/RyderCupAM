@@ -127,6 +127,7 @@ def login_request():
         ip_address="192.168.1.1",
         user_agent="Mozilla/5.0 Test",
         device_id_from_cookie=None,
+        code_verifier="v" * 43,
     )
 
 
@@ -147,7 +148,6 @@ class TestGoogleLoginUseCaseAutoRegister:
         assert response.user.email == "oauth@example.com"
         assert response.user.first_name == "Google"
         assert response.user.last_name == "User"
-        assert response.token_type == "bearer"
         assert response.access_token is not None
         assert response.refresh_token is not None
 
@@ -431,6 +431,7 @@ class TestGoogleLoginUseCaseTokenGeneration:
             authorization_code="valid-code",
             ip_address=None,
             user_agent=None,
+            code_verifier="v" * 43,
         )
 
         response = await use_case.execute(request)
@@ -456,6 +457,7 @@ class TestGoogleLoginUseCaseTokenGeneration:
             authorization_code="valid-code",
             ip_address=None,
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            code_verifier="v" * 43,
         )
 
         await use_case.execute(request)
@@ -629,7 +631,9 @@ class TestGoogleLoginCuentaDesactivada:
 
         with pytest.raises(AccountDeactivatedException):
             await caso.execute(
-                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+                GoogleLoginRequestDTO(
+                    authorization_code="code", ip_address="203.0.113.7", code_verifier="v" * 43
+                )
             )
 
     async def test_a_deactivated_account_gets_no_session_device_or_email(
@@ -670,7 +674,9 @@ class TestGoogleLoginCuentaDesactivada:
 
         with pytest.raises(AccountDeactivatedException):
             await caso.execute(
-                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+                GoogleLoginRequestDTO(
+                    authorization_code="code", ip_address="203.0.113.7", code_verifier="v" * 43
+                )
             )
 
         register_device_use_case.execute.assert_not_awaited()
@@ -709,7 +715,9 @@ class TestGoogleLoginCuentaDesactivada:
         )
 
         with pytest.raises(AccountDeactivatedException):
-            await caso.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await caso.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert (
@@ -758,7 +766,9 @@ class TestGoogleConElCorreoSinVerificar:
         )
 
         with pytest.raises(GoogleEmailNotVerifiedError):
-            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await use_case.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert (
@@ -780,7 +790,9 @@ class TestGoogleConElCorreoSinVerificar:
         )
 
         with pytest.raises(GoogleEmailNotVerifiedError):
-            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await use_case.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert await uow.users.find_by_email(Email("oauth@example.com")) is None
@@ -810,7 +822,9 @@ class TestGoogleConElCorreoSinVerificar:
             google_user_info
         )
 
-        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        respuesta = await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert respuesta.user.email == "oauth@example.com"
 
@@ -851,7 +865,10 @@ class TestElVinculoAutomaticoAlLog:
 
         await use_case.execute(
             GoogleLoginRequestDTO(
-                authorization_code="code", ip_address="203.0.113.7", user_agent="Navegador"
+                authorization_code="code",
+                ip_address="203.0.113.7",
+                user_agent="Navegador",
+                code_verifier="v" * 43,
             )
         )
 
@@ -881,7 +898,9 @@ class TestElVinculoAutomaticoAlLog:
         await self._cuenta(uow)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        respuesta = await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert respuesta.user.email == "oauth@example.com"
         async with uow:
@@ -937,7 +956,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         async with uow:
             guardada = await uow.users.find_by_id(cuenta.id)
@@ -960,7 +981,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         _cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        respuesta = await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         async with uow:
             nuevo = await uow.refresh_tokens.find_by_token_hash(respuesta.refresh_token)
@@ -977,7 +1000,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=True)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
@@ -995,7 +1020,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         await self._cuenta_con_sesion(uow, verificada=False)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         use_case._email_service.send_account_secured_notice.assert_awaited_once_with(
             to_email="oauth@example.com", user_name="Ana", via="google"
@@ -1008,7 +1035,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         await self._cuenta_con_sesion(uow, verificada=True)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         use_case._email_service.send_account_secured_notice.assert_not_awaited()
 
@@ -1020,7 +1049,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
         use_case._email_service.send_account_secured_notice.side_effect = RuntimeError("smtp")
 
-        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        respuesta = await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert respuesta.access_token
 
@@ -1035,7 +1066,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         await self._cuenta_con_sesion(uow, verificada=True)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         use_case._email_service.send_google_account_notice.assert_awaited_once_with(
             to_email="oauth@example.com", user_name="Ana", linked=True
@@ -1063,7 +1096,10 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         await use_case.execute(
             GoogleLoginRequestDTO(
-                authorization_code="code", ip_address="203.0.113.7", user_agent="Navegador"
+                authorization_code="code",
+                ip_address="203.0.113.7",
+                user_agent="Navegador",
+                code_verifier="v" * 43,
             )
         )
 
@@ -1099,7 +1135,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        respuesta = await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert respuesta.user.email == "oauth@example.com"
         async with uow:
@@ -1133,7 +1171,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
             )
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         async with uow:
             assert (
@@ -1163,7 +1203,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         await self._cuenta_con_sesion(uow, verificada=True)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert apuntes == []
 
@@ -1184,7 +1226,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         with pytest.raises(AccountDeactivatedException):
-            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await use_case.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
@@ -1210,7 +1254,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         uow.users.find_by_id_for_update = espia
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+        await use_case.execute(
+            GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+        )
 
         assert pedidos == [cuenta.id, cuenta.id]
 
@@ -1239,7 +1285,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         with pytest.raises(AccountDeactivatedException):
-            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await use_case.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
@@ -1269,7 +1317,9 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         with pytest.raises(ValueError, match="Account changed during Google sign-in"):
-            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+            await use_case.execute(
+                GoogleLoginRequestDTO(authorization_code="code", code_verifier="v" * 43)
+            )
 
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password

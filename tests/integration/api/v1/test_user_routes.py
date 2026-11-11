@@ -28,7 +28,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"email": "test_user@example.com"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -53,7 +53,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "John Doe"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -88,7 +88,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"email": "user1@example.com", "full_name": "John Smith"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -112,7 +112,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"email": "nonexistent@example.com"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
@@ -135,7 +135,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Nonexistent User"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
@@ -156,7 +156,7 @@ class TestUserRoutes:
         token = auth_data["token"]
 
         search_response = await client.get(
-            "/api/v1/users/search", headers={"Authorization": f"Bearer {token}"}
+            "/api/v1/users/search", headers={"Cookie": f"access_token={token}"}
         )
 
         assert search_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -183,7 +183,7 @@ class TestUserRoutes:
             search_response = await client.get(
                 "/api/v1/users/search",
                 params={"full_name": search_name},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Cookie": f"access_token={token}"},
             )
 
             assert search_response.status_code == status.HTTP_200_OK
@@ -206,7 +206,7 @@ class TestUserRoutes:
         search_by_email = await client.get(
             "/api/v1/users/search",
             params={"email": "rafa_nadal@prueba.com"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_by_email.status_code == status.HTTP_200_OK
@@ -217,7 +217,7 @@ class TestUserRoutes:
         search_by_name = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Rafael Nadal Parera"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert search_by_name.status_code == status.HTTP_200_OK
@@ -243,7 +243,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Buscado Nombre"},
-            headers={"Authorization": f"Bearer {buscador['token']}"},
+            headers={"Cookie": f"access_token={buscador['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -267,7 +267,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search",
             params={"email": "Buscado.Correo@Example.com"},
-            headers={"Authorization": f"Bearer {buscador['token']}"},
+            headers={"Cookie": f"access_token={buscador['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -286,7 +286,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Yo Mismo"},
-            headers={"Authorization": f"Bearer {yo['token']}"},
+            headers={"Cookie": f"access_token={yo['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -308,7 +308,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "Updated", "last_name": None},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -329,7 +329,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": None, "last_name": "Updated"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -349,7 +349,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "New", "last_name": "Names"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -378,7 +378,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "", "last_name": None},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Pydantic devuelve 422 para errores de validación
@@ -398,7 +398,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client, "display1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
-        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        headers = {"Cookie": f"access_token={auth_data['token']}"}
 
         sin_alias = await client.get("/api/v1/auth/current-user", headers=headers)
         await client.patch("/api/v1/users/profile", json={"alias": "Chuchi"}, headers=headers)
@@ -419,7 +419,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client, "display2.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
-        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        headers = {"Cookie": f"access_token={auth_data['token']}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Fugaz"}, headers=headers)
 
         respuesta = await client.patch("/api/v1/users/profile", json={"alias": ""}, headers=headers)
@@ -435,7 +435,7 @@ class TestUserRoutes:
         await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Resuelto"},
-            headers={"Authorization": f"Bearer {owner['token']}"},
+            headers={"Cookie": f"access_token={owner['token']}"},
         )
         searcher = await create_authenticated_user(
             client, "display4.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
@@ -444,7 +444,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search-autocomplete",
             params={"query": "Resuelto"},
-            headers={"Authorization": f"Bearer {searcher['token']}"},
+            headers={"Cookie": f"access_token={searcher['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -464,7 +464,7 @@ class TestUserRoutes:
         await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Chuchi"},
-            headers={"Authorization": f"Bearer {owner['token']}"},
+            headers={"Cookie": f"access_token={owner['token']}"},
         )
         searcher = await create_authenticated_user(
             client, "auto2.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
@@ -473,7 +473,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search-autocomplete",
             params={"query": "Chuchi"},
-            headers={"Authorization": f"Bearer {searcher['token']}"},
+            headers={"Cookie": f"access_token={searcher['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -493,7 +493,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search-autocomplete",
             params={"query": "Buscable"},
-            headers={"Authorization": f"Bearer {searcher['token']}"},
+            headers={"Cookie": f"access_token={searcher['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -514,7 +514,7 @@ class TestUserRoutes:
         await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Discreto"},
-            headers={"Authorization": f"Bearer {owner['token']}"},
+            headers={"Cookie": f"access_token={owner['token']}"},
         )
         searcher = await create_authenticated_user(
             client, "auto6.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
@@ -523,7 +523,7 @@ class TestUserRoutes:
         response = await client.get(
             "/api/v1/users/search-autocomplete",
             params={"query": "Discreto"},
-            headers={"Authorization": f"Bearer {searcher['token']}"},
+            headers={"Cookie": f"access_token={searcher['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -543,7 +543,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Chuchi"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -563,7 +563,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Chuchi2"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -575,7 +575,7 @@ class TestUserRoutes:
             client, "alias3.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
         token = auth_data["token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Cookie": f"access_token={token}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Borrable"}, headers=headers)
 
         response = await client.patch("/api/v1/users/profile", json={"alias": ""}, headers=headers)
@@ -593,7 +593,7 @@ class TestUserRoutes:
         await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Repetido"},
-            headers={"Authorization": f"Bearer {owner['token']}"},
+            headers={"Cookie": f"access_token={owner['token']}"},
         )
         other = await create_authenticated_user(
             client, "alias5.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
@@ -602,7 +602,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Repetido"},
-            headers={"Authorization": f"Bearer {other['token']}"},
+            headers={"Cookie": f"access_token={other['token']}"},
         )
 
         assert response.status_code == status.HTTP_409_CONFLICT
@@ -616,7 +616,7 @@ class TestUserRoutes:
         await client.patch(
             "/api/v1/users/profile",
             json={"alias": "Mayusculas"},
-            headers={"Authorization": f"Bearer {owner['token']}"},
+            headers={"Cookie": f"access_token={owner['token']}"},
         )
         other = await create_authenticated_user(
             client, "alias7.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
@@ -625,7 +625,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": "mayusculas"},
-            headers={"Authorization": f"Bearer {other['token']}"},
+            headers={"Cookie": f"access_token={other['token']}"},
         )
 
         assert response.status_code == status.HTTP_409_CONFLICT
@@ -637,7 +637,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client, "alias8.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
-        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        headers = {"Cookie": f"access_token={auth_data['token']}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Propio"}, headers=headers)
 
         response = await client.patch(
@@ -660,7 +660,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client, "alias9.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
-        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        headers = {"Cookie": f"access_token={auth_data['token']}"}
 
         for invalid in ("C", "a" * 21, "Chu<b>chi", "chu@chi"):
             response = await client.patch(
@@ -682,7 +682,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": None},
-            headers={"Authorization": f"Bearer {auth_data['token']}"},
+            headers={"Cookie": f"access_token={auth_data['token']}"},
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -692,7 +692,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client, "alias12.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
         )
-        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        headers = {"Cookie": f"access_token={auth_data['token']}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Intacto"}, headers=headers)
 
         response = await client.patch(
@@ -713,7 +713,7 @@ class TestUserRoutes:
         response = await client.patch(
             "/api/v1/users/profile",
             json={"alias": "  Chu  chi  "},
-            headers={"Authorization": f"Bearer {auth_data['token']}"},
+            headers={"Cookie": f"access_token={auth_data['token']}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -740,7 +740,7 @@ class TestUserRoutes:
                 "new_password": None,
                 "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -767,7 +767,7 @@ class TestUserRoutes:
                 "new_password": "n3wP@ssw0rd!",
                 "confirm_password": "n3wP@ssw0rd!",
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -795,7 +795,7 @@ class TestUserRoutes:
                 "new_password": "Abcdefghijk1",
                 "confirm_password": "Abcdefghijk1",
             },
-            headers={"Authorization": f"Bearer {auth_data['token']}"},
+            headers={"Cookie": f"access_token={auth_data['token']}"},
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -828,7 +828,7 @@ class TestUserRoutes:
                 "new_password": "n3wP@ssw0rd!9",
                 "confirm_password": "n3wP@ssw0rd!9",
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -861,7 +861,7 @@ class TestUserRoutes:
                 "new_password": None,
                 "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -890,7 +890,7 @@ class TestUserRoutes:
                 "new_password": None,
                 "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token1}"},
+            headers={"Cookie": f"access_token={token1}"},
         )
 
         assert update_response.status_code == status.HTTP_409_CONFLICT
@@ -932,7 +932,7 @@ class TestUserRoutes:
                 "new_password": "N3wS3cur3P@ss!",
                 "confirm_password": "D1ff3r3ntP@ss!",
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

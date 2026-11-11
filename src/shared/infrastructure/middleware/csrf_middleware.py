@@ -36,7 +36,7 @@ from src.shared.infrastructure.security.jwt_handler import subject_ignoring_expi
 def usuarios_de_la_sesion(request: Request) -> set[str]:
     """
     Los usuarios que dicen las credenciales de la petición, para exigir que el
-    token CSRF sea del suyo (BE #724): el JWT de acceso —cookie o Bearer— y el
+    token CSRF sea del suyo (BE #724): el JWT de la cookie de acceso y el
     de refresh, con su firma comprobada y aunque hayan caducado.
 
     Más de uno es una sesión incoherente: una cookie de acceso de otra persona
