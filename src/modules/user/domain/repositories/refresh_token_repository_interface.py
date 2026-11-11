@@ -132,24 +132,6 @@ class RefreshTokenRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete_expired(self) -> int:
-        """
-        Elimina todos los refresh tokens expirados de la base de datos.
-
-        Método de limpieza que debe ejecutarse periódicamente
-        (ej: tarea cron diaria) para liberar espacio en BD.
-
-        Returns:
-            Número de tokens eliminados
-
-        Example:
-            >>> # Ejecutar diariamente a las 3am
-            >>> deleted = await repository.delete_expired()
-            >>> logger.info(f"Cleaned up {deleted} expired refresh tokens")
-        """
-        pass
-
-    @abstractmethod
     async def count_active_for_user(self, user_id: UserId) -> int:
         """
         Cuenta los refresh tokens activos (no revocados, no sustituidos, no expirados).

@@ -148,21 +148,6 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         )
         return await self._revoca_y_cuenta_las_vivas(stmt)
 
-    async def delete_expired(self) -> int:
-        """
-        Elimina todos los refresh tokens expirados de la base de datos.
-
-        Returns:
-            Número de tokens eliminados
-        """
-        stmt = delete(refresh_tokens_table).where(
-            refresh_tokens_table.c.expires_at < datetime.now()
-        )
-
-        result = await self._session.execute(stmt)
-        await self._session.flush()
-        return result.rowcount or 0
-
     async def count_active_for_user(self, user_id: UserId) -> int:
         """
         Cuenta los refresh tokens activos de un usuario.
