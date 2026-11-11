@@ -18,12 +18,16 @@ cualquier cliente.
 | B7   | el 400: formato de la API, sin repetir la ruta        | detail + error_code   |
 | B8   | todos los métodos y el preflight de CORS; /health y   | 400 con cabeceras de  |
 |      | las cabeceras de seguridad                            | seguridad             |
+| B9   | lo que no es HTTP (el lifespan) pasa sin mirar        | pasa a la app         |
 """
+
+import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
 
 import main
+from src.shared.infrastructure.http.ruta_sin_barras_codificadas import RutaSinBarrasCodificadas
 
 
 @pytest.fixture
@@ -84,9 +88,9 @@ def test_b6_otros_codificados_pasan(cliente, tramo):
     When: GET a una ruta con otros caracteres codificados (también %2F doble)
     Then: No es el 400 de la ruta: sigue a la app como antes
     """
-    respuesta = cliente.get(f"/api/v1/countries/{tramo}")
+    respuesta = cliente.get(f"/api/v1/no-existe/{tramo}")
 
-    assert respuesta.status_code != 400 or respuesta.json().get("error_code") != "INVALID_PATH"
+    assert respuesta.status_code == 404
 
 
 def test_b7_el_400_no_repite_la_ruta(cliente):
@@ -141,3 +145,29 @@ def test_b8_el_400_lleva_las_cabeceras_de_seguridad_y_health_sigue(cliente):
         respuesta.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
     )
     assert cliente.get("/health").status_code == 200
+
+
+def test_b9_lo_que_no_es_http_pasa():
+    """
+    Given: El middleware suelto, sobre una app que apunta lo que le llega
+    When: Un scope de lifespan, aunque traiga una ruta con %2F
+    Then: Pasa a la app sin responder nada
+    """
+    llegan = []
+    enviados = []
+
+    async def app(scope, receive, send):
+        llegan.append(scope["type"])
+
+    async def send(mensaje):
+        enviados.append(mensaje)
+
+    async def receive():
+        return {"type": "lifespan.startup"}
+
+    asyncio.run(
+        RutaSinBarrasCodificadas(app)({"type": "lifespan", "raw_path": b"/a%2Fb"}, receive, send)
+    )
+
+    assert llegan == ["lifespan"]
+    assert enviados == []
