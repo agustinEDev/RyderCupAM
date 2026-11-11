@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.59.0] - 2026-11-11
+
+**El avatar sin imagen responde 204** (#795, BE #793). Sin migraciones. Compatible con el
+frontend en producción: el `<img>` del avatar ya pinta el icono genérico cuando no llega una
+imagen, así que en pantalla no cambia nada.
+
+### Security
+
+- **El avatar ya no delata un bloqueo** (F-09, A01): `GET /users/{id}/avatar` respondía
+  404 con textos distintos para «sin avatar» y para «no existe / desactivada / te bloqueó».
+  Ahora sin avatar, cuenta inexistente o desactivada, bloqueado por su dueño y un dato roto
+  responden el mismo **204 No Content**, sin cuerpo ni texto, con `Cache-Control: no-store`,
+  y hacen el mismo trabajo: buscar la cuenta y una consulta de bloqueos.
+
+### Fixed
+
+- Dos 500 latentes al pedir un avatar con datos rotos: una foto activa borrada (la base de
+  datos deja su id a NULL) y un avatar predefinido sin id. Hoy no hay ninguna cuenta así en
+  producción.
+
+### Changed
+
+- El caso de uso devuelve la imagen o nada, sin excepciones para el camino normal; se quita
+  `AvatarNotFoundError`, que ya no se usaba. Cada usuario sin avatar en una lista ya no cuesta
+  un 404 que el navegador no guarda.
+
+### Tests
+
+- Unitarios 9551, seguridad 64, integración 1620; 8 mutaciones, todas muertas. Kind: la API
+  del avatar (4 casos) y el icono con el 204 en Chrome y en WebKit.
+
 ## [2.58.0] - 2026-11-11
 
 **Fase 3 del plan de seguridad, release 3 (backend)** (#791). Cierra la fase: hallazgo F-03
