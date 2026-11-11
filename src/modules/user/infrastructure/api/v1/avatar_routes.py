@@ -143,11 +143,9 @@ async def get_user_avatar_image(
     imagen = await use_case.execute(str(user_id), viewer_id=str(current_user.id))
     if imagen is None:
         # Sin imagen, una sola respuesta para todos los casos (BE #793): sin cuerpo ni
-        # texto que distinga un bloqueo de una cuenta sin avatar. Sin guardar: al ponerse
-        # un avatar, se ve enseguida
-        return Response(
-            status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "no-store"}
-        )
+        # texto que distinga un bloqueo de una cuenta sin avatar. Sin guardar en caché
+        # (no-store, de la política de cabeceras): al ponerse un avatar, se ve enseguida
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     return Response(content=imagen.datos, media_type=imagen.tipo)
 
 
