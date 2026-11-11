@@ -120,6 +120,9 @@ from src.shared.infrastructure.http.http_context_validator import (  # noqa: E40
 from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
     LimitaElCuerpoDeLasSubidas,
 )
+from src.shared.infrastructure.http.ruta_sin_barras_codificadas import (  # noqa: E402
+    RutaSinBarrasCodificadas,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -434,6 +437,15 @@ if ENV != "production":
                 print("   ⚠️  NO CORS headers in response!")
 
         return response
+
+
+# ================================
+# RUTAS CON UNA BARRA CODIFICADA (FE-03)
+# ================================
+# Uvicorn decodifica %2F antes de enrutar: un id con «/» añadía tramos a la ruta. Va
+# fuera de CORS, del CSRF y de las rutas (400 también al preflight) y dentro de las
+# cabeceras de seguridad, que el 400 lleva igual
+app.add_middleware(RutaSinBarrasCodificadas)
 
 
 # ================================
