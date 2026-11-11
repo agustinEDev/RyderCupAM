@@ -51,3 +51,18 @@ def test_sentry_user_context_with_session_is_only_the_user_id(cliente):
     assert {"id": user_id} in usuarios
     # Al acabar la petición se limpia (None); ninguna lleva más que el id
     assert all(u is None or set(u) == {"id"} for u in usuarios)
+
+
+def test_a_bearer_header_alone_identifies_no_one(cliente):
+    """
+    Given: Un access token válido solo en Authorization: Bearer (2.58.0: ya no vale)
+    When: Pasa por el middleware
+    Then: Sentry no recibe a ningún usuario
+    """
+    user_id = str(uuid4())
+    token = create_access_token({"sub": user_id})
+
+    with patch.object(sentry_middleware.sentry_sdk, "set_user") as set_user:
+        cliente.get("/api/v1/algo", headers={"Authorization": f"Bearer {token}"})
+
+    assert all(llamada.args[0] is None for llamada in set_user.call_args_list)

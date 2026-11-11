@@ -44,8 +44,8 @@ reaches the use case as `EmailTakenConcurrentlyError`; any other error goes up).
    release voids the pending plaintext links: whoever clicks an old one sees "invalid
    link".
 4. **Reset links are validated by `POST /auth/validate-reset-token`** with the token in
-   the body. The GET stays in 2.57.0, deprecated, and is removed in 2.58.0; meanwhile
-   Sentry receives its URL with the token filtered out.
+   the body. The GET stayed in 2.57.0, deprecated, with its token filtered out of
+   Sentry; 2.58.0 removed both.
 5. **"Forgot password" counts 3 per hour per email and network** (like the login,
    ADR-043), and **10 emails per account in 24 hours** from anywhere. Above that nothing
    is sent, the previous link stays valid and the answer is the same. The daily quota
@@ -90,9 +90,10 @@ third party cannot keep the owner without a reset link from another network.
     transaction with `SELECT ... FOR UPDATE` and an update.
 - **B-3, the staggered deploy window.** While 2.56 still serves next to 2.57, it can
   write a plaintext link after this migration ran; that link no longer works with 2.57
-  and stays in the table. The 2.58.0 migration repeats the
-  `UPDATE ... WHERE token !~ '^[0-9a-f]{64}$'` of both columns (see
-  `docs/pendientes-de-release.md`). Also, during that window, links cross between
+  and stays in the table. The plan was for 2.58.0 to repeat the
+  `UPDATE ... WHERE token !~ '^[0-9a-f]{64}$'` of both columns; checked read-only in
+  production on 11 Nov 2026 there were none left, and 2.57 only writes hashes, so the
+  migration was dropped. Also, during that window, links cross between
   versions: a hashed link issued by 2.57 fails on a 2.56 instance and a plaintext one
   issued by 2.56 fails on 2.57. Whoever hits it asks for another link.
 - An email sent in the background is lost if the process restarts right then; the user

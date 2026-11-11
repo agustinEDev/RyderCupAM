@@ -5,7 +5,7 @@ Además de cabecera == cookie, con sesión el token tiene que llevar la firma de
 ESE usuario: una cookie plantada desde otro subdominio ya no basta, porque quien
 la planta no sabe firmar para la víctima. El usuario sale del JWT de la cookie de
 acceso (aunque haya caducado: la firma del JWT sí se comprueba), o del de la de
-refresh, o del Bearer. Sin sesión no hay nada que suplantar y se queda el
+refresh (desde la 2.58.0 el Bearer ya no es sesión). Sin sesión no hay nada que suplantar y se queda el
 double-submit de siempre.
 
   #  sesión                       | token (cabecera = cookie)  | resultado
@@ -18,7 +18,8 @@ double-submit de siempre.
   26 ninguna                      | cualquiera                 | pasa la CSRF (luego 401)
   27 A, en `/auth/google/link`    | ninguno                    | 403 CSRF: ya no está exenta
   28 A tras renovar               | el que trae la renovación  | pasa
-  29 A por Bearer, sin cookies    | el de B / el de A          | 403 CSRF / pasa
+  29 solo un Bearer de A          | el de A                    | 401: el Bearer no es sesión
+                                                                  (2.58.0), nunca un 2xx
   30 A con un JWT de acceso falso | el de B                    | no cuenta: si la de refresh
                                                                   es de A, 403 CSRF
   31 A / ninguna                  | con caracteres no ASCII    | 403 CSRF, no un 500 (revisor)
@@ -72,7 +73,8 @@ async def _entra(client: AsyncClient, email: str) -> dict:
     assert alta.status_code == status.HTTP_201_CREATED, alta.text
     login = await client.post("/api/v1/auth/login", json={"email": email, "password": PASS})
     assert login.status_code == status.HTTP_200_OK, login.text
-    return login.json()
+    # El access token ya no viene en el cuerpo (2.58.0): se toma de su cookie
+    return {**login.json(), "access_token": login.cookies["access_token"]}
 
 
 @pytest.fixture
@@ -216,20 +218,21 @@ async def test_csrf_after_refresh_new_token_is_accepted(dos):
     assert respuesta.status_code == status.HTTP_200_OK, respuesta.text
 
 
-async def test_csrf_bearer_token_binds_its_user(dos):
+async def test_csrf_a_bearer_alone_is_no_session_and_never_passes(dos):
     """
-    Given: Solo un Bearer de A, sin cookies de sesión
-    When: Llega con el token de B y luego con el de A
-    Then: El de B da 403 y el de A pasa
+    Given: Solo un Bearer de A, sin cookies de sesión (2.58.0: el Bearer ya no vale)
+    When: Toca el perfil con el token CSRF de A
+    Then: 401, nunca un 2xx: ni el CSRF ni la autenticación lo toman por sesión
     """
-    client, a, b = dos
+    client, a, _ = dos
+    acceso = client.cookies.get("access_token")
     client.cookies.delete("access_token")
     client.cookies.delete("refresh_token")
-    bearer = {"Authorization": f"Bearer {a['access_token']}"}
+    bearer = {"Authorization": f"Bearer {acceso}"}
 
-    assert _es_rechazo_csrf(await _toca_el_perfil(client, b["csrf_token"], headers=bearer))
     respuesta = await _toca_el_perfil(client, a["csrf_token"], headers=bearer)
-    assert respuesta.status_code == status.HTTP_200_OK, respuesta.text
+
+    assert respuesta.status_code == status.HTTP_401_UNAUTHORIZED, respuesta.text
 
 
 async def test_csrf_forged_access_jwt_is_ignored_and_refresh_user_counts(dos):

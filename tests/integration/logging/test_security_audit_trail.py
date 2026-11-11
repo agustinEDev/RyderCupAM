@@ -95,13 +95,13 @@ class TestSecurityAuditTrail:
                 "password": "LogoutT3st123!",
             },
         )
-        access_token = login_response.json()["access_token"]
+        access_token = login_response.cookies["access_token"]
 
         # Logout
         logout_response = await client.post(
             "/api/v1/auth/logout",
             json={},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Cookie": f"access_token={access_token}"},
         )
 
         assert logout_response.status_code == 200

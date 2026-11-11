@@ -22,7 +22,7 @@ Authentication (11 endpoints)
 ├── POST /api/v1/auth/refresh-token      # Renew access token
 ├── POST /api/v1/auth/forgot-password    # Request password reset (email with token)
 ├── POST /api/v1/auth/reset-password     # Complete password reset
-├── GET  /api/v1/auth/validate-reset-token/:token # Validate reset token
+├── POST /api/v1/auth/validate-reset-token       # Validate reset token (token in the body)
 └── POST /api/v1/auth/unlock-account     # Manual account unlock (Admin, v1.13.0)
 
 Google OAuth (3 endpoints) ⭐ Sprint 3
@@ -147,7 +147,7 @@ Support (1 endpoint) ⭐ v2.0.8
 | `/auth/resend-verification` | POST | No | Resend verification email |
 | `/auth/forgot-password` | POST | No | Request password reset (sends email with token) |
 | `/auth/reset-password` | POST | No | Complete password reset using token. Revokes every session and device; on an unverified account it also verifies the email and removes any linked Google (ADR-045); any pending email change is cancelled |
-| `/auth/validate-reset-token/{token}` | GET | No | Validate reset token before showing form |
+| `/auth/validate-reset-token` | POST | No | Validate reset token before showing form (token in the body; the GET was removed in 2.58.0) |
 | `/auth/unlock-account` | POST | Yes | Manual account unlock (Admin) - **v1.13.0** |
 
 
@@ -165,11 +165,11 @@ Support (1 endpoint) ⭐ v2.0.8
 - `password` (string, required)
 
 **Login Response:**
-- `access_token` (string, JWT) - LEGACY, use cookie
-- `refresh_token` (string, JWT) - LEGACY, use cookie
 - `csrf_token` (string, 256-bit) - CSRF protection token (v1.13.0)
 - `user` (object) - User data (see User Object below)
-- httpOnly Cookies: `access_token` (15 min), `refresh_token` (7 days)
+- httpOnly Cookies: `access_token` (15 min), `refresh_token` (7 days). Since 2.58.0 the
+  tokens are only in the cookies, never in the body, and `Authorization: Bearer` is not
+  accepted: the cookie is the only way to authenticate
 - Cookie NO httpOnly: `csrf_token` (15 min, readable by JS)
 
 **User Object (UserResponseDTO):**
@@ -246,10 +246,10 @@ Returned in all endpoints that include user data (login, current-user, register,
 
 **Request:**
 - `authorization_code` (string, required) - Google authorization code from OAuth consent screen
+- `code_verifier` (string, required since 2.58.0) - PKCE verifier (RFC 7636, 43-128 chars); without it, 422
 
 **Response (200 OK):**
-- `access_token`, `refresh_token`, `csrf_token` - JWT tokens
-- `token_type` - "bearer"
+- `csrf_token` - CSRF token (the session tokens go only in the cookies since 2.58.0)
 - `user` - User data (see User Object in Authentication section, includes `auth_providers` and `has_password`)
 - `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
 - `device_id` - The session's device (always present; the device cookie is set on every login and refresh)
@@ -1130,7 +1130,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 - ✅ Auto-generated Pydantic schemas
 - ✅ Documented validations and data types
 - ✅ HTTP response codes (200, 400, 401, 403, 404, 422, 500)
-- ✅ Authentication with Bearer token or cookies
+- ✅ Authentication with the httpOnly session cookie
 
 **Recommendation:** Use Swagger UI to see complete JSON examples and test endpoints.
 
@@ -1170,7 +1170,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 | POST /auth/register | 30/hour | network | Anti registration spam |
 | POST /auth/forgot-password, /auth/resend-verification | 30/hour + 3/hour per email | network + email | Protect Mailgun and the mailbox |
 | POST /auth/reset-password | 20/hour | network | |
-| GET /auth/validate-reset-token/{token} | 30/hour | network | |
+| POST /auth/validate-reset-token | 30/hour | network | |
 | POST /support/contact | 10/day | network | Anti contact form spam; 20/day app-wide on top |
 | POST /handicaps/update | 5/hour | user | Protect RFEG API |
 | POST /handicaps/refresh-mine | 10/hour | user | Each call may wait for RFEG |

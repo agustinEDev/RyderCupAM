@@ -63,9 +63,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         """
         Extrae el token JWT del request.
 
-        Orden de prioridad:
-        1. Cookie httpOnly "access_token"
-        2. Header Authorization "Bearer <token>"
+        Solo la cookie httpOnly "access_token" (2.58.0: el Bearer ya no cuenta).
 
         Args:
             request: Request de FastAPI
@@ -73,8 +71,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         Returns:
             Token JWT o None si no se encuentra
         """
-        # Cookie httpOnly primero y después Authorization: Bearer, la misma regla
-        # que get_current_user
+        # La misma regla que get_current_user: solo la cookie
         return read_access_token(request)
 
     def _decode_token(self, token: str) -> dict | None:

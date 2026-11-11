@@ -410,7 +410,6 @@ class GoogleLoginUseCase:
             access_token=access_token,
             refresh_token=refresh_token_jwt,
             csrf_token=self._token_service.create_csrf_token(str(user.id.value)),
-            token_type="bearer",  # nosec B106 - not a password, it's an OAuth token type
             user=UserResponseDTO.model_validate(user),
             is_new_user=is_new_user,
             device_id=device_id_str,

@@ -67,7 +67,9 @@ async def _con_google(client: AsyncClient, email: str) -> dict:
     app.dependency_overrides[get_google_oauth_service] = lambda: google
     await _reautentica(client)
     vinculo = await client.post(
-        "/api/v1/auth/google/link", json={"authorization_code": "code"}, headers=_csrf(client)
+        "/api/v1/auth/google/link",
+        json={"authorization_code": "code", "code_verifier": "v" * 43},
+        headers=_csrf(client),
     )
     assert vinculo.status_code == 200, vinculo.text
     return datos
@@ -250,7 +252,9 @@ async def test_unlink_with_the_mark_spent_on_linking_answers_403(client: AsyncCl
     )
     app.dependency_overrides[get_google_oauth_service] = lambda: google
     vinculo = await client.post(
-        "/api/v1/auth/google/link", json={"authorization_code": "code"}, headers=_csrf(client)
+        "/api/v1/auth/google/link",
+        json={"authorization_code": "code", "code_verifier": "v" * 43},
+        headers=_csrf(client),
     )
     assert vinculo.status_code == 200, vinculo.text
     assert datos["user"]["id"]

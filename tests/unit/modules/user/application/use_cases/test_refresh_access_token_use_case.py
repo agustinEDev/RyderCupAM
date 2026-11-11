@@ -127,7 +127,6 @@ class TestRefreshAccessTokenUseCase:
         Then:
             - Retorna RefreshAccessTokenResponseDTO con nuevo access token
             - access_token es el generado por token_service
-            - token_type es "bearer"
             - user contiene datos del usuario
         """
         # Given
@@ -150,7 +149,6 @@ class TestRefreshAccessTokenUseCase:
         assert result is not None
         assert isinstance(result, RefreshAccessTokenResponseDTO)
         assert result.access_token == "new_access_token_jwt"
-        assert result.token_type == "bearer"
         assert result.user.email == sample_user.email.value
         assert result.user.first_name == sample_user.first_name
         assert result.message == "Access token renovado exitosamente"

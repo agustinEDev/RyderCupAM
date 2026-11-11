@@ -85,15 +85,13 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
     if response.status_code != status.HTTP_200_OK:
         pytest.skip(f"No se pudo autenticar usuario de prueba (status: {response.status_code})")
 
-    data = response.json()
+    # Los tokens de sesión llegan solo en las cookies (2.58.0); el CSRF, también en el
+    # cuerpo. Si faltan, falla: saltarse en silencio dejaría sin probar el CSRF
+    access_token = response.cookies.get("access_token")
+    refresh_token = response.cookies.get("refresh_token")
+    csrf_token = response.json().get("csrf_token")
 
-    # Extraer tokens de response body
-    access_token = data.get("access_token")
-    refresh_token = data.get("refresh_token")
-    csrf_token = data.get("csrf_token")
-
-    if not all([access_token, refresh_token, csrf_token]):
-        pytest.skip("Respuesta de login no contiene todos los tokens requeridos")
+    assert all([access_token, refresh_token, csrf_token]), "faltan tokens tras el login"
 
     return client, {
         "access_token": access_token,
@@ -214,7 +212,7 @@ async def test_post_request_without_csrf_token_fails(csrf_authenticated_client):
     response = await client.patch(
         "/api/v1/users/profile",
         json={"first_name": "John"},
-        headers={"Authorization": f"Bearer {access_token}"},
+        cookies={"access_token": access_token},
     )
 
     # Debe fallar por falta de CSRF token
@@ -242,10 +240,12 @@ async def test_post_request_with_invalid_csrf_token_fails(csrf_authenticated_cli
         "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
-            "Authorization": f"Bearer {access_token}",
             CSRF_HEADER_NAME: "invalid_token_12345",  # Token INVÁLIDO en header
         },
-        cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie válido pero header no coincide
+        cookies={
+            "access_token": access_token,
+            CSRF_COOKIE_NAME: csrf_token,
+        },  # Cookie válido pero header no coincide
     )
 
     # Debe fallar por token CSRF inválido
@@ -273,10 +273,12 @@ async def test_post_request_with_valid_csrf_token_succeeds(csrf_authenticated_cl
         "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
-            "Authorization": f"Bearer {access_token}",
             CSRF_HEADER_NAME: csrf_token,  # Token VÁLIDO en header
         },
-        cookies={CSRF_COOKIE_NAME: csrf_token},  # Token VÁLIDO en cookie
+        cookies={
+            "access_token": access_token,
+            CSRF_COOKIE_NAME: csrf_token,
+        },  # Token VÁLIDO en cookie
     )
 
     # Debe tener éxito (200 OK)
@@ -387,8 +389,10 @@ async def test_post_request_with_csrf_cookie_but_no_header_fails(
     response = await client.patch(
         "/api/v1/users/profile",
         json={"first_name": "John"},
-        headers={"Authorization": f"Bearer {access_token}"},
-        cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie presente pero header ausente
+        cookies={
+            "access_token": access_token,
+            CSRF_COOKIE_NAME: csrf_token,
+        },  # Cookie presente pero header ausente
     )
 
     # Debe fallar por falta de header CSRF
@@ -421,9 +425,9 @@ async def test_post_request_with_csrf_header_but_no_cookie_fails(
         "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
-            "Authorization": f"Bearer {access_token}",
             CSRF_HEADER_NAME: csrf_token,  # Header presente pero cookie ausente
         },
+        cookies={"access_token": access_token},
     )
 
     # Debe fallar por falta de cookie CSRF
@@ -447,7 +451,7 @@ async def test_accept_terms_without_csrf_token_fails(csrf_authenticated_client):
 
     response = await client.post(
         "/api/v1/users/me/accept-terms",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        cookies={"access_token": tokens["access_token"]},
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -492,11 +496,8 @@ async def test_accept_terms_with_valid_csrf_token_succeeds(
 
     response = await client.post(
         "/api/v1/users/me/accept-terms",
-        headers={
-            "Authorization": f"Bearer {tokens['access_token']}",
-            CSRF_HEADER_NAME: csrf_token,
-        },
-        cookies={CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER_NAME: csrf_token},
+        cookies={"access_token": tokens["access_token"], CSRF_COOKIE_NAME: csrf_token},
     )
 
     assert response.status_code == status.HTTP_200_OK

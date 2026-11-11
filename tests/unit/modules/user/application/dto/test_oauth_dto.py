@@ -24,6 +24,7 @@ class TestGoogleLoginRequestDTO:
             ip_address="192.168.1.1",
             user_agent="Mozilla/5.0",
             device_id_from_cookie="abc-123",
+            code_verifier="v" * 43,
         )
         assert dto.authorization_code == "4/0AbCD-EfGh_code"
         assert dto.ip_address == "192.168.1.1"
@@ -31,7 +32,7 @@ class TestGoogleLoginRequestDTO:
         assert dto.device_id_from_cookie == "abc-123"
 
     def test_valid_request_with_only_required_fields(self):
-        dto = GoogleLoginRequestDTO(authorization_code="some-code")
+        dto = GoogleLoginRequestDTO(authorization_code="some-code", code_verifier="v" * 43)
         assert dto.authorization_code == "some-code"
         assert dto.ip_address is None
         assert dto.user_agent is None
@@ -43,12 +44,13 @@ class TestGoogleLoginRequestDTO:
 
     def test_empty_authorization_code_raises(self):
         with pytest.raises(ValidationError):
-            GoogleLoginRequestDTO(authorization_code="")
+            GoogleLoginRequestDTO(authorization_code="", code_verifier="v" * 43)
 
     def test_serialization(self):
         dto = GoogleLoginRequestDTO(
             authorization_code="code-123",
             ip_address="10.0.0.1",
+            code_verifier="v" * 43,
         )
         data = dto.model_dump()
         assert data["authorization_code"] == "code-123"
@@ -86,8 +88,9 @@ class TestGoogleLoginResponseDTO:
         assert dto.access_token == "jwt-access"
         assert dto.refresh_token == "jwt-refresh"
         assert dto.csrf_token == "csrf-xyz"
-        assert dto.token_type == "bearer"
         assert dto.is_new_user is True
+        # Los tokens, solo para las cookies: fuera del cuerpo (2.58.0)
+        assert {"access_token", "refresh_token", "token_type"}.isdisjoint(dto.model_dump())
         assert dto.user.email == "test@example.com"
 
     def test_default_values(self, user_response):
@@ -98,7 +101,6 @@ class TestGoogleLoginResponseDTO:
             user=user_response,
             device_id="dev-123",
         )
-        assert dto.token_type == "bearer"
         assert dto.is_new_user is False
 
     def test_device_id_is_required(self, user_response):
@@ -128,7 +130,7 @@ class TestLinkGoogleAccountRequestDTO:
     """Tests para LinkGoogleAccountRequestDTO."""
 
     def test_valid_request(self):
-        dto = LinkGoogleAccountRequestDTO(authorization_code="link-code")
+        dto = LinkGoogleAccountRequestDTO(authorization_code="link-code", code_verifier="v" * 43)
         assert dto.authorization_code == "link-code"
 
     def test_missing_code_raises(self):
@@ -137,7 +139,7 @@ class TestLinkGoogleAccountRequestDTO:
 
     def test_empty_code_raises(self):
         with pytest.raises(ValidationError):
-            LinkGoogleAccountRequestDTO(authorization_code="")
+            LinkGoogleAccountRequestDTO(authorization_code="", code_verifier="v" * 43)
 
 
 class TestLinkGoogleAccountResponseDTO:

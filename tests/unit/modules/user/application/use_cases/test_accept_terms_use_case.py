@@ -266,6 +266,7 @@ class TestAltaConGoogle:
                 ip_address="192.168.1.1",
                 user_agent="Mozilla/5.0 Test",
                 device_id_from_cookie=None,
+                code_verifier="v" * 43,
             )
         )
 
