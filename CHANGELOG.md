@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.60.0] - 2026-11-11
+
+**Rutas con una barra codificada, rechazadas** (#799, fase 4 del plan de seguridad). Sin
+migraciones. Compatible con el frontend en producción: ninguna pantalla manda `%2F` ni `%5C`
+en la ruta; la 2.75.0 del frontend ya ni puede construirlas.
+
+### Security
+
+- **Una barra codificada ya no añade tramos a la ruta** (A01): Uvicorn decodifica `%2F`
+  antes de enrutar, así que `GET /api/v1%2Fcountries` respondía 200 y un id con `%2F` podía
+  llegar a otra ruta (`/quick-matches/<id>%2Fshared/scoring` alcanzaba la vista compartida).
+  El middleware `RutaSinBarrasCodificadas` mira la ruta tal como llegó (`raw_path`) y
+  responde **400** `{"detail": "Ruta no válida", "error_code": "INVALID_PATH"}` ante
+  `%2F` o `%5C` en cualquier caja y con cualquier método. La búsqueda (`?q=a%2Fb`) y
+  `%252F` no se tocan.
+- El 400 va dentro de CORS y del correlation id, así que el front lo puede leer y lleva las
+  cabeceras de seguridad. Deja un aviso en el log con el método, la IP y el correlation id,
+  nunca la ruta.
+
+### Changed
+
+- Kind local más ligero para un Mac de 8 GB: una copia de la API y una del front, y
+  reservas a la medida del uso real (unos 600 MB en total). Solo afecta al clúster local.
+
 ## [2.59.0] - 2026-11-11
 
 **El avatar sin imagen responde 204** (#795, BE #793). Sin migraciones. Compatible con el
