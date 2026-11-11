@@ -16,9 +16,14 @@ cualquier cliente.
 | B5   | %2F en la búsqueda (?q=a%2Fb)                         | pasa                  |
 | B6   | %20, %C3%A9 y %252F (doble) en la ruta                | pasan                 |
 | B7   | el 400: formato de la API, sin repetir la ruta        | detail + error_code   |
-| B8   | todos los métodos y el preflight de CORS; /health y   | 400 con cabeceras de  |
-|      | las cabeceras de seguridad                            | seguridad             |
+| B8   | todos los métodos; /health; el 400 con las cabeceras  | 400 legible desde el  |
+|      | de seguridad, CORS y correlation id. El preflight lo  | front                 |
+|      | contesta CORS, como cualquier otro (Agustín, 11 nov)  |                       |
 | B9   | lo que no es HTTP (el lifespan) pasa sin mirar        | pasa a la app         |
+| B10  | un aviso en el log: método, IP y correlation id, sin  | warning               |
+|      | la ruta                                               |                       |
+| B11  | sin raw_path no se mira la ruta ya decodificada (daría | pasa a la app         |
+|      | lo contrario: ni %2F real ni %252F legítimo)           |                       |
 """
 
 import asyncio
@@ -117,18 +122,32 @@ def test_b8_todos_los_metodos(cliente, metodo):
     assert respuesta.status_code == 400
 
 
-def test_b8_el_preflight_tambien(cliente):
+def test_b8_el_preflight_lo_contesta_cors(cliente):
     """
     Given: Un preflight de CORS desde el front
     When: OPTIONS a una ruta con %2F
-    Then: 400, también aquí
+    Then: Lo contesta CORS, como cualquier otro: 200 con sus cabeceras
     """
     respuesta = cliente.options(
         "/api/v1/competitions/x%2Fy",
         headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "DELETE"},
     )
 
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 200
+    assert respuesta.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_b8_el_400_se_lee_desde_el_front(cliente):
+    """
+    Given: El front, desde su origen
+    When: GET a una ruta con %2F
+    Then: El 400 lleva CORS (el navegador lo lee) y el correlation id
+    """
+    respuesta = cliente.get("/api/v1%2Fcountries", headers={"Origin": "http://localhost:5173"})
+
+    _rechazada(respuesta)
+    assert respuesta.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert respuesta.headers.get("x-correlation-id")
 
 
 def test_b8_el_400_lleva_las_cabeceras_de_seguridad_y_health_sigue(cliente):
@@ -171,3 +190,52 @@ def test_b9_lo_que_no_es_http_pasa():
 
     assert llegan == ["lifespan"]
     assert enviados == []
+
+
+def test_b10_deja_un_aviso_sin_la_ruta(cliente, caplog):
+    """
+    Given: La app
+    When: DELETE a una ruta con %2F y un marcador
+    Then: Un warning con el método y el correlation id, sin la ruta
+    """
+    with caplog.at_level(
+        "WARNING", logger="src.shared.infrastructure.http.ruta_sin_barras_codificadas"
+    ):
+        respuesta = cliente.delete(
+            "/api/v1/marcador-secreto%2Fx", headers={"X-Correlation-ID": "corr-1234"}
+        )
+
+    assert respuesta.status_code == 400
+    avisos = [r for r in caplog.records if r.name.endswith("ruta_sin_barras_codificadas")]
+    assert len(avisos) == 1
+    assert avisos[0].levelname == "WARNING"
+    assert "DELETE" in avisos[0].getMessage()
+    assert "corr-1234" in avisos[0].getMessage()
+    assert "marcador-secreto" not in avisos[0].getMessage()
+
+
+@pytest.mark.parametrize("ruta", ["/a/b", "/a%2Fb"])
+def test_b11_sin_raw_path_no_mira_la_ruta_decodificada(ruta):
+    """
+    Given: El middleware suelto y un servidor que no manda raw_path
+    When: Una petición cuya ruta ya decodificada es /a/b o /a%2Fb (de un %252F legítimo)
+    Then: Pasa a la app: lo decodificado no dice si había una barra codificada
+    """
+    llegan = []
+
+    async def app(scope, receive, send):
+        llegan.append(scope["path"])
+
+    async def send(mensaje):
+        raise AssertionError(mensaje)
+
+    async def receive():
+        return {"type": "http.request"}
+
+    asyncio.run(
+        RutaSinBarrasCodificadas(app)(
+            {"type": "http", "method": "GET", "path": ruta, "headers": []}, receive, send
+        )
+    )
+
+    assert llegan == [ruta]

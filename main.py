@@ -386,6 +386,14 @@ app.add_middleware(CSRFMiddleware)
 app.add_middleware(UnhandledErrorMiddleware)
 
 # ================================
+# RUTAS CON UNA BARRA CODIFICADA (FE-03)
+# ================================
+# Uvicorn decodifica %2F antes de enrutar: un id con «/» añadía tramos a la ruta. Antes
+# del CSRF y de las rutas, y dentro de CORS y del correlation id, como el 403 del CSRF:
+# el 400 se lee desde el front y el preflight lo contesta CORS (Agustín, 11 nov 2026)
+app.add_middleware(RutaSinBarrasCodificadas)
+
+# ================================
 # CORS MIDDLEWARE (v1.8.0)
 # ================================
 # Registrado DESPUÉS de CSRF → se ejecuta PRIMERO (orden inverso)
@@ -437,15 +445,6 @@ if ENV != "production":
                 print("   ⚠️  NO CORS headers in response!")
 
         return response
-
-
-# ================================
-# RUTAS CON UNA BARRA CODIFICADA (FE-03)
-# ================================
-# Uvicorn decodifica %2F antes de enrutar: un id con «/» añadía tramos a la ruta. Va
-# fuera de CORS, del CSRF y de las rutas (400 también al preflight) y dentro de las
-# cabeceras de seguridad, que el 400 lleva igual
-app.add_middleware(RutaSinBarrasCodificadas)
 
 
 # ================================
