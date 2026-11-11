@@ -141,9 +141,10 @@ async def _otro(uow: InMemoryUnitOfWork, email: str) -> User:
 @pytest.mark.asyncio
 class TestAvatarConBloqueoOCuentaDesactivada:
     """
-    G2: si el otro me bloqueó, su avatar no existe para mí (404 como inexistente).
-    Si lo bloqueé yo, lo sigo viendo (opción A de Agustín, 10 nov 2026).
-    G3: el de una cuenta desactivada, 404.
+    G2: si el otro me bloqueó, su avatar no existe para mí: sin imagen, como inexistente
+    (la ruta responde el mismo 204). Si lo bloqueé yo, lo sigo viendo (opción A de
+    Agustín, 10 nov 2026).
+    G3: el de una cuenta desactivada, sin imagen.
     """
 
     async def _escena(self, uow):
