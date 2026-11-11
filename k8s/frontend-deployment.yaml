@@ -18,7 +18,7 @@ spec:
   # ==========================================
   # RÉPLICAS - Alta disponibilidad
   # ==========================================
-  replicas: 2                    # 2 copias del frontend
+  replicas: 1                    # Una copia: es el clúster local de pruebas
 
   # ==========================================
   # SELECTOR - Cómo encontrar los Pods
@@ -76,11 +76,11 @@ spec:
           # ==========================================
           resources:
             requests:                           # Mínimo garantizado
-              memory: "256Mi"                   # 256 Megabytes (frontend es ligero)
-              cpu: "250m"                       # 0.25 CPU cores
+              memory: "64Mi"                    # nginx sirviendo ficheros: muy ligero
+              cpu: "50m"                        # 0.05 CPU cores
             limits:                             # Máximo permitido
-              memory: "512Mi"                   # 512 Megabytes
-              cpu: "500m"                       # 0.5 CPU cores
+              memory: "128Mi"                   # 128 Megabytes
+              cpu: "250m"                       # 0.25 CPU cores
 
           # ==========================================
           # HEALTH CHECKS - Verificación de salud

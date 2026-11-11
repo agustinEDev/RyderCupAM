@@ -18,7 +18,7 @@ spec:
   # ==========================================
   # RÉPLICAS - Cuántos Pods queremos
   # ==========================================
-  replicas: 2                    # 2 copias de la API (alta disponibilidad)
+  replicas: 1                    # Una copia: es el clúster local de pruebas (Mac de 8 GB)
 
   # ==========================================
   # SELECTOR - Cómo encontrar los Pods
@@ -91,10 +91,10 @@ spec:
           # ==========================================
           resources:
             requests:                      # Mínimo garantizado
-              memory: "512Mi"              # 512 Megabytes
-              cpu: "500m"                  # 0.5 CPU cores (500 milicores)
+              memory: "256Mi"              # En reposo usa ~145 MB
+              cpu: "250m"                  # 0.25 CPU cores (250 milicores)
             limits:                        # Máximo permitido
-              memory: "1Gi"                # 1 Gigabyte
+              memory: "768Mi"              # 768 Megabytes
               cpu: "1000m"                 # 1 CPU core (1000 milicores)
 
           # ==========================================

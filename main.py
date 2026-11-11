@@ -120,6 +120,9 @@ from src.shared.infrastructure.http.http_context_validator import (  # noqa: E40
 from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
     LimitaElCuerpoDeLasSubidas,
 )
+from src.shared.infrastructure.http.ruta_sin_barras_codificadas import (  # noqa: E402
+    RutaSinBarrasCodificadas,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -381,6 +384,14 @@ app.add_middleware(CSRFMiddleware)
 # Registrado ANTES de CORS → se ejecuta DENTRO de él: un 500 lleva sus
 # cabeceras y el navegador lo lee como 500, no como «Failed to fetch»
 app.add_middleware(UnhandledErrorMiddleware)
+
+# ================================
+# RUTAS CON UNA BARRA CODIFICADA (FE-03)
+# ================================
+# Uvicorn decodifica %2F antes de enrutar: un id con «/» añadía tramos a la ruta. Antes
+# del CSRF y de las rutas, y dentro de CORS y del correlation id, como el 403 del CSRF:
+# el 400 se lee desde el front y el preflight lo contesta CORS (Agustín, 11 nov 2026)
+app.add_middleware(RutaSinBarrasCodificadas)
 
 # ================================
 # CORS MIDDLEWARE (v1.8.0)
