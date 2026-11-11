@@ -337,23 +337,23 @@ def _de_amistades(sentencias: list[str]) -> int:
     return sum("friendships" in s for s in sentencias)
 
 
-async def test_4_el_avatar_solo_pregunta_por_bloqueos_cuando_hace_falta(client: AsyncClient):
+async def test_4_el_avatar_pregunta_por_bloqueos_salvo_el_propio(client: AsyncClient):
     """
-    Given: Ana y Luis, los dos con avatar
-    When: Ana pide el suyo, el de Luis y el de un id que no existe
-    Then: Una consulta de amistades solo para el de Luis; ninguna en los otros dos
+    Given: Ana (con avatar), Luis (con avatar), Bea (sin avatar) y un id que no existe
+    When: Ana pide el suyo y los de los demás
+    Then: El suyo, sin consulta de amistades; los otros tres, una cada uno, y Bea y el id
+          de nadie con las mismas consultas: el tiempo no dice si la cuenta existe (BE #793)
     """
     yo = await _usuario(client, "Ana", avatar=2)
     el = await _usuario(client, "Luis", avatar=4)
+    sin_avatar = await _usuario(client, "Bea")
 
     propio = await _consultas_del_avatar(client, yo, yo["user"]["id"])
     ajeno = await _consultas_del_avatar(client, yo, el["user"]["id"])
+    de_bea = await _consultas_del_avatar(client, yo, sin_avatar["user"]["id"])
     inexistente = await _consultas_del_avatar(client, yo, str(uuid.uuid4()))
 
     assert _de_amistades(propio) == 0
-    assert _de_amistades(ajeno) == 1
-    assert _de_amistades(inexistente) == 0
-    # El de otro, la sesión y su usuario más una sola de amistades; el de un id de
-    # nadie, la sesión y la búsqueda de su usuario
-    recuento = f"propio={len(propio)} ajeno={len(ajeno)} inexistente={len(inexistente)}"
-    assert len(ajeno) == len(inexistente) + 1, recuento
+    assert _de_amistades(ajeno) == _de_amistades(de_bea) == _de_amistades(inexistente) == 1
+    recuento = f"sin avatar={len(de_bea)} inexistente={len(inexistente)}"
+    assert len(de_bea) == len(inexistente), recuento

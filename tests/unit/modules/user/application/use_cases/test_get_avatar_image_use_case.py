@@ -222,21 +222,25 @@ class TestAvatarConBloqueoOCuentaDesactivada:
 
         assert bloqueos.preguntas == []
 
-    async def test_4_un_usuario_que_no_existe_no_pregunta_por_bloqueos(self, uow):
+    async def test_a7_un_id_de_nadie_hace_el_mismo_trabajo_que_uno_sin_avatar(self, uow):
         """
-        Given: Un id que no es de nadie
-        When: Se pide su avatar
-        Then: None sin preguntar por bloqueos
+        Given: Un id que no es de nadie y una cuenta desactivada
+        When: Se piden sus avatares
+        Then: None, y una pregunta por bloqueos cada uno, como una cuenta sin avatar: el
+              tiempo no dice si la cuenta existe (BE #793)
         """
-        _, yo = await self._escena(uow)
+        dueno, yo = await self._escena(uow)
+        dueno.deactivate(deactivated_by_user_id=str(yo.id.value))
+        await uow.users.save(dueno)
+        nadie = UserId.generate()
         bloqueos = Bloqueos()
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
 
-        assert (
-            await use_case.execute(str(UserId.generate().value), viewer_id=str(yo.id.value)) is None
-        )
+        a = await use_case.execute(str(nadie.value), viewer_id=str(yo.id.value))
+        b = await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
 
-        assert bloqueos.preguntas == []
+        assert a is None and b is None
+        assert bloqueos.preguntas == [(yo.id, nadie), (yo.id, dueno.id)]
 
     async def test_4_el_de_otro_pregunta_una_vez(self, uow):
         """

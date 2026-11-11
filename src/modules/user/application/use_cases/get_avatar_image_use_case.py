@@ -10,9 +10,8 @@ Devuelve la imagen o `None`, sin excepciones para el camino normal (2.59.0, BE #
 sin avatar, un usuario inexistente o desactivado, alguien que bloqueó a quien lo pide
 (F-09, opción A de Agustín, 10 nov 2026) y una foto activa que ya no está son el mismo
 «no hay imagen», y la ruta responde a todos el mismo 204 (código, cabeceras y cuerpo).
-Por tiempo, «sin avatar» y «me bloqueó» hacen el mismo trabajo (una consulta de
-bloqueos); solo «no existe» se ahorra esa consulta, y eso dice que una cuenta existe,
-nunca un bloqueo. Quien bloqueó sí ve el del bloqueado: su perfil le enseña nombre y
+Por tiempo, todos hacen el mismo trabajo: buscar la cuenta y una consulta de bloqueos
+(BE #793). Solo una foto activa cuyo registro falta (un dato roto) hace una consulta más. Quien bloqueó sí ve el del bloqueado: su perfil le enseña nombre y
 foto para poder desbloquearlo.
 """
 
@@ -51,13 +50,15 @@ class GetAvatarImageUseCase:
         quien_mira = UserId(viewer_id)
         async with self._uow:
             user = await self._uow.users.find_by_id(user_id_vo)
-        if not user or not user.is_active:
-            return None
 
-        # Solo si es de otro y existe: una consulta, fuera de la unidad de trabajo de
-        # usuarios (comparten sesión). El dueño y un id de nadie no la gastan. Se pregunta
-        # también si no tiene avatar: sin avatar y bloqueado hacen el mismo trabajo
-        if user.id != quien_mira and await self._bloqueos.me_bloqueo(quien_mira, user.id):
+        # Si es de otro, siempre una consulta de bloqueos (fuera de la unidad de trabajo de
+        # usuarios: comparten sesión), también si la cuenta no existe, está de baja o no
+        # tiene avatar: así el tiempo no dice cuál de ellos es (BE #793). El dueño no la
+        # gasta: de su propia cuenta no hay nada que esconder
+        me_bloqueo = user_id_vo != quien_mira and await self._bloqueos.me_bloqueo(
+            quien_mira, user_id_vo
+        )
+        if not user or not user.is_active or me_bloqueo:
             return None
 
         return await self._imagen_de(user)
