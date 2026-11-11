@@ -185,15 +185,6 @@ class AvatarUploadNotFoundError(UserDomainError):
     pass
 
 
-class AvatarNotFoundError(UserDomainError):
-    """
-    Excepción lanzada al pedir la imagen de avatar activa de un usuario que no tiene
-    ninguna (avatar_source == NONE).
-    """
-
-    pass
-
-
 class AvatarUploadTooLargeError(UserDomainError):
     """Excepción lanzada cuando el archivo subido supera el tamaño máximo permitido."""
 

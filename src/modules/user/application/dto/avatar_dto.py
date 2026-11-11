@@ -4,10 +4,19 @@ Avatar DTOs - Application Layer
 DTOs de entrada/salida para los casos de uso de gestión de avatar de usuario.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+@dataclass(frozen=True)
+class ImagenDeAvatar:
+    """Los bytes del avatar activo de un usuario y su tipo (`image/jpeg`, `image/png`...)."""
+
+    datos: bytes
+    tipo: str
 
 
 class SetAvatarPresetRequestDTO(BaseModel):
