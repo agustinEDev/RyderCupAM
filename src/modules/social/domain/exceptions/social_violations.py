@@ -28,12 +28,6 @@ class InvalidFriendshipStatusViolation(BusinessRuleViolation):
     pass
 
 
-class FriendshipRateLimitViolation(BusinessRuleViolation):
-    """Se ha excedido el limite de solicitudes de amistad enviadas."""
-
-    pass
-
-
 class BlockedUserViolation(BusinessRuleViolation):
     """La accion no es posible porque existe un bloqueo entre ambos usuarios."""
 

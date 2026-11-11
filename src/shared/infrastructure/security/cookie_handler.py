@@ -165,22 +165,6 @@ def read_access_token(request: Request) -> str | None:
     return request.cookies.get(COOKIE_NAME) or None
 
 
-def get_cookie_name() -> str:
-    """
-    Retorna el nombre de la cookie de autenticación.
-
-    Útil para extraer el token desde las cookies en el middleware.
-
-    Returns:
-        Nombre de la cookie (constante COOKIE_NAME)
-
-    Example:
-        >>> get_cookie_name()
-        'access_token'
-    """
-    return COOKIE_NAME
-
-
 # =============================================================================
 # Refresh Token Cookie Handlers (Session Timeout - v1.8.0)
 # =============================================================================
@@ -361,22 +345,6 @@ def delete_csrf_cookie(response: Response) -> None:
         samesite="lax",  # Mismo samesite que al crear
         domain=get_cookie_domain(),  # Mismo domain que al crear
     )
-
-
-def get_csrf_cookie_name() -> str:
-    """
-    Retorna el nombre de la cookie de CSRF token.
-
-    Útil para extraer el token CSRF desde las cookies en endpoints.
-
-    Returns:
-        Nombre de la cookie de CSRF token (constante CSRF_COOKIE_NAME)
-
-    Example:
-        >>> get_csrf_cookie_name()
-        'csrf_token'
-    """
-    return CSRF_COOKIE_NAME
 
 
 # =============================================================================
