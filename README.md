@@ -402,7 +402,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 - `POST /api/v1/auth/refresh-token`
 - `POST /api/v1/auth/forgot-password`
 - `POST /api/v1/auth/reset-password`
-- `GET /api/v1/auth/validate-reset-token/:token`
+- `POST /api/v1/auth/validate-reset-token`
 - `POST /api/v1/auth/unlock-account`
 </details>
 

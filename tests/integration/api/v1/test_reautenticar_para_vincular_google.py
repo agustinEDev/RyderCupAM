@@ -74,7 +74,9 @@ async def _reautentica(client: AsyncClient, clave: str = CLAVE) -> Response:
 
 async def _vincula(client: AsyncClient) -> Response:
     return await client.post(
-        "/api/v1/auth/google/link", json={"authorization_code": "code"}, headers=_csrf(client)
+        "/api/v1/auth/google/link",
+        json={"authorization_code": "code", "code_verifier": "v" * 43},
+        headers=_csrf(client),
     )
 
 

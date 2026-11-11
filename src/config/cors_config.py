@@ -239,7 +239,6 @@ def get_cors_config() -> dict:
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": [
             "Content-Type",
-            "Authorization",
             "Accept",
             "Accept-Language",
             "Content-Language",

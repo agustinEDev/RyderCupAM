@@ -57,7 +57,7 @@ async def _vincula(client: AsyncClient, email: str, verificada: bool = True):
     )
     respuesta = await client.post(
         "/api/v1/auth/google/link",
-        json={"authorization_code": "code"},
+        json={"authorization_code": "code", "code_verifier": "v" * 43},
         headers={"User-Agent": "Navegador de prueba", "X-Forwarded-For": "203.0.113.100"},
     )
     return datos, respuesta
@@ -248,12 +248,16 @@ async def test_a_deactivated_account_gets_its_own_code_on_google(client: AsyncCl
     email = "desactivada.google@example.com"
     await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
     _google(email)
-    primera = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+    primera = await client.post(
+        "/api/v1/auth/google", json={"authorization_code": "c1", "code_verifier": "v" * 43}
+    )
     assert primera.status_code == 200
     await _sql("update users set is_active = false where email = :e", e=email)
     client.cookies.clear()
 
-    respuesta = await client.post("/api/v1/auth/google", json={"authorization_code": "c2"})
+    respuesta = await client.post(
+        "/api/v1/auth/google", json={"authorization_code": "c2", "code_verifier": "v" * 43}
+    )
 
     assert respuesta.status_code == 403
     assert respuesta.json()["error_code"] == "ACCOUNT_DEACTIVATED"
@@ -274,7 +278,9 @@ async def test_g2_google_takes_an_unverified_account_from_whoever_had_it(client:
     otro = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
     assert otro["user"]["email_verified"] is False
     _google(email)
-    google = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+    google = await client.post(
+        "/api/v1/auth/google", json={"authorization_code": "c1", "code_verifier": "v" * 43}
+    )
     assert google.status_code == 200
     de_google = dict(google.cookies)
     client.cookies.clear()
@@ -330,7 +336,9 @@ async def test_g1_the_creator_google_link_does_not_survive_the_claim(client: Asy
     )
     _google(email)
 
-    duenno = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+    duenno = await client.post(
+        "/api/v1/auth/google", json={"authorization_code": "c1", "code_verifier": "v" * 43}
+    )
 
     assert duenno.status_code == 200
     vinculos = await _sql(

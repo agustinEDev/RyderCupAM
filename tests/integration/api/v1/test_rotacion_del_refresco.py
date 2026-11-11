@@ -157,7 +157,7 @@ async def test_a2_the_old_cookie_within_the_margin_gets_access_without_a_new_ref
     r = await _refresca(client, cookies["refresh_token"])
 
     assert r.status_code == 200, r.text
-    assert r.json()["access_token"]
+    assert r.cookies.get("access_token")
     assert _cookie_de_refresco(r) is None
     assert not _borra_la_cookie_de_refresco(r)
 

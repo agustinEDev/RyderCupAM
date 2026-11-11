@@ -38,11 +38,11 @@ def _as(client: AsyncClient, user: dict, network: str) -> dict:
     """
     Cabeceras de un usuario desde una red.
 
-    get_current_user prefiere la cookie al Bearer, y el client guarda la del último
-    que inició sesión: sin vaciarla, todas las peticiones irían como él.
+    La cookie de la cabecera manda sobre las que guarda el client, y se vacían: el
+    client guarda las del último que inició sesión.
     """
     client.cookies.clear()
-    return {"Authorization": f"Bearer {user['token']}", **_network(network)}
+    return {"Cookie": f"access_token={user['token']}", **_network(network)}
 
 
 async def _login(client: AsyncClient, email: str, password: str, network: str):

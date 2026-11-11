@@ -124,7 +124,7 @@ async def test_con_un_token_que_no_vale_en_la_cabecera_tambien_401(
     competicion = await _competicion(client, "PUBLIC", stroke_play)
 
     for ruta in _rutas(competicion, stroke_play):
-        respuesta = await client.get(ruta, headers={"Authorization": "Bearer no-es-un-token"})
+        respuesta = await client.get(ruta, headers={"Cookie": "access_token=no-es-un-token"})
         assert respuesta.status_code == 401, (ruta, respuesta.text)
 
 

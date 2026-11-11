@@ -70,24 +70,25 @@ def test_valid_access_token_in_cookie_keys_on_the_user():
     assert key == f"user:{user_id}"
 
 
-def test_valid_access_token_in_bearer_header_keys_on_the_user():
+def test_a_bearer_header_alone_keys_on_the_network():
     """
-    Given: Un access token válido solo en la cabecera Authorization
+    Given: Un access token válido solo en la cabecera Authorization (2.58.0: ya no vale)
     When: Se calcula la clave
-    Then: Es la del usuario del token
+    Then: Es la de red, como una petición sin sesión
     """
     user_id = str(uuid4())
 
     key = get_rate_limit_key(_request(bearer_token=create_access_token({"sub": user_id})))
 
-    assert key == f"user:{user_id}"
+    assert key == get_rate_limit_key(_request())
+    assert user_id not in key
 
 
-def test_cookie_wins_over_bearer_header_like_get_current_user():
+def test_a_bearer_header_does_not_change_the_cookie_user():
     """
-    Given: La cookie de A y la cabecera de B
+    Given: La cookie de A y una cabecera Bearer de B
     When: Se calcula la clave
-    Then: Cuenta A, la misma prioridad con la que get_current_user autentica
+    Then: Cuenta A: la cabecera no se lee (2.58.0), como en get_current_user
     """
     user_a, user_b = str(uuid4()), str(uuid4())
 

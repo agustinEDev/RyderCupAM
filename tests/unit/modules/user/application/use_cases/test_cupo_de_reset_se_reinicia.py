@@ -126,7 +126,9 @@ async def test_m2_signing_in_with_google_resets_the_quota():
     )
 
     await caso.execute(
-        GoogleLoginRequestDTO(authorization_code="code", ip_address="1.2.3.4", user_agent="UA")
+        GoogleLoginRequestDTO(
+            authorization_code="code", ip_address="1.2.3.4", user_agent="UA", code_verifier="v" * 43
+        )
     )
 
     assert user.password_reset_emails_in_window == 0

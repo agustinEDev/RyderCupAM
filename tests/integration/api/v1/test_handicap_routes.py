@@ -51,7 +51,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": user_id},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert
@@ -80,7 +80,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": non_existent_id},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert
@@ -124,7 +124,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update-multiple",
             json={"user_ids": user_ids},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert
@@ -157,7 +157,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update-multiple",
             json={"user_ids": []},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert
@@ -181,7 +181,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": user_id},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert - Debe devolver 404 con mensaje descriptivo
@@ -207,7 +207,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": user_id, "manual_handicap": 18.5},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert - Debe funcionar usando el manual_handicap
@@ -230,7 +230,7 @@ class TestHandicapEndpoints:
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": "invalid-uuid"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert
@@ -265,7 +265,7 @@ class TestHandicapEndpointsAuthorization:
         último que inició sesión: sin vaciarla, todas las peticiones irían como él.
         """
         client.cookies.clear()
-        return {"Authorization": f"Bearer {data['token']}"}
+        return {"Cookie": f"access_token={data['token']}"}
 
     async def _handicap_of(self, client: AsyncClient, data: dict) -> float | None:
         response = await client.get("/api/v1/auth/current-user", headers=self._as(client, data))
@@ -493,14 +493,14 @@ class TestRefreshMineEndpoint:
         )
         assert login.status_code == 200
         assert "needs_handicap" not in login.json()
-        token = login.json()["access_token"]
+        token = login.cookies["access_token"]
         client.cookies.clear()
         self._rfeg_que_devuelve(8.5)
 
         # Act
         response = await client.post(
             "/api/v1/handicaps/refresh-mine",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Cookie": f"access_token={token}"},
         )
 
         # Assert

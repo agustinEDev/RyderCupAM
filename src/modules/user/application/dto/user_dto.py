@@ -443,11 +443,8 @@ class AvisoDeFallosRequestDTO(BaseModel):
 class LoginResponseDTO(BaseModel):
     """
     DTO de salida para el caso de uso de login.
-    Devuelve el token de acceso, refresh token y la información básica del usuario.
-
-    Session Timeout (v1.8.0):
-    - access_token: Válido por 15 minutos (operaciones frecuentes)
-    - refresh_token: Válido por 7 días (renovar access sin re-login)
+    Devuelve la información básica del usuario. Los tokens (acceso, 15 minutos;
+    renovación, 7 días) van solo a las cookies httpOnly (F-03, 2.58.0).
 
     CSRF Protection (v1.13.0):
     - csrf_token: Token de 256 bits para validación double-submit (vale lo que el refresh
@@ -458,8 +455,10 @@ class LoginResponseDTO(BaseModel):
       ruta lo pone en la cookie siempre
     """
 
-    access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
-    refresh_token: str = Field(..., description="Token JWT de renovación (7 días).")
+    # Los tokens, solo para las cookies httpOnly de la ruta: ni en el cuerpo ni en el
+    # esquema (F-03, 2.58.0). Un script inyectado no tiene qué leer
+    access_token: str = Field(..., exclude=True)
+    refresh_token: str = Field(..., exclude=True)
     csrf_token: str = Field(
         ...,
         description=(
@@ -467,7 +466,6 @@ class LoginResponseDTO(BaseModel):
             "más 1 h; su cookie dura 15 minutos)."
         ),
     )
-    token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
     email_verification_required: bool = Field(
         default=False, description="Indica si el usuario necesita verificar su email."
@@ -820,7 +818,8 @@ class RefreshAccessTokenResponseDTO(BaseModel):
       refresh token más 1 h; su cookie dura 15 minutos)
     """
 
-    access_token: str = Field(..., description="Nuevo access token JWT válido por 15 minutos.")
+    # El access token nuevo, solo para la cookie httpOnly de la ruta (F-03, 2.58.0)
+    access_token: str = Field(..., exclude=True)
     csrf_token: str = Field(
         ...,
         description=(
@@ -828,7 +827,6 @@ class RefreshAccessTokenResponseDTO(BaseModel):
             "token más 1 h; su cookie dura 15 minutos)."
         ),
     )
-    token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información básica del usuario autenticado.")
     message: str = Field(
         default="Access token renovado exitosamente",
@@ -982,8 +980,8 @@ class ValidateResetTokenBodyDTO(BaseModel):
     """
     El cuerpo de `POST /auth/validate-reset-token` (fase 3, C4): el token, fuera de la URL.
 
-    Sin la longitud exacta aquí: un token imposible responde 200 con valid=False, como
-    el GET (BE #453), no 422. Con tope, para no aceptar cuerpos enormes.
+    Sin la longitud exacta aquí: un token imposible responde 200 con valid=False
+    (BE #453), no 422. Con tope, para no aceptar cuerpos enormes.
     """
 
     token: str = Field(..., max_length=512, description="Token de reseteo a validar.")

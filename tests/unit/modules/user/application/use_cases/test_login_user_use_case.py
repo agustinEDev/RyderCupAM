@@ -125,7 +125,6 @@ class TestLoginUserUseCase:
         assert response is not None
         assert response.access_token is not None
         assert len(response.access_token) > 0
-        assert response.token_type == "bearer"
         assert response.user.email == "test@example.com"
         assert response.user.first_name == "John"
         assert response.user.last_name == "Doe"

@@ -75,7 +75,9 @@ async def _vincula(uow, ana, correos, google=None):
     return await LinkGoogleAccountUseCase(
         uow, google or _google(), security_audit=MagicMock(), email_service=correos
     ).execute(
-        LinkGoogleAccountRequestDTO(authorization_code="c"), str(ana.id.value), reautenticado=True
+        LinkGoogleAccountRequestDTO(authorization_code="c", code_verifier="v" * 43),
+        str(ana.id.value),
+        reautenticado=True,
     )
 
 
