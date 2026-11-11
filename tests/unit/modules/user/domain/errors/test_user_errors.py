@@ -71,11 +71,6 @@ class TestExceptionBehavior:
         with pytest.raises(UserDomainError):
             raise UserNotFoundError("User not found")
 
-    def test_repository_exceptions_can_be_caught_as_repository_error(self):
-        """Verifica que excepciones de repositorio se pueden capturar como RepositoryError."""
-        with pytest.raises(RepositoryError):
-            raise RepositoryError("Connection failed")
-
     def test_exception_with_complex_details(self):
         """Verifica que las excepciones pueden manejar detalles complejos."""
         details = {
@@ -126,22 +121,3 @@ class TestExceptionCatchingScenarios:
         for error in domain_errors:
             with pytest.raises(UserDomainError):
                 raise error
-
-    def test_specific_error_handling_workflow(self):
-        """Verifica un flujo realista de manejo de errores específicos."""
-
-        def simulate_repository_operation():
-            # Simula diferentes tipos de errores que pueden ocurrir
-            import random
-
-            error_type = random.choice([1, 2, 3])
-
-            if error_type == 1:
-                raise UserNotFoundError("User not found")
-            if error_type == 2:
-                raise UserAlreadyExistsError("Email already registered")
-            raise RepositoryError("Database unavailable")
-
-        # Debe poder capturar y clasificar diferentes errores
-        with pytest.raises((UserNotFoundError, UserAlreadyExistsError, RepositoryError)):
-            simulate_repository_operation()

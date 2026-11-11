@@ -82,6 +82,21 @@ def test_e2_confirming_drops_a_password_reset_asked_for_the_old_email():
     assert ana.password_reset_token is None
 
 
+def test_e2_confirming_drops_the_old_sign_up_verification_link():
+    """
+    Given: Una cuenta del alta sin verificar, con su enlace de verificación sin usar
+    When: Confirma el cambio a otro correo
+    Then: Ese enlace ya no vale: verificaría el correo nuevo sin que nadie lo demuestre
+    """
+    ana = _ana(verificada=False)
+    ana.generate_verification_token()
+    token = ana.request_email_change("ana@trabajo.com", ahora=AHORA)
+
+    ana.confirm_email_change(token, ahora=AHORA)
+
+    assert ana.verification_token is None
+
+
 def test_e2_an_unverified_account_ends_verified_with_the_new_email():
     """E8: una cuenta del alta sin verificar que confirma el nuevo queda verificada con él."""
     ana = _ana(verificada=False)

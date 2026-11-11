@@ -3,7 +3,7 @@
 ## Status
 **ACCEPTED** - November 3, 2025
 
-> **Update (11 Nov 2026):** the generic logger was removed as unused: `LoggerFactory`/`get_logger`/`configure_logging` (`factory.py`), `PythonLogger`, the `Logger` interface, the domain-event logging handlers (`event_handlers.py`) and the Text/Structured formatters. Nothing in production called them. Production logs with the Python standard library (`logging.getLogger(__name__)`) and audits through `security_logger` (JSON formatter). The `LOG_LEVEL`, `LOG_FORMAT` and `LOG_FILE` environment variables were only read by the removed factory and no longer have any effect.
+> **Update (11 Nov 2026):** the generic logger was removed as unused: `LoggerFactory`/`get_logger`/`configure_logging` (`factory.py`), `PythonLogger`, the `Logger` interface, the domain-event logging handlers (`event_handlers.py`) and the Text/Structured formatters. Nothing in production called them. Production logs with the Python standard library (`logging.getLogger(__name__)`) and audits through `security_logger` (JSON formatter). The `LOG_LEVEL`, `LOG_FORMAT` and `LOG_FILE` environment variables were only read by `configure_from_environment()` in the removed factory, which nothing ever called, so they never had any effect in production.
 
 ## Context
 
