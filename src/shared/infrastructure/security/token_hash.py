@@ -44,25 +44,3 @@ def hash_token(token: str) -> str:
     - OWASP A02: Cryptographic Failures - Protege contra DB leaks
     """
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-def verify_token_hash(token: str, stored_hash: str) -> bool:
-    """
-    Verifica si un token coincide con un hash almacenado.
-
-    Args:
-        token: Token JWT en texto plano
-        stored_hash: Hash almacenado en BD
-
-    Returns:
-        True si el token coincide con el hash, False en caso contrario
-
-    Example:
-        >>> token = "eyJhbGciOiJIUzI1..."
-        >>> hashed = hash_token(token)
-        >>> verify_token_hash(token, hashed)
-        True
-        >>> verify_token_hash("wrong_token", hashed)
-        False
-    """
-    return hash_token(token) == stored_hash

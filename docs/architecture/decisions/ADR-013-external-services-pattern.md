@@ -44,7 +44,7 @@ class HandicapService(ABC):
 - Robustness: Graceful degradation on failures
 
 **3. Mock for Tests**
-- MockHandicapService: Configurable test data
+- MockHandicapService: Configurable test data (`tests/fakes/`)
 - Deterministic testing without network calls
 
 **4. Usage in Use Cases**

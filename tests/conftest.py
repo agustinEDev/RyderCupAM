@@ -203,7 +203,7 @@ def _sin_la_rfeg_de_verdad() -> None:
     de develop del 17 oct 2026). Con `setdefault`, los tests que ponen su propio mock
     antes de pedir el cliente lo conservan.
     """
-    from src.modules.user.infrastructure.external.mock_handicap_service import (
+    from tests.fakes.mock_handicap_service import (
         MockHandicapService,
     )
 

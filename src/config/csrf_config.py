@@ -114,9 +114,6 @@ def csrf_token_belongs_to(token: str, user_id: str, *, ahora: float | None = Non
 # Cookie configuration
 CSRF_COOKIE_NAME: Final[str] = "csrf_token"
 CSRF_COOKIE_MAX_AGE: Final[int] = 900  # 15 minutos (igual que access token)
-CSRF_COOKIE_HTTPONLY: Final[bool] = False  # Debe ser accesible desde JS
-CSRF_COOKIE_SECURE: Final[bool] = True  # Solo HTTPS en producción
-CSRF_COOKIE_SAMESITE: Final[str] = "lax"  # Protección adicional
 
 # Header configuration
 CSRF_HEADER_NAME: Final[str] = "X-CSRF-Token"
@@ -132,8 +129,8 @@ EXEMPT_PATHS: Final[set[str]] = {
     "/api/v1/auth/refresh-token",  # Protected by httpOnly refresh_token cookie
     "/api/v1/auth/logout",  # Session termination - low risk, high usability
     "/api/v1/auth/forgot-password",  # Public endpoint
-    "/api/v1/auth/reset-password",  # Public endpoint (token in URL)
-    "/api/v1/auth/verify-email",  # Public endpoint (token in URL)
+    "/api/v1/auth/reset-password",  # Public endpoint (token in the body)
+    "/api/v1/auth/verify-email",  # Public endpoint (token in the body)
     # Los enlaces del correo, sin sesión (fase 3): validar el de restablecer y pedir otro
     # de verificación con el caducado (pantalla de «enlace caducado»). Públicas, con su
     # límite y la misma respuesta exista o no la cuenta. El reenvío por correo

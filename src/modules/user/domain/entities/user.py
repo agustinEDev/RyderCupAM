@@ -581,15 +581,6 @@ class User:
         """Verifica si el usuario tiene password (False para OAuth-only users)."""
         return self.password is not None
 
-    def is_system_admin(self) -> bool:
-        """
-        Verifica si el usuario tiene privilegios de administrador del sistema.
-
-        Returns:
-            bool: True si el usuario es administrador, False en caso contrario
-        """
-        return self.is_admin
-
     def verify_password(self, plain_password: str) -> bool:
         """Verifica si el password plano coincide con el hasheado."""
         if self.password is None:
@@ -1024,49 +1015,6 @@ class User:
         self._pending_email_expires_at = None
         self._updated_at = datetime.now()
 
-    def change_email(self, new_email: str) -> None:
-        """
-        Cambia el email del usuario y resetea la verificación.
-
-        Cuando se cambia el email, el usuario debe verificar el nuevo correo:
-        - Marca email_verified como False
-        - Genera un nuevo token de verificación
-        - Emite evento de cambio de email
-
-        Args:
-            new_email: Nuevo email (ya validado por el use case)
-
-        Raises:
-            ValueError: Si el email no es válido
-        """
-        new_email_vo = Email(new_email)
-        old_email_str = str(self.email.value) if self.email else ""
-
-        if new_email == old_email_str:
-            return  # No cambió nada
-
-        self._email = new_email_vo
-        self._email_verified = False  # Requiere nueva verificación
-        # El enlace de verificación del correo de antes tampoco vale para este, ni un
-        # cambio de correo pendiente (lo sustituye este)
-        self._verification_token = None
-        self._verification_token_expires_at = None
-        self.cancel_email_change()
-        # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
-        # verificaría el nuevo sin que nadie lo haya demostrado (#749)
-        self._password_reset_token = None
-        self._reset_token_expires_at = None
-        self._updated_at = datetime.now()
-
-        self._add_domain_event(
-            UserEmailChangedEvent(
-                user_id=str(self.id.value),
-                old_email=old_email_str,
-                new_email=new_email,
-                changed_at=self.updated_at,
-            )
-        )
-
     def change_password(self, new_password: str | Password) -> None:
         """
         Cambia el password del usuario.
@@ -1220,29 +1168,6 @@ class User:
             bool: True si el email está verificado
         """
         return self.email_verified
-
-    def is_spanish(self) -> bool:
-        """
-        Verifica si el usuario es español (España).
-
-        Esta información es relevante para determinar si el usuario puede
-        acceder a funcionalidades específicas de RFEG (Real Federación Española de Golf).
-
-        Returns:
-            bool: True si el usuario tiene nacionalidad española (ES), False en caso contrario
-
-        Ejemplos:
-            >>> user = User(..., country_code=CountryCode("ES"))
-            >>> user.is_spanish()
-            True
-            >>> user2 = User(..., country_code=CountryCode("FR"))
-            >>> user2.is_spanish()
-            False
-            >>> user3 = User(..., country_code=None)
-            >>> user3.is_spanish()
-            False
-        """
-        return self.country_code is not None and self.country_code.value == "ES"
 
     # === Password Reset Methods ===
 

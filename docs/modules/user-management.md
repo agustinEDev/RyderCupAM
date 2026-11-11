@@ -115,7 +115,7 @@ Module responsible for user management, including registration, JWT authenticati
 - `UserRepositoryInterface` - User CRUD
   - find_by_id, find_by_email, add, update, delete, exists_by_email
 - `RefreshTokenRepositoryInterface` - Refresh token management
-  - save, find_by_token_hash, revoke_all_for_user, delete_expired
+  - save, find_by_token_hash, revoke_all_for_user, delete_expired_before
 - `UserOAuthAccountRepositoryInterface` - OAuth account management ⭐ Sprint 3
   - save, find_by_provider_and_provider_user_id, find_by_user_id, find_by_user_id_and_provider, delete
 

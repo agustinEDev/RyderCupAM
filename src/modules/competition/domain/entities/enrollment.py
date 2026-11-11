@@ -230,18 +230,6 @@ class Enrollment:
         """Verifica si está aprobado/inscrito."""
         return self._status.is_active()
 
-    def is_rejected(self) -> bool:
-        """Verifica si fue rechazado."""
-        return self._status == EnrollmentStatus.REJECTED
-
-    def is_withdrawn(self) -> bool:
-        """Verifica si el jugador se retiró."""
-        return self._status == EnrollmentStatus.WITHDRAWN
-
-    def has_team_assigned(self) -> bool:
-        """Verifica si tiene equipo asignado."""
-        return self._team_id is not None
-
     @property
     def fixed_handicap(self) -> Decimal | None:
         """El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)."""
@@ -433,20 +421,6 @@ class Enrollment:
     # MÉTODOS DE ACTUALIZACIÓN
     # ===========================================
 
-    def assign_to_team(self, team_id: str) -> None:
-        """Asigna el jugador a un equipo. Solo si APPROVED."""
-        if not self.is_approved():
-            raise EnrollmentStateError(
-                f"Solo se pueden asignar equipos a enrollments aprobados. "
-                f"Estado actual: {self._status.value}"
-            )
-
-        if not team_id or not team_id.strip():
-            raise ValueError("El ID del equipo no puede estar vacío")
-
-        self._team_id = team_id.strip()
-        self._updated_at = datetime.now()
-
     def set_custom_handicap(self, handicap: Decimal) -> None:
         """Establece un hándicap personalizado."""
         self._validate_custom_handicap(handicap)
@@ -462,10 +436,6 @@ class Enrollment:
         """Establece o cambia el color de barras del jugador."""
         self._tee_color = tee_color
         self._updated_at = datetime.now()
-
-    def has_tee_assigned(self) -> bool:
-        """Verifica si tiene tee asignado."""
-        return self._tee_color is not None
 
     def set_name_preference(self, use_real_name: bool) -> None:
         """

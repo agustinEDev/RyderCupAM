@@ -19,7 +19,7 @@ class HandicapService(ABC):
 
     Implementaciones esperadas:
     - RFEGHandicapService: Busca en la API de la RFEG
-    - MockHandicapService: Para testing
+    - MockHandicapService: doble de prueba (tests/fakes)
     """
 
     @abstractmethod

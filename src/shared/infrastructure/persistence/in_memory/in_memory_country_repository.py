@@ -79,17 +79,3 @@ class InMemoryCountryRepository(CountryRepositoryInterface):
     async def exists(self, code: CountryCode) -> bool:
         """Verifica si existe un país con el código especificado."""
         return code in self._countries
-
-    def add_adjacency(self, country1: CountryCode, country2: CountryCode) -> None:
-        """
-        Añade una adyacencia entre dos países (helper para tests).
-
-        La adyacencia es bidireccional.
-        """
-        if country1 not in self._adjacencies:
-            self._adjacencies[country1] = set()
-        if country2 not in self._adjacencies:
-            self._adjacencies[country2] = set()
-
-        self._adjacencies[country1].add(country2)
-        self._adjacencies[country2].add(country1)

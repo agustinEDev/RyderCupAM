@@ -21,10 +21,6 @@ class PlazaEnFranjaRepositoryInterface(ABC):
         """Quita la plaza de ese jugador en esa franja, si la tiene."""
 
     @abstractmethod
-    async def quitar_del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> None:
-        """Quita todas las plazas de ese jugador en esa competición (al retirarse)."""
-
-    @abstractmethod
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         """Todas las plazas de la competición, por orden de llegada."""
 

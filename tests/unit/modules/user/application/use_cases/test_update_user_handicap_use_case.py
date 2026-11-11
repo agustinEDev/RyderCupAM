@@ -10,11 +10,11 @@ from src.modules.user.application.use_cases.update_user_handicap_use_case import
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.infrastructure.external.mock_handicap_service import (
-    MockHandicapService,
-)
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
+)
+from tests.fakes.mock_handicap_service import (
+    MockHandicapService,
 )
 
 

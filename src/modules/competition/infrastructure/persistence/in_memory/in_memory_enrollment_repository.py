@@ -145,10 +145,6 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
             if enr.competition_id == competition_id and enr.status == EnrollmentStatus.REQUESTED
         )
 
-    async def count_approved_enrollments(self, competition_id: CompetitionId) -> int:
-        """Cuenta el número de inscripciones aprobadas para una competición (alias)."""
-        return await self.count_approved(competition_id)
-
     async def delete(self, enrollment_id: EnrollmentId) -> None:
         """Elimina una inscripción por su ID."""
         if enrollment_id in self._enrollments:

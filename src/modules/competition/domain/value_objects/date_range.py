@@ -105,43 +105,6 @@ class DateRange:
         delta = self.end_date - self.start_date
         return delta.days
 
-    def includes(self, check_date: date) -> bool:
-        """
-        Verifica si una fecha está dentro del rango (inclusive).
-
-        Args:
-            check_date: Fecha a verificar
-
-        Returns:
-            bool: True si la fecha está en el rango, False en caso contrario
-
-        Ejemplos:
-            >>> range1 = DateRange(date(2025, 6, 1), date(2025, 6, 3))
-            >>> range1.includes(date(2025, 6, 2))
-            True
-            >>> range1.includes(date(2025, 6, 5))
-            False
-        """
-        return self.start_date <= check_date <= self.end_date
-
-    def overlaps_with(self, other: "DateRange") -> bool:
-        """
-        Verifica si este rango se solapa con otro.
-
-        Args:
-            other: Otro DateRange a comparar
-
-        Returns:
-            bool: True si hay solapamiento, False en caso contrario
-
-        Ejemplos:
-            >>> range1 = DateRange(date(2025, 6, 1), date(2025, 6, 3))
-            >>> range2 = DateRange(date(2025, 6, 2), date(2025, 6, 4))
-            >>> range1.overlaps_with(range2)
-            True
-        """
-        return self.start_date <= other.end_date and self.end_date >= other.start_date
-
     def __str__(self) -> str:
         """Representación string legible."""
         return f"{self.start_date} to {self.end_date}"

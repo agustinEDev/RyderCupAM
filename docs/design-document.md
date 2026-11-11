@@ -166,7 +166,7 @@ Domain (Entities, VOs, Events, Repos)
 **Infrastructure**:
 - Routes: `/auth/*`, `/auth/google/*` ⭐ Sprint 3, `/handicaps/*`, `/users/*`
 - Repos: `SQLAlchemyUserRepository`, `SQLAlchemyUserOAuthAccountRepository` ⭐ Sprint 3
-- External: `RFEGHandicapService`, `MockHandicapService`, `GoogleOAuthService` ⭐ Sprint 3
+- External: `RFEGHandicapService`, `GoogleOAuthService` ⭐ Sprint 3 (the `MockHandicapService` test double lives in `tests/fakes/`)
 - Email Verification: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 **Email Verification**:

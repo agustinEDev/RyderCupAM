@@ -4,8 +4,6 @@ In-Memory Password History Repository para testing.
 Implementación en memoria del repositorio de historial de contraseñas.
 """
 
-from datetime import datetime
-
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.repositories.password_history_repository_interface import (
     PasswordHistoryRepositoryInterface,
@@ -62,37 +60,3 @@ class InMemoryPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
             Número total de registros
         """
         return len([h for h in self._history.values() if h.user_id == user_id])
-
-    async def delete_old_records(self, older_than: datetime) -> int:
-        """
-        Elimina registros más antiguos que una fecha.
-
-        Args:
-            older_than: Fecha límite
-
-        Returns:
-            Número de registros eliminados
-        """
-        to_delete = [h_id for h_id, h in self._history.items() if h.created_at < older_than]
-
-        for h_id in to_delete:
-            del self._history[h_id]
-
-        return len(to_delete)
-
-    async def delete_by_user(self, user_id: UserId) -> int:
-        """
-        Elimina todos los registros de un usuario.
-
-        Args:
-            user_id: ID del usuario
-
-        Returns:
-            Número de registros eliminados
-        """
-        to_delete = [h_id for h_id, h in self._history.items() if h.user_id == user_id]
-
-        for h_id in to_delete:
-            del self._history[h_id]
-
-        return len(to_delete)

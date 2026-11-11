@@ -105,20 +105,6 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 token.revoke()
         return count
 
-    async def delete_expired(self) -> int:
-        """
-        Elimina todos los tokens expirados.
-
-        Returns:
-            Número de tokens eliminados
-        """
-        expired_ids = [token_id for token_id, token in self._tokens.items() if token.is_expired()]
-
-        for token_id in expired_ids:
-            del self._tokens[token_id]
-
-        return len(expired_ids)
-
     async def count_active_for_user(self, user_id: UserId) -> int:
         """
         Cuenta los tokens activos de un usuario.

@@ -1,5 +1,4 @@
 import os
-from collections.abc import AsyncGenerator
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
@@ -55,13 +54,3 @@ async_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
-
-
-async def get_db_session_for_scripts() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Función de utilidad para obtener una sesión en scripts o pruebas aisladas.
-    No usar directamente en endpoints de FastAPI.
-    """
-
-    async with async_session_maker() as session:
-        yield session

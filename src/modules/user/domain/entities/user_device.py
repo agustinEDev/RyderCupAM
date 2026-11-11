@@ -276,37 +276,6 @@ class UserDevice:
         )
         self._add_domain_event(event)
 
-    def revoke_automatically(self) -> None:
-        """
-        Revoca el dispositivo automáticamente (por política del sistema).
-
-        Similar a revoke(), pero marca revoked_by_user=False en el evento
-        para distinguir revocaciones automáticas (cleanup, políticas) de
-        revocaciones manuales del usuario.
-
-        Raises:
-            ValueError: Si el dispositivo ya estaba revocado
-
-        Examples:
-            >>> # Sistema ejecuta cleanup de dispositivos viejos
-            >>> device.revoke_automatically()
-            >>> device.is_active
-            False
-        """
-        if not self._is_active:
-            raise RuntimeError("Device already revoked")
-
-        self._is_active = False
-
-        # Disparar evento con revoked_by_user=False
-        event = DeviceRevokedEvent(
-            user_id=self._user_id,
-            device_id=self._id,
-            device_name=self._device_name,
-            revoked_by_user=False,  # Automático por sistema
-        )
-        self._add_domain_event(event)
-
     def is_idle(self, now: datetime | None = None) -> bool:
         """Si lleva más de `SESSION_IDLE_TIMEOUT` sin usarse (BE #376)."""
         return (now or datetime.now()) - self._last_used_at > SESSION_IDLE_TIMEOUT
