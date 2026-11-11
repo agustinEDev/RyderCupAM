@@ -1,10 +1,8 @@
 """
 🎨 Formatters - Formateadores de Logging
 
-Proporciona diferentes formateadores para las salidas de logging:
-- TextFormatter: Formato legible para desarrollo
-- JsonFormatter: Formato estructurado para producción
-- StructuredFormatter: Formato híbrido con contexto
+Formateador JSON del log de seguridad (JsonFormatter) y su adaptador al
+logging estándar de Python (PythonLoggingFormatter).
 
 Características:
 - Formateo consistente
@@ -19,7 +17,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
-from .config import HandlerConfig, LogFormat
+from .config import HandlerConfig
 
 
 class BaseFormatter(ABC):
@@ -79,46 +77,6 @@ class BaseFormatter(ABC):
         return extra
 
 
-class TextFormatter(BaseFormatter):
-    """
-    Formateador de texto legible para desarrollo.
-
-    Produce salidas como:
-    2024-11-03 15:30:45 | INFO | app.users | Usuario registrado | user_id=123 correlation_id=abc-def
-    """
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Formatea como texto legible"""
-        timestamp = self._get_timestamp(record)
-        level = record.levelname
-        name = record.name
-        message = record.getMessage()
-        base_msg = f"{timestamp} | {level} | {name} | {message}"
-        extra = self._extract_extra_data(record)
-        extra_str = self._format_extras(extra)
-        if extra_str:
-            base_msg += f" | {extra_str}"
-        if record.exc_info:
-            base_msg += f"\n{logging.Formatter().formatException(record.exc_info)}"
-        return base_msg
-
-    def _format_extras(self, extra: dict) -> str:
-        extra_parts = []
-        # Correlation ID primero si está presente
-        if "correlation_id" in extra and self.include_correlation_id:
-            extra_parts.append(f"correlation_id={extra.pop('correlation_id')}")
-        # Resto de campos
-        if self.include_context:
-            for key, value in extra.items():
-                if key != "context":
-                    extra_parts.append(f"{key}={value}")
-            # Contexto como campos individuales
-            if "context" in extra and isinstance(extra["context"], dict):
-                for key, value in extra["context"].items():
-                    extra_parts.append(f"{key}={value}")
-        return " ".join(extra_parts) if extra_parts else ""
-
-
 class JsonFormatter(BaseFormatter):
     """
     Formateador JSON estructurado para producción.
@@ -168,80 +126,6 @@ class JsonFormatter(BaseFormatter):
             log_entry["exception"] = logging.Formatter().formatException(record.exc_info)
 
         return json.dumps(log_entry, ensure_ascii=False, separators=(",", ":"))
-
-
-class StructuredFormatter(BaseFormatter):
-    """
-    Formateador híbrido que combina legibilidad con estructura.
-
-    Produce salidas como:
-    [2024-11-03 15:30:45] INFO app.users: Usuario registrado
-    ├─ correlation_id: abc-def
-    ├─ user_id: 123
-    └─ context: {"action": "register"}
-    """
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Formatea con estructura híbrida"""
-        timestamp = self._get_timestamp(record)
-        level = record.levelname
-        name = record.name
-        message = record.getMessage()
-        main_line = f"[{timestamp}] {level} {name}: {message}"
-        extra = self._extract_extra_data(record)
-        lines = [main_line]
-        extra_lines = self._format_structured_extras(extra)
-        if extra_lines:
-            lines.extend(extra_lines)
-        if record.exc_info:
-            exc_text = logging.Formatter().formatException(record.exc_info)
-            exc_lines = exc_text.split("\n")
-            for exc_line in exc_lines:
-                if exc_line.strip():
-                    lines.append(f"   {exc_line}")
-        return "\n".join(lines)
-
-    def _format_structured_extras(self, extra: dict) -> list:
-        extra_lines = []
-        if "correlation_id" in extra and self.include_correlation_id:
-            correlation_id = extra.pop("correlation_id")
-            extra_lines.append(f"├─ correlation_id: {correlation_id}")
-        if self.include_context:
-            for key, value in extra.items():
-                if key == "context" and isinstance(value, dict):
-                    context_json = json.dumps(value, ensure_ascii=False)
-                    extra_lines.append(f"├─ context: {context_json}")
-                else:
-                    extra_lines.append(f"├─ {key}: {value}")
-        if extra_lines:
-            extra_lines[-1] = extra_lines[-1].replace("├─", "└─")
-        return extra_lines
-
-
-class FormatterFactory:
-    """Factory para crear formatters según configuración"""
-
-    @staticmethod
-    def create_formatter(config: HandlerConfig) -> BaseFormatter:
-        """
-        Crea un formatter según la configuración.
-
-        Args:
-            config: Configuración del handler
-
-        Returns:
-            Instancia del formatter apropiado
-
-        Raises:
-            ValueError: Si el formato no es soportado
-        """
-        if config.format == LogFormat.TEXT:
-            return TextFormatter(config)
-        if config.format == LogFormat.JSON:
-            return JsonFormatter(config)
-        if config.format == LogFormat.STRUCTURED:
-            return StructuredFormatter(config)
-        raise ValueError(f"Formato no soportado: {config.format}")
 
 
 # Clase para integración con logging estándar de Python
