@@ -9,8 +9,10 @@ de cualquier usuario con una única URL, sin conocer el origen.
 Devuelve la imagen o `None`, sin excepciones para el camino normal (2.59.0, BE #793):
 sin avatar, un usuario inexistente o desactivado, alguien que bloqueó a quien lo pide
 (F-09, opción A de Agustín, 10 nov 2026) y una foto activa que ya no está son el mismo
-«no hay imagen». Así no hay un sitio donde se puedan distinguir: la ruta responde a
-todos el mismo 204. Quien bloqueó sí ve el del bloqueado: su perfil le enseña nombre y
+«no hay imagen», y la ruta responde a todos el mismo 204 (código, cabeceras y cuerpo).
+Por tiempo, «sin avatar» y «me bloqueó» hacen el mismo trabajo (una consulta de
+bloqueos); solo «no existe» se ahorra esa consulta, y eso dice que una cuenta existe,
+nunca un bloqueo. Quien bloqueó sí ve el del bloqueado: su perfil le enseña nombre y
 foto para poder desbloquearlo.
 """
 
@@ -66,6 +68,10 @@ class GetAvatarImageUseCase:
             return None
 
         if user.avatar_source == AvatarSource.PRESET:
+            # Sin id de cuál, un dato roto: sin imagen, como la foto borrada (antes, un 500).
+            # Un fichero de preset que falte sí sale como error: es del despliegue
+            if user.avatar_preset_id is None:
+                return None
             datos, tipo = self._preset_provider.get_preset_image(user.avatar_preset_id)
             return ImagenDeAvatar(datos=datos, tipo=tipo)
 

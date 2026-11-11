@@ -17,10 +17,12 @@ el navegador no guarda. Ahora:
   A10 un id mal formado: 422
 """
 
+import io
 import uuid
 
 import pytest
 from httpx import AsyncClient
+from PIL import Image
 
 from tests.conftest import create_authenticated_user, set_auth_cookies, sql_en_la_bd_de_test
 
@@ -79,6 +81,32 @@ async def test_a1_a2_con_avatar_la_imagen(client: AsyncClient):
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("image/")
     assert len(r.content) > 0
+
+
+async def test_a2_la_foto_subida_de_otro_se_ve(client: AsyncClient):
+    """
+    Given: Luis con una foto subida
+    When: Ana pide su avatar
+    Then: 200 con la foto (JPEG)
+    """
+    yo = await _usuario(client, "Ana")
+    el = await _usuario(client, "Luis")
+    foto = io.BytesIO()
+    Image.new("RGB", (64, 64), (30, 120, 60)).save(foto, format="JPEG")
+    set_auth_cookies(client, el["cookies"])
+    r = await client.post(
+        "/api/v1/users/me/avatar/upload",
+        files={"file": ("foto.jpg", foto.getvalue(), "image/jpeg")},
+        headers={"X-CSRF-Token": el["cookies"].get("csrf_token", "")},
+    )
+    assert r.status_code == 201, r.text
+    client.cookies.clear()
+
+    r = await _avatar(client, yo, el["user"]["id"])
+
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(r.content)).format == "JPEG"
 
 
 async def test_a3_a7_los_cuatro_casos_sin_imagen_son_el_mismo_204(client: AsyncClient):

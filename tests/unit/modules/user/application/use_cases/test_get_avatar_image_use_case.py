@@ -20,6 +20,7 @@ from src.modules.user.application.use_cases.get_avatar_image_use_case import (
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_avatar_upload import UserAvatarUpload
+from src.modules.user.domain.errors.user_errors import InvalidAvatarPresetError
 from src.modules.user.domain.value_objects.avatar_source import AvatarSource
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
@@ -294,3 +295,34 @@ async def test_a6_foto_borrada_con_la_referencia_a_null_no_hay_imagen(uow):
     use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
     assert await use_case.execute(str(user.id.value), viewer_id=VIEWER) is None
+
+
+@pytest.mark.asyncio
+async def test_a6_predefinido_sin_id_no_hay_imagen(uow):
+    """
+    Given: Una cuenta con el origen en PRESET pero sin id de cuál (un dato roto)
+    When: Se pide el avatar
+    Then: None, como la foto borrada (antes, un 500)
+    """
+    user = User(
+        id=UserId.generate(),
+        email=Email("preset-sin-id@example.com"),
+        password=Password.from_plain_text("s3cur3P@ssw0rd!"),
+        first_name="Ana",
+        last_name="García",
+        avatar_source=AvatarSource.PRESET,
+        avatar_preset_id=None,
+    )
+    await uow.users.save(user)
+    use_case = GetAvatarImageUseCase(uow, PresetQueFallaSinId(), Bloqueos())
+
+    assert await use_case.execute(str(user.id.value), viewer_id=VIEWER) is None
+
+
+class PresetQueFallaSinId(FakeAvatarPresetProvider):
+    """Como el de verdad: sin id de preset, lanza."""
+
+    def get_preset_image(self, preset_id):
+        if preset_id is None:
+            raise InvalidAvatarPresetError("sin preset")
+        return super().get_preset_image(preset_id)
