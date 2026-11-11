@@ -21,17 +21,6 @@ class UserDomainError(Exception):
         super().__init__(self.message)
 
 
-class UserValidationError(UserDomainError):
-    """
-    Excepción lanzada cuando la validación de una entidad User falla.
-
-    Se utiliza para errores de validación en la construcción o modificación
-    de entidades User que no están relacionados con Value Objects específicos.
-    """
-
-    pass
-
-
 class TermsAcceptanceRequiredError(UserDomainError):
     """
     Se intenta dar de alta a alguien que no ha aceptado los Términos.
@@ -127,39 +116,6 @@ class RepositoryError(UserDomainError):
 
     Se utiliza para encapsular errores de persistencia, conexión a base de datos,
     o cualquier problema relacionado con la capa de infraestructura de datos.
-    """
-
-    pass
-
-
-class RepositoryConnectionError(RepositoryError):
-    """
-    Excepción lanzada cuando hay problemas de conexión con el repositorio.
-
-    Se utiliza cuando no se puede establecer o mantener una conexión
-    con el sistema de persistencia (base de datos, etc.).
-    """
-
-    pass
-
-
-class RepositoryOperationError(RepositoryError):
-    """
-    Excepción lanzada cuando una operación de repositorio falla.
-
-    Se utiliza para errores durante operaciones CRUD como save, update, delete
-    que fallan por problemas de integridad, constraints, etc.
-    """
-
-    pass
-
-
-class RepositoryTimeoutError(RepositoryError):
-    """
-    Excepción lanzada cuando una operación de repositorio excede el timeout.
-
-    Se utiliza cuando las operaciones de base de datos tardan más tiempo
-    del configurado como límite máximo.
     """
 
     pass

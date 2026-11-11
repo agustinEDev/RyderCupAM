@@ -54,19 +54,3 @@ class EventBusError(Exception):
             details_str = ", ".join(f"{k}={v}" for k, v in self.details.items())
             return f"{super().__str__()} | Details: {details_str}"
         return super().__str__()
-
-
-class HandlerRegistrationError(EventBusError):
-    """
-    Error al registrar o desregistrar handlers.
-    """
-
-    pass
-
-
-class EventPublicationError(EventBusError):
-    """
-    Error al publicar eventos.
-    """
-
-    pass
