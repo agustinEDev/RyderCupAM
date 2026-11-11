@@ -1309,7 +1309,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         async def otro_correo(user_id):
             otra = copy.deepcopy(uow.users._users[user_id])
-            otra.change_email("otro.correo@example.com")
+            otra._email = Email("otro.correo@example.com")
             uow.users._users[user_id] = otra
             return otra
 

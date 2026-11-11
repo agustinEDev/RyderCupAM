@@ -27,14 +27,6 @@ class TeamAssignment(StrEnum):
     MANUAL = "MANUAL"
     AUTOMATIC = "AUTOMATIC"
 
-    def is_manual(self) -> bool:
-        """Verifica si la asignación es manual."""
-        return self == TeamAssignment.MANUAL
-
-    def is_automatic(self) -> bool:
-        """Verifica si la asignación es automática."""
-        return self == TeamAssignment.AUTOMATIC
-
     def __composite_values__(self):
         """
         Retorna los valores para SQLAlchemy composite mapping.

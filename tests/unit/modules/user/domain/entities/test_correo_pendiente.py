@@ -198,14 +198,3 @@ def test_a_non_ascii_token_is_just_invalid():
 
     with pytest.raises(EmailChangeInvalidError):
         ana.confirm_email_change("tokén", ahora=AHORA)
-
-
-def test_changing_the_email_directly_cancels_a_pending_change():
-    """El cambio directo (el del administrador) anula el pendiente del usuario."""
-    ana = _ana()
-    token = ana.request_email_change("ana@trabajo.com", ahora=AHORA)
-
-    ana.change_email("ana@otra.com")
-
-    with pytest.raises(EmailChangeInvalidError):
-        ana.confirm_email_change(token, ahora=AHORA)

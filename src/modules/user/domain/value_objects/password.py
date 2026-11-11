@@ -206,16 +206,6 @@ class Password:
         return None
 
     @staticmethod
-    def _is_strong_password(password: str) -> bool:
-        """
-        Método legacy para backward compatibility.
-        Usa el nuevo _validate_password_strength internamente.
-
-        DEPRECATED: Usar _validate_password_strength para mensajes de error detallados.
-        """
-        return Password._validate_password_strength(password) is None
-
-    @staticmethod
     @functools.cache
     def _relleno() -> str:
         """

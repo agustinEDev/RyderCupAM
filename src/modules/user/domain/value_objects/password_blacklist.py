@@ -163,13 +163,3 @@ def is_common_password(password: str) -> bool:
         True
     """
     return password.casefold() in COMMON_PASSWORDS
-
-
-def get_blacklist_size() -> int:
-    """
-    Retorna el tamaño de la blacklist de contraseñas comunes.
-
-    Returns:
-        Número de contraseñas en la blacklist
-    """
-    return len(COMMON_PASSWORDS)
