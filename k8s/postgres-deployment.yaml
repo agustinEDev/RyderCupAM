@@ -102,10 +102,10 @@ spec:
           # ==========================================
           resources:
             requests:                       # Mínimo garantizado
-              memory: "512Mi"               # 512 Megabytes
-              cpu: "500m"                   # 0.5 CPU cores
+              memory: "256Mi"               # La base de pruebas es pequeña
+              cpu: "250m"                   # 0.25 CPU cores
             limits:                         # Máximo permitido
-              memory: "1Gi"                 # 1 Gigabyte
+              memory: "768Mi"               # 768 Megabytes
               cpu: "1000m"                  # 1 CPU core
 
           # ==========================================
