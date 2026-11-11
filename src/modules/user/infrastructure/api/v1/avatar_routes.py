@@ -57,7 +57,6 @@ from src.modules.user.application.use_cases.upload_avatar_use_case import (
     UploadAvatarUseCase,
 )
 from src.modules.user.domain.errors.user_errors import (
-    AvatarNotFoundError,
     AvatarUploadNotFoundError,
     AvatarUploadTooLargeError,
     InvalidAvatarImageError,
@@ -124,24 +123,32 @@ async def get_avatar_preset_image(
 @router.get(
     "/users/{user_id}/avatar",
     summary="Get user's active avatar image",
-    description="Returns the raw image bytes of a user's active avatar (preset or upload).",
+    description=(
+        "Returns the raw image bytes of a user's active avatar (preset or upload), or 204 "
+        "No Content when there is no image to show: no avatar, an unknown or deactivated "
+        "user, a user who blocked the viewer, or an active photo that no longer exists. "
+        "The 204 is the same in every case."
+    ),
+    responses={
+        200: {"description": "The avatar image.", "content": {"image/*": {}}},
+        204: {"description": "No image to show (same answer in every case)."},
+    },
 )
 async def get_user_avatar_image(
     user_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetAvatarImageUseCase = Depends(get_avatar_image_use_case),
 ):
-    """El avatar de un usuario; 404 como inexistente si su dueño bloqueó a quien lo pide."""
-    try:
-        # Quien lo pide: si el dueño le bloqueó, 404 como si no existiera (F-09)
-        image_bytes, content_type = await use_case.execute(
-            str(user_id), viewer_id=str(current_user.id)
+    """El avatar de un usuario, o 204 si no hay imagen que enseñar a quien lo pide."""
+    imagen = await use_case.execute(str(user_id), viewer_id=str(current_user.id))
+    if imagen is None:
+        # Sin imagen, una sola respuesta para todos los casos (BE #793): sin cuerpo ni
+        # texto que distinga un bloqueo de una cuenta sin avatar. Sin guardar: al ponerse
+        # un avatar, se ve enseguida
+        return Response(
+            status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "no-store"}
         )
-        return Response(content=image_bytes, media_type=content_type)
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except AvatarNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return Response(content=imagen.datos, media_type=imagen.tipo)
 
 
 # ======================================================================================

@@ -2,10 +2,15 @@
 Tests para GetAvatarImageUseCase.
 
 Usa un IAvatarPresetProvider falso para no depender de los assets reales en disco.
+
+Desde la 2.59.0 (BE #793) devuelve la imagen o None, sin excepciones para el camino
+normal: sin avatar, inexistente, desactivada, bloqueado o foto perdida son el mismo
+«no hay imagen», y la ruta responde 204 a todos.
 """
 
 import pytest
 
+from src.modules.user.application.dto.avatar_dto import ImagenDeAvatar
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
     IAvatarPresetProvider,
 )
@@ -15,7 +20,7 @@ from src.modules.user.application.use_cases.get_avatar_image_use_case import (
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_avatar_upload import UserAvatarUpload
-from src.modules.user.domain.errors.user_errors import AvatarNotFoundError, UserNotFoundError
+from src.modules.user.domain.value_objects.avatar_source import AvatarSource
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -76,10 +81,9 @@ class TestGetAvatarImageUseCase:
         await uow.users.save(user)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
-        image_bytes, content_type = await use_case.execute(str(user.id.value), viewer_id=VIEWER)
+        imagen = await use_case.execute(str(user.id.value), viewer_id=VIEWER)
 
-        assert image_bytes == b"preset-7-bytes"
-        assert content_type == "image/jpeg"
+        assert imagen == ImagenDeAvatar(datos=b"preset-7-bytes", tipo="image/jpeg")
 
     async def test_returns_upload_bytes_when_avatar_is_upload(self, uow):
         """Una foto subida: sus bytes."""
@@ -90,25 +94,32 @@ class TestGetAvatarImageUseCase:
         await uow.users.save(user)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
-        image_bytes, content_type = await use_case.execute(str(user.id.value), viewer_id=VIEWER)
+        imagen = await use_case.execute(str(user.id.value), viewer_id=VIEWER)
 
-        assert image_bytes == b"my-photo-bytes"
-        assert content_type == "image/jpeg"
+        assert imagen == ImagenDeAvatar(datos=b"my-photo-bytes", tipo="image/jpeg")
 
-    async def test_raises_when_user_has_no_avatar(self, uow):
-        """Sin avatar: AvatarNotFoundError."""
+    async def test_a3_sin_avatar_no_hay_imagen(self, uow):
+        """Sin avatar: None."""
         user = await _make_saved_user(uow)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
-        with pytest.raises(AvatarNotFoundError):
-            await use_case.execute(str(user.id.value), viewer_id=VIEWER)
+        assert await use_case.execute(str(user.id.value), viewer_id=VIEWER) is None
 
-    async def test_raises_when_user_not_found(self, uow):
-        """Usuario inexistente: UserNotFoundError."""
+    async def test_a5_usuario_inexistente_no_hay_imagen(self, uow):
+        """Usuario inexistente: None."""
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
-        with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(UserId.generate().value), viewer_id=VIEWER)
+        assert await use_case.execute(str(UserId.generate().value), viewer_id=VIEWER) is None
+
+    async def test_a6_foto_activa_cuyo_fichero_ya_no_existe_no_hay_imagen(self, uow):
+        """La foto activa apunta a una subida que ya no está: None."""
+        user = await _make_saved_user(uow)
+        upload = UserAvatarUpload.create(user_id=user.id, image_data=b"my-photo-bytes")
+        user.set_uploaded_avatar(upload.id)
+        await uow.users.save(user)
+        use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
+
+        assert await use_case.execute(str(user.id.value), viewer_id=VIEWER) is None
 
 
 # ==================== G2 y G3 (F-09, fase 3 del plan a 9) ====================
@@ -147,14 +158,13 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         """
         Given: El dueño del avatar me bloqueó
         When: Pido su avatar
-        Then: UserNotFoundError, como una cuenta que no existe
+        Then: None, como una cuenta que no existe o sin avatar
         """
         dueno, yo = await self._escena(uow)
         bloqueos = Bloqueos({yo.id: {dueno.id}})
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
 
-        with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
+        assert await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value)) is None
 
     async def test_g2_si_lo_bloquee_yo_veo_su_avatar(self, uow):
         """
@@ -166,23 +176,22 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         bloqueos = Bloqueos({dueno.id: {yo.id}})
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
 
-        image_bytes, _ = await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
+        imagen = await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
 
-        assert image_bytes == b"preset-3-bytes"
+        assert imagen is not None and imagen.datos == b"preset-3-bytes"
 
     async def test_g3_el_de_una_cuenta_desactivada_no_existe(self, uow):
         """
         Given: La cuenta del dueño está desactivada
         When: Pido su avatar
-        Then: UserNotFoundError
+        Then: None
         """
         dueno, yo = await self._escena(uow)
         dueno.deactivate(deactivated_by_user_id=str(yo.id.value))
         await uow.users.save(dueno)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
-        with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
+        assert await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value)) is None
 
     async def test_f5_sin_bloqueos_ni_quien_mira_no_se_construye(self, uow):
         """
@@ -215,14 +224,15 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         """
         Given: Un id que no es de nadie
         When: Se pide su avatar
-        Then: UserNotFoundError sin preguntar por bloqueos
+        Then: None sin preguntar por bloqueos
         """
         _, yo = await self._escena(uow)
         bloqueos = Bloqueos()
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
 
-        with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(UserId.generate().value), viewer_id=str(yo.id.value))
+        assert (
+            await use_case.execute(str(UserId.generate().value), viewer_id=str(yo.id.value)) is None
+        )
 
         assert bloqueos.preguntas == []
 
@@ -239,3 +249,47 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         await use_case.execute(str(dueno.id.value), viewer_id=str(yo.id.value))
 
         assert bloqueos.preguntas == [(yo.id, dueno.id)]
+
+    async def test_a7_sin_avatar_pregunta_por_bloqueos_como_si_me_hubiera_bloqueado(self, uow):
+        """
+        Given: Otro sin avatar que no me bloqueó, y otro con avatar que sí
+        When: Pido sus avatares
+        Then: Los dos sin imagen y con el mismo trabajo: una pregunta por bloqueos cada uno
+        """
+        _, yo = await self._escena(uow)
+        sin_avatar = await _otro(uow, "sinavatar@example.com")
+        me_bloqueo = await _otro(uow, "bloquea@example.com")
+        me_bloqueo.set_preset_avatar(2)
+        await uow.users.save(me_bloqueo)
+        bloqueos = Bloqueos({yo.id: {me_bloqueo.id}})
+        use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), bloqueos)
+
+        a = await use_case.execute(str(sin_avatar.id.value), viewer_id=str(yo.id.value))
+        b = await use_case.execute(str(me_bloqueo.id.value), viewer_id=str(yo.id.value))
+
+        assert a is None and b is None
+        assert bloqueos.preguntas == [(yo.id, sin_avatar.id), (yo.id, me_bloqueo.id)]
+
+
+@pytest.mark.asyncio
+async def test_a6_foto_borrada_con_la_referencia_a_null_no_hay_imagen(uow):
+    """
+    Given: La foto activa se borró y la base de datos dejó su id a NULL (ON DELETE SET
+           NULL), con el origen todavía en UPLOAD
+    When: Se pide el avatar
+    Then: None, sin buscar una subida sin id (antes, un 500)
+    """
+    # Como la lee el mapper de la base de datos tras el borrado
+    user = User(
+        id=UserId.generate(),
+        email=Email("foto-borrada@example.com"),
+        password=Password.from_plain_text("s3cur3P@ssw0rd!"),
+        first_name="Ana",
+        last_name="García",
+        avatar_source=AvatarSource.UPLOAD,
+        active_avatar_upload_id=None,
+    )
+    await uow.users.save(user)
+    use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
+
+    assert await use_case.execute(str(user.id.value), viewer_id=VIEWER) is None

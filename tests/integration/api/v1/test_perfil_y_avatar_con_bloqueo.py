@@ -1,9 +1,10 @@
 """
 Perfil y avatar con un bloqueo o una cuenta desactivada (F-09, fase 3 del plan a 9).
 
-  G2 el otro me bloqueó: su perfil y su avatar, 404 igual que una cuenta inexistente
+  G2 el otro me bloqueó: su perfil, 404 igual que una cuenta inexistente; su avatar, el
+     mismo 204 sin imagen que una cuenta inexistente o sin avatar (2.59.0, BE #793)
      lo bloqueé yo: los sigo viendo (nombre, foto y «Desbloquear»; opción A, 10 nov)
-  G3 cuenta desactivada: perfil y avatar, 404
+  G3 cuenta desactivada: perfil 404 y avatar 204, como inexistente
 """
 
 import uuid
@@ -72,7 +73,8 @@ async def test_g2_si_me_bloqueo_es_como_si_no_existiera(client: AsyncClient, que
     """
     Given: Luis (con avatar) me bloqueó
     When: Pido su perfil o su avatar
-    Then: 404, con el mismo cuerpo que para un id que no existe
+    Then: Lo mismo que para un id que no existe: el perfil, 404 con el mismo texto; el
+          avatar, 204 sin cuerpo
     """
     yo = await _usuario(client, "Ana")
     el = await _usuario(client, "Luis", avatar=4)
@@ -82,6 +84,10 @@ async def test_g2_si_me_bloqueo_es_como_si_no_existiera(client: AsyncClient, que
     inexistente_id = str(uuid.uuid4())
     inexistente = await _pide(client, yo, _rutas(inexistente_id)[que])
 
+    if que == "avatar":
+        assert r.status_code == inexistente.status_code == 204, r.text
+        assert r.content == inexistente.content == b""
+        return
     assert r.status_code == 404, r.text
     assert inexistente.status_code == 404
     assert r.json()["detail"].replace(el["user"]["id"], "X") == inexistente.json()[
@@ -123,11 +129,11 @@ async def test_g2_sin_bloqueo_se_ve(client: AsyncClient, que: str):
 
 
 @pytest.mark.parametrize("que", ["perfil", "avatar"])
-async def test_g3_cuenta_desactivada_da_404(client: AsyncClient, que: str):
+async def test_g3_cuenta_desactivada_es_como_inexistente(client: AsyncClient, que: str):
     """
     Given: La cuenta de Luis (con avatar) desactivada por un administrador
     When: Pido su perfil o su avatar
-    Then: 404
+    Then: Como inexistente: el perfil 404 y el avatar 204
     """
     yo = await _usuario(client, "Ana")
     el = await _usuario(client, "Luis", avatar=4)
@@ -146,7 +152,7 @@ async def test_g3_cuenta_desactivada_da_404(client: AsyncClient, que: str):
 
     r = await _pide(client, yo, _rutas(el["user"]["id"])[que])
 
-    assert r.status_code == 404, r.text
+    assert r.status_code == (204 if que == "avatar" else 404), r.text
 
 
 # ------------------------------------- F2 (revisión): sin pistas del bloqueo
