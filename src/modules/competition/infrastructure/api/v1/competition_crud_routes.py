@@ -35,9 +35,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
-    NotCompetitionCreatorError,
 )
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
@@ -45,7 +43,6 @@ from src.modules.competition.application.mappers.competition_mapper import (
 from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
-from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.services.invitacion_de_la_ficha import (
     invitacion_pendiente,
     se_le_ofrece_aceptar,
@@ -88,19 +85,16 @@ from src.modules.competition.domain.entities.competition import CompetitionState
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
-from src.modules.competition.domain.value_objects.location import InvalidLocationError
 from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.value_objects.country_code import InvalidCountryCodeError
 
 logger = logging.getLogger(__name__)
 
@@ -390,15 +384,6 @@ async def create_competition(
                 updated_at=enriched_dto.updated_at,
             )
 
-    except CompetitionAlreadyExistsError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except (
-        InvalidCountryError,
-        InvalidCountryCodeError,
-        InvalidLocationError,
-        PerfilIncompletoError,
-    ) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -663,12 +648,6 @@ async def update_competition(
 
         return dto
 
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except CompetitionAlreadyExistsError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
     # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:
     # el país que no existe o no es adyacente (InvalidCountryError), el código de
@@ -692,13 +671,7 @@ async def update_competition(
                 ],
             },
         )
-    except (
-        CompetitionNotEditableError,
-        InvalidCountryError,
-        InvalidCountryCodeError,
-        InvalidLocationError,
-        ValueError,
-    ) as e:
+    except (CompetitionNotEditableError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
@@ -735,10 +708,6 @@ async def delete_competition(
 
         return
 
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionNotDeletableError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -771,9 +740,5 @@ async def update_stroke_play_settings(
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

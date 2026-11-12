@@ -32,9 +32,6 @@ from src.modules.social.application.dto.profile_photo_dto import (
     ProfilePhotoDTO,
 )
 from src.modules.social.application.exceptions import (
-    ActivityNotVisibleError,
-    PhotoNotFoundError,
-    ProfileGalleryFullError,
     ProfileNotVisibleError,
 )
 from src.modules.social.application.use_cases.delete_profile_photo_use_case import (
@@ -51,13 +48,7 @@ from src.modules.social.application.use_cases.upload_profile_photo_use_case impo
     UploadProfilePhotoUseCase,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.errors.user_errors import (
-    AvatarUploadTooLargeError,
-    InvalidAvatarImageError,
-    UserNotFoundError,
-)
 from src.shared.infrastructure.http.upload_reader import (
-    UploadTooLargeError,
     read_upload_within_limit,
 )
 
@@ -91,21 +82,10 @@ async def upload_my_photo(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UploadProfilePhotoUseCase = Depends(get_upload_profile_photo_use_case),
 ):
-    try:
-        # Por trozos y cortando al pasarse del tope, no `file.read()` entero: un
-        # fichero enorme no llega completo a memoria antes de rechazarse (F-08)
-        raw = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
-        return await use_case.execute(str(current_user.id), raw, caption=caption)
-    except ProfileGalleryFullError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e)
-        ) from e
-    except InvalidAvatarImageError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    # Por trozos y cortando al pasarse del tope, no `file.read()` entero: un
+    # fichero enorme no llega completo a memoria antes de rechazarse (F-08)
+    raw = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
+    return await use_case.execute(str(current_user.id), raw, caption=caption)
 
 
 @router.get(
@@ -130,8 +110,6 @@ async def get_player_gallery(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
         ) from e
-    except ActivityNotVisibleError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 @router.get(
@@ -154,12 +132,7 @@ async def get_photo_image(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetProfilePhotoImageUseCase = Depends(get_profile_photo_image_use_case),
 ):
-    try:
-        imagen = await use_case.execute(str(current_user.id), str(user_id), str(photo_id))
-    except ActivityNotVisibleError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except PhotoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    imagen = await use_case.execute(str(current_user.id), str(user_id), str(photo_id))
 
     # Si el cliente ya la tiene, no se reenvian los bytes. Es lo que evita que
     # abrir un perfil diez veces mueva setenta megas
@@ -190,7 +163,4 @@ async def delete_my_photo(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: DeleteProfilePhotoUseCase = Depends(get_delete_profile_photo_use_case),
 ):
-    try:
-        await use_case.execute(str(current_user.id), str(photo_id))
-    except PhotoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    await use_case.execute(str(current_user.id), str(photo_id))

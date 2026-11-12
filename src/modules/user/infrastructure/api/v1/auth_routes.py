@@ -101,7 +101,6 @@ from src.modules.user.application.use_cases.validate_reset_token_use_case import
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
-from src.modules.user.domain.errors.user_errors import TermsAcceptanceRequiredError
 from src.modules.user.domain.exceptions import (
     AccountDeactivatedException,
     AccountLockedException,
@@ -202,12 +201,6 @@ async def register_user(
     try:
         user_response = await use_case.execute(register_data)
         return user_response
-    except TermsAcceptanceRequiredError as e:
-        # La validación del DTO ya da 422; esto es por si llegara sin validar
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(e),
-        ) from e
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
         return coded_bad_request(e)

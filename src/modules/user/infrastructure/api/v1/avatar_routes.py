@@ -57,14 +57,9 @@ from src.modules.user.application.use_cases.upload_avatar_use_case import (
     UploadAvatarUseCase,
 )
 from src.modules.user.domain.errors.user_errors import (
-    AvatarUploadNotFoundError,
-    AvatarUploadTooLargeError,
-    InvalidAvatarImageError,
     InvalidAvatarPresetError,
-    UserNotFoundError,
 )
 from src.shared.infrastructure.http.upload_reader import (
-    UploadTooLargeError,
     read_upload_within_limit,
 )
 
@@ -167,8 +162,6 @@ async def set_avatar_preset(
 ):
     try:
         return await use_case.execute(str(current_user.id), body)
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except InvalidAvatarPresetError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -191,15 +184,8 @@ async def upload_avatar(
     file: UploadFile = File(...),
     use_case: UploadAvatarUseCase = Depends(get_upload_avatar_use_case),
 ):
-    try:
-        raw_bytes = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
-        return await use_case.execute(str(current_user.id), raw_bytes)
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (AvatarUploadTooLargeError, UploadTooLargeError) as e:
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(e)) from e
-    except InvalidAvatarImageError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    raw_bytes = await read_upload_within_limit(file, MAX_UPLOAD_BYTES)
+    return await use_case.execute(str(current_user.id), raw_bytes)
 
 
 @router.get(
@@ -211,10 +197,7 @@ async def list_my_avatar_uploads(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListMyAvatarUploadsUseCase = Depends(get_list_my_avatar_uploads_use_case),
 ):
-    try:
-        return await use_case.execute(str(current_user.id))
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return await use_case.execute(str(current_user.id))
 
 
 @router.get(
@@ -227,11 +210,8 @@ async def get_my_avatar_upload_image(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetMyAvatarUploadImageUseCase = Depends(get_my_avatar_upload_image_use_case),
 ):
-    try:
-        image_bytes, content_type = await use_case.execute(str(current_user.id), str(upload_id))
-        return Response(content=image_bytes, media_type=content_type)
-    except AvatarUploadNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    image_bytes, content_type = await use_case.execute(str(current_user.id), str(upload_id))
+    return Response(content=image_bytes, media_type=content_type)
 
 
 @router.post(
@@ -245,12 +225,7 @@ async def activate_uploaded_avatar(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ActivateUploadedAvatarUseCase = Depends(get_activate_uploaded_avatar_use_case),
 ):
-    try:
-        return await use_case.execute(str(current_user.id), str(upload_id))
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except AvatarUploadNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return await use_case.execute(str(current_user.id), str(upload_id))
 
 
 @router.delete(
@@ -263,7 +238,4 @@ async def remove_avatar(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RemoveAvatarUseCase = Depends(get_remove_avatar_use_case),
 ):
-    try:
-        return await use_case.execute(str(current_user.id))
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return await use_case.execute(str(current_user.id))

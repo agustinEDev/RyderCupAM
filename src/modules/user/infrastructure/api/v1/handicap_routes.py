@@ -35,7 +35,6 @@ from src.modules.user.application.use_cases.update_user_handicap_use_case import
     UpdateUserHandicapUseCase,
 )
 from src.modules.user.domain.errors.handicap_errors import (
-    HandicapNotFoundError,
     HandicapServiceUnavailableError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -223,8 +222,6 @@ async def update_user_handicap(
 
         return result
 
-    except HandicapNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except HandicapServiceUnavailableError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

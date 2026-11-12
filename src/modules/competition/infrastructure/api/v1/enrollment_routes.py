@@ -48,38 +48,11 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionFullError,
-    CompetitionNotFoundError as DirectCompetitionNotFoundError,
-    CompetitionNotFoundError as HandicapCompetitionNotFoundError,
-    CompetitionNotFoundError as HandleCompetitionNotFoundError,
-    CompetitionNotFoundError as ListCompetitionNotFoundError,
-    CompetitionNotFoundError as RemoveCompetitionNotFoundError,
-    CompetitionNotFoundError as RequestCompetitionNotFoundError,
-    EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
-    EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
-    EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
-    EnrollmentNotFoundError as NamePreferenceEnrollmentNotFoundError,
-    EnrollmentNotFoundError as RemoveEnrollmentNotFoundError,
-    EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
-    EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
-    HandicapEditNotAllowedError,
-    InvalidTeeColorError,
-    NotCompetitionCreatorError as RemoveNotCreatorError,
-    NotCreatorError as DirectNotCreatorError,
-    NotCreatorError as HandicapNotCreatorError,
-    NotCreatorError as HandleNotCreatorError,
-    NotCreatorError as RemoveHandicapNotCreatorError,
-)
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
-from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
-    NotOwnerError as CancelNotOwnerError,
 )
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    AlreadyEnrolledError as DirectAlreadyEnrolledError,
-    CompetitionNotActiveError as DirectCompetitionNotActiveError,
     DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
@@ -99,29 +72,22 @@ from src.modules.competition.application.use_cases.remove_enrolled_player_use_ca
     RemoveEnrolledPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
-    AlreadyEnrolledError as RequestAlreadyEnrolledError,
-    CompetitionIsPrivateError,
-    CompetitionNotActiveError,
-    EnrollmentClosedError,
     RequestEnrollmentUseCase,
     TeeWindowFullError,
     TeeWindowHasRoomError,
     TeeWindowNotFoundError,
     TeeWindowRequiredError,
-    TooManyEnrollmentsError,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
 )
 from src.modules.competition.application.use_cases.set_name_preference_use_case import (
-    NotOwnerError as NamePreferenceNotOwnerError,
     SetNamePreferenceUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
-    NotOwnerError as WithdrawNotOwnerError,
     WithdrawEnrollmentUseCase,
 )
-from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -333,29 +299,11 @@ async def request_enrollment(
         estado, codigo, texto = _FRANJA_QUE_NO_VALE[type(e)]
         return JSONResponse(status_code=estado, content={"detail": texto, "error_code": codigo})
 
-    except RequestCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except TeamsFormedError as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
-    except (
-        CompetitionNotActiveError,
-        CompetitionFullError,
-        EnrollmentClosedError,
-        TooManyEnrollmentsError,
-        PerfilIncompletoError,
-    ) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except CompetitionIsPrivateError as e:
-        # 403 y no 404: la competicion existe y quien pide ya sabe que existe
-        # —tiene su id—; lo que no tiene es puerta por la que entrar (BE #318)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except RequestAlreadyEnrolledError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvalidTeeColorError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -389,21 +337,11 @@ async def direct_enroll_player(
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
-    except DirectCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except DirectNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (DirectCompetitionNotActiveError, CompetitionFullError, PerfilIncompletoError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except DirectAlreadyEnrolledError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except TeamsFormedError as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
-    except InvalidTeeColorError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get(
@@ -457,8 +395,6 @@ async def list_enrollments(
             viewer_id=viewer_id,
         )
 
-    except ListCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -485,14 +421,6 @@ async def approve_enrollment(
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
-    except HandleEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandleCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandleNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (EnrollmentStateError, CompetitionFullError, PerfilIncompletoError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except TeamsFormedError as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -516,19 +444,9 @@ async def reject_enrollment(
 
     Solo el creador de la competición puede rechazar.
     """
-    try:
-        request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="REJECT")
-        creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
-
-    except HandleEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandleCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandleNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="REJECT")
+    creator_id = UserId(str(current_user.id))
+    return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
 
 @router.post(
@@ -549,17 +467,9 @@ async def cancel_enrollment(
     Solo el dueño de la inscripción puede cancelarla.
     Solo válido desde estados REQUESTED o INVITED.
     """
-    try:
-        request_dto = CancelEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
-        user_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, user_id)
-
-    except CancelEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except CancelNotOwnerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    request_dto = CancelEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
+    user_id = UserId(str(current_user.id))
+    return await use_case.execute(request_dto, user_id)
 
 
 @router.post(
@@ -586,17 +496,11 @@ async def withdraw_enrollment(
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)
 
-    except WithdrawEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except WithdrawNotOwnerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (DraftInProgressError, TeamsFormedError) as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
         )
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -622,10 +526,6 @@ async def remove_enrolled_player(
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )
-    except (RemoveEnrollmentNotFoundError, RemoveCompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except RemoveNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (
         CannotRemoveOrganizerError,
         RemovalNotAllowedError,
@@ -637,8 +537,6 @@ async def remove_enrolled_player(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
         )
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 _FRANJA_QUE_NO_VALE: dict[type[Exception], tuple[int, str, str]] = {
@@ -700,16 +598,6 @@ async def set_custom_handicap(
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
-    except HandicapEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandicapCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandicapNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except HandicapEditNotAllowedError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -734,24 +622,8 @@ async def remove_custom_handicap(
     Solo el creador de la competición (o un admin) puede eliminarlo. Solo se permite
     mientras la competición está en DRAFT, ACTIVE o CLOSED.
     """
-    try:
-        creator_id = UserId(str(current_user.id))
-        return await use_case.execute(
-            str(enrollment_id), creator_id, is_admin=current_user.is_admin
-        )
-
-    except RemoveHandicapEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except HandicapCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except RemoveHandicapNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except HandicapEditNotAllowedError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except PerfilIncompletoError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    creator_id = UserId(str(current_user.id))
+    return await use_case.execute(str(enrollment_id), creator_id, is_admin=current_user.is_admin)
 
 
 @router.put(
@@ -777,14 +649,8 @@ async def set_name_preference(
     momento, torneo en marcha incluido: quien se equivocó al elegir no
     tiene que esperar a que acabe para corregirlo.
     """
-    try:
-        request_dto = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment_id, use_real_name=body.use_real_name
-        )
-        user_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, user_id)
-
-    except NamePreferenceEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NamePreferenceNotOwnerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    request_dto = SetNamePreferenceRequestDTO(
+        enrollment_id=enrollment_id, use_real_name=body.use_real_name
+    )
+    user_id = UserId(str(current_user.id))
+    return await use_case.execute(request_dto, user_id)

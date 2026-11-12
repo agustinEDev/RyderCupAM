@@ -31,16 +31,8 @@ from src.modules.competition.application.dto.scoring_dto import (
     WithdrawalResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    InvalidHoleNumberError,
-    MatchNotFoundError,
-    MatchNotScoringError,
-    NotMatchPlayerError,
     NotYourMarkedPlayerError,
     PlayerWithdrawnError,
-    RoundNotFoundError,
-    ScorecardAlreadySubmittedError,
-    ScorecardNotReadyError,
     ScoringNotOpenYetError,
     WithdrawalNotAllowedError,
 )
@@ -112,17 +104,6 @@ async def get_scoring_view(
     except NoPuedeVerloError:
         return solo_quien_participa()
 
-    except MatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-
 
 @router.post(
     "/matches/{match_id}/scores/holes/{hole_number}",
@@ -181,16 +162,6 @@ async def submit_hole_score(
     try:
         return await use_case.execute(str(match_id), hole_number, body, effective_user_id)
 
-    except MatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except NotMatchPlayerError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
     except PlayerWithdrawnError:
         # Con codigo propio en la raiz: el retirado del fourball no anota hasta
         # que se deshaga la retirada, y el movil no debe reintentar el golpe
@@ -222,16 +193,6 @@ async def submit_hole_score(
                 "scoring_opens_at": e.opens_at.isoformat(),
             },
         )
-    except MatchNotScoringError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
-    except (InvalidHoleNumberError, ScorecardAlreadySubmittedError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
 
 
 @router.post(
@@ -282,28 +243,8 @@ async def submit_scorecard(
     try:
         return await use_case.execute(str(match_id), effective_user_id)
 
-    except MatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except NotMatchPlayerError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except MatchNotScoringError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
     except PlayerWithdrawnError:
         return _retirado()
-    except (ScorecardNotReadyError, ScorecardAlreadySubmittedError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
 
 
 @router.get(
@@ -344,12 +285,6 @@ async def get_leaderboard(
         )
     except NoPuedeVerloError:
         return solo_quien_participa()
-
-    except CompetitionNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
 
 
 def _error_en_la_raiz(error, codigo_http: int) -> JSONResponse:
@@ -415,26 +350,6 @@ async def concede_match(
             is_admin=current_user.is_admin,
         )
 
-    except MatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except NotMatchPlayerError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except MatchNotScoringError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -456,10 +371,6 @@ async def _retirada(use_case, match_id, player_id, current_user, *, undo: bool):
             is_admin=current_user.is_admin,
             undo=undo,
         )
-    except (MatchNotFoundError, RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotMatchPlayerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except WithdrawalNotAllowedError as e:
         # Codigo en la raiz y el motivo, para que el cliente explique cual de
         # las reglas (code-review); el texto, en español y por motivo

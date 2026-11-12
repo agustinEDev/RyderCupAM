@@ -41,8 +41,7 @@ from src.modules.user.application.use_cases.admin_update_user_use_case import (
 from src.modules.user.application.use_cases.get_admin_stats_use_case import (
     GetAdminStatsUseCase,
 )
-from src.modules.user.domain.errors.user_errors import DuplicateEmailError, UserNotFoundError
-from src.modules.user.domain.exceptions import UserHasActivityException
+from src.modules.user.domain.errors.user_errors import DuplicateEmailError
 from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
     EMAIL_ALREADY_IN_USE,
     TEXTOS as TEXTOS_DE_CUENTA,
@@ -129,8 +128,6 @@ async def update_user(
             ),
             user_agent=get_user_agent(request),
         )
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DuplicateEmailError:
         # Con su código, para que la app lo diga en su idioma (y sin el correo en el texto)
         return respuesta_con_codigo(
@@ -164,8 +161,6 @@ async def set_user_active(
             ),
             user_agent=get_user_agent(request),
         )
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -192,17 +187,12 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Admins cannot delete their own account",
         )
-    try:
-        # Quién y desde dónde, para el log de seguridad (F-20)
-        await use_case.execute(
-            user_id,
-            actor_user_id=str(current_user.id),
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            ),
-            user_agent=get_user_agent(request),
-        )
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except UserHasActivityException as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    # Quién y desde dónde, para el log de seguridad (F-20)
+    await use_case.execute(
+        user_id,
+        actor_user_id=str(current_user.id),
+        ip_address=get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        ),
+        user_agent=get_user_agent(request),
+    )
