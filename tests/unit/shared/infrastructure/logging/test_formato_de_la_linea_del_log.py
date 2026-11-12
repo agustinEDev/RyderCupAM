@@ -25,6 +25,10 @@ def formatea(tmp_path):
         yield lambda record: json.loads(destinos[0].format(record))
     finally:
         audit.para()
+        # para() deja los destinos colgados del logger: se cierran (el fichero vive en tmp_path)
+        for destino in list(audit._logger.handlers):
+            destino.close()
+            audit._logger.removeHandler(destino)
 
 
 def _registro(**extra):
@@ -44,7 +48,7 @@ def _registro(**extra):
     return record
 
 
-def test_t1_base_fields(formatea):
+def test_format_plain_record_writes_the_base_fields(formatea):
     """
     Given: Un registro sin datos extra
     When: Se formatea
@@ -63,7 +67,7 @@ def test_t1_base_fields(formatea):
     assert linea["line"] == 42
 
 
-def test_t2_correlation_id_and_context_go_to_the_top_level(formatea):
+def test_format_with_correlation_and_context_lifts_them_to_the_top_level(formatea):
     """
     Given: Un registro con correlation_id y context
     When: Se formatea
@@ -77,7 +81,7 @@ def test_t2_correlation_id_and_context_go_to_the_top_level(formatea):
     assert "context" not in linea.get("extra", {})
 
 
-def test_t3_other_fields_go_under_extra(formatea):
+def test_format_with_own_fields_puts_them_under_extra(formatea):
     """
     Given: Un registro con campos propios (como el evento de seguridad)
     When: Se formatea
@@ -89,7 +93,7 @@ def test_t3_other_fields_go_under_extra(formatea):
     assert linea["extra"]["component"] == "x"
 
 
-def test_t4_an_exception_is_written_out(formatea):
+def test_format_with_exception_info_writes_the_traceback(formatea):
     """
     Given: Un registro con una excepción
     When: Se formatea
@@ -106,7 +110,7 @@ def test_t4_an_exception_is_written_out(formatea):
     assert "Traceback" in linea["exception"]
 
 
-def test_t5_no_extra_key_without_extra_fields(formatea):
+def test_format_without_own_fields_has_no_extra_key(formatea):
     """
     Given: Un registro sin campos propios (y sin el taskName de Python 3.12)
     When: Se formatea
@@ -121,7 +125,7 @@ def test_t5_no_extra_key_without_extra_fields(formatea):
     assert "exception" not in linea
 
 
-def test_t6_the_asyncio_task_name_is_not_written(formatea):
+def test_format_with_the_asyncio_task_name_leaves_it_out(formatea):
     """
     Given: Un registro con el taskName que Python 3.12+ añade a todos (None fuera de una tarea)
     When: Se formatea
