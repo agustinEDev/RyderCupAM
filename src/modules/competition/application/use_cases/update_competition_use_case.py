@@ -21,6 +21,7 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -38,6 +39,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 # En el orden del día, para nombrarlas como se juegan
@@ -106,7 +108,7 @@ class UpdateCompetitionUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
-    async def _paises_de_los_campos(self, competition) -> list:
+    async def _paises_de_los_campos(self, competition: Competition) -> list[CountryCode]:
         """El país de cada campo de golf de la competición."""
         paises = []
         for asociacion in competition.golf_courses:
@@ -143,7 +145,8 @@ class UpdateCompetitionUseCase:
         enviados = self._campos_de_localizacion(request)
         actual = competition.location
 
-        if "main_country" in enviados:
+        # En `enviados` solo entra lo que llega con valor: el `is not None` es para el tipo
+        if "main_country" in enviados and request.main_country is not None:
             return await self._location_builder.build_from_codes(
                 main_country=request.main_country,
                 adjacent_country_1=request.adjacent_country_1,
@@ -159,9 +162,10 @@ class UpdateCompetitionUseCase:
                 adjacent_country_2=request.adjacent_country_2,
             )
 
-        def hueco(campo: str, valor_actual) -> str | None:
+        def hueco(campo: str, valor_actual: CountryCode | None) -> str | None:
             if campo in enviados:
-                return getattr(request, campo)
+                enviado: str | None = getattr(request, campo)
+                return enviado
             return str(valor_actual) if valor_actual else None
 
         return await self._location_builder.build_from_codes(
@@ -171,7 +175,9 @@ class UpdateCompetitionUseCase:
         )
 
     @staticmethod
-    def _comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request) -> None:
+    def _comprobar_que_la_agenda_sigue_valiendo(
+        rondas: list[Round], competition: Competition, request: UpdateCompetitionRequestDTO
+    ) -> None:
         """Lo que la agenda ya montada no aguanta que cambie.
 
         Raises:

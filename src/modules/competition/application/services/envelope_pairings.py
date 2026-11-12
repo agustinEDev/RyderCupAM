@@ -34,7 +34,11 @@ class EnvelopePairings:
     """Los enfrentamientos de una sesion, si los sobres ya estan abiertos."""
 
     @staticmethod
-    async def decidir(uow: CompetitionUnitOfWorkInterface, round_id: RoundId, manual_pairings=None):
+    async def decidir(
+        uow: CompetitionUnitOfWorkInterface,
+        round_id: RoundId,
+        manual_pairings: list[ManualPairingDTO] | None = None,
+    ) -> list[ManualPairingDTO] | None:
         """Los enfrentamientos que se van a usar para generar los partidos.
 
         Los de los sobres abiertos mandan: sin esto el organizador pulsaria

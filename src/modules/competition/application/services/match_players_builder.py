@@ -11,11 +11,13 @@ versión que daba a cada uno TODO su hándicap de juego como golpes, fuera cual
 fuera el formato (BE #477). Ahora generar y reasignar usan esta.
 """
 
+from collections.abc import Mapping
 from decimal import Decimal
 
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     para_jugar_la_ryder,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.services.barra_del_jugador import (
     barra_del_jugador,
     barra_sin_golpes,
@@ -24,8 +26,12 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+    TeeRating,
+)
 from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
+from src.shared.domain.services.tee_lookup import TeeKey
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -44,16 +50,16 @@ class MatchPlayersBuilder:
         match_format: MatchFormat,
         team_a_ids: list[UserId],
         team_b_ids: list[UserId],
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """Los jugadores de los dos equipos, con los golpes que da su formato."""
         args = (
@@ -81,12 +87,12 @@ class MatchPlayersBuilder:
 
     def resolve_player_data(
         self,
-        user_id,
-        enrollment_map,
-        tee_ratings,
-        user_handicap_map,
-        user_gender_map,
-        con_tarjeta=None,
+        user_id: UserId,
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        user_handicap_map: Mapping[str, Decimal],
+        user_gender_map: Mapping[str, Gender | None],
+        con_tarjeta: Mapping[TeeKey, object] | None = None,
     ) -> tuple[TeeColor, Gender | None, TeeRating | None, Decimal]:
         """
         Resuelve datos de un jugador: tee colour, gender, tee rating e handicap index.
@@ -115,7 +121,12 @@ class MatchPlayersBuilder:
         return barra.tee_color, barra.tee_gender, barra.tee_rating, handicap_index
 
     @staticmethod
-    def _team_holes(team_ids, player_data, holes_by_tee, default):
+    def _team_holes(
+        team_ids: list[UserId],
+        player_data: Mapping[str, tuple[TeeColor, Gender | None, Decimal]],
+        holes_by_tee: Mapping[TeeKey, list[int]] | None,
+        default: list[int],
+    ) -> list[int]:
         """
         Orden de dificultad de un equipo de FOURSOMES.
 
@@ -135,18 +146,18 @@ class MatchPlayersBuilder:
 
     def _build_fourball_match_players(
         self,
-        team_a_ids,
-        team_b_ids,
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        team_a_ids: list[UserId],
+        team_b_ids: list[UserId],
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURBALL usando el método diferencial WHS.
@@ -227,7 +238,7 @@ class MatchPlayersBuilder:
         )
 
         # 3. Construir MatchPlayers con PH diferencial
-        def build_player(uid):
+        def build_player(uid: UserId) -> MatchPlayer:
             uid_str = str(uid.value)
             tee_color, tee_gen, _, hi = player_data[uid_str]
             ph = differential_phs[uid_str]
@@ -249,18 +260,18 @@ class MatchPlayersBuilder:
 
     def _build_singles_match_players(
         self,
-        a_player_id,
-        b_player_id,
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        a_player_id: UserId,
+        b_player_id: UserId,
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> tuple["MatchPlayer", "MatchPlayer"]:
         """
         Construye MatchPlayers para SINGLES usando el método diferencial WHS.
@@ -354,18 +365,18 @@ class MatchPlayersBuilder:
 
     def _build_foursomes_match_players(
         self,
-        team_a_ids,
-        team_b_ids,
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        team_a_ids: list[UserId],
+        team_b_ids: list[UserId],
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURSOMES usando el método diferencial WHS.

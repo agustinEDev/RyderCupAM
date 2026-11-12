@@ -16,7 +16,10 @@ from src.modules.competition.application.services.jugadores_del_partido import (
     JugadoresDelPartido,
 )
 from src.modules.competition.application.services.salidas_de_la_ronda import de_los_partidos
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -166,7 +169,9 @@ class ReassignMatchPlayersUseCase:
             updated_at=new_match.updated_at,
         )
 
-    async def _validate(self, request, user_id, is_admin: bool = False):
+    async def _validate(
+        self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
+    ) -> tuple[Match, Round, Competition]:
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
         match = await self._uow.matches.find_by_id(match_id)
@@ -193,7 +198,9 @@ class ReassignMatchPlayersUseCase:
         return match, round_entity, competition
 
     @staticmethod
-    def _validate_team_membership(team_assignment, request):
+    def _validate_team_membership(
+        team_assignment: TeamAssignment | None, request: ReassignMatchPlayersRequestDTO
+    ) -> None:
         """Verifica que los jugadores pertenecen al equipo correcto."""
         if not team_assignment:
             raise NoTeamAssignmentError(

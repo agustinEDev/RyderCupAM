@@ -52,8 +52,6 @@ class PlayerNames:
         )
         real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
         names: dict[UserId, str] = {
-            user.id: user.display_name_or_legal(user.id in real_name_wanted)
-            for user in users
-            if user.id is not None
+            user.id: user.display_name_or_legal(user.id in real_name_wanted) for user in users
         }
         return {uid: names.get(uid, "") for uid in user_ids}

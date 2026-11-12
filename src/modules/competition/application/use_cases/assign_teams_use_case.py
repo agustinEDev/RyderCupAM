@@ -20,7 +20,10 @@ from src.modules.competition.application.services.equipos_formados import (
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.policies.snake_draft_service import (
+    PlayerForDraft,
     SnakeDraftService,
     Team,
 )
@@ -146,7 +149,13 @@ class AssignTeamsUseCase:
             created_at=assignment.created_at,
         )
 
-    async def _repartir(self, competition, request, enrollments, mode):
+    async def _repartir(
+        self,
+        competition: Competition,
+        request: AssignTeamsRequestDTO,
+        enrollments: list[Enrollment],
+        mode: TeamAssignmentMode,
+    ) -> tuple[list[UserId], list[UserId]]:
         """Reparte los equipos; las reglas de los capitanes son del dominio (BE #320)."""
         # Un torneo sin equipos no se reparte (#251)
         ryder_cup = competition.require_ryder_cup()
@@ -165,7 +174,7 @@ class AssignTeamsUseCase:
             )
         return self._draft_service.assign_teams_with_captains(players, *capitanes)
 
-    async def _players_for_draft(self, enrollments):
+    async def _players_for_draft(self, enrollments: list[Enrollment]) -> list[PlayerForDraft]:
         """Los jugadores con el hándicap que cuenta para el draft.
 
         La misma regla que usa la sala de draft (FE #653), en un solo sitio:
@@ -174,7 +183,9 @@ class AssignTeamsUseCase:
         """
         return await DraftRoster.de_los_inscritos(enrollments, self._user_repo)
 
-    def _manual_assign(self, request, enrollments):
+    def _manual_assign(
+        self, request: AssignTeamsRequestDTO, enrollments: list[Enrollment]
+    ) -> tuple[list[UserId], list[UserId]]:
         """Asignación manual con validación."""
         if not request.team_a_player_ids or not request.team_b_player_ids:
             raise ValueError(

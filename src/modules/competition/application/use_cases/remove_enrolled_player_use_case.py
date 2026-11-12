@@ -29,6 +29,7 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
     exigir_sin_draft_abierto,
     sacar_de_la_competicion,
 )
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -158,7 +159,7 @@ class RemoveEnrolledPlayerUseCase:
 
             # La entidad valida el estado: solo un aprobado
             enrollment.withdraw("removed_by_organizer")
-            asignadas: list = []
+            asignadas: list[tuple[Round, UserId]] = []
             fotos = await sacar_de_la_competicion(
                 self._uow,
                 competition,

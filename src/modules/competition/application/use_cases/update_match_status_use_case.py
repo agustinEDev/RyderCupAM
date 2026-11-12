@@ -15,6 +15,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.match_opener import MatchOpener
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -91,7 +94,9 @@ class UpdateMatchStatusUseCase:
             updated_at=match.updated_at,
         )
 
-    async def _validate(self, request, user_id, is_admin: bool = False):
+    async def _validate(
+        self, request: UpdateMatchStatusRequestDTO, user_id: UserId, is_admin: bool = False
+    ) -> tuple[Match, Round, Competition]:
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
         # Primero SIN bloqueo, para autorizar: antes cualquiera con sesion que
@@ -136,7 +141,7 @@ class UpdateMatchStatusUseCase:
 
         return match, round_entity, competition
 
-    async def _handle_start(self, match, round_entity):
+    async def _handle_start(self, match: Match, round_entity: Round) -> str | None:
         """Ejecuta START: match.start() + pre-create HoleScores + auto-start round.
 
         Los tres pasos viven en `MatchOpener`, compartidos con la apertura
@@ -148,7 +153,9 @@ class UpdateMatchStatusUseCase:
         except ValueError as e:
             raise InvalidActionError(str(e)) from e
 
-    async def _handle_complete(self, request, match, round_entity):
+    async def _handle_complete(
+        self, request: UpdateMatchStatusRequestDTO, match: Match, round_entity: Round
+    ) -> str | None:
         """Ejecuta COMPLETE: match.complete() + auto-complete round."""
         if request.result is None:
             raise InvalidActionError("Se requiere 'result' para completar un partido")

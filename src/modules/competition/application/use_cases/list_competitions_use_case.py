@@ -16,6 +16,7 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
@@ -148,16 +149,16 @@ class ListCompetitionsUseCase:
         la que ya le toca abrir es una ACTIVE más. Antes cada estado se filtraba por su
         cuenta y esa programada no salía, o salía según el orden de los estados.
         """
-        filtros = {
-            "creator_id": creator_id,
-            "search_name": search_name,
-            "search_creator": search_creator,
-            "viewer_id": viewer_id,
-            "is_admin": is_admin,
-            "viewer_email": viewer_email,
-        }
         if not estados:
-            return await self.execute(status=None, **filtros)
+            return await self.execute(
+                status=None,
+                creator_id=creator_id,
+                search_name=search_name,
+                search_creator=search_creator,
+                viewer_id=viewer_id,
+                is_admin=is_admin,
+                viewer_email=viewer_email,
+            )
 
         pedidos = list(dict.fromkeys(e.upper() for e in estados))
         a_consultar = list(pedidos)
@@ -168,7 +169,7 @@ class ListCompetitionsUseCase:
             a_consultar.append(CompetitionStatus.DRAFT.value)
 
         async with self._uow:
-            traidas: dict = {}
+            traidas: dict[CompetitionId, Competition] = {}
             for estado in a_consultar:
                 if search_name or search_creator:
                     filas = await self._fetch_with_search(
@@ -275,7 +276,7 @@ class ListCompetitionsUseCase:
     def _las_inscritas_que_quedan(
         competitions: list[Competition],
         estados: list[str] | None,
-        estado_de_la_inscripcion: dict,
+        estado_de_la_inscripcion: dict[CompetitionId, EnrollmentStatus],
     ) -> list[Competition]:
         """
         Los filtros que dependen del ESTADO, ya con el estado definitivo (BE #331).
