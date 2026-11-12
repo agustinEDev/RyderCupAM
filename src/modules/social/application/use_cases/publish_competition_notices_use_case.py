@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from typing import Any
 
 from src.modules.social.application.exclusive_achievements import lock_players
 from src.modules.social.application.publication import stamp_for_publication
@@ -157,7 +158,7 @@ def _desenlace(result: "RyderResultRef", bando: str) -> str:
     return "WON" if mios > suyos else "LOST"
 
 
-def _misma_salida(payload: dict, salida: TeeTimeRef) -> bool:
+def _misma_salida(payload: dict[str, Any], salida: TeeTimeRef) -> bool:
     """
     Si lo publicado cuenta la misma salida: dia, sesion, hora, compañeros y
     rivales. El partido no cuenta: regenerar los mismos emparejamientos crea
@@ -470,7 +471,7 @@ class PublishCompetitionNoticesUseCase:
         )
 
     @staticmethod
-    def _de_la_franja(franja: TeeWindowRef | None) -> dict:
+    def _de_la_franja(franja: TeeWindowRef | None) -> dict[str, Any]:
         """Lo que un aviso cuenta de su franja; sin franja, todo vacío."""
         return {
             "round_id": franja.round_id if franja else None,
@@ -765,7 +766,7 @@ class PublishCompetitionNoticesUseCase:
         tipo: ActivityEventType,
         origen: str,
         tournament: TournamentRef,
-        extra: dict | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> ActivityEvent:
         """Un aviso de torneo para alguien, con lo que se cuenta de él y lo que se añada."""
         return ActivityEvent.create(
@@ -777,7 +778,7 @@ class PublishCompetitionNoticesUseCase:
         )
 
     @staticmethod
-    def _del_torneo(tournament: TournamentRef) -> dict:
+    def _del_torneo(tournament: TournamentRef) -> dict[str, Any]:
         return {
             "competition_id": tournament.competition_id,
             "competition_name": tournament.name,

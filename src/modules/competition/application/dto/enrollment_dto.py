@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -160,13 +161,13 @@ class HandleEnrollmentRequestDTO(BaseModel):
 
     @field_validator("action", mode="before")
     @classmethod
-    def uppercase_action(cls, v):
+    def uppercase_action(cls, v: Any) -> Any:
         """Convierte action a mayúsculas."""
         if v:
             return v.upper().strip()
         return v
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Validar que action sea válida."""
         if self.action not in ["APPROVE", "REJECT"]:
             raise ValueError("action debe ser 'APPROVE' o 'REJECT'")
@@ -395,7 +396,7 @@ class EnrollmentResponseDTO(BaseModel):
 
     @field_validator("tee_color", mode="before")
     @classmethod
-    def convert_tee_color(cls, v):
+    def convert_tee_color(cls, v: Any) -> Any:
         """Convierte TeeColor enum a string."""
         if hasattr(v, "value"):
             return v.value
@@ -403,7 +404,7 @@ class EnrollmentResponseDTO(BaseModel):
 
     @field_validator("id", "competition_id", "user_id", mode="before")
     @classmethod
-    def convert_value_objects_uuid(cls, v):
+    def convert_value_objects_uuid(cls, v: Any) -> Any:
         """Convierte Value Objects UUID a UUID primitivo."""
         if hasattr(v, "value"):
             return v.value
@@ -411,7 +412,7 @@ class EnrollmentResponseDTO(BaseModel):
 
     @field_validator("status", mode="before")
     @classmethod
-    def convert_enrollment_status(cls, v):
+    def convert_enrollment_status(cls, v: Any) -> Any:
         """Convierte EnrollmentStatus enum a string."""
         if hasattr(v, "value"):
             return v.value

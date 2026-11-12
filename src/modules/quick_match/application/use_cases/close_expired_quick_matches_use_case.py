@@ -101,7 +101,7 @@ class CloseExpiredQuickMatchesUseCase:
                 published += 1
         return ClosedQuickMatches(completed, cancelled, published)
 
-    async def _zonas(self, abiertas: list["_Abierta"]) -> dict:
+    async def _zonas(self, abiertas: list["_Abierta"]) -> dict[GolfCourseId, str | None]:
         """La zona horaria de cada campo; sin campo (borrado) no hay, y se usa UTC."""
         ids = list({a.golf_course_id for a in abiertas})
         async with self._golf_course_uow:

@@ -30,6 +30,7 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
@@ -67,7 +68,9 @@ class SendInvitationByUserIdUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
-    async def _avisar(self, competition, invitation, caducada) -> None:
+    async def _avisar(
+        self, competition: Competition, invitation: Invitation, caducada: Invitation | None
+    ) -> None:
         """
         Ya guardada: si tiene cuenta, le sale en Actividad (BE-2); y la que
         caducó sin abrirse y dio paso a esta pierde su aviso (CodeRabbit).

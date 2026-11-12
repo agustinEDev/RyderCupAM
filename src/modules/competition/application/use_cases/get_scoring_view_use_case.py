@@ -1,5 +1,7 @@
 """Caso de Uso: Obtener vista de scoring de un partido."""
 
+from collections.abc import Iterable, Sequence
+
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
     HoleInfoDTO,
@@ -24,6 +26,9 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     esta_dentro,
     exigir_la_partida,
 )
+from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -31,16 +36,20 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
-def _hole_card_dto(holes) -> list[HoleInfoDTO]:
+def _hole_card_dto(holes: Iterable[Hole]) -> list[HoleInfoDTO]:
     """Traduce una tarjeta de dominio a DTO, ordenada por número de hoyo."""
     return [
         HoleInfoDTO(
@@ -196,7 +205,9 @@ class GetScoringViewUseCase:
             )
         return vista
 
-    def _build_marker_assignments(self, match, user_names):
+    def _build_marker_assignments(
+        self, match: Match, user_names: dict[UserId, str]
+    ) -> list[MarkerAssignmentResponseDTO]:
         """Construye DTOs de marker assignments."""
         return [
             MarkerAssignmentResponseDTO(
@@ -211,7 +222,12 @@ class GetScoringViewUseCase:
             for ma in match.effective_marker_assignments
         ]
 
-    def _build_players(self, match, user_names, golf_course=None):
+    def _build_players(
+        self,
+        match: Match,
+        user_names: dict[UserId, str],
+        golf_course: GolfCourse | None = None,
+    ) -> list[ScoringPlayerDTO]:
         """
         Construye DTOs de jugadores, cada uno con la tarjeta de su barra.
 
@@ -237,9 +253,14 @@ class GetScoringViewUseCase:
             for p in (*match.team_a_players, *match.team_b_players)
         ]
 
-    def _build_scores(self, hole_scores, round_entity, fuera=None):
+    def _build_scores(
+        self,
+        hole_scores: Sequence[HoleScore],
+        round_entity: Round,
+        fuera: BolasFuera | None = None,
+    ) -> tuple[list[HoleScoreEntryDTO], list[str]]:
         """Construye DTOs de scores por hoyo y calcula resultados."""
-        scores_by_hole: dict[int, list] = {}
+        scores_by_hole: dict[int, list[HoleScore]] = {}
         for hs in hole_scores:
             scores_by_hole.setdefault(hs.hole_number, []).append(hs)
 
@@ -274,7 +295,11 @@ class GetScoringViewUseCase:
 
         return scores_dto, hole_results_list
 
-    def _build_hole_player_scores(self, hole_hs_list):
+    def _build_hole_player_scores(
+        self, hole_hs_list: list[HoleScore]
+    ) -> tuple[
+        list[PlayerHoleScoreDTO], list[tuple[str, int | None]], list[tuple[str, int | None]]
+    ]:
         """Construye player scores y los nets de cada equipo con user_ids, para la mejor bola."""
         player_scores = []
         team_a_player_nets: list[tuple[str, int | None]] = []
@@ -303,13 +328,13 @@ class GetScoringViewUseCase:
 
     def _compute_hole_result(
         self,
-        hole_hs_list,
-        team_a_player_nets,
-        team_b_player_nets,
-        match_format,
-        hole_results_list,
-        fuera=None,
-    ):
+        hole_hs_list: list[HoleScore],
+        team_a_player_nets: list[tuple[str, int | None]],
+        team_b_player_nets: list[tuple[str, int | None]],
+        match_format: MatchFormat,
+        hole_results_list: list[str],
+        fuera: BolasFuera | None = None,
+    ) -> HoleResultDTO | None:
         """El resultado del hoyo, o None si aun no se puede decidir (`hole_result`)."""
         winner = self._scoring_service.hole_result(hole_hs_list, match_format, fuera)
         if winner is None:

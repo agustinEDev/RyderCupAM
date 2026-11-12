@@ -24,6 +24,7 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
 from src.modules.competition.application.services.equipos_formados import (
     exigir_sin_equipos_formados,
 )
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -133,7 +134,7 @@ class WithdrawEnrollmentUseCase:
 
             # Sale de todo: partidas y franjas, y la capitanía si la tenía sin
             # equipos formados (release social 2; con equipos ya no llega aquí)
-            asignadas: list = []
+            asignadas: list[tuple[Round, UserId]] = []
             fotos = await sacar_de_la_competicion(
                 self._uow,
                 competition,

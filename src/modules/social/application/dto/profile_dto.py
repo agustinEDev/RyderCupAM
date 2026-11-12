@@ -1,5 +1,7 @@
 """DTOs del perfil de un jugador y del feed de actividad."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from src.modules.social.application.dto.head_to_head_dto import (
@@ -145,7 +147,7 @@ class ActivityEventDTO(BaseModel):
             "un torneo publica dias despues de sus vueltas"
         ),
     )
-    payload: dict = Field(
+    payload: dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo. "

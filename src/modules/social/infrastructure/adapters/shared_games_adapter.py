@@ -260,7 +260,7 @@ class SharedGamesAdapter(SharedGamesInterface):
             return {}
         async with self._user_uow:
             usuarios = await self._user_uow.users.find_by_ids(list(ids))
-        return {u.id: u for u in usuarios if u.id is not None}
+        return {u.id: u for u in usuarios}
 
     # ==================== Partida rapida ====================
 

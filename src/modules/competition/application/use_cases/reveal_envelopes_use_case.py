@@ -28,6 +28,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -43,7 +44,7 @@ class RevealEnvelopesUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository,
+        user_repository: UserRepositoryInterface,
         timezone_service: ICompetitionTimezone | None = None,
         generador: GeneradorDePartidos | None = None,
     ):

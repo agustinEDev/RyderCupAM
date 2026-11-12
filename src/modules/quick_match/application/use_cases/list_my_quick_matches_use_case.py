@@ -49,7 +49,10 @@ class ListMyQuickMatchesUseCase:
                 user_id, status=status_vo, golf_course_id=course_vo
             )
 
-        participant_ids = list({p.user_id for qm in quick_matches for p in qm.participants})
+        # Solo los registrados: un invitado no tiene cuenta que buscar
+        participant_ids = list(
+            {p.user_id for qm in quick_matches for p in qm.participants if p.user_id is not None}
+        )
         async with self._user_uow:
             users_by_id = {
                 user.id: user for user in await self._user_uow.users.find_by_ids(participant_ids)

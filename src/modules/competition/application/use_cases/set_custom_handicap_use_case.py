@@ -118,6 +118,7 @@ class SetCustomHandicapUseCase:
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
             status=enrollment.status.value,
-            custom_handicap=enrollment.custom_handicap,
+            # El mismo objeto que se acaba de poner en la inscripción
+            custom_handicap=request.custom_handicap,
             updated_at=enrollment.updated_at,
         )

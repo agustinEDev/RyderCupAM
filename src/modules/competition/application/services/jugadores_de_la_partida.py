@@ -22,6 +22,7 @@ from decimal import Decimal
 from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -114,9 +115,11 @@ class JugadoresDeLaPartida:
         }
         generos = {u.id: u.gender for u in await self._usuarios.find_by_ids(list(user_ids))}
 
-        sin_handicap = [
-            u for u in user_ids if u not in inscripciones or inscripciones[u].fixed_handicap is None
-        ]
+        # El hándicap fijado de cada uno; sin inscripción o sin fijar, no está
+        fijados: dict[UserId, Decimal] = {
+            u: e.fixed_handicap for u, e in inscripciones.items() if e.fixed_handicap is not None
+        }
+        sin_handicap = [u for u in user_ids if u not in fijados]
         if sin_handicap:
             nombres = await self._nombres(uow, competition, sin_handicap)
             raise JugadoresSinHandicapError(
@@ -132,7 +135,8 @@ class JugadoresDeLaPartida:
 
         if competition.play_mode == PlayMode.SCRATCH:
             return {
-                u: self._sin_golpes(u, inscripciones[u], generos.get(u), contexto) for u in user_ids
+                u: self._sin_golpes(u, inscripciones[u], fijados[u], generos.get(u), contexto)
+                for u in user_ids
             }
 
         jugadores: dict[UserId, JugadorDePartida] = {}
@@ -152,7 +156,7 @@ class JugadoresDeLaPartida:
                 franja,
                 contexto,
                 user_id,
-                inscripcion.fixed_handicap,
+                fijados[user_id],
                 barra.tee_color,
                 barra.tee_gender,
                 barra.tee_rating,
@@ -239,7 +243,13 @@ class JugadoresDeLaPartida:
         )
 
     @staticmethod
-    def _sin_golpes(user_id, inscripcion, genero, contexto: StrokeContext) -> JugadorDePartida:
+    def _sin_golpes(
+        user_id: UserId,
+        inscripcion: Enrollment,
+        handicap: Decimal,
+        genero: Gender | None,
+        contexto: StrokeContext,
+    ) -> JugadorDePartida:
         """SCRATCH: todos juegan con 0, y las barras no hace falta que estén valoradas."""
         # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
         # género se busca también entre las que la traen (P12)
@@ -249,7 +259,7 @@ class JugadoresDeLaPartida:
         tee_gender = barra.tee_gender
         return JugadorDePartida(
             user_id=user_id,
-            handicap=inscripcion.fixed_handicap,
+            handicap=handicap,
             playing_handicap=0,
             tee_color=barra.tee_color,
             tee_gender=tee_gender,
@@ -257,11 +267,18 @@ class JugadoresDeLaPartida:
             par_por_hoyo=_pares(contexto, barra.tee_color, tee_gender),
         )
 
-    async def _nombres(self, uow, competition, user_ids) -> dict[UserId, str]:
+    async def _nombres(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        competition: Competition,
+        user_ids: list[UserId],
+    ) -> dict[UserId, str]:
         return await PlayerNames.de_la_competicion(user_ids, competition.id, self._usuarios, uow)
 
 
-def _pares(contexto: StrokeContext, tee_color: TeeColor, tee_gender: Gender | None) -> tuple:
+def _pares(
+    contexto: StrokeContext, tee_color: TeeColor, tee_gender: Gender | None
+) -> tuple[int, ...]:
     """El par de cada hoyo, del 1 al 18, desde esas barras (P12)."""
     pares = contexto.pars_for(tee_color, tee_gender)
     return tuple(pares[hoyo] for hoyo in range(1, HOYOS + 1))

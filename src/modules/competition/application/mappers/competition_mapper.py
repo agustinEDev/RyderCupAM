@@ -1,6 +1,8 @@
 """Mapper para convertir entidades Competition a DTOs de presentación."""
 
 import logging
+from typing import Any
+from uuid import UUID
 
 from src.modules.competition.application.dto.competition_dto import (
     CaptaincyResponseDTO,
@@ -215,7 +217,7 @@ class CompetitionDTOMapper:
         ]
 
     @staticmethod
-    def tournament_fields(competition: Competition) -> dict:
+    def tournament_fields(competition: Competition) -> dict[str, Any]:
         """
         El tipo de torneo, su modalidad y lo que es solo de la Ryder Cup (#251).
 
@@ -226,7 +228,7 @@ class CompetitionDTOMapper:
         """
         ryder_cup = competition.ryder_cup
 
-        def valor(user_id: UserId | None):
+        def valor(user_id: UserId | None) -> UUID | None:
             return user_id.value if user_id else None
 
         return {
@@ -265,7 +267,7 @@ class CompetitionDTOMapper:
     def to_captaincy_dto(competition: Competition) -> CaptaincyResponseDTO:
         """Capitanes y subcapitanes de la competición (BE #320)."""
 
-        def valor(user_id: UserId | None):
+        def valor(user_id: UserId | None) -> UUID | None:
             """El UUID del jugador, o None si el puesto está vacío."""
             return user_id.value if user_id else None
 

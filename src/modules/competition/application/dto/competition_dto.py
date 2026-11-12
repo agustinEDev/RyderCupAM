@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -302,7 +302,7 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
-    def uppercase_country_codes(cls, v):
+    def uppercase_country_codes(cls, v: Any) -> Any:
         """Convierte códigos de país a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -310,7 +310,7 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     @field_validator("play_mode", mode="before")
     @classmethod
-    def uppercase_play_mode(cls, v):
+    def uppercase_play_mode(cls, v: Any) -> Any:
         """Convierte play_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -318,7 +318,7 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     @field_validator("team_assignment", mode="before")
     @classmethod
-    def uppercase_team_assignment(cls, v):
+    def uppercase_team_assignment(cls, v: Any) -> Any:
         """Convierte team_assignment a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -557,7 +557,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
-    def uppercase_country_codes(cls, v):
+    def uppercase_country_codes(cls, v: Any) -> Any:
         """Convierte códigos de país a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -565,7 +565,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
 
     @field_validator("play_mode", mode="before")
     @classmethod
-    def uppercase_play_mode(cls, v):
+    def uppercase_play_mode(cls, v: Any) -> Any:
         """Convierte play_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -573,7 +573,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
 
     @field_validator("team_assignment", mode="before")
     @classmethod
-    def uppercase_team_assignment(cls, v):
+    def uppercase_team_assignment(cls, v: Any) -> Any:
         """Convierte team_assignment a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -920,7 +920,7 @@ class CompetitionResponseDTO(BaseModel):
 
     @field_validator("id", "creator_id", mode="before")
     @classmethod
-    def convert_value_objects_uuid(cls, v):
+    def convert_value_objects_uuid(cls, v: Any) -> Any:
         """Convierte Value Objects UUID a UUID primitivo."""
         if hasattr(v, "value"):
             return v.value
@@ -928,7 +928,7 @@ class CompetitionResponseDTO(BaseModel):
 
     @field_validator("name", mode="before")
     @classmethod
-    def convert_competition_name(cls, v):
+    def convert_competition_name(cls, v: Any) -> Any:
         """Convierte CompetitionName a string."""
         if hasattr(v, "value"):
             return v.value
@@ -936,7 +936,7 @@ class CompetitionResponseDTO(BaseModel):
 
     @field_validator("status", mode="before")
     @classmethod
-    def convert_competition_status(cls, v):
+    def convert_competition_status(cls, v: Any) -> Any:
         """Convierte CompetitionStatus enum a string."""
         if hasattr(v, "value"):
             return v.value

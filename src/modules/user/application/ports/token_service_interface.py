@@ -5,7 +5,7 @@ Define el contrato para servicios de tokens de autenticación.
 """
 
 from datetime import timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ITokenService(Protocol):
@@ -20,7 +20,9 @@ class ITokenService(Protocol):
     - MockTokenService (testing)
     """
 
-    def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+    def create_access_token(
+        self, data: dict[str, Any], expires_delta: timedelta | None = None
+    ) -> str:
         """
         Crea un token de acceso.
 
@@ -33,7 +35,7 @@ class ITokenService(Protocol):
         """
         pass
 
-    def verify_access_token(self, token: str) -> dict | None:
+    def verify_access_token(self, token: str) -> dict[str, Any] | None:
         """
         Verifica y decodifica un token.
 
@@ -45,7 +47,7 @@ class ITokenService(Protocol):
         """
         pass
 
-    def verify_refresh_token(self, token: str) -> dict | None:
+    def verify_refresh_token(self, token: str) -> dict[str, Any] | None:
         """
         Verifica y decodifica un refresh token.
 
@@ -60,7 +62,9 @@ class ITokenService(Protocol):
         Distingue el final normal de una sesión de un token inválido (FE #1042).
         """
 
-    def create_refresh_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+    def create_refresh_token(
+        self, data: dict[str, Any], expires_delta: timedelta | None = None
+    ) -> str:
         """Crea un refresh token (7 días por defecto)."""
 
     def create_csrf_token(self, user_id: str) -> str:
