@@ -275,7 +275,7 @@ modules =
     src.config.dependencies.soporte
 
 [importlinter:contract:dominio-de-usuarios-por-capas]
-name = El dominio de usuarios va en una dirección: servicios > repositorios > entidades > eventos > valores > puertos (B10, fase 5)
+name = El dominio de usuarios va en una dirección: servicios > repositorios > entidades > eventos > errores, excepciones y valores > puertos (B10, fase 5)
 type = layers
 containers =
     src.modules.user.domain

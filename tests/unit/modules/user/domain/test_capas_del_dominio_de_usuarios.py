@@ -4,8 +4,9 @@ El dominio de usuarios sin ciclos de importación (hallazgo B10 de la auditoría
 El objeto de valor `Password` importaba el puerto del hasher desde `domain/services`, y la
 entidad `TermsAcceptance` la versión de los Términos también desde ahí, mientras los servicios
 importan entidades y objetos de valor: tres ciclos entre subpaquetes. El puerto vive ahora en
-`domain/ports` y las reglas de los Términos en `domain/value_objects` (U1, U4); un contrato de
-import-linter fija el orden de las capas (U2).
+`domain/ports` y las reglas de los Términos en `domain/value_objects` (U1, U4). El orden de
+las capas (U2) lo fija el contrato `dominio-de-usuarios-por-capas` de `.importlinter`, que
+comprueba `lint-imports` en el CI.
 """
 
 import importlib
