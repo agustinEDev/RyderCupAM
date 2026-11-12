@@ -20,12 +20,12 @@ from src.modules.competition.application.services.equipos_formados import (
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
-from src.modules.competition.domain.services.snake_draft_service import (
+from src.modules.competition.domain.policies.snake_draft_service import (
     SnakeDraftService,
     Team,
+)
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus

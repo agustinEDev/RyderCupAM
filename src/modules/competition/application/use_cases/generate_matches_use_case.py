@@ -487,6 +487,12 @@ class GenerateMatchesUseCase:
         """Hasta donde llega lo pendiente de avisar: para descartar solo lo que venga despues."""
         return len(self._salidas_por_avisar)
 
+    def motivo_del_bloqueo(
+        self, error: Exception, at: datetime | None
+    ) -> MatchGenerationBlock | None:
+        """`bloqueo_por` para quien solo conoce al generador: el EnvelopeDesk (B10)."""
+        return bloqueo_por(error, at)
+
     def descartar_salidas(self, desde: int) -> None:
         """
         Lo generado desde `desde` se deshizo: eso no se avisa. Lo de antes

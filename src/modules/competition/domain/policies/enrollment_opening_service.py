@@ -21,7 +21,7 @@ una cosa y hace otra.
 
 from datetime import UTC, date, datetime, time, timedelta
 
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 
 
 class EnrollmentOpeningService:

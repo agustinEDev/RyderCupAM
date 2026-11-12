@@ -168,13 +168,13 @@ from src.modules.competition.application.use_cases.vista_de_competicion_use_case
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
+from src.modules.competition.domain.policies.snake_draft_service import (
+    SnakeDraftService,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
-from src.modules.competition.domain.services.snake_draft_service import (
-    SnakeDraftService,
-)
 from src.modules.competition.infrastructure.services.competition_timezone_from_course import (
     CompetitionTimezoneFromCourse,
 )

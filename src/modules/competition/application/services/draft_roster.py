@@ -17,7 +17,7 @@ from src.modules.competition.application.services.handicaps_de_la_competicion im
     para_jugar_la_ryder,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.services.snake_draft_service import PlayerForDraft
+from src.modules.competition.domain.policies.snake_draft_service import PlayerForDraft
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )

@@ -24,11 +24,11 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.franjas_de_la_jornada import FranjasDeLaJornada
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId

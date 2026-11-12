@@ -13,7 +13,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 )
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 
 

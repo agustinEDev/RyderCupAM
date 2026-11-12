@@ -9,7 +9,9 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Protocol, runtime_checkable
 
+from src.modules.competition.application.dto.round_match_dto import ManualPairingDTO
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionParticipantError,
@@ -23,10 +25,6 @@ from src.modules.competition.application.services.handicaps_de_la_competicion im
     para_jugar_la_ryder,
 )
 from src.modules.competition.application.services.team_roster import TeamRoster
-from src.modules.competition.application.use_cases.generate_matches_use_case import (
-    GenerateMatchesUseCase,
-    bloqueo_por,
-)
 from src.modules.competition.domain.entities.competition import (
     Competition,
     TeamsNotAssignedError,
@@ -85,6 +83,44 @@ ORDEN_DE_SESION = {
 _ORDEN_DE_SESION = ORDEN_DE_SESION
 
 
+@runtime_checkable
+class GeneradorDePartidos(Protocol):
+    """
+    Lo que el EnvelopeDesk necesita del que genera los partidos (BE #361).
+
+    Es `GenerateMatchesUseCase`; va como Protocol para que un servicio de aplicación no
+    importe un caso de uso, que a su vez importa servicios (ciclo B10, fase 5).
+    """
+
+    def marca_de_salidas(self) -> int:
+        """Cuántos avisos de salidas hay pendientes."""
+        ...
+
+    async def generar_dentro(
+        self,
+        round_entity: Round,
+        competition: Competition,
+        manual_pairings: list[ManualPairingDTO] | None = None,
+        refrescar_handicap_rfeg: bool = True,
+    ) -> int:
+        """Genera los partidos de la sesión en la transacción abierta."""
+        ...
+
+    def descartar_salidas(self, desde: int) -> None:
+        """Olvida los avisos desde `desde`: lo generado se deshizo."""
+        ...
+
+    async def avisar_salidas(self) -> None:
+        """Avisa de los partidos generados, ya guardados."""
+        ...
+
+    def motivo_del_bloqueo(
+        self, error: Exception, at: datetime | None
+    ) -> MatchGenerationBlock | None:
+        """El motivo que se apunta en la sesión por este fallo, o None."""
+        ...
+
+
 class RoundAlreadyScheduledError(Exception):
     """Esa sesion ya tiene sus partidos generados."""
 
@@ -100,7 +136,7 @@ class EnvelopeDesk:
         user_repository: UserRepositoryInterface,
         clock: Callable[[], datetime] | None = None,
         timezone_service: ICompetitionTimezone | None = None,
-        generador: GenerateMatchesUseCase | None = None,
+        generador: GeneradorDePartidos | None = None,
     ):
         """
         Args:
@@ -483,8 +519,13 @@ class EnvelopeDesk:
     def _motivo(self, error: Exception) -> MatchGenerationBlock:
         """De la excepcion al motivo que se apunta en la sesion."""
         ahora = self.ahora.replace(tzinfo=None)
-        # El mismo que apunta el reintento a mano: una sola traducción
-        motivo = bloqueo_por(error, ahora)
+        # El mismo que apunta el reintento a mano: una sola traducción. Solo se llega
+        # aquí tras fallar el generador, así que lo hay
+        motivo = (
+            self._generador.motivo_del_bloqueo(error, ahora)
+            if self._generador is not None
+            else None
+        )
         if motivo is not None:
             return motivo
         # Lo que no se esperaba se registra entero: el motivo solo dice que falló

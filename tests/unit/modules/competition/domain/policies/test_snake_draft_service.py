@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.domain.services.snake_draft_service import (
+from src.modules.competition.domain.policies.snake_draft_service import (
     DraftResult,
     PlayerForDraft,
     SnakeDraftService,

@@ -19,7 +19,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
-from ..services.marcadores_en_cadena import MIN_PARA_MARCAR, MarcadoresEnCadena
+from ..policies.marcadores_en_cadena import MIN_PARA_MARCAR, MarcadoresEnCadena
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from ..value_objects.estado_partida import EstadoPartida

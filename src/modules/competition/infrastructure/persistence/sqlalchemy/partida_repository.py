@@ -8,10 +8,10 @@ from sqlalchemy import delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.policies.marcadores_en_cadena import MarcadoresEnCadena
 from src.modules.competition.domain.repositories.partida_repository_interface import (
     PartidaRepositoryInterface,
 )
-from src.modules.competition.domain.services.marcadores_en_cadena import MarcadoresEnCadena
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
