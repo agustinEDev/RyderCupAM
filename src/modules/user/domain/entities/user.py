@@ -936,12 +936,12 @@ class User:
         ):
             return
 
-        # `*_changed` ya exige que el valor no sea None, pero mypy no lo sigue
-        # a traves del booleano
-        if first_name_changed:
-            self._first_name = first_name  # type: ignore[assignment]
-        if last_name_changed:
-            self._last_name = last_name  # type: ignore[assignment]
+        # `*_changed` ya exige que el valor no sea None; repetirlo aquí no cambia nada y
+        # deja que mypy lo compruebe
+        if first_name_changed and first_name is not None:
+            self._first_name = first_name
+        if last_name_changed and last_name is not None:
+            self._last_name = last_name
         if country_code_changed:
             self._country_code = new_country_code
         if gender_changed:
