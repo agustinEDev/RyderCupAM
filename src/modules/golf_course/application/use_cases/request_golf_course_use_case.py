@@ -6,6 +6,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     RequestGolfCourseRequestDTO,
     RequestGolfCourseResponseDTO,
 )
+from src.modules.golf_course.application.exceptions import CountryNotFoundError
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.application.ports.timezone_resolver import ITimezoneResolver
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -38,6 +39,7 @@ class RequestGolfCourseUseCase:
         RequestGolfCourseResponseDTO con el campo creado
 
     Raises:
+        CountryNotFoundError: Si el país no existe
         ValueError: Si los datos son inválidos (reglas de dominio)
     """
 
@@ -76,7 +78,7 @@ class RequestGolfCourseUseCase:
             # 2. Validar que el país existe en la BD
             country = await self._uow.countries.find_by_code(country_code)
             if country is None:
-                raise ValueError(f"Country with code '{request.country_code}' not found")
+                raise CountryNotFoundError(f"Country with code '{request.country_code}' not found")
 
             # 3. Crear Tees
             tees = GolfCourseMapper.to_domain_tees(request.tees)
