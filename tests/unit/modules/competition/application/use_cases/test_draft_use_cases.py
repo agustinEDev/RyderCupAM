@@ -508,6 +508,25 @@ class TestElMinutoQueSeAgota:
         # esperándole, y una sala que nadie mira resolvería un turno por vistazo
         assert sala.turn_started_at == AHORA + timedelta(seconds=60)
 
+    async def test_si_el_draft_desaparece_mientras_se_espera_el_turno_es_como_si_no_hubiera(self):
+        """
+        Given un turno agotado y, mientras se espera la fila bloqueada, otra petición
+        termina el draft y otra deshace los equipos (el draft se borra)
+        When se mira la sala
+        Then la respuesta es la de «todavía no hay sorteo» (None), no un 500
+        """
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, ver, _, reloj = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+        reloj.avanza(61)
+
+        async def ya_no_esta(_comp_id):
+            return None
+
+        uow.drafts.find_by_competition_for_update = ya_no_esta
+
+        assert await ver.execute(comp_id.value, resto[-1]) is None
+
     async def test_la_app_elige_el_handicap_mas_bajo(self):
         uow, comp_id, creator_id, resto, usuarios = await _montar()
         start, ver, _, reloj = _casos(uow, usuarios)
