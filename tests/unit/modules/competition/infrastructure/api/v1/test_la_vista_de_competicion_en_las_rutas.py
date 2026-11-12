@@ -370,3 +370,82 @@ def test_g2_las_rutas_crud_no_tocan_la_unidad_de_trabajo():
         }
     )
     assert usos == []
+
+
+class _JugadorSinVerificar:
+    """Quien no es admin y no ha verificado su correo: su correo no cuenta para invitaciones."""
+
+    id = "7d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6"
+    is_admin = False
+    email = "jugador@t.com"
+    email_verified = False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consulta", "esperada"),
+    [
+        (
+            "?my_competitions=true",
+            (
+                "mis_competiciones",
+                UUID(_JugadorSinVerificar.id),
+                None,
+                {"search_name": None, "search_creator": None, "viewer_email": None},
+            ),
+        ),
+        (
+            "?my_competitions=false",
+            (
+                "las_de_los_demas",
+                UUID(_JugadorSinVerificar.id),
+                None,
+                {
+                    "creator_id": None,
+                    "search_name": None,
+                    "search_creator": None,
+                    "is_admin": False,
+                    "viewer_email": None,
+                },
+            ),
+        ),
+        (
+            "",
+            (
+                "listar",
+                None,
+                {
+                    "creator_id": None,
+                    "search_name": None,
+                    "search_creator": None,
+                    "viewer_id": _JugadorSinVerificar.id,
+                    "is_admin": False,
+                    "viewer_email": None,
+                },
+            ),
+        ),
+    ],
+    ids=["mias", "de-los-demas", "todas"],
+)
+async def test_l9_un_jugador_sin_verificar_no_lista_como_admin_ni_con_su_correo(consulta, esperada):
+    """Given un jugador con el correo sin verificar, When pide un listado, Then ni admin ni correo (A01)."""
+    listado, vista = _ListadoEspia(), _VistaDeListado()
+    app.dependency_overrides[d.get_current_user] = _JugadorSinVerificar
+    app.dependency_overrides[d.get_list_competitions_use_case] = lambda: listado
+    app.dependency_overrides[d.get_vista_de_competicion_use_case] = lambda: vista
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as cliente:
+            respuesta = await cliente.get(BASE + consulta)
+    finally:
+        for dep in (
+            d.get_current_user,
+            d.get_list_competitions_use_case,
+            d.get_vista_de_competicion_use_case,
+        ):
+            app.dependency_overrides.pop(dep, None)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert listado.llamadas == [esperada]
+    assert vista.llamadas == [(["c"], UUID(_JugadorSinVerificar.id), False)]
