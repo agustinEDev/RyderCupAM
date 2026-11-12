@@ -11,7 +11,7 @@ class UserRegisteredEventHandler(EventHandler[UserRegisteredEvent]):
     Define las acciones a realizar cuando un usuario se registra.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
 
     @property

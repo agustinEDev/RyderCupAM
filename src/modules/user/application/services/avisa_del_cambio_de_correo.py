@@ -4,6 +4,8 @@ de antes. Los usan Seguridad y el panel de administración (BE #753, punto 4).
 """
 
 import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.entities.user import User
@@ -19,7 +21,8 @@ async def avisa_del_cambio_de_correo(
     al mandarlos ni al montarlos: el cambio ya está guardado (CodeRabbit en BE #760).
     """
     try:
-        envios = [
+        # Cada aviso con su método y sus argumentos, que no son los mismos
+        envios: list[tuple[str, Callable[..., Awaitable[object]], dict[str, Any]]] = [
             (
                 "confirmation",
                 email_service.send_email_change_confirmation,

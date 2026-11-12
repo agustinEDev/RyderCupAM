@@ -139,7 +139,7 @@ class ResendVerificationFromLinkUseCase(_Reenvio):
             return False
         async with self._uow:
             user = await self._user_finder.by_verification_token(token)
-        if user is None or user.is_email_verified() or user.email is None:
+        if user is None or user.is_email_verified():
             return False
         caduca = user.verification_token_expires_at
         if caduca is None or datetime.now() <= caduca:

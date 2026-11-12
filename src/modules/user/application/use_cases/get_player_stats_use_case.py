@@ -1,22 +1,39 @@
 """Caso de Uso: resumen de rendimiento de un jugador (BE #128, BE #167)."""
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date as date_type
 from decimal import Decimal
 
+from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
+from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.services.course_context import own_playing_handicap
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.user.application.dto.player_stats_dto import (
@@ -25,6 +42,7 @@ from src.modules.user.application.dto.player_stats_dto import (
     ScoringBreakdownResponseDTO,
 )
 from src.modules.user.application.services.tournament_round import (
+    TournamentPlayer,
     is_scratch,
     tournament_index,
     tournament_personal_handicap,
@@ -47,6 +65,7 @@ from src.shared.domain.services.stroke_play_scoring import (
     HoleSetup,
     StrokePlayScoring,
 )
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -104,8 +123,8 @@ class _GroupPlayer:
     """El jugador en su grupo, con la forma del jugador de un partido (`MatchPlayer`)."""
 
     player_handicap: Decimal
-    tee_color: object
-    tee_gender: object
+    tee_color: TeeColor
+    tee_gender: Gender | None
 
 
 class GetPlayerStatsUseCase:
@@ -445,11 +464,11 @@ class GetPlayerStatsUseCase:
     async def _collect_competition_rounds(
         self,
         user_id: UserId,
-        matches: list,
-        rounds_by_match: dict,
-        scorecards: dict,
+        matches: list[Match],
+        rounds_by_match: Mapping[MatchId, Round | None],
+        scorecards: Mapping[MatchId, list[HoleScore]],
         profile_handicap: float | None,
-        scratch_competitions: set,
+        scratch_competitions: set[CompetitionId],
     ) -> list[_ComputableRound]:
         """
         Vueltas de torneo computables del jugador.
@@ -507,10 +526,10 @@ class GetPlayerStatsUseCase:
 
     def _tournament_round(
         self,
-        course,
-        round_,
-        player,
-        hole_scores: list,
+        course: GolfCourse,
+        round_: Round,
+        player: TournamentPlayer | None,
+        hole_scores: Sequence[HoleScore | _ValidatedHole],
         profile_handicap: float | None,
         scratch: bool,
         source_id: str,
@@ -605,7 +624,7 @@ class GetPlayerStatsUseCase:
             }
             strokes = await uow.golpes_de_partida.de_las_partidas([g.id for g in groups])
 
-        validated: dict = {}
+        validated: dict[PartidaId, list[_ValidatedHole]] = {}
         for stroke in strokes:
             if stroke.user_id == user_id and stroke.validado:
                 validated.setdefault(stroke.partida_id, []).append(
@@ -659,12 +678,12 @@ class GetPlayerStatsUseCase:
 
     def _to_played_round(
         self,
-        course,
+        course: GolfCourse,
         holes: list[HoleSetup],
-        scores_by_hole: dict,
+        scores_by_hole: dict[int, int | None],
         handicap: float | None,
-        tee_color,
-        tee_gender,
+        tee_color: TeeColor | None,
+        tee_gender: Gender | None,
     ) -> PlayedRound | None:
         """
         La vuelta convertida en materia prima para el diferencial, o None.
@@ -700,7 +719,9 @@ class GetPlayerStatsUseCase:
         )
 
     @staticmethod
-    def _tee_rating(course, tee_color, tee_gender) -> TeeRating | None:
+    def _tee_rating(
+        course: GolfCourse, tee_color: TeeColor | None, tee_gender: Gender | None
+    ) -> TeeRating | None:
         """
         Ratings del tee que se jugó, o None si no se puede saber.
 
@@ -719,7 +740,9 @@ class GetPlayerStatsUseCase:
     # ==================== Lectura de tarjetas ====================
 
     @staticmethod
-    def _computable_holes(scores_by_hole: dict, hole_card: list) -> list | None:
+    def _computable_holes(
+        scores_by_hole: Mapping[int, object], hole_card: list[Hole]
+    ) -> list[Hole] | None:
         """
         Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
@@ -748,37 +771,41 @@ class GetPlayerStatsUseCase:
     # número fijo de consultas, tenga el historial que tenga (tabla del 22 oct
     # 2026, M). Lo que se calcula con lo leído no cambia.
 
-    async def _quick_match_courses_and_scores(self, matches: list) -> tuple[dict, dict]:
+    async def _quick_match_courses_and_scores(
+        self, matches: list[QuickMatch]
+    ) -> tuple[dict[GolfCourseId, GolfCourse], dict[QuickMatchId, list[QuickMatchHoleScore]]]:
         """Los campos y los golpes de esas partidas rápidas, en dos consultas."""
         if not matches:
             return {}, {}
         courses = await self._courses_by_id({match.golf_course_id for match in matches})
-        scores_by_match: dict = {}
+        scores_by_match: dict[QuickMatchId, list[QuickMatchHoleScore]] = {}
         for score in await self._quick_match_uow.quick_match_hole_scores.find_by_matches(
             [match.id for match in matches]
         ):
             scores_by_match.setdefault(score.quick_match_id, []).append(score)
         return courses, scores_by_match
 
-    async def _courses_by_id(self, course_ids: set) -> dict:
+    async def _courses_by_id(self, course_ids: set[GolfCourseId]) -> dict[GolfCourseId, GolfCourse]:
         """Los campos de una vez; uno borrado no está, y quien lo pida recibe None."""
         if not course_ids:
             return {}
         courses = await self._golf_course_uow.golf_courses.find_by_ids(list(course_ids))
         return {course.id: course for course in courses}
 
-    async def _scorecards(self, matches: list, user_id: UserId) -> dict:
+    async def _scorecards(
+        self, matches: list[Match], user_id: UserId
+    ) -> dict[MatchId, list[HoleScore]]:
         """La tarjeta del jugador en cada partido, en una consulta."""
         if not matches:
             return {}
-        by_match: dict = {match.id: [] for match in matches}
+        by_match: dict[MatchId, list[HoleScore]] = {match.id: [] for match in matches}
         for hole_score in await self._competition_uow.hole_scores.find_by_matches_and_player(
             [match.id for match in matches], user_id
         ):
             by_match.setdefault(hole_score.match_id, []).append(hole_score)
         return by_match
 
-    async def _rounds_by_match(self, matches: list) -> dict:
+    async def _rounds_by_match(self, matches: list[Match]) -> dict[MatchId, Round | None]:
         """
         La ronda de cada partido, todas en una consulta.
 
@@ -791,7 +818,9 @@ class GetPlayerStatsUseCase:
         rounds = {r.id: r for r in await self._competition_uow.rounds.find_by_ids(round_ids)}
         return {match.id: rounds.get(match.round_id) for match in matches}
 
-    async def _scratch_competitions(self, rounds_by_match: dict) -> set:
+    async def _scratch_competitions(
+        self, rounds_by_match: Mapping[MatchId, Round | None]
+    ) -> set[CompetitionId]:
         """Las competiciones scratch de esas rondas: ahí la vuelta propia va sin golpes."""
         competition_ids = list({r.competition_id for r in rounds_by_match.values() if r})
         if not competition_ids:
@@ -800,12 +829,17 @@ class GetPlayerStatsUseCase:
         return {c.id for c in competitions if is_scratch(c)}
 
     @staticmethod
-    def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
+    def _match_course(
+        match: Match, rounds_by_match: Mapping[MatchId, Round | None]
+    ) -> GolfCourseId | None:
         round_ = rounds_by_match.get(match.id)
         return round_.golf_course_id if round_ is not None else None
 
     def _competition_hole_outcomes(
-        self, hole_scores: list, hole_card: list, playing_handicap: int | None
+        self,
+        hole_scores: Sequence[HoleScore | _ValidatedHole],
+        hole_card: list[Hole],
+        playing_handicap: int | None,
     ) -> list[HoleOutcome] | None:
         """
         Los hoyos de una tarjeta de competición, o None si no forman vuelta.
@@ -855,8 +889,8 @@ class GetPlayerStatsUseCase:
 
     def _quick_match_hole_outcomes(
         self,
-        holes: list,
-        scores_by_hole: dict,
+        holes: list[HoleSetup],
+        scores_by_hole: dict[int, int | None],
         playing_handicap: int | None,
     ) -> list[HoleOutcome]:
         """
@@ -905,7 +939,10 @@ class GetPlayerStatsUseCase:
     # ==================== Jugadores y hándicaps ====================
 
     @staticmethod
-    def _hole_card(course, player) -> list:
+    def _hole_card(
+        course: GolfCourse | None,
+        player: TournamentPlayer | QuickMatchParticipant | None,
+    ) -> list[Hole]:
         """
         Tarjeta de la barra que juega ese jugador.
 
@@ -923,19 +960,21 @@ class GetPlayerStatsUseCase:
         return course.hole_card_for(player.tee_color, player.tee_gender)
 
     @staticmethod
-    def _find_participant(match, user_id: UserId):
+    def _find_participant(match: QuickMatch, user_id: UserId) -> QuickMatchParticipant | None:
         return next(
             (p for p in match.participants if p.user_id is not None and p.user_id == user_id),
             None,
         )
 
     @staticmethod
-    def _find_match_player(match, user_id: UserId):
+    def _find_match_player(match: Match, user_id: UserId) -> MatchPlayer | None:
         """El jugador dentro del partido, mire en el equipo que mire."""
         return match.find_player(user_id)
 
     @staticmethod
-    def _match_player_handicap(player, profile_handicap: float | None) -> float | None:
+    def _match_player_handicap(
+        player: TournamentPlayer | None, profile_handicap: float | None
+    ) -> float | None:
         """El índice con el que jugó el partido de torneo: ver `tournament_index`."""
         index = tournament_index(player, profile_handicap)
         return None if index is None else float(index)

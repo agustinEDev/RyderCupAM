@@ -17,6 +17,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_provenance import CourseProvenance
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -138,7 +139,7 @@ class UpdateGolfCourseUseCase:
                 pending_update=None,
             )
 
-    def _zona_de(self, location, actual: str | None) -> str | None:
+    def _zona_de(self, location: CourseLocation | None, actual: str | None) -> str | None:
         """
         La zona horaria de las coordenadas nuevas, si las hay.
 

@@ -143,7 +143,7 @@ class GoogleLoginUseCase:
                     raise ValueError("User not found")
                 # Y que siga siendo la cuenta de ESE correo: si lo cambió justo antes,
                 # Google no tiene nada que demostrar sobre ella
-                if bloqueada.email is None or bloqueada.email != email:
+                if bloqueada.email != email:
                     raise ValueError("Account changed during Google sign-in")
                 user = bloqueada
                 # Otra petición a la vez (otra pestaña) pudo vincular ya este Google:
@@ -215,7 +215,9 @@ class GoogleLoginUseCase:
         await self._uow.oauth_accounts.save(new_oauth)
         return user
 
-    async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
+    async def _register_device(
+        self, request: GoogleLoginRequestDTO, user_id_str: str
+    ) -> tuple[UserDeviceId, str, bool, bool]:
         """Register device: (device_id, device_id_str, avisa, lo dio de alta este login)."""
         # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(

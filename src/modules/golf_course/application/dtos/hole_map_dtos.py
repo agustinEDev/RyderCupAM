@@ -29,7 +29,9 @@ class HoleMapDTO(BaseModel):
     )
     attribution: str | None = None
     holes_needing_green: list[int] = Field(default_factory=list)
-    geojson: FeatureCollection
+    # Sin parametrizar a propósito: `FeatureCollection[...]` es otro modelo de
+    # pydantic en tiempo de ejecución y cambiaría el esquema publicado en la API
+    geojson: FeatureCollection  # type: ignore[type-arg]
 
 
 class HoleMapReviewDTO(HoleMapDTO):

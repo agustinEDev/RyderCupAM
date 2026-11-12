@@ -3,6 +3,7 @@ from src.modules.user.application.dto.user_dto import (
     FindUserResponseDTO,
 )
 from src.modules.user.application.ports.bloqueos_interface import BloqueosInterface
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -82,7 +83,7 @@ class FindUserUseCase:
             display_name=user.display_name,
         )
 
-    async def _sin_quien_me_bloqueo(self, user, viewer_id: UserId):
+    async def _sin_quien_me_bloqueo(self, user: User | None, viewer_id: UserId) -> User | None:
         """
         Quien me bloqueó no se encuentra: la misma respuesta que un correo o un
         nombre que no existen (F-09). A quien bloqueé yo, sí. Fuera de la unidad
@@ -93,7 +94,7 @@ class FindUserUseCase:
         return None if await self._bloqueos.me_bloqueo(viewer_id, user.id) else user
 
     @staticmethod
-    def _solo_activa(user):
+    def _solo_activa(user: User | None) -> User | None:
         """
         Una cuenta desactivada no se encuentra (F-01b): la misma respuesta que un
         correo o un nombre que no existen, sin su nombre ni su id.

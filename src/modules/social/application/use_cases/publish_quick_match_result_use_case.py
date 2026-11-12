@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
@@ -34,12 +35,13 @@ from src.modules.social.domain.services.counted_round import (
     holes_by_side,
     match_play_counts,
 )
-from src.modules.social.domain.services.ranking import rank
+from src.modules.social.domain.services.ranking import Puesto, rank
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.services.stroke_play_scoring import (
     NET_DOUBLE_BOGEY_OVER_PAR,
@@ -75,7 +77,7 @@ class _Lectura:
     match: QuickMatch
     course: GolfCourse
     scores: dict[ParticipantId, dict[int, int | None]]
-    users: dict
+    users: dict[UserId, User]
     strokes: dict[ParticipantId, ParticipantStrokes]
     # El índice con el que jugó cada uno la partida: el que desempata (H)
     handicaps: dict[ParticipantId, Decimal | None]
@@ -176,7 +178,9 @@ class PublishQuickMatchResultUseCase:
         )
 
     @staticmethod
-    def _indices(match: QuickMatch, users: dict) -> dict[ParticipantId, Decimal | None]:
+    def _indices(
+        match: QuickMatch, users: dict[UserId, User]
+    ) -> dict[ParticipantId, Decimal | None]:
         """El índice con el que juega cada uno: el fijado al empezar, o el de siempre."""
         handicaps: dict[ParticipantId, Decimal | None] = {}
         for p in match.participants:
@@ -244,7 +248,7 @@ class PublishQuickMatchResultUseCase:
                 continue
             pid = vuelta.participant.participant_id
             puesto = puestos.get(pid)
-            payload: dict = {
+            payload: dict[str, Any] = {
                 "golf_course_id": str(match.golf_course_id.value),
                 "scoring_format": match.scoring_format.value if match.scoring_format else None,
                 "holes_played": vuelta.holes_played,
@@ -269,7 +273,9 @@ class PublishQuickMatchResultUseCase:
         return eventos
 
     @staticmethod
-    def _mejor_bruto(cuentan: list[_Totales], puestos: dict) -> set[ParticipantId]:
+    def _mejor_bruto(
+        cuentan: list[_Totales], puestos: dict[ParticipantId, Puesto]
+    ) -> set[ParticipantId]:
         """
         Quien lleva la etiqueta de mejor bruto (tabla del 22 oct, D): nadie si
         el mejor bruto es tambien de un 1.º; si no, todos los que lo comparten.
@@ -370,7 +376,7 @@ class PublishQuickMatchResultUseCase:
         return eventos
 
     @staticmethod
-    def _quien(p: QuickMatchParticipant) -> dict:
+    def _quien(p: QuickMatchParticipant) -> dict[str, Any]:
         """El rival o compañero: el id de quien tiene cuenta; el nombre del invitado."""
         if p.user_id is not None:
             return {"user_id": str(p.user_id.value), "name": None}
@@ -383,7 +389,7 @@ class PublishQuickMatchResultUseCase:
         return "WON" if ganador == bando else "LOST"
 
     @staticmethod
-    def _evento(match: QuickMatch, user_id, payload: dict) -> ActivityEvent:
+    def _evento(match: QuickMatch, user_id: UserId, payload: dict[str, Any]) -> ActivityEvent:
         return ActivityEvent.create(
             user_id=user_id,
             type=ActivityEventType.QUICK_MATCH_FINISHED,

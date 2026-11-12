@@ -13,6 +13,7 @@ from src.modules.quick_match.application.exceptions import (
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -25,6 +26,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_status import Quic
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -120,7 +122,9 @@ class GetSharedQuickMatchUseCase:
         return shared
 
     @staticmethod
-    def _shared_by_a_friend(quick_match, users: dict, friends: set) -> bool:
+    def _shared_by_a_friend(
+        quick_match: QuickMatch, users: dict[UserId, User], friends: set[UserId]
+    ) -> bool:
         """Si algun jugador con cuenta es el amigo que la comparte con quien mira."""
         for participant in quick_match.participants:
             user_id = participant.user_id
@@ -136,7 +140,7 @@ class GetSharedQuickMatchUseCase:
 
     @staticmethod
     def _hide_names(
-        shared: SharedQuickMatchDetailResponseDTO, quick_match, hidden: set[UserId]
+        shared: SharedQuickMatchDetailResponseDTO, quick_match: QuickMatch, hidden: set[UserId]
     ) -> None:
         """Sin nombre los invitados y los jugadores que quien mira no puede ver."""
         nameless = {
@@ -155,7 +159,7 @@ class GetSharedQuickMatchUseCase:
 
     @staticmethod
     def _hide_blocked_ids(
-        shared: SharedQuickMatchDetailResponseDTO, quick_match, blocked: set[UserId]
+        shared: SharedQuickMatchDetailResponseDTO, quick_match: QuickMatch, blocked: set[UserId]
     ) -> None:
         """
         Sin `user_id` ni `handicap` el jugador con el que hay un bloqueo, en

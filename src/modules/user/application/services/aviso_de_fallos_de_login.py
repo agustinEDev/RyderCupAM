@@ -16,6 +16,7 @@ a la vez no mandan dos correos. Si no sale, se libera. Un fallo nunca tumba nada
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import Literal
 
 from src.modules.user.application.dto.user_dto import AvisoDeFallosRequestDTO
 from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
@@ -106,7 +107,9 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
             # dirección (OWASP A09)
             logger.error("Failed sign-ins notice failed: %s", type(e).__name__)
 
-    async def _reserva(self, request: AvisoDeFallosRequestDTO, ahora: datetime):
+    async def _reserva(
+        self, request: AvisoDeFallosRequestDTO, ahora: datetime
+    ) -> datetime | Literal[False] | None:
         """
         Apunta el aviso con la fila del usuario bloqueada, antes de enviarlo.
 

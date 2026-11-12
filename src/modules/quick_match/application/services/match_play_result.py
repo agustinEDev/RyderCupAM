@@ -106,7 +106,8 @@ def match_play_reading(
     regla = match.match_format
     sin_resultado = MatchPlayReading(None, None, 0, decided_early=False)
     rosters = match.team_rosters()
-    if rosters is None:
+    # Sin formato no hay bandos (`team_rosters` da None): el `regla is None` es para el tipo
+    if rosters is None or regla is None:
         return sin_resultado
     team_a_ids, team_b_ids = rosters
 
@@ -120,24 +121,29 @@ def match_play_reading(
         if not hole_is_complete(scores, team_a_ids, team_b_ids, regla):
             continue
 
-        def net(pid, hole=hole_number, values=scores):
+        def net(
+            pid: ParticipantId,
+            hole: int = hole_number,
+            values: Mapping[ParticipantId, int | None] = scores,
+        ) -> int | None:
             # La raya (score nulo) se propaga: `calculate_hole_winner` la lee
             # como bando que no entrego bola y le da el hoyo al rival, que es
             # la regla de match play. Convertirla en un numero aqui la haria
             # competir por el hoyo.
-            if values[pid] is None:
+            score = values[pid]
+            if score is None:
                 return None
             allocation = strokes_by_participant.get(pid)
             if allocation is None:
-                return values[pid]
-            return allocation.net_score(hole, values[pid])
+                return score
+            return allocation.net_score(hole, score)
 
         # Solo los que anotaron: en foursomes el bando entrega UNA bola, asi
         # que el companero no tiene score y `values[pid]` reventaria.
         results_by_hole[hole_number] = scoring_service.calculate_hole_winner(
             [net(pid) for pid in team_a_ids if pid in scores],
             [net(pid) for pid in team_b_ids if pid in scores],
-            match.match_format,
+            regla,
         )
 
     if not results_by_hole:

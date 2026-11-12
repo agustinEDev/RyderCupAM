@@ -179,7 +179,8 @@ def _osm_line(hole_map: CourseHoleMap | None, number: int) -> OsmLineDTO | None:
         return None
     return OsmLineDTO(
         points=[point_dto(p) for p in mapped.play_line],
-        green_center=None if mapped.needs_green else point_dto(mapped.green.center),
+        # `needs_green` es `green is None`: mirado aquí, el tipo lo sabe
+        green_center=None if mapped.green is None else point_dto(mapped.green.center),
     )
 
 
