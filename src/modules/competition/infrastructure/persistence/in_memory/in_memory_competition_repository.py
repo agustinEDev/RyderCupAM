@@ -1,7 +1,7 @@
 """In-Memory Competition Repository para testing."""
 
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import datetime
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
@@ -72,25 +72,6 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Busca todas las competiciones con un estado específico."""
         return [comp for comp in self._competitions.values() if comp.status == status]
 
-    async def find_active_in_date_range(
-        self, start_date: date, end_date: date
-    ) -> list[Competition]:
-        """Busca competiciones activas que se solapen con un rango de fechas."""
-        active_statuses = [
-            CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
-        ]
-
-        return [
-            comp
-            for comp in self._competitions.values()
-            if comp.status in active_statuses
-            and self._date_ranges_overlap(
-                comp.dates.start_date, comp.dates.end_date, start_date, end_date
-            )
-        ]
-
     async def exists_with_name(
         self,
         name: CompetitionName,
@@ -158,10 +139,6 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
         # Paginar
         return results[offset : offset + limit]
-
-    def _date_ranges_overlap(self, start1: date, end1: date, start2: date, end2: date) -> bool:
-        """Verifica si dos rangos de fechas se solapan."""
-        return start1 <= end2 and end1 >= start2
 
     async def find_status_mark(
         self, competition_id: CompetitionId

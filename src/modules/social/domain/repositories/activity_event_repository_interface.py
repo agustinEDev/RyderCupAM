@@ -123,10 +123,6 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
-    async def exists_for_match(self, match_id: str) -> bool:
-        """Si esa partida ya generó eventos, para no publicarlos dos veces."""
-
-    @abstractmethod
     async def delete_for_user(
         self, user_id: UserId, types: Collection[ActivityEventType] | None = None
     ) -> int:

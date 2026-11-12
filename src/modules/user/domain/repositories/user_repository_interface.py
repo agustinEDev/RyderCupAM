@@ -36,7 +36,6 @@ class UserRepositoryInterface(ABC):
 
         Raises:
             UserAlreadyExistsError: Si ya existe un usuario con el mismo email
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -50,9 +49,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -79,9 +75,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado (con la fila bloqueada) o None
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -108,9 +101,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -124,9 +114,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             bool: True si existe, False si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -144,9 +131,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario que lo tiene, o None si está libre
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -161,9 +145,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -204,7 +185,6 @@ class UserRepositoryInterface(ABC):
 
         Raises:
             UserNotFoundError: Si el usuario no existe
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -218,9 +198,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             bool: True si se eliminó, False si no existía
-
-        Raises:
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -248,9 +225,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             List[User]: Lista de usuarios encontrados
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -267,9 +241,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             int: Número total de usuarios que coinciden con el filtro
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -286,9 +257,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -302,9 +270,6 @@ class UserRepositoryInterface(ABC):
 
         Returns:
             Optional[User]: El usuario encontrado o None si no existe o el token expiró
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
 
         Security:
             - Busca por el SHA-256 del token, que es lo que se guarda (fase 3)

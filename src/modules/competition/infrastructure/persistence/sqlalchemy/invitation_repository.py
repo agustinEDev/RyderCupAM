@@ -203,27 +203,3 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         stmt = select(func.count()).select_from(Invitation).where(and_(*conditions))
         result = await self._session.execute(stmt)
         return result.scalar() or 0
-
-    async def count_by_invitee(
-        self,
-        email: str | None = None,
-        user_id: UserId | None = None,
-        status: InvitationStatus | None = None,
-    ) -> int:
-        # Identity conditions use OR (email OR user_id match the same person)
-        identity_conditions = []
-        if email is not None:
-            identity_conditions.append(Invitation._invitee_email == email.strip().lower())
-        if user_id is not None:
-            identity_conditions.append(Invitation._invitee_user_id == user_id)
-
-        if not identity_conditions:
-            return 0
-
-        where_clauses = [or_(*identity_conditions)]
-        if status is not None:
-            where_clauses.append(Invitation._status == status)
-
-        stmt = select(func.count()).select_from(Invitation).where(and_(*where_clauses))
-        result = await self._session.execute(stmt)
-        return result.scalar() or 0

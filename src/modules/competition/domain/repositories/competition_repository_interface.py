@@ -7,7 +7,7 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import datetime
 
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -42,7 +42,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Raises:
             CompetitionAlreadyExistsError: Si ya existe una competición con el mismo ID
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -56,7 +55,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Raises:
             CompetitionNotFoundError: Si la competición no existe
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -70,9 +68,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             bool: True si se eliminó, False si no existía
-
-        Raises:
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -86,9 +81,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             Optional[Competition]: La competición encontrada o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -127,9 +119,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones del creador
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -149,30 +138,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones con el estado especificado
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
-        """
-        pass
-
-    @abstractmethod
-    async def find_active_in_date_range(
-        self, start_date: date, end_date: date
-    ) -> list[Competition]:
-        """
-        Busca competiciones activas que se superpongan con un rango de fechas.
-
-        Útil para: Detectar conflictos de fechas, calendario de torneos.
-
-        Args:
-            start_date: Fecha de inicio del rango
-            end_date: Fecha de fin del rango
-
-        Returns:
-            List[Competition]: Lista de competiciones activas en el rango
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -196,9 +161,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             bool: True si existe, False si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -228,9 +190,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de todas las competiciones
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -243,9 +202,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             int: Número total de competiciones
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -261,9 +217,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             int: Número total de competiciones del creador
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -292,9 +245,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones que cumplen los criterios
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 

@@ -139,19 +139,3 @@ class InvitationRepositoryInterface(ABC):
     ) -> int:
         """Cuenta invitaciones de una competicion con filtro opcional de status y fecha."""
         pass
-
-    @abstractmethod
-    async def count_by_invitee(
-        self,
-        email: str | None = None,
-        user_id: UserId | None = None,
-        status: InvitationStatus | None = None,
-    ) -> int:
-        """
-        Cuenta invitaciones para un invitado.
-
-        Matches invitations where invitee_email == email OR invitee_user_id == user_id.
-        If status is provided, it is applied as an additional AND filter.
-        Returns 0 if neither email nor user_id is provided.
-        """
-        pass

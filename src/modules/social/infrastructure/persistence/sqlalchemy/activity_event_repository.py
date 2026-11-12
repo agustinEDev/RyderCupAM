@@ -383,15 +383,6 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def exists_for_match(self, match_id: str) -> bool:
-        stmt = (
-            select(activity_events_table.c.id)
-            .where(activity_events_table.c.source_match_id == match_id)
-            .limit(1)
-        )
-        result = await self._session.execute(stmt)
-        return result.first() is not None
-
     async def delete_for_user(
         self, user_id: UserId, types: Collection[ActivityEventType] | None = None
     ) -> int:

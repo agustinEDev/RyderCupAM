@@ -317,11 +317,11 @@ Pure domain service for match play scoring logic.
 
 **Interfaces (Domain Layer):**
 - `CompetitionRepositoryInterface` - Competition CRUD
-  - find_by_id, find_by_creator, find_by_status, find_active_in_date_range
+  - find_by_id, find_by_creator, find_by_status
   - add, update, delete, exists_with_name, count_by_creator
 - `EnrollmentRepositoryInterface` - Enrollment CRUD
   - find_by_id, find_by_competition, find_by_competition_and_status, find_by_user
-  - add, update, exists_for_user_in_competition, count_approved, find_by_competition_and_team
+  - add, update, count_approved
 - `CountryRepositoryInterface` - Country queries (shared)
   - find_by_code, find_all_active, are_adjacent, find_adjacent_countries, exists
 

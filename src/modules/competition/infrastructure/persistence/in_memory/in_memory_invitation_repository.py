@@ -158,19 +158,3 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
             and (status is None or inv.status == status)
             and (since is None or inv.created_at >= since)
         )
-
-    async def count_by_invitee(
-        self,
-        email: str | None = None,
-        user_id: UserId | None = None,
-        status: InvitationStatus | None = None,
-    ) -> int:
-        count = 0
-        for inv in self._invitations.values():
-            if status and inv.status != status:
-                continue
-            if (email and inv.invitee_email == email.strip().lower()) or (
-                user_id and inv.invitee_user_id == user_id
-            ):
-                count += 1
-        return count
