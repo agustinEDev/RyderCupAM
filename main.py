@@ -37,6 +37,7 @@ from src.config.clave_de_brevo_viva import (  # noqa: E402
     VigiaDeLaClaveDeBrevo,
     vigia_activado,
 )
+from src.config.codigos_de_error import todos_los_codigos  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
@@ -111,6 +112,7 @@ from src.shared.infrastructure.email.envio_de_correo import (  # noqa: E402
     brevo_desde,
     comprueba_el_envio_de_correo,
 )
+from src.shared.infrastructure.http.codigos_de_error import registra_los_codigos  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
@@ -297,6 +299,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 
 # Errores de dominio de competición con su 400 (un Stableford sin equipos, #251)
 register_competition_exception_handlers(app)
+
+# Cada error de dominio con su código, en un solo sitio (antes, un except en cada ruta)
+registra_los_codigos(app, todos_los_codigos())
 
 # Términos de uso sin aceptar (B6): 403 con error_code TERMS_NOT_ACCEPTED
 app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
