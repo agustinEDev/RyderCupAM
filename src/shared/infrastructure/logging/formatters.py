@@ -21,7 +21,6 @@ from datetime import datetime
 from typing import Any
 
 # Atributos que todo LogRecord trae de serie: no son datos del evento.
-# `taskName` lo añade Python 3.12+ a todos los registros (None fuera de una tarea).
 _CAMPOS_DE_SERIE = frozenset(
     {
         "name",
@@ -41,7 +40,6 @@ _CAMPOS_DE_SERIE = frozenset(
         "threadName",
         "processName",
         "process",
-        "taskName",
         "message",
         "exc_info",
         "exc_text",
@@ -72,6 +70,10 @@ class JsonFormatter(logging.Formatter):
             for clave, valor in record.__dict__.items()
             if clave not in _CAMPOS_DE_SERIE
         }
+        # Python 3.12+ pone `taskName` en todos los registros: dentro de una petición es
+        # su tarea (`Task-1234`, une los eventos de esa petición); fuera, None, y sobra
+        if extra.get("taskName", "") is None:
+            del extra["taskName"]
         if "correlation_id" in extra:
             log_entry["correlation_id"] = extra.pop("correlation_id")
         if "context" in extra:

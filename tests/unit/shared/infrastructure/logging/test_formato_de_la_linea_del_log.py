@@ -134,3 +134,14 @@ def test_format_with_the_asyncio_task_name_leaves_it_out(formatea):
     linea = formatea(_registro(taskName=None))
 
     assert "extra" not in linea
+
+
+def test_format_inside_a_named_task_keeps_its_name_under_extra(formatea):
+    """
+    Given: Un registro creado dentro de una tarea (en una petición, `Task-1234`)
+    When: Se formatea
+    Then: El nombre sigue en extra.taskName: es lo que une los eventos de una misma petición
+    """
+    linea = formatea(_registro(taskName="Task-1234"))
+
+    assert linea["extra"] == {"taskName": "Task-1234"}
