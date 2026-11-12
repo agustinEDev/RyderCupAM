@@ -5,6 +5,10 @@ Hasta ahora la ruta miraba el texto del `ValueError` («not found» → 404,
 «permission» → 403, el resto → 400). Los casos de uso lanzan ya errores con tipo
 y la ruta decide por el tipo; para el cliente no cambia nada: ni el código ni el
 `detail` (G1-G9). Y la ruta ya no lee el texto para elegir el código (G11).
+
+El único cambio a propósito (G12): al editar, un `ValueError` cuyo texto repite lo
+que escribió el cliente (el nombre de una barra) y contiene «not found» o
+«permission» daba 404 o 403. Ahora da 400, como cualquier otro dato inválido.
 """
 
 import ast
@@ -153,6 +157,20 @@ def pide() -> Iterator:
         ("G3 editar sin ser creador ni admin", UPDATE, SIN_PERMISO, 403),
         ("G4 editar con un país que no existe", UPDATE, SIN_PAIS, 404),
         ("G5 editar con otro ValueError", UPDATE, ValueError("Cannot edit a REJECTED"), 400),
+        # Antes la ruta leía el texto de cualquier ValueError: una barra llamada «Not found»
+        # (el texto lo escribe el cliente) daba 404. Ahora es un 400 como cualquier otro.
+        (
+            "G12 texto del cliente con not found",
+            UPDATE,
+            ValueError("Duplicate tee: Not found (MALE)"),
+            400,
+        ),
+        (
+            "G12 texto del cliente con permission",
+            UPDATE,
+            ValueError("Duplicate tee: No permission (MALE)"),
+            400,
+        ),
         ("G6 aprobar un campo que no existe", APPROVE, NO_ESTA, 404),
         ("G6 rechazar un campo que no existe", REJECT, NO_ESTA, 404),
         ("G7 aprobar una propuesta que no existe", APPROVE_UPDATE, PROPUESTA_NO_ESTA, 404),
