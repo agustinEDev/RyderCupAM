@@ -19,7 +19,7 @@ pieza y la sustituye.
 """
 
 from dataclasses import dataclass, replace
-from typing import Self
+from typing import Any, Self
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -233,7 +233,7 @@ class RyderCupSetup:
     # Columnas (composite de SQLAlchemy)
     # ------------------------------------------------------------------
 
-    def __composite_values__(self) -> tuple:
+    def __composite_values__(self) -> tuple[Any, ...]:
         """En el orden de `from_columns`: así se guarda en `competitions`."""
         return (
             self.team_1_name,

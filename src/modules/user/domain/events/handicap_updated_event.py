@@ -7,6 +7,7 @@ Este evento se dispara cuando el hándicap de un usuario es actualizado.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -58,7 +59,7 @@ class HandicapUpdatedEvent(DomainEvent):
             return None
         return self.new_handicap - self.old_handicap
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialización específica para HandicapUpdatedEvent.
 

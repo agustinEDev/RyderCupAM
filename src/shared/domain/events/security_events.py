@@ -49,7 +49,7 @@ class SecurityAuditEvent(DomainEvent, ABC):
     user_agent: str
     severity: SecuritySeverity = SecuritySeverity.MEDIUM
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación básica de campos requeridos"""
         if not self.ip_address:
             raise ValueError("ip_address es requerido en SecurityAuditEvent")
@@ -124,7 +124,7 @@ class LoginAttemptEvent(SecurityAuditEvent):
     success: bool = False  # Requerido, pero con default para dataclass
     failure_reason: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación de campos"""
         super().__post_init__()
         if not self.email:
@@ -174,7 +174,7 @@ class LogoutEvent(SecurityAuditEvent):
 
     refresh_tokens_revoked: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         # Logout es evento de baja severidad (acción normal)
@@ -207,7 +207,7 @@ class TermsAcceptedEvent(SecurityAuditEvent):
 
     terms_version: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: aceptar es una acción normal"""
         super().__post_init__()
         if not self.terms_version:
@@ -237,7 +237,7 @@ class RefreshTokenUsedEvent(SecurityAuditEvent):
     refresh_token_id: str = ""  # Requerido, validado en __post_init__
     new_access_token_created: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         if not self.refresh_token_id:
@@ -276,7 +276,7 @@ class RefreshTokenRevokedEvent(SecurityAuditEvent):
     # Qué dispositivo se revocó, cuando es una revocación de dispositivo (BE #737)
     device_id: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         if self.tokens_revoked_count < 0:
@@ -327,7 +327,7 @@ class RefreshTokenReuseDetectedEvent(SecurityAuditEvent):
     device_id: str = ""
     tokens_revoked_count: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: HIGH, va a Sentry con el tope de su tipo."""
         super().__post_init__()
         if self.tokens_revoked_count < 0:
@@ -374,7 +374,7 @@ class PasswordChangedEvent(SecurityAuditEvent):
 
     old_password_verified: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         # Cambio de contraseña es HIGH (acción de seguridad importante)
@@ -405,7 +405,7 @@ class EmailChangedEvent(SecurityAuditEvent):
 
     email_verification_required: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         # Cambio de email es HIGH (acción de seguridad importante)
@@ -438,7 +438,7 @@ class AccountUnlockedAuditEvent(SecurityAuditEvent):
     unlocked_user_id: str = ""
     previous_failed_attempts: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: quitar un bloqueo de seguridad es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
@@ -474,7 +474,7 @@ class AccountDeactivatedAuditEvent(SecurityAuditEvent):
     devices_revoked: int = 0
     tokens_revoked: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: dejar a alguien fuera de su cuenta es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
@@ -511,7 +511,7 @@ class RefreshRejectedAuditEvent(SecurityAuditEvent):
     reason: str = ""
     rejected: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: un rechazo es MEDIUM; el final normal, LOW."""
         super().__post_init__()
         object.__setattr__(
@@ -548,7 +548,7 @@ class SecurityChangeFailedAuditEvent(SecurityAuditEvent):
 
     reason: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Severidad según el motivo."""
         super().__post_init__()
         alta = self.reason == "wrong_current_password"
@@ -585,7 +585,7 @@ class AccountReactivatedAuditEvent(SecurityAuditEvent):
     reactivated_user_id: str = ""
     tokens_revoked: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: devolver el acceso a una cuenta es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
@@ -617,7 +617,7 @@ class AdminRoleChangedAuditEvent(SecurityAuditEvent):
     target_user_id: str = ""
     is_admin: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: cambiar quién administra es CRITICAL."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
@@ -644,7 +644,7 @@ class AccountDeletedByAdminAuditEvent(SecurityAuditEvent):
 
     deleted_user_id: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: un borrado sin vuelta atrás es CRITICAL."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
@@ -671,7 +671,7 @@ class AdminEmailChangeRequestedAuditEvent(SecurityAuditEvent):
 
     target_user_id: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: el correo es la llave de la cuenta, CRITICAL."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.CRITICAL)
@@ -703,7 +703,7 @@ class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
     tokens_revoked: int = 0
     google_unlinked: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: una cuenta que cambia de manos es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
@@ -736,7 +736,7 @@ class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
 
     automatic: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: un acceso nuevo a la cuenta es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
@@ -769,7 +769,7 @@ class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
 
     via: str = "profile"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y severidad: como un cambio de contraseña o de correo, HIGH."""
         super().__post_init__()
         # Solo los dos caminos conocidos: una errata se apuntaría como «by the user»
@@ -810,7 +810,7 @@ class AccessDeniedEvent(SecurityAuditEvent):
     action_attempted: str = ""  # Requerido, validado en __post_init__
     denial_reason: str = ""  # Requerido, validado en __post_init__
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         if not self.resource_type:
@@ -862,7 +862,7 @@ class RateLimitExceededEvent(SecurityAuditEvent):
     limit_value: str = ""
     request_count: int = 0  # Requerido, validado en __post_init__
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y configuración de severity"""
         super().__post_init__()
         if not self.endpoint:
@@ -928,7 +928,7 @@ class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
     success: bool = False  # Requerido, pero con default para dataclass
     failure_reason: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y asignación de severity según éxito/fallo"""
         super().__post_init__()
 
@@ -1000,7 +1000,7 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
     success: bool = False  # Requerido, pero con default para dataclass
     failure_reason: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y asignación de severity según éxito/fallo"""
         super().__post_init__()
 

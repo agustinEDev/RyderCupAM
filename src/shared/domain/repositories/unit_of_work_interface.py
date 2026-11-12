@@ -6,6 +6,8 @@ Esta interfaz coordina transacciones entre múltiples repositorios manteniendo c
 """
 
 from abc import ABC, abstractmethod
+from types import TracebackType
+from typing import Self
 
 
 class UnitOfWorkInterface(ABC):
@@ -31,7 +33,7 @@ class UnitOfWorkInterface(ABC):
     """
 
     @abstractmethod
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         """
         Inicia una nueva unidad de trabajo (contexto async).
 
@@ -44,7 +46,12 @@ class UnitOfWorkInterface(ABC):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         Finaliza la unidad de trabajo (contexto async).
 

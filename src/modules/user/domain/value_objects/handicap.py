@@ -30,7 +30,7 @@ class Handicap:
     MAX_HANDICAP = 54.0
     value: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Valida que el hándicap esté en el rango permitido."""
         if not isinstance(self.value, (int, float)):
             raise TypeError(

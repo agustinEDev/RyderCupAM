@@ -9,6 +9,7 @@ no en este VO, para mantener la separación de responsabilidades.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from src.shared.domain.value_objects.country_code import CountryCode
 
@@ -61,7 +62,7 @@ class Location:
     adjacent_country_1: CountryCode | None = None
     adjacent_country_2: CountryCode | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Validación automática de la ubicación.
 
@@ -124,7 +125,7 @@ class Location:
         country_codes = [c.value for c in self.get_all_countries()]
         return " / ".join(country_codes)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Operador de igualdad - Comparación por valor.
 
@@ -141,7 +142,7 @@ class Location:
         """Hash del objeto - Permite usar en sets y como keys de dict."""
         return hash((self.main_country, self.adjacent_country_1, self.adjacent_country_2))
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Retorna los valores para SQLAlchemy composite mapping.
 

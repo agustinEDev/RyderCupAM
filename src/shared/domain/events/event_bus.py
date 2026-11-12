@@ -6,6 +6,7 @@ publicar eventos y registrar handlers de forma desacoplada.
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .domain_event import DomainEvent
 from .event_handler import EventHandler
@@ -47,7 +48,7 @@ class EventBus(ABC):
         pass
 
     @abstractmethod
-    def register(self, handler: EventHandler) -> None:
+    def register(self, handler: EventHandler[Any]) -> None:
         """
         Registra un handler para un tipo específico de evento.
 
@@ -57,7 +58,7 @@ class EventBus(ABC):
         pass
 
     @abstractmethod
-    def unregister(self, handler: EventHandler) -> None:
+    def unregister(self, handler: EventHandler[Any]) -> None:
         """
         Desregistra un handler específico.
 
@@ -67,7 +68,7 @@ class EventBus(ABC):
         pass
 
     @abstractmethod
-    def get_handlers(self, event_type: type[DomainEvent]) -> list[EventHandler]:
+    def get_handlers(self, event_type: type[DomainEvent]) -> list[EventHandler[Any]]:
         """
         Obtiene todos los handlers registrados para un tipo de evento.
 

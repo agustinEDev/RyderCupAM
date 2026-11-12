@@ -1356,7 +1356,7 @@ class Competition:
         """Representación string legible."""
         return f"{self._name} ({self._status.value})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Operador de igualdad - Comparación por identidad (ID)."""
         return isinstance(other, Competition) and self._id == other._id
 

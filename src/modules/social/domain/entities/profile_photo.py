@@ -1,6 +1,7 @@
 """Entidad: ProfilePhoto — una foto de la galeria de un jugador."""
 
 from datetime import datetime
+from typing import Any
 
 from src.modules.social.domain.value_objects.profile_photo_id import ProfilePhotoId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -71,7 +72,7 @@ class ProfilePhoto:
         )
 
     @classmethod
-    def reconstruct(cls, **props) -> "ProfilePhoto":
+    def reconstruct(cls, **props: Any) -> "ProfilePhoto":
         return cls(**props)
 
     # === Getters ===
@@ -119,7 +120,7 @@ class ProfilePhoto:
         limpio = caption.strip()
         return limpio or None
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, ProfilePhoto) and self._id == other._id
 
     def __hash__(self) -> int:

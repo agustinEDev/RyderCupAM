@@ -49,10 +49,10 @@ class InvitationId:
     def __str__(self) -> str:
         return str(self.value)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, InvitationId) and self.value == other.value
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, InvitationId):
             return NotImplemented
         return self.value < other.value

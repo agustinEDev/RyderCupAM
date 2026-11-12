@@ -243,7 +243,7 @@ class Password:
         """Representación string segura (sin mostrar hash)."""
         return "[Password Hash]"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Operador de igualdad."""
         return isinstance(other, Password) and self.hashed_value == other.hashed_value
 

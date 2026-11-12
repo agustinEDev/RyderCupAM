@@ -14,6 +14,7 @@ jugador ha jugado, no de esta vuelta (`exclusive_achievements`, 22 oct 2026).
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 
@@ -71,7 +72,7 @@ class DetectedAchievement:
     type: ActivityEventType
     count: int = 1
     holes: tuple[int, ...] = ()
-    detail: dict | None = None
+    detail: dict[str, Any] | None = None
 
 
 class AchievementDetector:

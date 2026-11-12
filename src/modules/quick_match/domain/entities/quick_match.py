@@ -487,8 +487,9 @@ class QuickMatch:
             )
 
         team = participant.team
-        uses_teams = self._match_format is not None and self._match_format != MatchFormat.SINGLES
-        if not uses_teams:
+        # Sin equipos: partido libre o individual. Con la condicion escrita
+        # sobre el atributo, mypy sabe en el `else` que hay formato
+        if self._match_format is None or self._match_format == MatchFormat.SINGLES:
             if team is not None:
                 raise InvalidTeamAssignmentViolation("This quick match format does not use teams.")
         else:
@@ -810,11 +811,15 @@ class QuickMatch:
 
     def __str__(self) -> str:
         format_value = (
-            self._match_format.value if self._match_format else self._scoring_format.value
+            self._match_format.value
+            if self._match_format
+            # Uno de los dos siempre: lo exigen `_validate_format` y el CHECK
+            # ck_quick_matches_exactly_one_format, pero el tipo no lo expresa
+            else self._scoring_format.value  # type: ignore[union-attr]
         )
         return f"QuickMatch({format_value}, {self._status.value})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, QuickMatch) and self._id == other._id
 
     def __hash__(self) -> int:

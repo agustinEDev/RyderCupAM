@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
-from typing import Self, overload
+from typing import Any, Self, overload
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -320,7 +320,7 @@ class StrokePlaySetup:
     # Persistencia, con composite()
     # ------------------------------------------------------------------
 
-    def __composite_values__(self) -> tuple:
+    def __composite_values__(self) -> tuple[Any, ...]:
         """En el orden de `from_columns`: así se guarda en `competitions`."""
         return (
             list(self.category_limits),

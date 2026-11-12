@@ -83,11 +83,11 @@ class CompetitionId:
         """Representación string del UUID."""
         return str(self.value)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Operador de igualdad."""
         return isinstance(other, CompetitionId) and self.value == other.value
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: object) -> bool:
         """Operador menor que (para ordenamiento)."""
         if not isinstance(other, CompetitionId):
             return NotImplemented

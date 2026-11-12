@@ -125,8 +125,6 @@ class JugadoresDelPartido:
             holes_by_tee = context.holes_by_tee
 
             for user in await self._user_repo.find_by_ids(list(player_ids)):
-                if user.id is None:
-                    continue
                 # En SCRATCH solo el género: el hándicap no cuenta
                 if not is_scratch and user.handicap is not None:
                     user_handicap_map[str(user.id.value)] = Decimal(str(user.handicap.value))

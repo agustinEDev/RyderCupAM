@@ -6,6 +6,7 @@ Este evento se dispara cuando un usuario se registra por primera vez.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -53,7 +54,7 @@ class UserRegisteredEvent(DomainEvent):
         """Nombre completo del usuario registrado."""
         return f"{self.first_name} {self.last_name}".strip()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialización específica para UserRegisteredEvent.
 

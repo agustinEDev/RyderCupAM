@@ -14,9 +14,11 @@ Los apuntes no se gastan: lo que estuvo oculto se queda oculto.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,7 @@ class WithdrawnAchievement:
         type: ActivityEventType,
         published_at: datetime,
         visible_to_friends: bool,
-        payload: dict,
+        payload: dict[str, Any],
     ) -> "WithdrawnAchievement":
         """El apunte del logro que se retira."""
         oculto = not visible_to_friends
@@ -88,7 +90,7 @@ class WithdrawnAchievement:
         return hoyos is None or bool(set(hoyos) & set(self.hidden_holes))
 
 
-def _holes(payload: dict) -> tuple[int, ...] | None:
+def _holes(payload: dict[str, Any]) -> tuple[int, ...] | None:
     """Los hoyos de un logro, o None si no dice ninguno valido."""
     hoyos = payload.get("holes")
     if not isinstance(hoyos, list):
@@ -97,7 +99,9 @@ def _holes(payload: dict) -> tuple[int, ...] | None:
     return validos or None
 
 
-def exclusive_scope(user_id, type: ActivityEventType, golf_course_id: str | None) -> tuple:
+def exclusive_scope(
+    user_id: UserId, type: ActivityEventType, golf_course_id: str | None
+) -> tuple[UserId, ActivityEventType, str | None]:
     """
     Entre que logros exclusivos se elige uno, y se hereda lo oculto: jugador,
     tipo y, en «campo nuevo», campo.
@@ -105,7 +109,7 @@ def exclusive_scope(user_id, type: ActivityEventType, golf_course_id: str | None
     return user_id, type, golf_course_id if type == ActivityEventType.NEW_COURSE else None
 
 
-def scope_of(event: ActivityEvent) -> tuple:
+def scope_of(event: ActivityEvent) -> tuple[UserId, ActivityEventType, str | None]:
     """El ambito de un logro exclusivo que se publica."""
     campo = event.payload.get("golf_course_id")
     return exclusive_scope(event.user_id, event.type, campo if isinstance(campo, str) else None)
