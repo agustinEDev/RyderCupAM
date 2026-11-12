@@ -14,6 +14,7 @@ from datetime import datetime
 
 import pytest
 
+from src.modules.competition.application.use_cases.generate_matches_use_case import bloqueo_por
 from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_GENDER,
@@ -189,6 +190,10 @@ class _GeneradorQueRevientaAMitad:
 
     async def avisar_salidas(self):
         """Nada que avisar: no llego a crear ningun partido."""
+
+    def motivo_del_bloqueo(self, error, at):
+        """La misma traducción que el generador de verdad: un RuntimeError no tiene motivo."""
+        return bloqueo_por(error, at)
 
 
 async def _dos_sobres_entregados(db_session, ronda, jugadores):

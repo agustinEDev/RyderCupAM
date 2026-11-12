@@ -39,7 +39,7 @@ def test_c1_ningun_par_de_subpaquetes_de_competiciones_se_importa_en_ciclo():
 
 
 def test_c3_el_caso_de_uso_que_genera_los_partidos_cumple_lo_que_pide_el_envelope_desk():
-    """Given el Protocol del generador, When se mira el caso de uso real, Then tiene sus cuatro métodos."""
+    """Given el Protocol del generador, When se mira el caso de uso real, Then tiene sus cinco métodos."""
     from src.modules.competition.application.services.envelope_desk import GeneradorDePartidos
     from src.modules.competition.application.use_cases.generate_matches_use_case import (
         GenerateMatchesUseCase,

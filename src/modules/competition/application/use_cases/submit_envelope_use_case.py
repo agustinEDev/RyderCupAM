@@ -14,6 +14,7 @@ from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO, en
 from src.modules.competition.application.exceptions import RoundNotFoundError
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
+    GeneradorDePartidos,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -37,7 +38,7 @@ class SubmitEnvelopeUseCase:
         user_repository,
         clock=None,
         timezone_service=None,
-        generador=None,
+        generador: GeneradorDePartidos | None = None,
     ):
         """
         Args:
