@@ -87,7 +87,6 @@ class UserDeviceRepositoryInterface(ABC):
             device: Entidad UserDevice a persistir
 
         Raises:
-            RepositoryError: Si hay error en la persistencia
             DuplicateDeviceError: Si el fingerprint ya existe para ese usuario
 
         Examples:

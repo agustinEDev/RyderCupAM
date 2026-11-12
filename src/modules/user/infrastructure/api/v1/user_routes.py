@@ -70,10 +70,8 @@ from src.modules.user.application.use_cases.update_security_use_case import (
     UpdateSecurityUseCase,
 )
 from src.modules.user.domain.errors.user_errors import (
-    AliasAlreadyTakenError,
     DuplicateEmailError,
     InvalidCredentialsError,
-    UserNotFoundError,
 )
 from src.modules.user.domain.exceptions import (
     EmailChangeEmailInUseError,
@@ -216,11 +214,6 @@ async def find_user(
 
         # Ejecutar el caso de uso
         return await use_case.execute(request, viewer_id=UserId(str(current_user.id)))
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -326,13 +319,7 @@ async def accept_terms(
         ),
         user_agent=get_user_agent(request),
     )
-    try:
-        return await use_case.execute(accept_request)
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+    return await use_case.execute(accept_request)
 
 
 @router.patch(
@@ -374,18 +361,6 @@ async def update_profile(
         response = await use_case.execute(user_id, request)
         return response
 
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except AliasAlreadyTakenError as e:
-        # 409 y no 400: la petición es correcta, lo que pasa es que otra
-        # persona llegó antes. El mensaje va tal cual al campo del formulario
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -474,11 +449,6 @@ async def update_security(
         response = await use_case.execute(user_id, request)
         return response
 
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
     except InvalidCredentialsError:
         # Con su código, para que la app lo diga en su idioma
         return respuesta_con_codigo(

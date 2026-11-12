@@ -28,30 +28,19 @@ from src.modules.competition.application.dto.competition_dto import (
     TeeResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
     CompetitionNotFoundError,
-    GolfCourseHasRoundsError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
-    CompetitionNotFoundError as AddGCNotFoundError,
     GolfCourseAlreadyAssignedError,
     GolfCourseNotApprovedError,
-    GolfCourseNotFoundError,
     IncompatibleCountryError,
-    NotCompetitionCreatorError as AddGCNotCreatorError,
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
-    CompetitionNotDraftError as RemoveGCNotDraftError,
-    GolfCourseNotAssignedError,
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
-    CompetitionNotDraftError as ReorderNotDraftError,
-    CompetitionNotFoundError as ReorderNotFoundError,
-    InvalidReorderError,
-    NotCompetitionCreatorError as ReorderNotCreatorError,
     ReorderGolfCoursesUseCase,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -107,14 +96,7 @@ async def add_golf_course_to_competition(
 
         return response
 
-    except AddGCNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except GolfCourseNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except AddGCNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (
-        AgendaNotEditableError,
         GolfCourseNotApprovedError,
         GolfCourseAlreadyAssignedError,
         IncompatibleCountryError,
@@ -140,26 +122,16 @@ async def remove_golf_course_from_competition(
     ),
 ):
     """Elimina un campo de golf de una competición en estado DRAFT."""
-    try:
-        current_user_id = UserId(current_user.id)
+    current_user_id = UserId(current_user.id)
 
-        request_dto = RemoveGolfCourseRequestDTO(
-            competition_id=competition_id,
-            golf_course_id=golf_course_id,
-        )
+    request_dto = RemoveGolfCourseRequestDTO(
+        competition_id=competition_id,
+        golf_course_id=golf_course_id,
+    )
 
-        response = await use_case.execute(
-            request_dto, current_user_id, is_admin=current_user.is_admin
-        )
+    response = await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        return response
-
-    except RemoveGCNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except RemoveGCNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (RemoveGCNotDraftError, GolfCourseNotAssignedError, GolfCourseHasRoundsError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return response
 
 
 @router.put(
@@ -178,26 +150,16 @@ async def reorder_golf_courses(
     use_case: ReorderGolfCoursesUseCase = Depends(get_reorder_golf_courses_use_case),
 ):
     """Reordena los campos de golf asociados a una competición en estado DRAFT."""
-    try:
-        current_user_id = UserId(current_user.id)
+    current_user_id = UserId(current_user.id)
 
-        request_dto = ReorderGolfCoursesRequestDTO(
-            competition_id=competition_id,
-            golf_course_ids=reorder_body.golf_course_ids,
-        )
+    request_dto = ReorderGolfCoursesRequestDTO(
+        competition_id=competition_id,
+        golf_course_ids=reorder_body.golf_course_ids,
+    )
 
-        response = await use_case.execute(
-            request_dto, current_user_id, is_admin=current_user.is_admin
-        )
+    response = await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        return response
-
-    except ReorderNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ReorderNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (ReorderNotDraftError, InvalidReorderError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return response
 
 
 @router.get(

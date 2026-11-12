@@ -9,7 +9,7 @@ from collections.abc import Awaitable
 from typing import TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
@@ -32,11 +32,7 @@ from src.modules.competition.application.dto.partidas_dto import (
     TeeGroupsResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    NotCompetitionCreatorError,
-    PartidaNotFoundError,
     PartidasError,
-    RoundNotFoundError,
 )
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
@@ -153,10 +149,6 @@ async def _responder(llamada: Awaitable[T]) -> T | JSONResponse:
     """Ejecuta el caso de uso y traduce sus errores, los mismos en todas las rutas."""
     try:
         return await llamada
-    except (RoundNotFoundError, CompetitionNotFoundError, PartidaNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_CON_CODIGO as e:
         return _respuesta(e)
 

@@ -27,15 +27,7 @@ from src.modules.competition.application.dto.invitation_dto import (
     SendInvitationByEmailRequestDTO,
     SendInvitationByUserIdRequestDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    InvitationNotFoundError,
-    InviteeNotFoundError,
-    NotCompetitionCreatorError,
-    NotInviteeError,
-)
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
-from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
 )
@@ -55,15 +47,9 @@ from src.modules.competition.application.use_cases.send_invitation_by_user_id_us
     SendInvitationByUserIdUseCase,
 )
 from src.modules.competition.domain.exceptions.competition_violations import (
-    AlreadyEnrolledInvitationViolation,
     CompetitionFullViolation,
-    DuplicateInvitationViolation,
-    InvalidInvitationStatusViolation,
-    InvitationCompetitionStatusViolation,
-    InvitationExpiredViolation,
     InvitationNoRoomViolation,
     InvitationRateLimitViolation,
-    SelfInvitationViolation,
 )
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -156,18 +142,6 @@ async def send_invitation_by_user_id(
         )
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except InviteeNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except SelfInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except AlreadyEnrolledInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except DuplicateInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
@@ -176,8 +150,6 @@ async def send_invitation_by_user_id(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
-    except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
         # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
         # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
@@ -209,16 +181,6 @@ async def send_invitation_by_email(
         )
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except SelfInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except AlreadyEnrolledInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except DuplicateInvitationViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
@@ -227,8 +189,6 @@ async def send_invitation_by_email(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
-    except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
         # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
         # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
@@ -281,10 +241,6 @@ async def respond_to_invitation(
         )
         return await use_case.execute(request_dto)
 
-    except InvitationNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotInviteeError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except InvitationNoRoomViolation:
         # Con su codigo en la raiz, para que la pantalla lo diga en su idioma
         # (claves siempre, #360; BE #385). El texto, la constante de la clase y
@@ -301,18 +257,6 @@ async def respond_to_invitation(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
-    except InvalidInvitationStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvitationExpiredViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except CompetitionFullViolation as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except PerfilIncompletoError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post(
@@ -329,14 +273,7 @@ async def cancel_invitation(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CancelInvitationUseCase = Depends(get_cancel_invitation_use_case),
 ) -> Response:
-    try:
-        await use_case.execute(invitation_id, current_user.id, is_admin=current_user.is_admin)
-    except InvitationNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except InvalidInvitationStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await use_case.execute(invitation_id, current_user.id, is_admin=current_user.is_admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -356,18 +293,12 @@ async def list_competition_invitations(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
-    try:
-        validated_status = _validate_status_filter(status_filter)
-        return await use_case.execute(
-            competition_id=str(competition_id),
-            current_user_id=str(current_user.id),
-            is_admin=current_user.is_admin,
-            status_filter=validated_status,
-            page=page,
-            limit=limit,
-        )
-
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    validated_status = _validate_status_filter(status_filter)
+    return await use_case.execute(
+        competition_id=str(competition_id),
+        current_user_id=str(current_user.id),
+        is_admin=current_user.is_admin,
+        status_filter=validated_status,
+        page=page,
+        limit=limit,
+    )

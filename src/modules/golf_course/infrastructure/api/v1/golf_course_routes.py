@@ -48,6 +48,11 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     RequestGolfCourseRequestDTO,
     UpdateGolfCourseRequestDTO,
 )
+from src.modules.golf_course.application.exceptions import (
+    CountryNotFoundError,
+    GolfCourseEditForbiddenError,
+    GolfCourseMissingError,
+)
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
 )
@@ -204,9 +209,9 @@ async def get_golf_course_by_id(
     except HTTPException:
         # Re-raise HTTPException as-is (403, 404, etc.) from None
         raise
+    except GolfCourseMissingError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
@@ -379,15 +384,11 @@ async def update_golf_course(
 
         return response
 
+    except (GolfCourseMissingError, CountryNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    except GolfCourseEditForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from None
     except ValueError as e:
-        error_str = str(e).lower()
-        if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-        if "permission" in error_str or "not have permission" in error_str:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from None
-        if "rejected" in error_str or "cannot edit" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
         logger.warning(f"Validation error in update_golf_course: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
@@ -543,13 +544,9 @@ async def approve_golf_course(
             "golf_course": response.golf_course,
         }
 
+    except GolfCourseMissingError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
-        error_str = str(e).lower()
-        if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-        if "cannot approve" in error_str or "only pending" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
@@ -605,15 +602,9 @@ async def reject_golf_course(
             "golf_course": response.golf_course,
         }
 
+    except GolfCourseMissingError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
-        error_str = str(e).lower()
-        if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-        if "cannot reject" in error_str or "only pending" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-        if "reason" in error_str and ("10" in error_str or "500" in error_str):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
@@ -674,13 +665,9 @@ async def approve_update_golf_course(
             "applied_changes_from": response.applied_changes_from,
         }
 
+    except GolfCourseMissingError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
-        error_str = str(e).lower()
-        if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-        if "not a clone" in error_str or "does not have" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
@@ -740,13 +727,9 @@ async def reject_update_golf_course(
             "rejected_clone_id": response.rejected_clone_id,
         }
 
+    except GolfCourseMissingError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
-        error_str = str(e).lower()
-        if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-        if "not a clone" in error_str or "does not have" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:

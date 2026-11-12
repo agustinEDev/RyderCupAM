@@ -53,11 +53,6 @@ class TestCompetitionRepositoryInterface:
         assert hasattr(CompetitionRepositoryInterface, "find_by_status")
         assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.find_by_status)
 
-    def test_has_find_active_in_date_range_method(self):
-        """Debe tener método find_active_in_date_range."""
-        assert hasattr(CompetitionRepositoryInterface, "find_active_in_date_range")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.find_active_in_date_range)
-
     def test_has_exists_with_name_method(self):
         """Debe tener método exists_with_name."""
         assert hasattr(CompetitionRepositoryInterface, "exists_with_name")
@@ -113,24 +108,10 @@ class TestEnrollmentRepositoryInterface:
         assert hasattr(EnrollmentRepositoryInterface, "find_by_user")
         assert inspect.iscoroutinefunction(EnrollmentRepositoryInterface.find_by_user)
 
-    def test_has_exists_for_user_in_competition_method(self):
-        """Debe tener método exists_for_user_in_competition."""
-        assert hasattr(EnrollmentRepositoryInterface, "exists_for_user_in_competition")
-        assert inspect.iscoroutinefunction(
-            EnrollmentRepositoryInterface.exists_for_user_in_competition
-        )
-
     def test_has_count_approved_method(self):
         """Debe tener método count_approved."""
         assert hasattr(EnrollmentRepositoryInterface, "count_approved")
         assert inspect.iscoroutinefunction(EnrollmentRepositoryInterface.count_approved)
-
-    def test_has_find_by_competition_and_team_method(self):
-        """Debe tener método find_by_competition_and_team."""
-        assert hasattr(EnrollmentRepositoryInterface, "find_by_competition_and_team")
-        assert inspect.iscoroutinefunction(
-            EnrollmentRepositoryInterface.find_by_competition_and_team
-        )
 
     def test_cannot_instantiate_directly(self):
         """No se debe poder instanciar directamente (clase abstracta)."""

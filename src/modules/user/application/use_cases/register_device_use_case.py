@@ -103,7 +103,6 @@ class RegisterDeviceUseCase:
 
         Raises:
             ValueError: Si user_id no es UUID válido
-            RepositoryError: Si falla la persistencia
         """
         async with self._uow:
             user_id = UserId(request.user_id)

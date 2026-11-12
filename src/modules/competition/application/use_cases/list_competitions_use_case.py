@@ -73,15 +73,6 @@ class ListCompetitionsUseCase:
         self._uow = uow
         self._zona_del_campo = zona_del_campo
 
-    @property
-    def zona_del_campo(self) -> ICompetitionTimezone | None:
-        """De donde sale la zona horaria, para el camino gemelo de la ruta.
-
-        «Mis competiciones» arma su lista por su cuenta, sin pasar por `execute`,
-        y necesita abrir lo que toque igual que este caso de uso (BE #331).
-        """
-        return self._zona_del_campo
-
     async def execute(
         self,
         status: str | None = None,
@@ -135,6 +126,174 @@ class ListCompetitionsUseCase:
             await EnrollmentOpener.abrir_las_que_toquen(visibles, self._uow, self._zona_del_campo)
             return self._los_que_siguen_cumpliendo(visibles, status)
 
+    async def listar(
+        self,
+        estados: list[str] | None,
+        creator_id: str | None = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        viewer_id: str | None = None,
+        is_admin: bool = False,
+        viewer_email: str | None = None,
+    ) -> list[Competition]:
+        """
+        Las competiciones de los estados pedidos, sin repetir, abriendo antes las que toquen.
+
+        Sin estados (o con la lista vacía), todas. Es el filtro de `GET /competitions`,
+        que puede llegar varias veces (`?status=ACTIVE&status=DRAFT`).
+
+        Se reúnen las filas de todos los estados, se aparta lo que quien mira no puede
+        ver, se abre lo que toque y solo entonces se filtra por los estados pedidos
+        (BE #814). Si se piden las ACTIVE, se traen también las DRAFT: una programada a
+        la que ya le toca abrir es una ACTIVE más. Antes cada estado se filtraba por su
+        cuenta y esa programada no salía, o salía según el orden de los estados.
+        """
+        filtros = {
+            "creator_id": creator_id,
+            "search_name": search_name,
+            "search_creator": search_creator,
+            "viewer_id": viewer_id,
+            "is_admin": is_admin,
+            "viewer_email": viewer_email,
+        }
+        if not estados:
+            return await self.execute(status=None, **filtros)
+
+        pedidos = list(dict.fromkeys(e.upper() for e in estados))
+        a_consultar = list(pedidos)
+        if (
+            CompetitionStatus.ACTIVE.value in pedidos
+            and CompetitionStatus.DRAFT.value not in pedidos
+        ):
+            a_consultar.append(CompetitionStatus.DRAFT.value)
+
+        async with self._uow:
+            traidas: dict = {}
+            for estado in a_consultar:
+                if search_name or search_creator:
+                    filas = await self._fetch_with_search(
+                        search_name=search_name,
+                        search_creator=search_creator,
+                        status=estado,
+                        creator_id=creator_id,
+                    )
+                else:
+                    filas = await self._fetch_filtered_competitions(estado, creator_id)
+                for competition in filas:
+                    traidas.setdefault(competition.id, competition)
+
+            # Se abren DESPUES de filtrar la visibilidad: una privada que no se le
+            # ensena a quien mira tampoco se le abre de paso (BE #318)
+            visibles = await self.visibles_para(
+                list(traidas.values()), viewer_id, is_admin, viewer_email=viewer_email
+            )
+            await EnrollmentOpener.abrir_las_que_toquen(visibles, self._uow, self._zona_del_campo)
+            return [c for c in visibles if c.status.value in pedidos]
+
+    async def mis_competiciones(
+        self,
+        quien: UserId,
+        estados: list[str] | None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        viewer_email: str | None = None,
+    ) -> list[Competition]:
+        """
+        «Mis competiciones»: las que creó y, detrás, en las que está.
+
+        En las que está: sus inscripciones y las privadas a las que le han invitado y
+        aún no ha contestado (la invitación no crea fila de inscripción hasta que se
+        acepta; release social 2). Pasan por la misma visibilidad que el listado: una
+        fila rechazada o retirada no se borra, y sin esto el expulsado recuperaba la
+        privada por aquí (BE #318). Se abren las que toquen DESPUÉS de la visibilidad
+        y ANTES del filtro por estado, como en `execute`: filtrar por el estado viejo
+        tiraría la recién abierta (BE #331).
+        """
+        async with self._uow:
+            yo = str(quien.value)
+            creadas = await self.listar(
+                estados,
+                creator_id=yo,
+                search_name=search_name,
+                search_creator=search_creator,
+                viewer_id=yo,
+            )
+            inscripciones = await self._uow.enrollments.find_by_user(quien)
+            estado_de_la_inscripcion = {i.competition_id: i.status for i in inscripciones}
+            ids_creadas = {c.id for c in creadas}
+            ids = {i.competition_id for i in inscripciones}
+            ids |= set(
+                await self._uow.invitations.competiciones_con_invitacion_pendiente(
+                    quien, viewer_email, datetime.now()
+                )
+            )
+            candidatas = []
+            for competition_id in ids:
+                competition = await self._uow.competitions.find_by_id(competition_id)
+                if competition and competition.id not in ids_creadas:
+                    candidatas.append(competition)
+
+            visibles = await self.visibles_para(candidatas, yo, viewer_email=viewer_email)
+            await EnrollmentOpener.abrir_las_que_toquen(visibles, self._uow, self._zona_del_campo)
+            return creadas + self._las_inscritas_que_quedan(
+                visibles, estados, estado_de_la_inscripcion
+            )
+
+    async def las_de_los_demas(
+        self,
+        quien: UserId,
+        estados: list[str] | None,
+        creator_id: str | None = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        is_admin: bool = False,
+        viewer_email: str | None = None,
+    ) -> list[Competition]:
+        """
+        El listado sin las suyas: ni las que creó, ni en las que tiene inscripción, ni
+        a las que le han invitado. Esas ya salen en «Mis competiciones» (revisor de la
+        release social 2).
+        """
+        async with self._uow:
+            todas = await self.listar(
+                estados,
+                creator_id=creator_id,
+                search_name=search_name,
+                search_creator=search_creator,
+                viewer_id=str(quien.value),
+                is_admin=is_admin,
+                viewer_email=viewer_email,
+            )
+            inscripciones = await self._uow.enrollments.find_by_user(quien)
+            suyas = {i.competition_id for i in inscripciones}
+            suyas |= await self._uow.invitations.competiciones_con_invitacion_pendiente(
+                quien, viewer_email, datetime.now()
+            )
+            return [c for c in todas if c.creator_id != quien and c.id not in suyas]
+
+    @staticmethod
+    def _las_inscritas_que_quedan(
+        competitions: list[Competition],
+        estados: list[str] | None,
+        estado_de_la_inscripcion: dict,
+    ) -> list[Competition]:
+        """
+        Los filtros que dependen del ESTADO, ya con el estado definitivo (BE #331).
+
+        Fuera la rechazada salvo en una competición ACTIVE, y las que no son de los
+        estados pedidos.
+        """
+        pedidos = [e.upper() for e in estados] if estados else None
+        quedan = []
+        for competition in competitions:
+            estado = competition.status.value
+            rechazada = estado_de_la_inscripcion.get(competition.id) == EnrollmentStatus.REJECTED
+            if rechazada and estado != "ACTIVE":
+                continue
+            if pedidos is None or estado in pedidos:
+                quedan.append(competition)
+        return quedan
+
     @staticmethod
     def _los_que_siguen_cumpliendo(
         competitions: list[Competition], status: str | None
@@ -165,10 +324,10 @@ class ListCompetitionsUseCase:
     ) -> list[Competition]:
         """Aparta las privadas de quien no esta dentro (BE #318).
 
-        Publico a proposito: lo usa este caso de uso y tambien la ruta, que
-        anade por su cuenta las competiciones que salen de tus inscripciones.
-        Ese camino se salto el filtro y dejaba al expulsado recuperando la
-        privada de la que acababan de echarlo.
+        Lo usan `execute` y `mis_competiciones`, que añade las competiciones
+        que salen de tus inscripciones. Ese camino se saltó el filtro cuando
+        vivía en la ruta y dejaba al expulsado recuperando la privada de la
+        que acababan de echarlo.
 
         Una privada la ve su creador, quien esta dentro y quien tiene una
         invitacion o una solicitud en marcha — ese necesita mirarla antes de
@@ -192,7 +351,7 @@ class ListCompetitionsUseCase:
 
         quien = UserId(viewer_id)
         # UNA consulta por quien mira, no una por competicion: el listado trae
-        # hasta 100 y el endpoint llama una vez por cada estado del filtro
+        # hasta 100 por estado pedido
         inscripciones = await self._uow.enrollments.find_by_user(quien)
         dentro_de = {e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER}
         dentro_de |= await self._uow.invitations.competiciones_con_invitacion_pendiente(

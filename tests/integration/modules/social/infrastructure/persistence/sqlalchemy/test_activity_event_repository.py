@@ -231,17 +231,6 @@ async def test_sin_jugadores_no_consulta_nada(db_session):
     assert await repository.find_in([_todos()], limit=10) == []
 
 
-async def test_sabe_si_una_partida_ya_se_publico(db_session):
-    """Given una partida publicada / When se pregunta / Then lo sabe."""
-    user = await _make_saved_user(db_session, "feed-repo-8@example.com")
-    repository = SQLAlchemyActivityEventRepository(db_session)
-    await repository.add_many([_event(user, ActivityEventType.BIRDIE, "match-1")])
-    await db_session.commit()
-
-    assert await repository.exists_for_match("match-1") is True
-    assert await repository.exists_for_match("match-2") is False
-
-
 async def test_borra_todo_lo_publicado_por_un_jugador(db_session):
     """
     Given dos jugadores con eventos / When uno apaga la publicacion / Then

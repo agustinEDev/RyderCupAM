@@ -43,11 +43,6 @@ class HoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
-        """Busca los hole scores de un hoyo especifico de un partido."""
-        pass
-
-    @abstractmethod
     async def find_one(
         self, match_id: MatchId, hole_number: int, player_user_id: UserId
     ) -> HoleScore | None:
@@ -69,11 +64,6 @@ class HoleScoreRepositoryInterface(ABC):
         Los hole scores de un jugador en varios partidos, en una sola lectura y
         no una por partido (el panel de estadísticas, tabla del 22 oct 2026, M).
         """
-        pass
-
-    @abstractmethod
-    async def delete_by_match(self, match_id: MatchId) -> int:
-        """Elimina todos los hole scores de un partido. Retorna la cantidad eliminada."""
         pass
 
     @abstractmethod

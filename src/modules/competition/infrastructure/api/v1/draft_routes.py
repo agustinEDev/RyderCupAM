@@ -13,12 +13,6 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.draft_dto import DraftStateDTO
-from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
-    CompetitionNotFoundError,
-    NotCompetitionCreatorError,
-    NotCompetitionParticipantError,
-)
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
@@ -29,7 +23,6 @@ from src.modules.competition.application.use_cases.start_draft_use_case import (
 )
 from src.modules.competition.domain.entities.draft import (
     DraftNotRunningError,
-    NotYourTurnError,
     PlayerAlreadyPickedError,
 )
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
@@ -51,7 +44,6 @@ class DraftPickBodyDTO(BaseModel):
 # no es suyo o un jugador que ya no está
 _ERRORES_DE_LA_SALA = (
     CaptainMissingError,
-    CompetitionNotClosedError,
     DraftAlreadyStartedError,
     DraftNotRunningError,
     PlayerAlreadyPickedError,
@@ -85,10 +77,6 @@ async def start_draft(
         return await use_case.execute(
             competition_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DE_LA_SALA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -121,14 +109,9 @@ async def get_draft(
     use_case: GetDraftUseCase = Depends(get_draft_use_case),
 ):
     """Devuelve la sala de draft (FE #653)."""
-    try:
-        draft = await use_case.execute(
-            competition_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
-        )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionParticipantError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    draft = await use_case.execute(
+        competition_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+    )
     if draft is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -161,11 +144,5 @@ async def make_draft_pick(
     """Elige a un jugador para el equipo de turno (FE #653)."""
     try:
         return await use_case.execute(competition_id, UserId(str(current_user.id)), body.player_id)
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotYourTurnError as e:
-        # 409 y no 403: no es que no pueda elegir nunca, es que ahora mismo no
-        # le toca. La pantalla se vuelve a pintar y sigue
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DE_LA_SALA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

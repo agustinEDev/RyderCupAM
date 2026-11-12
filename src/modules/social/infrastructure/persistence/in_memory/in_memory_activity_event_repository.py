@@ -183,9 +183,6 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         encontrados.sort(key=lambda e: (e.published_at, str(e.id)), reverse=True)
         return encontrados[:limit]
 
-    async def exists_for_match(self, match_id: str) -> bool:
-        return any(e.source_match_id == match_id for e in self._events)
-
     async def delete_for_user(
         self, user_id: UserId, types: Collection[ActivityEventType] | None = None
     ) -> int:

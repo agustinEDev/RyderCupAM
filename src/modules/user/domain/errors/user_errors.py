@@ -110,17 +110,6 @@ class InvalidCredentialsError(UserDomainError):
     pass
 
 
-class RepositoryError(UserDomainError):
-    """
-    Excepción base para errores de repositorio.
-
-    Se utiliza para encapsular errores de persistencia, conexión a base de datos,
-    o cualquier problema relacionado con la capa de infraestructura de datos.
-    """
-
-    pass
-
-
 class InvalidAvatarPresetError(UserDomainError):
     """
     Excepción lanzada cuando se referencia un preset_id de avatar fuera de rango.
