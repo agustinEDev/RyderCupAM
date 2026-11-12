@@ -71,22 +71,10 @@ from src.modules.competition.application.dto.round_match_dto import (
     WaitingListEntryDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
-    CompetitionNotFoundError as StatusCompNotFoundError,
-    FranjaInvalidaError,
     NotCompetitionCreatorError as ReassignNotCreatorError,
-    NotCompetitionCreatorError as StatusNotCreatorError,
-    NotCompetitionCreatorError as WalkoverNotCreatorError,
-    PlazaEnFranjaError,
-    RoundNotFoundError as StatusRoundNotFoundError,
-    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.services.baja_de_la_competicion import (
     DraftInProgressError,
-)
-from src.modules.competition.application.services.envelope_pairings import (
-    EnvelopesDecideThePairingsError,
-    EnvelopesNotRevealedError,
 )
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.jugadores_de_la_partida import (
@@ -102,57 +90,35 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
-    CompetitionNotFoundError as AssignTeamsNotFoundError,
     DuplicatePlayerInTeamsError,
     InsufficientPlayersError as AssignTeamsInsufficientError,
-    NotCompetitionCreatorError as AssignTeamsNotCreatorError,
     OddPlayersError,
     PlayerNotEnrolledError,
 )
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
-    CompetitionNotFoundError as ConfigSchedNotFoundError,
     ConfigureScheduleUseCase,
-    NoGolfCoursesError,
-    NotCompetitionCreatorError as ConfigSchedNotCreatorError,
 )
 from src.modules.competition.application.use_cases.create_round_use_case import (
-    CompetitionNotFoundError as CreateRoundNotFoundError,
     CreateRoundUseCase,
-    DateOutOfRangeError,
-    DuplicateSessionError as CreateRoundDuplicateSessionError,
-    GolfCourseNotInCompetitionError as CreateRoundGCNotInCompError,
-    NotCompetitionCreatorError as CreateRoundNotCreatorError,
 )
 from src.modules.competition.application.use_cases.declare_walkover_use_case import (
-    CompetitionNotInProgressError as WalkoverNotInProgressError,
     DeclareWalkoverUseCase,
-    InvalidWalkoverError,
-    MatchNotFoundError as WalkoverMatchNotFoundError,
 )
 from src.modules.competition.application.use_cases.delete_round_use_case import (
     DeleteRoundUseCase,
-    NotCompetitionCreatorError as DeleteRoundNotCreatorError,
-    RoundNotFoundError as DeleteRoundNotFoundError,
-    RoundNotModifiableError as DeleteRoundNotModifiableError,
 )
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
-    CompetitionNotClosedError as GenMatchesNotClosedError,
     GenerateMatchesUseCase,
     InsufficientPlayersError as GenMatchesInsufficientError,
     NoGolfCourseForHandicapError,
-    NotCompetitionCreatorError as GenMatchesNotCreatorError,
     NoTeamAssignmentError,
-    RoundNotFoundError as GenMatchesRoundNotFoundError,
-    RoundNotPendingMatchesError,
     TeeColorNotFoundError,
     motivo_apuntado,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
-    MatchNotFoundError as GetMatchNotFoundError,
 )
 from src.modules.competition.application.use_cases.get_schedule_use_case import (
-    CompetitionNotFoundError as GetScheduleNotFoundError,
     GetScheduleUseCase,
 )
 from src.modules.competition.application.use_cases.listas_de_espera_use_case import (
@@ -174,24 +140,14 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
     WrongNumberOfPlayersError,
 )
 from src.modules.competition.application.use_cases.undo_teams_use_case import (
-    CompetitionNotFoundError as UndoTeamsNotFoundError,
-    NotCompetitionCreatorError as UndoTeamsNotCreatorError,
     NoTeamsError,
     TeamsLockedError,
     UndoTeamsUseCase,
 )
 from src.modules.competition.application.use_cases.update_match_status_use_case import (
-    CompetitionNotInProgressError as StatusNotInProgressError,
-    InvalidActionError,
-    MatchNotFoundError as StatusMatchNotFoundError,
     UpdateMatchStatusUseCase,
 )
 from src.modules.competition.application.use_cases.update_round_use_case import (
-    DuplicateSessionError as UpdateRoundDuplicateSessionError,
-    GolfCourseNotInCompetitionError as UpdateRoundGCNotInCompError,
-    NotCompetitionCreatorError as UpdateRoundNotCreatorError,
-    RoundNotFoundError as UpdateRoundNotFoundError,
-    RoundNotModifiableError as UpdateRoundNotModifiableError,
     UpdateRoundUseCase,
 )
 from src.modules.competition.domain.value_objects.match_generation_block import (
@@ -250,43 +206,18 @@ async def create_round(
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
-    try:
-        current_user_id = UserId(current_user.id)
-        request_dto = CreateRoundRequestDTO(
-            competition_id=competition_id,
-            golf_course_id=body.golf_course_id,
-            round_date=body.round_date,
-            session_type=body.session_type,
-            match_format=body.match_format,
-            handicap_mode=body.handicap_mode,
-            allowance_percentage=body.allowance_percentage,
-            tee_sheet=body.tee_sheet,
-        )
-        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
-
-    except CreateRoundNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except CreateRoundNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        # Terminada o cancelada: su agenda ya no se toca (BE #365)
-        AgendaNotEditableError,
-        CreateRoundGCNotInCompError,
-        CreateRoundDuplicateSessionError,
-        DateOutOfRangeError,
-        # Franja sin hoja, solapada o con formato; sesión de Ryder sin formato (#251)
-        FranjaInvalidaError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    current_user_id = UserId(current_user.id)
+    request_dto = CreateRoundRequestDTO(
+        competition_id=competition_id,
+        golf_course_id=body.golf_course_id,
+        round_date=body.round_date,
+        session_type=body.session_type,
+        match_format=body.match_format,
+        handicap_mode=body.handicap_mode,
+        allowance_percentage=body.allowance_percentage,
+        tee_sheet=body.tee_sheet,
+    )
+    return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
 
 @router.put(
@@ -333,35 +264,11 @@ async def update_round(
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-    except UpdateRoundNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
     # Otro campo para una franja con partidas: alguien sin barras en él (#251)
     except JugadoresSinBarraError as e:
         return respuesta_con_jugadores("PLAYERS_WITHOUT_TEE", e.players)
     except JugadoresSinHandicapError as e:
         return respuesta_con_jugadores("PLAYERS_WITHOUT_HANDICAP", e.players)
-    except UpdateRoundNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        # Terminada o cancelada: su agenda ya no se toca (BE #365)
-        AgendaNotEditableError,
-        # Fuera de las fechas del torneo, como al crearla
-        DateOutOfRangeError,
-        UpdateRoundNotModifiableError,
-        UpdateRoundGCNotInCompError,
-        UpdateRoundDuplicateSessionError,
-        FranjaInvalidaError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
 
 
 @router.delete(
@@ -392,32 +299,9 @@ async def delete_round(
     - 403: Usuario no es el creador ni admin
     - 404: Ronda no encontrada
     """
-    try:
-        current_user_id = UserId(current_user.id)
-        request_dto = DeleteRoundRequestDTO(round_id=round_id)
-        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
-
-    except DeleteRoundNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except DeleteRoundNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        # Terminada o cancelada: su agenda ya no se toca (BE #365)
-        AgendaNotEditableError,
-        DeleteRoundNotModifiableError,
-        # Una franja con gente dentro (#251)
-        FranjaInvalidaError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    current_user_id = UserId(current_user.id)
+    request_dto = DeleteRoundRequestDTO(round_id=round_id)
+    return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
 
 @router.get(
@@ -444,20 +328,13 @@ async def get_schedule(
     - 200: Schedule con días, rondas, partidos y asignación de equipos
     - 404: Competición no encontrada
     """
-    try:
-        request_dto = GetScheduleRequestDTO(competition_id=competition_id)
-        return await use_case.execute(
-            request_dto,
-            viewer_id=UserId(str(current_user.id)),
-            viewer_is_admin=current_user.is_admin,
-            viewer_email=correo_de_quien_mira(current_user),
-        )
-
-    except GetScheduleNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+    request_dto = GetScheduleRequestDTO(competition_id=competition_id)
+    return await use_case.execute(
+        request_dto,
+        viewer_id=UserId(str(current_user.id)),
+        viewer_is_admin=current_user.is_admin,
+        viewer_email=correo_de_quien_mira(current_user),
+    )
 
 
 # ======================================================================================
@@ -495,12 +372,6 @@ async def get_match_detail(
     except NoPuedeVerloError:
         return solo_quien_participa()
 
-    except GetMatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-
 
 @router.put(
     "/matches/{match_id}/status",
@@ -531,37 +402,13 @@ async def update_match_status(
     - 403: Usuario no es el creador ni admin
     - 404: Partido no encontrado
     """
-    try:
-        current_user_id = UserId(current_user.id)
-        request_dto = UpdateMatchStatusRequestDTO(
-            match_id=match_id,
-            action=body.action,
-            result=body.result,
-        )
-        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
-
-    except (
-        StatusMatchNotFoundError,
-        StatusRoundNotFoundError,
-        StatusCompNotFoundError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except StatusNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        StatusNotInProgressError,
-        InvalidActionError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    current_user_id = UserId(current_user.id)
+    request_dto = UpdateMatchStatusRequestDTO(
+        match_id=match_id,
+        action=body.action,
+        result=body.result,
+    )
+    return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
 
 @router.post(
@@ -593,33 +440,13 @@ async def declare_walkover(
     - 403: Usuario no es el creador ni admin
     - 404: Partido no encontrado
     """
-    try:
-        current_user_id = UserId(current_user.id)
-        request_dto = DeclareWalkoverRequestDTO(
-            match_id=match_id,
-            winning_team=body.winning_team,
-            reason=body.reason,
-        )
-        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
-
-    except WalkoverMatchNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except WalkoverNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        WalkoverNotInProgressError,
-        InvalidWalkoverError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    current_user_id = UserId(current_user.id)
+    request_dto = DeclareWalkoverRequestDTO(
+        match_id=match_id,
+        winning_team=body.winning_team,
+        reason=body.reason,
+    )
+    return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
 
 @router.put(
@@ -739,16 +566,6 @@ async def assign_teams(
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-    except AssignTeamsNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except AssignTeamsNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
     except (DraftInProgressError, TeamsFormedError) as e:
         # Con su código en la raíz y un texto fijo por código (CodeQL)
         return JSONResponse(
@@ -809,10 +626,6 @@ async def undo_teams(
         await use_case.execute(
             competition_id, UserId(current_user.id), is_admin=current_user.is_admin
         )
-    except UndoTeamsNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except UndoTeamsNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (NoTeamsError, TeamsLockedError) as e:
         # Con su código en la raíz y un texto fijo por código (CodeQL)
         return JSONResponse(
@@ -878,16 +691,6 @@ async def generate_matches(
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-    except GenMatchesRoundNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except GenMatchesNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
     except (
         GenMatchesInsufficientError,
         NoTeamAssignmentError,
@@ -911,19 +714,6 @@ async def generate_matches(
                 "match_generation_block": block_to_dto(motivo).model_dump(mode="json"),
             },
         )
-    except (
-        GenMatchesNotClosedError,
-        RoundNotPendingMatchesError,
-        # Los sobres de los capitanes deciden los enfrentamientos de su sesion
-        # (FE #655): que no esten abiertos, o que se manden emparejamientos a
-        # mano habiendolos, es culpa de quien pide y no un fallo del servidor
-        EnvelopesDecideThePairingsError,
-        EnvelopesNotRevealedError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
 
 
 @router.post(
@@ -957,39 +747,14 @@ async def configure_schedule(
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
-    try:
-        current_user_id = UserId(current_user.id)
-        request_dto = ConfigureScheduleRequestDTO(
-            competition_id=competition_id,
-            mode=body.mode,
-            total_sessions=body.total_sessions,
-            sessions_per_day=body.sessions_per_day,
-        )
-        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
-
-    except ConfigSchedNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except ConfigSchedNotCreatorError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except (
-        # Terminada o cancelada: su agenda ya no se toca (BE #365)
-        AgendaNotEditableError,
-        # La agenda automática es de la Ryder (#251)
-        FranjaInvalidaError,
-        NoGolfCoursesError,
-        # Ya hay sesiones con partidos: sustituirlas se llevaría lo jugado
-        ScheduleAlreadyInPlayError,
-    ) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    current_user_id = UserId(current_user.id)
+    request_dto = ConfigureScheduleRequestDTO(
+        competition_id=competition_id,
+        mode=body.mode,
+        total_sessions=body.total_sessions,
+        sessions_per_day=body.sessions_per_day,
+    )
+    return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
 
 # ======================================================================================
@@ -1020,20 +785,13 @@ async def take_tee_window_place(
     """201 con la plaza; 400 con el motivo si no se puede."""
     quien = UserId(str(current_user.id))
     jugador = UserId(str(body.user_id)) if body.user_id else quien
-    try:
-        plaza = await use_case.execute(
-            RoundId(round_id),
-            jugador,
-            quien,
-            is_admin=current_user.is_admin,
-            en_lugar_de=RoundId(body.instead_of_round_id) if body.instead_of_round_id else None,
-        )
-    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except StatusNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except PlazaEnFranjaError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    plaza = await use_case.execute(
+        RoundId(round_id),
+        jugador,
+        quien,
+        is_admin=current_user.is_admin,
+        en_lugar_de=RoundId(body.instead_of_round_id) if body.instead_of_round_id else None,
+    )
     return TeeWindowPlaceResponseDTO(round_id=plaza.round_id.value, user_id=plaza.user_id.value)
 
 
@@ -1053,19 +811,12 @@ async def leave_tee_window_place(
     use_case: SoltarPlazaUseCase = Depends(get_soltar_plaza_use_case),
 ):
     """204 aunque no la tuviera."""
-    try:
-        await use_case.execute(
-            RoundId(round_id),
-            UserId(str(user_id)),
-            UserId(str(current_user.id)),
-            is_admin=current_user.is_admin,
-        )
-    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except StatusNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except PlazaEnFranjaError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    await use_case.execute(
+        RoundId(round_id),
+        UserId(str(user_id)),
+        UserId(str(current_user.id)),
+        is_admin=current_user.is_admin,
+    )
 
 
 # ======================================================================================
@@ -1093,12 +844,7 @@ async def join_waiting_list(
 ):
     """201; 400 con el motivo si no se puede."""
     yo = UserId(str(current_user.id))
-    try:
-        await use_case.execute(RoundId(round_id), yo, yo)
-    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except PlazaEnFranjaError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    await use_case.execute(RoundId(round_id), yo, yo)
     return WaitingListEntryDTO(round_id=round_id, user_id=yo.value)
 
 
@@ -1118,17 +864,12 @@ async def leave_waiting_list(
     use_case: DejarDeEsperarUseCase = Depends(get_dejar_de_esperar_use_case),
 ):
     """204 aunque no estuviera."""
-    try:
-        await use_case.execute(
-            RoundId(round_id),
-            UserId(str(user_id)),
-            UserId(str(current_user.id)),
-            is_admin=current_user.is_admin,
-        )
-    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except StatusNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    await use_case.execute(
+        RoundId(round_id),
+        UserId(str(user_id)),
+        UserId(str(current_user.id)),
+        is_admin=current_user.is_admin,
+    )
 
 
 @router.get(

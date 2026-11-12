@@ -25,12 +25,6 @@ from src.modules.competition.application.dto.envelope_dto import (
 from src.modules.competition.application.dto.match_generation_block_dto import (
     SessionWithoutMatchesDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    NotCompetitionCreatorError,
-    NotCompetitionParticipantError,
-    RoundNotFoundError,
-)
 from src.modules.competition.application.services.envelope_desk import (
     RoundAlreadyScheduledError,
 )
@@ -44,16 +38,12 @@ from src.modules.competition.application.use_cases.list_my_sessions_without_matc
     ListMySessionsWithoutMatchesUseCase,
 )
 from src.modules.competition.application.use_cases.reset_envelopes_use_case import (
-    NothingToResetError,
     ResetEnvelopesUseCase,
-    SessionAlreadyPlayedError,
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
-    EarlyRevealNeedsBothCaptainsError,
     RevealEnvelopesUseCase,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
-    NotATeamCaptainError,
     SubmitEnvelopeUseCase,
 )
 from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
@@ -141,10 +131,6 @@ async def submit_envelope(
             body.entries,
             sin_esperar=body.reveal_when_both_ready,
         )
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotATeamCaptainError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -174,10 +160,6 @@ async def get_envelopes(
         return await use_case.execute(
             round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionParticipantError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:
         # Mirar los sobres de una competicion sin equipos repartidos es una
         # peticion valida con una respuesta clara, no un 500
@@ -212,13 +194,6 @@ async def reveal_envelopes(
         return await use_case.execute(
             round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EarlyRevealNeedsBothCaptainsError as e:
-        # 409 y no 400: la petición es correcta, es que todavía no toca
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -245,16 +220,9 @@ async def reset_envelopes(
     use_case: ResetEnvelopesUseCase = Depends(get_reset_envelopes_use_case),
 ):
     """Rehace los sobres de una sesión (FE #655)."""
-    try:
-        return await use_case.execute(
-            round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
-        )
-    except (RoundNotFoundError, CompetitionNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (SessionAlreadyPlayedError, NothingToResetError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return await use_case.execute(
+        round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+    )
 
 
 @router.get(

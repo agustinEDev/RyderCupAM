@@ -67,21 +67,15 @@ from src.modules.competition.application.services.handicaps_al_cerrar import (
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
-    CompetitionNotFoundError as ActivateNotFoundError,
-    NotCompetitionCreatorError as ActivateNotCreatorError,
 )
 from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
     ActualizarHandicapsUseCase,
 )
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
-    CompetitionNotFoundError as CancelNotFoundError,
-    NotCompetitionCreatorError as CancelNotCreatorError,
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
-    CompetitionNotFoundError as CloseNotFoundError,
-    NotCompetitionCreatorError as CloseNotCreatorError,
 )
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
@@ -94,7 +88,6 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 )
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
-    NotCaptainOrCreatorError,
 )
 from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
     AnularProgramacionUseCase,
@@ -110,8 +103,6 @@ from src.modules.competition.application.use_cases.revert_competition_to_in_prog
     RevertCompetitionToInProgressUseCase,
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
-    CompetitionNotFoundError as StartNotFoundError,
-    NotCompetitionCreatorError as StartNotCreatorError,
     StartCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import (
@@ -192,10 +183,6 @@ async def activate_competition(
 
         return dto
 
-    except ActivateNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ActivateNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -233,10 +220,6 @@ async def close_enrollments(
 
         return dto
 
-    except CloseNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except CloseNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except PlayersWithoutTeeWindowError as e:
         return respuesta_sin_franja(e)
     except PlayersWithoutHandicapError as e:
@@ -278,10 +261,6 @@ async def start_competition(
 
         return dto
 
-    except StartNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except StartNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except PlayersWithoutTeeWindowError as e:
         return respuesta_sin_franja(e)
     except (CompetitionStateError, ValueError) as e:
@@ -321,10 +300,6 @@ async def complete_competition(
 
         return dto
 
-    except CompleteNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except CompleteNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -362,10 +337,6 @@ async def revert_competition_status(
 
         return dto
 
-    except RevertNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except RevertNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -405,10 +376,6 @@ async def revert_competition_to_in_progress(
 
         return dto
 
-    except RevertToInProgressNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except RevertToInProgressNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -446,10 +413,6 @@ async def reopen_enrollments(
 
         return dto
 
-    except ReopenNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ReopenNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -487,10 +450,6 @@ async def cancel_competition(
 
         return dto
 
-    except CancelNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except CancelNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -527,10 +486,6 @@ async def name_captains(
         return await use_case.execute(
             request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (
         CaptainNotEnrolledError,
         CaptainsLockedError,
@@ -580,10 +535,6 @@ async def name_vice_captain(
         return await use_case.execute(
             request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCaptainOrCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DE_CAPITANIA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -618,10 +569,6 @@ async def fill_captain(
         return await use_case.execute(
             request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DE_CAPITANIA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -712,10 +659,6 @@ async def update_handicaps(
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ActualizacionNoPermitidaError as e:
         return _no_permitida(e)
     except (ActualizacionEnCursoError, RefrescoDesactivadoError) as e:
@@ -771,10 +714,6 @@ async def schedule_handicap_update(
             body.run_at,
             is_admin=current_user.is_admin,
         )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ActualizacionNoPermitidaError as e:
         return _no_permitida(e, al_programar=True)
     except RefrescoDesactivadoError as e:
@@ -796,16 +735,11 @@ async def cancel_scheduled_handicap_update(
     use_case: AnularProgramacionUseCase = Depends(get_anular_programacion_use_case),
 ):
     """204 aunque no hubiera ninguna."""
-    try:
-        await use_case.execute(
-            CompetitionId(competition_id),
-            UserId(str(current_user.id)),
-            is_admin=current_user.is_admin,
-        )
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotCompetitionCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    await use_case.execute(
+        CompetitionId(competition_id),
+        UserId(str(current_user.id)),
+        is_admin=current_user.is_admin,
+    )
 
 
 # El texto de cada motivo, fijo y no el de la excepción (CodeQL, BE #562): las
