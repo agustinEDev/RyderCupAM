@@ -11,14 +11,14 @@ from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     ManualPairingDTO,
 )
+from src.modules.competition.application.services.bloqueos_al_generar import NoTeamAssignmentError
+from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
     InsufficientPlayersError,
     NotCompetitionCreatorError,
-    NoTeamAssignmentError,
     RoundNotFoundError,
     RoundNotPendingMatchesError,
-    TeeColorNotFoundError,
     motivo_apuntado,
 )
 from src.modules.competition.domain.entities.competition import Competition

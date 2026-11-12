@@ -20,6 +20,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
+from src.modules.competition.application.services.bloqueos_al_generar import bloqueo_por
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     HandicapsDeLaCompeticion,
     para_jugar_la_ryder,
@@ -112,12 +113,6 @@ class GeneradorDePartidos(Protocol):
 
     async def avisar_salidas(self) -> None:
         """Avisa de los partidos generados, ya guardados."""
-        ...
-
-    def motivo_del_bloqueo(
-        self, error: Exception, at: datetime | None
-    ) -> MatchGenerationBlock | None:
-        """El motivo que se apunta en la sesión por este fallo, o None."""
         ...
 
 
@@ -519,13 +514,8 @@ class EnvelopeDesk:
     def _motivo(self, error: Exception) -> MatchGenerationBlock:
         """De la excepcion al motivo que se apunta en la sesion."""
         ahora = self.ahora.replace(tzinfo=None)
-        # El mismo que apunta el reintento a mano: una sola traducción. Solo se llega
-        # aquí tras fallar el generador, así que lo hay
-        motivo = (
-            self._generador.motivo_del_bloqueo(error, ahora)
-            if self._generador is not None
-            else None
-        )
+        # El mismo que apunta el reintento a mano: una sola traducción
+        motivo = bloqueo_por(error, ahora)
         if motivo is not None:
             return motivo
         # Lo que no se esperaba se registra entero: el motivo solo dice que falló
