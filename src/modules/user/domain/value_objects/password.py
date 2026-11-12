@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
-from src.modules.user.domain.services.password_hasher import hasher_de_contrasenas
+from src.modules.user.domain.ports.password_hasher import hasher_de_contrasenas
 from src.modules.user.domain.value_objects.password_blacklist import is_common_password
 
 

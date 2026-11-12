@@ -23,9 +23,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
-from src.modules.user.domain.services.terms_of_service import current_terms_version
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.terms_of_service import current_terms_version
 from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,

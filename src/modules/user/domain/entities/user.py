@@ -29,7 +29,7 @@ from ..events.user_logged_out_event import UserLoggedOutEvent
 from ..events.user_password_changed_event import UserPasswordChangedEvent
 from ..events.user_profile_updated_event import UserProfileUpdatedEvent
 from ..events.user_registered_event import UserRegisteredEvent
-from ..services import terms_of_service
+from ..value_objects import terms_of_service
 from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap

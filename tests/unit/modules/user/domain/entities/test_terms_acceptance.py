@@ -14,11 +14,11 @@ from src.modules.user.domain.entities.terms_acceptance import (
     USER_AGENT_MAX_LENGTH,
     TermsAcceptance,
 )
-from src.modules.user.domain.services.terms_of_service import (
+from src.modules.user.domain.value_objects.terms_acceptance_id import TermsAcceptanceId
+from src.modules.user.domain.value_objects.terms_of_service import (
     TERMS_ACCEPTANCE_RETENTION_YEARS,
     terms_acceptance_purge_cutoff,
 )
-from src.modules.user.domain.value_objects.terms_acceptance_id import TermsAcceptanceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 AHORA = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)

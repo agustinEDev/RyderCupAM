@@ -33,7 +33,7 @@ from src.modules.user.domain.errors.user_errors import (
     TermsAcceptanceRequiredError,
     UserNotFoundError,
 )
-from src.modules.user.domain.services import terms_of_service
+from src.modules.user.domain.value_objects import terms_of_service
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId

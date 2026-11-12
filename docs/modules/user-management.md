@@ -151,8 +151,11 @@ UserUnitOfWorkInterface
 
 **Implemented:**
 - `UserFinder` - User search with business validations
-- `PasswordHasher` (ABC) → `BcryptPasswordHasher` (Infrastructure)
-  - hash_password(), verify_password()
+
+### Domain Ports
+
+- `PasswordHasher` (Protocol, `domain/ports/password_hasher.py`) → `BcryptPasswordHasher` (Infrastructure)
+  - `hash()`, `matches()`; installed once per process by `src/config/contrasenas.py`
   - bcrypt: 12 rounds (prod), 4 rounds (tests)
 
 ### Application Services (Ports)

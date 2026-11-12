@@ -19,11 +19,11 @@ from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.services.terms_of_service import TERMS_VERSION_MAX_LENGTH
 from src.modules.user.domain.value_objects.avatar_source import AvatarSource
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.password import Password
+from src.modules.user.domain.value_objects.terms_of_service import TERMS_VERSION_MAX_LENGTH
 from src.modules.user.domain.value_objects.user_avatar_upload_id import UserAvatarUploadId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender

@@ -4,7 +4,7 @@ import bcrypt
 import pytest
 
 from src.config.contrasenas import rondas_de_bcrypt
-from src.modules.user.domain.services import password_hasher
+from src.modules.user.domain.ports import password_hasher
 from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
     BcryptPasswordHasher,
 )

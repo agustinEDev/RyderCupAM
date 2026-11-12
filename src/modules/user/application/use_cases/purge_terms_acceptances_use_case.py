@@ -12,7 +12,7 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.services.terms_of_service import terms_acceptance_purge_cutoff
+from src.modules.user.domain.value_objects.terms_of_service import terms_acceptance_purge_cutoff
 
 
 class PurgeTermsAcceptancesUseCase:

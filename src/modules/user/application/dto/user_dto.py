@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
-from src.modules.user.domain.services.terms_of_service import (
+from src.modules.user.domain.value_objects.terms_of_service import (
     current_terms_version,
     require_utc,
 )

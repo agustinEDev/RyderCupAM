@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.services import terms_of_service
+from src.modules.user.domain.value_objects import terms_of_service
 
 
 def _usuario() -> User:

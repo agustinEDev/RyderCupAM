@@ -27,8 +27,8 @@ from src.modules.user.domain.entities.terms_acceptance import (
     USER_EMAIL_MAX_LENGTH,
     TermsAcceptance,
 )
-from src.modules.user.domain.services.terms_of_service import TERMS_VERSION_MAX_LENGTH
 from src.modules.user.domain.value_objects.terms_acceptance_id import TermsAcceptanceId
+from src.modules.user.domain.value_objects.terms_of_service import TERMS_VERSION_MAX_LENGTH
 from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_mapper import (
     UserIdDecorator,
 )

@@ -23,6 +23,9 @@ ruff==0.17.4
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
 import-linter==2.15
+# grimp - el grafo de importaciones que usa import-linter; lo importa también la prueba de ciclos
+# del dominio de usuarios (tests/unit/modules/user/domain/test_capas_del_dominio_de_usuarios.py)
+grimp==3.17
 
 # ================================
 # TYPE CHECKING

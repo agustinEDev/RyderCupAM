@@ -6,7 +6,7 @@ Una fila del historial de aceptaciones de los Términos de uso.
 
 from datetime import datetime
 
-from ..services import terms_of_service
+from ..value_objects import terms_of_service
 from ..value_objects.terms_acceptance_id import TermsAcceptanceId
 from ..value_objects.user_id import UserId
 
