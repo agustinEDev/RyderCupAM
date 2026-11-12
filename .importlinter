@@ -261,3 +261,15 @@ ignore_imports =
     src.shared.infrastructure.security.authorization -> src.modules.**
     src.shared.infrastructure.api.v1.country_routes -> src.modules.**
     src.shared.infrastructure.email.email_service -> src.modules.**
+
+[importlinter:contract:dependencias-por-contexto]
+name = Los proveedores de cada contexto solo comparten src.config.dependencies.comun (fase 5)
+type = independence
+modules =
+    src.config.dependencies.usuarios
+    src.config.dependencies.competicion
+    src.config.dependencies.competicion_juego
+    src.config.dependencies.campos
+    src.config.dependencies.partida_rapida
+    src.config.dependencies.social
+    src.config.dependencies.soporte

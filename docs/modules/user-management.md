@@ -168,7 +168,7 @@ UserUnitOfWorkInterface
 - `GoogleOAuthService` - Google OAuth via httpx (token exchange + userinfo) ⭐ Sprint 3
 
 **Dependency Injection:**
-- Configured in `src/config/dependencies.py`
+- Configured in `src/config/dependencies/` (`comun.py` and `usuarios.py`)
 - Complete Inversion of Control (IoC)
 
 **📋 See pattern:** ADR-012 Composition Root
