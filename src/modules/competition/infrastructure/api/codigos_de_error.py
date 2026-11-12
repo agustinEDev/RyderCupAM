@@ -119,6 +119,7 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     NotOwnerError as WithdrawEnrollmentNotOwnerError,
 )
+from src.modules.competition.domain.entities.competition import TournamentTypeError
 from src.modules.competition.domain.entities.draft import NotYourTurnError
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -132,8 +133,16 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 )
 from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.value_objects.location import InvalidLocationError
+from src.modules.competition.domain.value_objects.stroke_play_setup import (
+    StrokePlaySettingsError,
+)
 
 CODIGOS: dict[type[Exception], int] = {
+    # 400 (#251): pedir equipos, capitanes, draft, sobres o la clasificación por equipos a un
+    # torneo que no los tiene, o unos ajustes de stroke play sin sentido. Lo pueden lanzar
+    # rutas que no lo esperan; sin esto serían un 500
+    TournamentTypeError: status.HTTP_400_BAD_REQUEST,
+    StrokePlaySettingsError: status.HTTP_400_BAD_REQUEST,
     # 400: la petición no tiene sentido para el estado o las reglas del juego
     AgendaNotEditableError: status.HTTP_400_BAD_REQUEST,
     CompetitionFullError: status.HTTP_400_BAD_REQUEST,

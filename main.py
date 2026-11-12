@@ -65,9 +65,6 @@ from src.config.version import (  # noqa: E402
     get_deployed_commit,
     get_environment,
 )
-from src.modules.competition.infrastructure.api.exception_handlers import (  # noqa: E402
-    register_competition_exception_handlers,
-)
 from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     competition_crud_routes,
     competition_golf_course_routes,
@@ -296,9 +293,6 @@ app.state.limiter = limiter
 # Cuando se excede el límite, se responde automáticamente con HTTP 429
 # slowapi's handler is sync but FastAPI accepts both sync and async
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-
-# Errores de dominio de competición con su 400 (un Stableford sin equipos, #251)
-register_competition_exception_handlers(app)
 
 # Cada error de dominio con su código, en un solo sitio (antes, un except en cada ruta)
 registra_los_codigos(app, todos_los_codigos())

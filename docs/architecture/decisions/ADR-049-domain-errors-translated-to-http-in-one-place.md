@@ -22,6 +22,8 @@ could forget one and answer 500 for an ordinary "not found".
    `src/shared/infrastructure/http/codigos_de_error_compartidos.py`). The composition root
    (`src/config/codigos_de_error.py`) joins them, and `main.py` registers one exception
    handler per error with `registra_los_codigos`. A class in two maps fails at startup.
+   The two errors of tournaments without teams (#251), which competition translated with
+   its own handlers, are now in its map.
 2. **Same response as before.** The handler answers the mapped code and
    `{"detail": str(e)}`, exactly what `HTTPException` gave. Starlette picks the handler by
    the exception's MRO, so a subclass without its own code gets its closest parent's.
