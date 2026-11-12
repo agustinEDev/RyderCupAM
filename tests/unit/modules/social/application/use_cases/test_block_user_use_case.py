@@ -5,7 +5,10 @@ import pytest
 from src.modules.social.application.exceptions import AddresseeNotFoundError
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.domain.entities.friendship import Friendship
-from src.modules.social.domain.exceptions.social_violations import SelfFriendRequestViolation
+from src.modules.social.domain.exceptions.social_violations import (
+    InvalidFriendshipStatusViolation,
+    SelfFriendRequestViolation,
+)
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
@@ -129,3 +132,88 @@ class TestBlockUserUseCase:
 
         assert response.status == "BLOCKED"
         assert response.id == winning_friendship.id.value
+
+
+class TestBloqueoEnCarrera:
+    """Carreras al bloquear que tapaba la exención de mypy (fase 5, paso 3)."""
+
+    @pytest.fixture
+    def uow(self):
+        return InMemorySocialUnitOfWork()
+
+    @pytest.fixture
+    def user_uow(self):
+        return UserInMemoryUoW()
+
+    async def _usuario(self, user_uow, email):
+        user = User.create(
+            first_name="Test", last_name="User", email_str=email, plain_password="SecureP@ssw0rd123"
+        )
+        async with user_uow:
+            await user_uow.users.save(user)
+        return user
+
+    def _carrera(self, uow, despues_del_choque=None):
+        """La primera lectura no ve la fila; la segunda ve lo que haya (o nada)."""
+        original = uow.friendships.find_by_pair
+        llamadas = 0
+
+        async def find_by_pair(a, b):
+            nonlocal llamadas
+            llamadas += 1
+            if llamadas == 1:
+                return None
+            if despues_del_choque is not None:
+                await despues_del_choque()
+            return await original(a, b)
+
+        uow.friendships.find_by_pair = find_by_pair
+
+    async def test_bloquear_mientras_llega_una_solicitud_del_otro_bloquea_igualmente(
+        self, uow, user_uow
+    ):
+        """
+        Given B manda una solicitud a A justo cuando A le bloquea (gana la solicitud la carrera)
+        When A termina de bloquear
+        Then la relación queda BLOQUEADA por A, no como solicitud pendiente
+        """
+        a = await self._usuario(user_uow, "a.carrera@test.com")
+        b = await self._usuario(user_uow, "b.carrera@test.com")
+        solicitud = Friendship.create(
+            id=FriendshipId.generate(), requester_id=b.id, addressee_id=a.id
+        )
+        async with uow:
+            await uow.friendships.add(solicitud)
+        self._carrera(uow)
+
+        respuesta = await BlockUserUseCase(uow, user_uow).execute(str(a.id.value), str(b.id.value))
+
+        assert respuesta.status == "BLOCKED"
+        async with uow:
+            guardada = await uow.friendships.find_by_pair(a.id, b.id)
+        assert guardada.is_blocked()
+        assert guardada.blocked_by == a.id
+
+    async def test_bloquear_si_la_relacion_desaparece_en_la_carrera_es_un_conflicto(
+        self, uow, user_uow
+    ):
+        """
+        Given otra petición crea la pareja y otra la borra antes de releer
+        When A termina de bloquear
+        Then es un conflicto (409), no un 500
+        """
+        a = await self._usuario(user_uow, "a.borrada@test.com")
+        b = await self._usuario(user_uow, "b.borrada@test.com")
+        ganadora = Friendship.create(
+            id=FriendshipId.generate(), requester_id=b.id, addressee_id=a.id
+        )
+        async with uow:
+            await uow.friendships.add(ganadora)
+
+        async def la_borran():
+            await uow.friendships.remove(ganadora)
+
+        self._carrera(uow, despues_del_choque=la_borran)
+
+        with pytest.raises(InvalidFriendshipStatusViolation):
+            await BlockUserUseCase(uow, user_uow).execute(str(a.id.value), str(b.id.value))

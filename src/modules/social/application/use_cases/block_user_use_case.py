@@ -5,6 +5,7 @@ from src.modules.social.application.exceptions import AddresseeNotFoundError
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.exceptions.social_violations import (
     DuplicateFriendshipViolation,
+    InvalidFriendshipStatusViolation,
     SelfFriendRequestViolation,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -59,10 +60,19 @@ class BlockUserUseCase:
                     await self._uow.friendships.add(friendship)
                     await self._uow.flush()
                 except DuplicateFriendshipViolation:
-                    # Concurrent block on the same pair: another request already
-                    # won the uq_friendship_pair race (translated by the UoW
-                    # adapter). Idempotent: reload and return it.
-                    friendship = await self._uow.friendships.find_by_pair(blocker_id, blocked_id)
+                    # Otra petición ganó la carrera del índice uq_friendship_pair (la
+                    # traduce el adaptador de la UoW). Se relee lo que dejó. Si ya no
+                    # está (la borró una tercera), es un conflicto: que lo intente de
+                    # nuevo. Si es una solicitud o una amistad, se bloquea igualmente
+                    ganadora = await self._uow.friendships.find_by_pair(blocker_id, blocked_id)
+                    if ganadora is None:
+                        raise InvalidFriendshipStatusViolation(
+                            "The relationship changed while blocking; try again."
+                        ) from None
+                    friendship = ganadora
+                    if not friendship.is_blocked():
+                        friendship.block(blocker_id)
+                        await self._uow.friendships.update(friendship)
             elif not friendship.is_blocked():
                 friendship.block(blocker_id)
                 await self._uow.friendships.update(friendship)
