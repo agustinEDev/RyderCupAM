@@ -6,6 +6,11 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     UpdateGolfCourseRequestDTO,
     UpdateGolfCourseResponseDTO,
 )
+from src.modules.golf_course.application.exceptions import (
+    CountryNotFoundError,
+    GolfCourseEditForbiddenError,
+    GolfCourseMissingError,
+)
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.application.ports.timezone_resolver import ITimezoneResolver
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
@@ -68,11 +73,11 @@ class UpdateGolfCourseUseCase:
             # 1. Buscar campo original
             original_course = await self._uow.golf_courses.find_by_id(golf_course_id)
             if original_course is None:
-                raise ValueError(f"Golf course with ID {golf_course_id} not found")
+                raise GolfCourseMissingError(f"Golf course with ID {golf_course_id} not found")
 
             # 2. Validar permisos
             if not is_admin and original_course.creator_id != user_id:
-                raise ValueError(
+                raise GolfCourseEditForbiddenError(
                     f"User {user_id} does not have permission to edit golf course {golf_course_id}"
                 )
 
@@ -80,7 +85,7 @@ class UpdateGolfCourseUseCase:
             country_code = CountryCode(request.country_code)
             country = await self._uow.countries.find_by_code(country_code)
             if country is None:
-                raise ValueError(f"Country with code '{request.country_code}' not found")
+                raise CountryNotFoundError(f"Country with code '{request.country_code}' not found")
 
             # 4. Crear Tees y Holes desde DTOs
             location = GolfCourseMapper.to_domain_location(request.location)

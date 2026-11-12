@@ -6,6 +6,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ApproveGolfCourseRequestDTO,
     ApproveGolfCourseResponseDTO,
 )
+from src.modules.golf_course.application.exceptions import GolfCourseMissingError
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -34,7 +35,8 @@ class ApproveGolfCourseUseCase:
         ApproveGolfCourseResponseDTO con el campo aprobado
 
     Raises:
-        ValueError: Si el campo no existe o no se puede aprobar
+        GolfCourseMissingError: Si el campo no existe
+        ValueError: Si no se puede aprobar
     """
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
@@ -59,7 +61,7 @@ class ApproveGolfCourseUseCase:
             golf_course = await self._uow.golf_courses.find_by_id(golf_course_id)
 
             if not golf_course:
-                raise ValueError(f"Golf course not found: {request.golf_course_id}")
+                raise GolfCourseMissingError(f"Golf course not found: {request.golf_course_id}")
 
             # 2. Aprobar (domain method valida estado)
             golf_course.approve()

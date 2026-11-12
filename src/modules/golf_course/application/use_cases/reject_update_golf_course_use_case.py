@@ -6,6 +6,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     RejectUpdateGolfCourseRequestDTO,
     RejectUpdateGolfCourseResponseDTO,
 )
+from src.modules.golf_course.application.exceptions import GolfCourseMissingError
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -37,7 +38,8 @@ class RejectUpdateGolfCourseUseCase:
         - rejected_clone_id: ID del clone rechazado (eliminado)
 
     Raises:
-        ValueError: Si clone no existe, no es clone, o original no existe
+        GolfCourseMissingError: Si el clon o su original no existen
+        ValueError: Si no es un clon
     """
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
@@ -62,7 +64,7 @@ class RejectUpdateGolfCourseUseCase:
             clone = await self._uow.golf_courses.find_by_id(clone_id)
 
             if clone is None:
-                raise ValueError(f"Golf course clone with ID {clone_id} not found")
+                raise GolfCourseMissingError(f"Golf course clone with ID {clone_id} not found")
 
             # 2. Verificar que es realmente un clone (tiene original_golf_course_id)
             if clone.original_golf_course_id is None:
@@ -75,7 +77,9 @@ class RejectUpdateGolfCourseUseCase:
             original_course = await self._uow.golf_courses.find_by_id(clone.original_golf_course_id)
 
             if original_course is None:
-                raise ValueError(f"Original golf course {clone.original_golf_course_id} not found")
+                raise GolfCourseMissingError(
+                    f"Original golf course {clone.original_golf_course_id} not found"
+                )
 
             # 4. Quitar marca de "pending update" del original
             original_course.clear_pending_update()
