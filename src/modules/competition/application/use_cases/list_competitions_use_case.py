@@ -137,10 +137,16 @@ class ListCompetitionsUseCase:
         viewer_email: str | None = None,
     ) -> list[Competition]:
         """
-        `execute` con varios estados: una consulta por estado, sin repetir competiciones.
+        Las competiciones de los estados pedidos, sin repetir, abriendo antes las que toquen.
 
         Sin estados (o con la lista vacía), todas. Es el filtro de `GET /competitions`,
         que puede llegar varias veces (`?status=ACTIVE&status=DRAFT`).
+
+        Se reúnen las filas de todos los estados, se aparta lo que quien mira no puede
+        ver, se abre lo que toque y solo entonces se filtra por los estados pedidos
+        (BE #814). Si se piden las ACTIVE, se traen también las DRAFT: una programada a
+        la que ya le toca abrir es una ACTIVE más. Antes cada estado se filtraba por su
+        cuenta y esa programada no salía, o salía según el orden de los estados.
         """
         filtros = {
             "creator_id": creator_id,
@@ -152,10 +158,37 @@ class ListCompetitionsUseCase:
         }
         if not estados:
             return await self.execute(status=None, **filtros)
-        todas: list[Competition] = []
-        for estado in estados:
-            todas.extend(await self.execute(status=estado, **filtros))
-        return list({c.id: c for c in todas}.values())
+
+        pedidos = list(dict.fromkeys(e.upper() for e in estados))
+        a_consultar = list(pedidos)
+        if (
+            CompetitionStatus.ACTIVE.value in pedidos
+            and CompetitionStatus.DRAFT.value not in pedidos
+        ):
+            a_consultar.append(CompetitionStatus.DRAFT.value)
+
+        async with self._uow:
+            traidas: dict = {}
+            for estado in a_consultar:
+                if search_name or search_creator:
+                    filas = await self._fetch_with_search(
+                        search_name=search_name,
+                        search_creator=search_creator,
+                        status=estado,
+                        creator_id=creator_id,
+                    )
+                else:
+                    filas = await self._fetch_filtered_competitions(estado, creator_id)
+                for competition in filas:
+                    traidas.setdefault(competition.id, competition)
+
+            # Se abren DESPUES de filtrar la visibilidad: una privada que no se le
+            # ensena a quien mira tampoco se le abre de paso (BE #318)
+            visibles = await self.visibles_para(
+                list(traidas.values()), viewer_id, is_admin, viewer_email=viewer_email
+            )
+            await EnrollmentOpener.abrir_las_que_toquen(visibles, self._uow, self._zona_del_campo)
+            return [c for c in visibles if c.status.value in pedidos]
 
     async def mis_competiciones(
         self,
