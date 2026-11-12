@@ -26,8 +26,6 @@ from src.modules.social.application.dto.profile_dto import (
     PlayerProfileResponseDTO,
 )
 from src.modules.social.application.exceptions import (
-    ActivityNotVisibleError,
-    GamesTogetherNotVisibleError,
     ProfileNotVisibleError,
 )
 from src.modules.social.application.use_cases.get_feed_unseen_count_use_case import (
@@ -108,8 +106,6 @@ async def get_player_activity(
         )
     except ProfileNotVisibleError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND) from e
-    except ActivityNotVisibleError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 @router.get(
@@ -133,8 +129,6 @@ async def get_games_together(
         return await use_case.execute(str(current_user.id), str(user_id), cursor=cursor)
     except ProfileNotVisibleError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND) from e
-    except GamesTogetherNotVisibleError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 @router.get(

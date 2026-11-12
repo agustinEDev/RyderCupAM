@@ -1,6 +1,7 @@
 """
-Las dos rutas que reciben imágenes traducen el error de la lectura con tope
-(UploadTooLargeError, de shared) a su 413 (revisión de la fase 2, 9 nov 2026).
+Las dos rutas que reciben imágenes cortan un fichero demasiado grande antes del caso de
+uso, y la API responde 413 (revisión de la fase 2, 9 nov 2026). Desde la fase 5 el 413 lo
+pone el mapa central de errores: la ruta deja salir UploadTooLargeError.
 """
 
 from types import SimpleNamespace
@@ -8,11 +9,12 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from starlette.requests import Request
 
+from src.config.codigos_de_error import todos_los_codigos
 from src.modules.social.infrastructure.api.v1 import profile_photo_routes
 from src.modules.user.infrastructure.api.v1 import avatar_routes
+from src.shared.infrastructure.http.upload_reader import UploadTooLargeError
 
 pytestmark = pytest.mark.asyncio
 
@@ -50,16 +52,16 @@ async def test_the_avatar_upload_turns_a_too_large_file_into_413():
     """
     Given: Un fichero de 11 MB para el avatar (tope 10 MB)
     When: Llega a la ruta
-    Then: 413, sin llegar al caso de uso
+    Then: Sale UploadTooLargeError (la API la responde con 413), sin llegar al caso de uso
     """
     caso = AsyncMock()
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises(UploadTooLargeError):
         await avatar_routes.upload_avatar(
             _peticion(), current_user=SimpleNamespace(id=uuid4()), file=_Fichero(), use_case=caso
         )
 
-    assert error.value.status_code == 413
+    assert todos_los_codigos()[UploadTooLargeError] == 413
     caso.execute.assert_not_awaited()
 
 
@@ -67,11 +69,11 @@ async def test_the_gallery_upload_turns_a_too_large_file_into_413():
     """
     Given: Un fichero de 11 MB para la galería (tope 10 MB)
     When: Llega a la ruta
-    Then: 413, sin llegar al caso de uso
+    Then: Sale UploadTooLargeError (la API la responde con 413), sin llegar al caso de uso
     """
     caso = AsyncMock()
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises(UploadTooLargeError):
         await profile_photo_routes.upload_my_photo(
             _peticion(),
             file=_Fichero(),
@@ -80,5 +82,5 @@ async def test_the_gallery_upload_turns_a_too_large_file_into_413():
             use_case=caso,
         )
 
-    assert error.value.status_code == 413
+    assert todos_los_codigos()[UploadTooLargeError] == 413
     caso.execute.assert_not_awaited()

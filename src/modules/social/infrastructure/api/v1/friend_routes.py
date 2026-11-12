@@ -7,7 +7,7 @@ Endpoints FastAPI para gestion de amistades siguiendo Clean Architecture.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
@@ -32,12 +32,6 @@ from src.modules.social.application.dto.friendship_dto import (
     RespondFriendRequestRequestDTO,
     SendFriendRequestRequestDTO,
 )
-from src.modules.social.application.exceptions import (
-    AddresseeNotFoundError,
-    FriendshipNotFoundError,
-    NotAddresseeError,
-    NotFriendshipParticipantError,
-)
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
 from src.modules.social.application.use_cases.list_pending_requests_use_case import (
@@ -53,14 +47,7 @@ from src.modules.social.application.use_cases.send_friend_request_use_case impor
 from src.modules.social.application.use_cases.set_activity_sharing_use_case import (
     SetActivitySharingUseCase,
 )
-from src.modules.social.domain.exceptions.social_violations import (
-    BlockedUserViolation,
-    DuplicateFriendRequestViolation,
-    InvalidFriendshipStatusViolation,
-    SelfFriendRequestViolation,
-)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.errors.user_errors import UserNotFoundError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -104,21 +91,11 @@ async def send_friend_request(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SendFriendRequestUseCase = Depends(get_send_friend_request_use_case),
 ):
-    try:
-        request_dto = SendFriendRequestRequestDTO(
-            requester_id=current_user.id,
-            addressee_id=body.addressee_id,
-        )
-        return await use_case.execute(request_dto)
-
-    except AddresseeNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except SelfFriendRequestViolation as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except BlockedUserViolation as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except DuplicateFriendRequestViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    request_dto = SendFriendRequestRequestDTO(
+        requester_id=current_user.id,
+        addressee_id=body.addressee_id,
+    )
+    return await use_case.execute(request_dto)
 
 
 @router.post(
@@ -133,20 +110,12 @@ async def respond_to_friend_request(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RespondFriendRequestUseCase = Depends(get_respond_friend_request_use_case),
 ):
-    try:
-        request_dto = RespondFriendRequestRequestDTO(
-            friendship_id=friendship_id,
-            user_id=current_user.id,
-            action=body.action,
-        )
-        return await use_case.execute(request_dto)
-
-    except FriendshipNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotAddresseeError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except InvalidFriendshipStatusViolation as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    request_dto = RespondFriendRequestRequestDTO(
+        friendship_id=friendship_id,
+        user_id=current_user.id,
+        action=body.action,
+    )
+    return await use_case.execute(request_dto)
 
 
 @router.delete(
@@ -160,13 +129,7 @@ async def remove_friend(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RemoveFriendUseCase = Depends(get_remove_friend_use_case),
 ):
-    try:
-        await use_case.execute(str(friendship_id), str(current_user.id))
-
-    except FriendshipNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NotFriendshipParticipantError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    await use_case.execute(str(friendship_id), str(current_user.id))
 
 
 @router.post(
@@ -180,13 +143,7 @@ async def block_user(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: BlockUserUseCase = Depends(get_block_user_use_case),
 ):
-    try:
-        return await use_case.execute(str(current_user.id), str(user_id))
-
-    except AddresseeNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except SelfFriendRequestViolation as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return await use_case.execute(str(current_user.id), str(user_id))
 
 
 @router.get(
@@ -236,10 +193,6 @@ async def set_activity_sharing(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SetActivitySharingUseCase = Depends(get_set_activity_sharing_use_case),
 ):
-    try:
-        removed = await use_case.execute(str(current_user.id), enabled=payload.enabled)
-
-    except UserNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    removed = await use_case.execute(str(current_user.id), enabled=payload.enabled)
 
     return ActivitySharingResponseDTO(share_activity=payload.enabled, removed_events=removed)
