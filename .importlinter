@@ -279,6 +279,7 @@ name = El dominio de usuarios va en una dirección: servicios > repositorios > e
 type = layers
 containers =
     src.modules.user.domain
+exhaustive = true
 layers =
     services
     repositories
