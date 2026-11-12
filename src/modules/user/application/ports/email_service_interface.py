@@ -5,10 +5,10 @@ Define el contrato para servicios de envío de emails.
 La capa de aplicación depende de esta abstracción, no de implementaciones concretas.
 """
 
-from abc import ABC, abstractmethod
+from typing import Protocol
 
 
-class IEmailService(ABC):
+class IEmailService(Protocol):
     """
     Puerto para servicios de envío de email.
 
@@ -21,7 +21,6 @@ class IEmailService(ABC):
     - MockEmailService (testing)
     """
 
-    @abstractmethod
     async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
@@ -38,7 +37,6 @@ class IEmailService(ABC):
         """
         pass
 
-    @abstractmethod
     async def send_password_reset_email(
         self, to_email: str, reset_link: str, user_name: str
     ) -> bool:
@@ -60,7 +58,6 @@ class IEmailService(ABC):
         """
         pass
 
-    @abstractmethod
     async def send_new_login_notification(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
     ) -> bool:
@@ -76,7 +73,6 @@ class IEmailService(ABC):
             pais: El país aproximado, o None
         """
 
-    @abstractmethod
     async def send_session_closed_for_security_notice(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
     ) -> bool:
@@ -93,7 +89,6 @@ class IEmailService(ABC):
             pais: El país aproximado, o None
         """
 
-    @abstractmethod
     async def send_failed_logins_notification(
         self,
         to_email: str,
@@ -118,7 +113,6 @@ class IEmailService(ABC):
             minutos: Cuánto dura el bloqueo
         """
 
-    @abstractmethod
     async def send_password_changed_notification(
         self, to_email: str, user_name: str, google_unlinked: bool = False
     ) -> bool:
@@ -141,7 +135,6 @@ class IEmailService(ABC):
         """
         pass
 
-    @abstractmethod
     async def send_email_change_confirmation(
         self, to_email: str, user_name: str, token: str
     ) -> bool:
@@ -153,7 +146,6 @@ class IEmailService(ABC):
             True si se envió correctamente
         """
 
-    @abstractmethod
     async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
         """
         Avisa a la cuenta de que se ha vinculado (o desvinculado) un Google (BE #753): un
@@ -163,7 +155,6 @@ class IEmailService(ABC):
             True si se envió correctamente
         """
 
-    @abstractmethod
     async def send_register_attempt_notice(self, to_email: str, user_name: str) -> bool:
         """
         Avisa al buzón de una cuenta de que alguien intentó registrarse con su correo
@@ -175,7 +166,6 @@ class IEmailService(ABC):
             True si se envió correctamente
         """
 
-    @abstractmethod
     async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
         """
         Avisa al dueño de una cuenta SIN verificar que se la ha quedado (BE #753): lo que
@@ -186,7 +176,6 @@ class IEmailService(ABC):
             True si se envió correctamente
         """
 
-    @abstractmethod
     async def send_email_changed_notice(
         self, to_email: str, user_name: str, new_email: str
     ) -> bool:
@@ -198,7 +187,6 @@ class IEmailService(ABC):
             True si se envió correctamente
         """
 
-    @abstractmethod
     async def send_email_change_requested_notice(
         self, to_email: str, user_name: str, new_email: str
     ) -> bool:

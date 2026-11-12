@@ -9,16 +9,6 @@ import logging
 from datetime import datetime
 
 from src.config.settings import settings
-from src.modules.competition.application.ports.handicap_update_email_service_interface import (
-    IHandicapUpdateEmailService,
-)
-from src.modules.competition.application.ports.invitation_email_service_interface import (
-    IInvitationEmailService,
-)
-from src.modules.social.application.ports.social_email_service_interface import (
-    ISocialEmailService,
-)
-from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.shared.domain.services.email_masking import mask_email
 from src.shared.infrastructure.email.email_layout import (
     Boton,
@@ -42,9 +32,7 @@ logger = logging.getLogger(__name__)
 MINUTOS_POR_HORA = 60
 
 
-class EmailService(
-    IEmailService, IInvitationEmailService, ISocialEmailService, IHandicapUpdateEmailService
-):
+class EmailService:
     """
     Implementación de IEmailService usando Mailgun.
 

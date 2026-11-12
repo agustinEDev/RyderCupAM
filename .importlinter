@@ -254,13 +254,9 @@ source_modules =
 forbidden_modules =
     src.modules
 allow_indirect_imports = True
-# Deuda que ya existía y queda pendiente: cada línea es un import directo de shared
-# a un módulo que aún no se ha sacado. No se añaden más: una nueva rompe el contrato
-ignore_imports =
-    src.shared.infrastructure.security.jwt_handler -> src.modules.user.application.ports.token_service_interface
-    src.shared.infrastructure.security.authorization -> src.modules.**
-    src.shared.infrastructure.api.v1.country_routes -> src.modules.**
-    src.shared.infrastructure.email.email_service -> src.modules.**
+# Sin excepciones desde la fase 5: la autorización vive en el módulo de usuarios, las rutas de
+# países leen del repositorio de países compartido, y los servicios de tokens y de correo cumplen
+# los puertos de los módulos (Protocol) sin importarlos
 
 [importlinter:contract:dependencias-por-contexto]
 name = Los proveedores de cada contexto solo comparten src.config.dependencies.comun (fase 5)

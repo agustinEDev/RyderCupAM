@@ -13,10 +13,9 @@ from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from src.config.csrf_config import generate_csrf_token
 from src.config.settings import settings
-from src.modules.user.application.ports.token_service_interface import ITokenService
 
 
-class JWTTokenService(ITokenService):
+class JWTTokenService:
     """
     Implementación de ITokenService usando JWT (JSON Web Tokens).
 

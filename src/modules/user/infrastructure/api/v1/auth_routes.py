@@ -112,6 +112,7 @@ from src.modules.user.domain.exceptions.verification_token_expired_error import 
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
+from src.modules.user.infrastructure.api.authorization import require_admin
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_de_la_cookie_de_dispositivo,
@@ -129,7 +130,6 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_user_agent,
 )
 from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.authorization import require_admin
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
