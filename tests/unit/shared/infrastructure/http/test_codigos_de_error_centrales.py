@@ -20,8 +20,11 @@ from src.shared.infrastructure.http.codigos_de_error import registra_los_codigos
 
 RAIZ = Path(__file__).resolve().parents[5]
 
-# El código que daba cada excepción en las rutas de develop (12 nov 2026, tras la #809)
+# El código que daba cada excepción en develop (12 nov 2026, tras la #809): en sus rutas o,
+# las dos de los torneos sin equipos (#251), en exception_handlers.py de competición
 CODIGOS_DE_DEVELOP = {
+    "src.modules.competition.domain.entities.competition.TournamentTypeError": 400,
+    "src.modules.competition.domain.value_objects.stroke_play_setup.StrokePlaySettingsError": 400,
     "src.modules.competition.application.exceptions.AgendaNotEditableError": 400,
     "src.modules.competition.application.exceptions.CompetitionAlreadyExistsError": 409,
     "src.modules.competition.application.exceptions.CompetitionFullError": 400,
@@ -169,7 +172,7 @@ def test_the_central_map_gives_each_error_the_code_it_had_in_the_routes():
     assert {_nombre(c): s for c, s in todos_los_codigos().items()} == CODIGOS_DE_DEVELOP
 
 
-def test_the_app_registers_every_mapped_error():
+def test_registering_the_central_map_gives_every_error_its_handler():
     """
     Given: El mapa central
     When: Se mira qué manejadores tiene la app
@@ -180,7 +183,7 @@ def test_the_app_registers_every_mapped_error():
     assert sin_manejador == []
 
 
-def test_conflicting_errors_stay_out_of_the_central_map():
+def test_reading_the_map_with_conflicting_errors_leaves_them_to_their_routes():
     """
     Given: Los dos errores que dan códigos distintos según la ruta
     When: Se mira el mapa central
@@ -299,17 +302,22 @@ def _except_triviales():
 def test_no_route_translates_by_hand_an_error_the_central_map_already_translates():
     """
     Given: Las rutas y el mapa central
-    When: Se buscan except triviales que dan a sus errores el mismo código que el mapa
+    When: Se busca, clase a clase (también dentro de una tupla), un except trivial que le
+          da el mismo código que el mapa, contando el que hereda de su clase registrada
     Then: No queda ninguno, salvo los que se quedan a propósito (una ruta que quiera
           otro código para un error del mapa sí puede traducirlo ella)
     """
     mapa = todos_los_codigos()
 
+    def codigo_del_mapa(clase: type) -> int | None:
+        # El que le daría la app: el de su clase registrada más cercana
+        return next((mapa[c] for c in clase.__mro__ if c in mapa), None)
+
     repetidos = [
-        (fichero, funcion, [c.__name__ for c in clases])
+        (fichero, funcion, clase.__name__)
         for fichero, funcion, clases, codigo in _except_triviales()
-        if all(mapa.get(c) == codigo for c in clases)
-        and (fichero, funcion) not in SE_QUEDAN_A_PROPOSITO
+        for clase in clases
+        if codigo_del_mapa(clase) == codigo and (fichero, funcion) not in SE_QUEDAN_A_PROPOSITO
     ]
 
     assert repetidos == []

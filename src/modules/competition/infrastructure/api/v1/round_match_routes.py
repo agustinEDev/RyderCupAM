@@ -89,7 +89,6 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
 )
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
-    CompetitionNotClosedError as AssignTeamsNotClosedError,
     DuplicatePlayerInTeamsError,
     InsufficientPlayersError as AssignTeamsInsufficientError,
     OddPlayersError,
@@ -573,14 +572,12 @@ async def assign_teams(
             content={"detail": _NO_SE_FORMAN[e.error_code], "error_code": e.error_code},
         )
     except (
-        AssignTeamsNotClosedError,
         AssignTeamsInsufficientError,
         OddPlayersError,
         PlayerNotEnrolledError,
         DuplicatePlayerInTeamsError,
         CaptainMissingError,
         CaptainOnWrongTeamError,
-        # Equipos desiguales en el reparto manual (lo rechaza TeamAssignment)
         ValueError,
     ) as e:
         raise HTTPException(

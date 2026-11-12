@@ -28,7 +28,6 @@ from src.modules.competition.application.dto.competition_dto import (
     TeeResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -98,7 +97,6 @@ async def add_golf_course_to_competition(
         return response
 
     except (
-        AgendaNotEditableError,
         GolfCourseNotApprovedError,
         GolfCourseAlreadyAssignedError,
         IncompatibleCountryError,

@@ -59,8 +59,6 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
 )
 from src.modules.quick_match.application.exceptions import (
     GolfCourseNotApprovedError,
-    InvalidParticipantError,
-    InvalidTeeSelectionError,
 )
 from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
     AddFriendToQuickMatchUseCase,
@@ -115,13 +113,6 @@ from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_c
 )
 from src.modules.quick_match.application.use_cases.unhide_quick_match_use_case import (
     UnhideQuickMatchUseCase,
-)
-from src.modules.quick_match.domain.exceptions.quick_match_violations import (
-    IncompleteRosterViolation,
-    InvalidAllowanceViolation,
-    InvalidScorerConfigurationViolation,
-    InvalidTeamAssignmentViolation,
-    QuickMatchFullViolation,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
@@ -334,16 +325,7 @@ async def create_and_start_quick_match(
     )
     try:
         result = await use_case.execute(request_dto)
-    except (
-        GolfCourseNotApprovedError,
-        InvalidTeeSelectionError,
-        InvalidAllowanceViolation,
-        InvalidParticipantError,
-        QuickMatchFullViolation,
-        InvalidTeamAssignmentViolation,
-        IncompleteRosterViolation,
-        InvalidScorerConfigurationViolation,
-    ) as e:
+    except GolfCourseNotApprovedError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     # Un reintento con el mismo id devuelve la que ya había: 200, no 201

@@ -13,9 +13,6 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.draft_dto import DraftStateDTO
-from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
-)
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
@@ -47,7 +44,6 @@ class DraftPickBodyDTO(BaseModel):
 # no es suyo o un jugador que ya no está
 _ERRORES_DE_LA_SALA = (
     CaptainMissingError,
-    CompetitionNotClosedError,
     DraftAlreadyStartedError,
     DraftNotRunningError,
     PlayerAlreadyPickedError,

@@ -85,19 +85,16 @@ from src.modules.competition.domain.entities.competition import CompetitionState
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
-from src.modules.competition.domain.value_objects.location import InvalidLocationError
 from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.value_objects.country_code import InvalidCountryCodeError
 
 logger = logging.getLogger(__name__)
 
@@ -674,13 +671,7 @@ async def update_competition(
                 ],
             },
         )
-    except (
-        CompetitionNotEditableError,
-        InvalidCountryError,
-        InvalidCountryCodeError,
-        InvalidLocationError,
-        ValueError,
-    ) as e:
+    except (CompetitionNotEditableError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
