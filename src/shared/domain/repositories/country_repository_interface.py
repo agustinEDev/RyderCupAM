@@ -37,9 +37,6 @@ class CountryRepositoryInterface(ABC):
 
         Returns:
             Optional[Country]: El país encontrado o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -52,9 +49,6 @@ class CountryRepositoryInterface(ABC):
 
         Returns:
             List[Country]: Lista de todos los países activos
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -71,9 +65,6 @@ class CountryRepositoryInterface(ABC):
 
         Returns:
             bool: True si son adyacentes, False si no lo son
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
 
         Ejemplos:
             >>> await repo.are_adjacent(CountryCode("ES"), CountryCode("PT"))
@@ -96,9 +87,6 @@ class CountryRepositoryInterface(ABC):
         Returns:
             List[Country]: Lista de países adyacentes
 
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
-
         Ejemplos:
             >>> adjacent = await repo.find_adjacent_countries(CountryCode("ES"))
             >>> # Retorna: [Country(PT), Country(FR), Country(AD)]
@@ -117,8 +105,5 @@ class CountryRepositoryInterface(ABC):
 
         Returns:
             bool: True si existe, False si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass

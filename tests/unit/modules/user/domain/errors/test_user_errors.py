@@ -8,7 +8,6 @@ específicas del dominio de usuarios.
 import pytest
 
 from src.modules.user.domain.errors import (
-    RepositoryError,
     UserAlreadyExistsError,
     UserDomainError,
     UserNotFoundError,
@@ -47,13 +46,6 @@ class TestUserDomainErrorHierarchy:
 
         assert isinstance(error, UserDomainError)
         assert error.message == "User already exists"
-
-    def test_repository_error_inherits_from_base(self):
-        """Verifica que RepositoryError hereda de UserDomainError."""
-        error = RepositoryError("Repository error")
-
-        assert isinstance(error, UserDomainError)
-        assert error.message == "Repository error"
 
 
 class TestExceptionBehavior:
@@ -115,7 +107,6 @@ class TestExceptionCatchingScenarios:
         domain_errors = [
             UserNotFoundError("Not found"),
             UserAlreadyExistsError("Already exists"),
-            RepositoryError("Repository error"),
         ]
 
         for error in domain_errors:

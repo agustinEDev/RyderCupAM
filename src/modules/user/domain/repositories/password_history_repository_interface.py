@@ -35,9 +35,6 @@ class PasswordHistoryRepositoryInterface(ABC):
 
         Args:
             password_history: El registro a guardar
-
-        Raises:
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -52,9 +49,6 @@ class PasswordHistoryRepositoryInterface(ABC):
 
         Returns:
             list[PasswordHistory]: Lista ordenada por created_at DESC (más reciente primero)
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
 
         Example:
             >>> recent = await repo.find_recent_by_user(user_id, limit=5)
@@ -73,8 +67,5 @@ class PasswordHistoryRepositoryInterface(ABC):
 
         Returns:
             int: Número total de registros
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass

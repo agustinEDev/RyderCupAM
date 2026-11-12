@@ -42,7 +42,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Raises:
             CompetitionAlreadyExistsError: Si ya existe una competición con el mismo ID
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -56,7 +55,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Raises:
             CompetitionNotFoundError: Si la competición no existe
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -70,9 +68,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             bool: True si se eliminó, False si no existía
-
-        Raises:
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -86,9 +81,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             Optional[Competition]: La competición encontrada o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -127,9 +119,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones del creador
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -149,9 +138,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones con el estado especificado
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -175,9 +161,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             bool: True si existe, False si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -207,9 +190,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de todas las competiciones
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -222,9 +202,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             int: Número total de competiciones
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -240,9 +217,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             int: Número total de competiciones del creador
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -271,9 +245,6 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones que cumplen los criterios
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 

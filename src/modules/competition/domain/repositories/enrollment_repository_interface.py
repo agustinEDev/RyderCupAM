@@ -38,7 +38,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Raises:
             EnrollmentAlreadyExistsError: Si ya existe una inscripción con el mismo ID
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -52,7 +51,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Raises:
             EnrollmentNotFoundError: Si la inscripción no existe
-            RepositoryError: Si ocurre un error de persistencia
         """
         pass
 
@@ -66,9 +64,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             Optional[Enrollment]: La inscripción encontrada o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -104,9 +99,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             List[Enrollment]: Lista de inscripciones de la competición
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -131,9 +123,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             List[Enrollment]: Lista de inscripciones con el estado especificado
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -153,9 +142,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             List[Enrollment]: Lista de inscripciones del usuario
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -178,9 +164,6 @@ class EnrollmentRepositoryInterface(ABC):
         Returns:
             List[Enrollment]: Las inscripciones encontradas, como mucho una
                 por usuario (a lo sumo `len(user_ids)` resultados)
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -199,9 +182,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             Optional[Enrollment]: La inscripción encontrada o None si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -217,9 +197,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             int: Número total de inscripciones aprobadas
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -249,9 +226,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             int: Número total de inscripciones activas
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass
 
@@ -267,8 +241,5 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             int: Número total de inscripciones con estado REQUESTED
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
         """
         pass

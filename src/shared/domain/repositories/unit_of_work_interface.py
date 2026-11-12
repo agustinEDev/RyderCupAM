@@ -65,10 +65,6 @@ class UnitOfWorkInterface(ABC):
 
         Ejecuta todas las operaciones de escritura (INSERT, UPDATE, DELETE)
         que han sido acumuladas durante la transacción.
-
-        Raises:
-            UnitOfWorkError: Si ocurre un error durante el commit
-            RepositoryError: Si hay errores de persistencia
         """
         pass
 
@@ -79,9 +75,6 @@ class UnitOfWorkInterface(ABC):
 
         Deshace todos los cambios que no han sido confirmados y restaura
         el estado anterior de la base de datos.
-
-        Raises:
-            UnitOfWorkError: Si ocurre un error durante el rollback
         """
         pass
 
@@ -92,10 +85,6 @@ class UnitOfWorkInterface(ABC):
 
         Ejecuta las operaciones SQL pero no confirma la transacción.
         Útil para obtener IDs generados o validar constraints antes del commit final.
-
-        Raises:
-            UnitOfWorkError: Si ocurre un error durante el flush
-            RepositoryError: Si hay errores de persistencia
         """
         pass
 
