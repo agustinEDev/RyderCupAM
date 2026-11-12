@@ -36,10 +36,6 @@ class ApprovalStatus(StrEnum):
         """Retorna True si fue aprobado."""
         return self == ApprovalStatus.APPROVED
 
-    def is_rejected(self) -> bool:
-        """Retorna True si fue rechazado."""
-        return self == ApprovalStatus.REJECTED
-
     def is_final(self) -> bool:
         """Retorna True si está en estado final (APPROVED o REJECTED)."""
         return self in [ApprovalStatus.APPROVED, ApprovalStatus.REJECTED]

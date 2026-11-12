@@ -1,5 +1,5 @@
 """
-Mock Handicap Service - Infrastructure Layer
+Mock Handicap Service - doble de prueba
 
 Implementación mock del servicio de hándicap para testing.
 Permite configurar respuestas predefinidas sin hacer llamadas HTTP reales.

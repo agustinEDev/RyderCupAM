@@ -40,7 +40,7 @@ Implement **Handicap as Value Object** + **Domain Events** + **External Service 
 **5. External Service**
 - HandicapService interface (Domain)
 - RFEGHandicapService: RFEG web scraping (Infrastructure)
-- MockHandicapService: Deterministic tests (Infrastructure)
+- MockHandicapService: Deterministic tests (test double in `tests/fakes/`)
 
 **6. API Endpoints**
 - POST /api/v1/handicaps/update - RFEG + optional fallback

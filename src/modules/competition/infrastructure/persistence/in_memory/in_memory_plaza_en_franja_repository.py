@@ -26,13 +26,6 @@ class InMemoryPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
             p for p in self._plazas if not (p.round_id == round_id and p.user_id == user_id)
         ]
 
-    async def quitar_del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> None:
-        self._plazas = [
-            p
-            for p in self._plazas
-            if not (p.competition_id == competition_id and p.user_id == user_id)
-        ]
-
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         return [p for p in self._plazas if p.competition_id == competition_id]
 

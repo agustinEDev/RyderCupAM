@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.61.0] - 2026-11-12
+
+**Limpieza de código muerto** (#806, fase 5 del plan de calidad). Sin migraciones ni cambios
+para el usuario: compatible con el frontend en producción. Unas 3.400 líneas menos. Probado en
+el Kind con el frontend de `develop`: seguridad, cookies, registro, cambio de correo,
+dispositivos, anotación y competiciones, sin regresiones.
+
+### Removed
+
+- El logger genérico que nadie usaba: la factoría, `PythonLogger`, la interfaz `Logger`, los
+  manejadores de eventos para el log, los formateadores de texto y `LogConfig`. Se importaban en
+  cada arranque. La aplicación sigue con el logging estándar y el log de seguridad (ADR-008).
+- Excepciones que nada lanza, validadores y constantes de `shared/application/validation` sin
+  uso (quedan `sanitize_html`, `NameValidator` y `AliasValidator`), métodos de entidades y
+  objetos de valor sin llamadas (entre ellos `User.change_email`: el cambio de correo va por el
+  flujo del correo pendiente), métodos de repositorio sin llamadas con todas sus
+  implementaciones, ayudas de configuración y las constantes de la cookie CSRF, que no se
+  leían (las cookies salen igual).
+
+### Changed
+
+- `MockHandicapService`, un doble de test, pasa de `src/` a `tests/fakes/`.
+
+### Tests
+
+- La regla «al confirmar un correo nuevo se anula el enlace de verificación del alta» tiene
+  ahora su test en `confirm_email_change`; el único que tenía iba sobre el método borrado.
+
 ## [2.60.0] - 2026-11-11
 
 **Rutas con una barra codificada, rechazadas** (#799, fase 4 del plan de seguridad). Sin

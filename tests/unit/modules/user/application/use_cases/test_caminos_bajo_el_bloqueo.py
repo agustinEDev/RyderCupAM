@@ -247,25 +247,6 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
     assert pedidos == [ana.id]
 
 
-def test_b7_changing_the_email_drops_the_old_verification_link():
-    """
-    Given: Una cuenta con su enlace de verificación del alta, sin usar
-    When: El administrador le cambia el correo
-    Then: Ese enlace ya no vale: verificaría el correo nuevo sin que nadie lo demuestre
-    """
-    ana = User.create(
-        first_name="Ana",
-        last_name="Dueña",
-        email_str="ana@example.com",
-        plain_password="SecureP@ssw0rd123!",
-    )
-    ana.generate_verification_token()
-
-    ana.change_email("otra@example.com")
-
-    assert ana.verification_token is None
-
-
 async def test_a2_google_relinked_to_another_account_mid_login_gets_no_session():
     """
     Given: Ana con su Google vinculado

@@ -112,7 +112,7 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve None.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import (
+        from tests.fakes.mock_handicap_service import (
             MockHandicapService,
         )
 
@@ -145,7 +145,7 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve un valor.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import (
+        from tests.fakes.mock_handicap_service import (
             MockHandicapService,
         )
 
@@ -179,7 +179,7 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve None y no se proporciona hándicap manual.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import (
+        from tests.fakes.mock_handicap_service import (
             MockHandicapService,
         )
 

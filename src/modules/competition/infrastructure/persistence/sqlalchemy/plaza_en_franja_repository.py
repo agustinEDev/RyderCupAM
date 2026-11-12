@@ -43,14 +43,6 @@ class SQLAlchemyPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
             delete(tabla).where(tabla.c.round_id == round_id, tabla.c.user_id == user_id)
         )
 
-    async def quitar_del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> None:
-        tabla = tee_window_places_table
-        await self._session.execute(
-            delete(tabla).where(
-                tabla.c.competition_id == competition_id, tabla.c.user_id == user_id
-            )
-        )
-
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         return await self._donde(tee_window_places_table.c.competition_id == competition_id)
 

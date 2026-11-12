@@ -49,13 +49,6 @@ class Location:
         >>> loc2 = Location(CountryCode("ES"), CountryCode("PT"))
         >>> loc2.get_all_countries()
         [CountryCode("ES"), CountryCode("PT")]
-        >>> loc2.is_multi_country()
-        True
-
-        >>> # Torneo tri-nacional
-        >>> loc3 = Location(CountryCode("ES"), CountryCode("FR"), CountryCode("AD"))
-        >>> loc3.country_count()
-        3
 
         >>> # Inválido: países duplicados
         >>> Location(CountryCode("ES"), CountryCode("ES"))  # Lanza InvalidLocationError
@@ -100,15 +93,6 @@ class Location:
                 f"Los países no pueden repetirse. Se encontraron: {country_codes}"
             )
 
-    def is_multi_country(self) -> bool:
-        """
-        Verifica si el torneo se realiza en múltiples países.
-
-        Returns:
-            bool: True si hay al menos un país adyacente, False si es solo un país
-        """
-        return self.adjacent_country_1 is not None
-
     def get_all_countries(self) -> list[CountryCode]:
         """
         Obtiene la lista de todos los códigos de países involucrados.
@@ -127,36 +111,6 @@ class Location:
         if self.adjacent_country_2:
             countries.append(self.adjacent_country_2)
         return countries
-
-    def country_count(self) -> int:
-        """
-        Cuenta el número total de países.
-
-        Returns:
-            int: Número de países (1, 2 o 3)
-        """
-        return len(self.get_all_countries())
-
-    def includes_country(self, country_code: CountryCode) -> bool:
-        """
-        Verifica si un país específico está incluido en la ubicación.
-
-        Args:
-            country_code: Código del país a buscar
-
-        Returns:
-            bool: True si el país está incluido, False en caso contrario
-
-        Ejemplos:
-            >>> loc = Location(CountryCode("ES"), CountryCode("PT"))
-            >>> loc.includes_country(CountryCode("ES"))
-            True
-            >>> loc.includes_country(CountryCode("PT"))
-            True
-            >>> loc.includes_country(CountryCode("FR"))
-            False
-        """
-        return country_code in self.get_all_countries()
 
     def __str__(self) -> str:
         """

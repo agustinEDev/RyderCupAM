@@ -18,6 +18,7 @@ from src.modules.user.application.use_cases.link_google_account_use_case import 
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -231,7 +232,8 @@ async def test_the_verified_email_is_checked_again_when_linking(
     async def cambia_a_mitad(_code, code_verifier=None):
         """El canje de Google, que a mitad le quita la verificación a la cuenta."""
         otra = copy.deepcopy(uow.users._users[existing_user.id])
-        otra.change_email("otro.correo@example.com")
+        otra._email = Email("otro.correo@example.com")
+        otra._email_verified = False
         uow.users._users[existing_user.id] = otra
         return google_user_info
 

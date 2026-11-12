@@ -4,9 +4,7 @@ SQLAlchemy Password History Repository.
 Implementación del repositorio de Password History usando SQLAlchemy (async).
 """
 
-from datetime import datetime
-
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.password_history import PasswordHistory
@@ -88,46 +86,3 @@ class SQLAlchemyPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         stmt = select(PasswordHistory).where(password_history_table.c.user_id == str(user_id.value))
         result = await self._session.execute(stmt)
         return len(list(result.scalars().all()))
-
-    async def delete_old_records(self, older_than: datetime) -> int:
-        """
-        Elimina registros de historial más antiguos que una fecha.
-
-        Este método se usa para limpieza automática de registros con más de 1 año.
-
-        Args:
-            older_than: Fecha límite (registros antes de esta fecha se eliminan)
-
-        Returns:
-            int: Número de registros eliminados
-
-        Notes:
-            - Usa índice ix_password_history_created_at para optimizar
-            - Puede ejecutarse en background job (cronjob)
-        """
-        stmt = delete(password_history_table).where(
-            password_history_table.c.created_at < older_than
-        )
-        result = await self._session.execute(stmt)
-        await self._session.flush()
-        return result.rowcount
-
-    async def delete_by_user(self, user_id: UserId) -> int:
-        """
-        Elimina todos los registros de historial de un usuario.
-
-        Útil para GDPR compliance (derecho al olvido).
-        Normalmente no es necesario porque el Foreign Key tiene CASCADE.
-
-        Args:
-            user_id: ID del usuario
-
-        Returns:
-            int: Número de registros eliminados
-        """
-        stmt = delete(password_history_table).where(
-            password_history_table.c.user_id == str(user_id.value)
-        )
-        result = await self._session.execute(stmt)
-        await self._session.flush()
-        return result.rowcount

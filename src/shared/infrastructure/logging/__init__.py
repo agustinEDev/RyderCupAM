@@ -1,59 +1,24 @@
 """
-🏗️ Sistema de Logging - Infraestructura Compartida
+Sistema de Logging - Infraestructura Compartida
 
-Este módulo proporciona una infraestructura de logging avanzada y configurable
-para el Ryder Cup Manager, siguiendo principios de Clean Architecture.
+La aplicación usa el logging estándar de Python (``logging.getLogger``) y,
+para la auditoría, el log de seguridad (``security_logger``).
 
-Componentes principales:
-- Logger: Interface principal para logging
-- LogConfig: Configuración centralizada
-- Formatters: Formateadores personalizados
-- Handlers: Manejadores específicos
-- Factory: Creación de loggers configurados
-
-Características:
-✅ Logging estructurado (JSON/texto)
-✅ Múltiples niveles y handlers
-✅ Configuración flexible
-✅ Integración con Domain Events
-✅ Contexto de correlación
-✅ Formateo personalizado
+Componentes:
+- HandlerConfig: configuración de los handlers
+- JsonFormatter: formato JSON del log de seguridad
+- LogLevel: niveles de logging
 """
 
 # Re-exportaciones principales
-from .config import HandlerConfig, LogConfig, LogFormat, LogHandler
-from .event_handlers import AuditEventHandler, EventLoggingHandler
-from .factory import LoggerFactory, configure_logging, get_logger
-from .formatters import (
-    FormatterFactory,
-    JsonFormatter,
-    StructuredFormatter,
-    TextFormatter,
-)
-from .logger import Logger, LogLevel
-from .python_logger import PythonLogger
+from .config import HandlerConfig, LogFormat, LogHandler
+from .formatters import JsonFormatter
+from .logger import LogLevel
 
 __all__ = [
-    "AuditEventHandler",
-    # Domain Events integration
-    "EventLoggingHandler",
-    # Formatters
-    "FormatterFactory",
     "HandlerConfig",
     "JsonFormatter",
-    # Configuration
-    "LogConfig",
     "LogFormat",
     "LogHandler",
     "LogLevel",
-    # Core interfaces
-    "Logger",
-    # Factory and convenience functions
-    "LoggerFactory",
-    # Implementations
-    "PythonLogger",
-    "StructuredFormatter",
-    "TextFormatter",
-    "configure_logging",
-    "get_logger",
 ]

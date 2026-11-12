@@ -12,8 +12,6 @@ from .event_handler import EventHandler
 from .exceptions import (
     EventBusError,
     EventHandlerError,
-    EventPublicationError,
-    HandlerRegistrationError,
 )
 
 __all__ = [
@@ -24,6 +22,4 @@ __all__ = [
     "EventHandler",
     # Excepciones
     "EventHandlerError",
-    "EventPublicationError",
-    "HandlerRegistrationError",
 ]
