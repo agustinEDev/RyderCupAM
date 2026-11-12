@@ -119,3 +119,22 @@ async def test_i3_las_rutas_de_paises_leen_del_repositorio_de_paises(pide, camin
     respuesta = await pide(camino)
     assert respuesta.status_code == codigo, respuesta.text
     assert respuesta.json() == cuerpo
+
+
+def test_i3_las_rutas_de_paises_no_piden_la_unidad_de_trabajo_de_competiciones():
+    """Given las dos rutas de países, When se miran sus dependencias, Then piden el repositorio de países y no la uow de competiciones."""
+    from src.config.dependencies import get_competition_uow
+
+    def dependencias(dependant):
+        for d in dependant.dependencies:
+            yield d.call
+            yield from dependencias(d)
+
+    from src.shared.infrastructure.api.v1.country_routes import router
+
+    rutas = router.routes
+    assert len(rutas) == 2
+    for ruta in rutas:
+        llamadas = set(dependencias(ruta.dependant))
+        assert get_country_repository in llamadas, ruta.path
+        assert get_competition_uow not in llamadas, ruta.path

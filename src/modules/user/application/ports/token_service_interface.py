@@ -4,8 +4,8 @@ Token Service Interface - Application Layer Port
 Define el contrato para servicios de tokens de autenticación.
 """
 
-from typing import Protocol
 from datetime import timedelta
+from typing import Protocol
 
 
 class ITokenService(Protocol):

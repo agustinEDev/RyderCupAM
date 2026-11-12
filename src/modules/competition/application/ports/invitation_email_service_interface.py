@@ -5,8 +5,8 @@ Define el contrato para envio de emails de invitacion.
 Vive en el Competition module (Interface Segregation Principle).
 """
 
-from typing import Protocol
 from datetime import datetime
+from typing import Protocol
 
 
 class IInvitationEmailService(Protocol):

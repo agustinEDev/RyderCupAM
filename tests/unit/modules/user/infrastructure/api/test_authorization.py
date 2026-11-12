@@ -163,11 +163,6 @@ def test_is_creator_of_returns_false_when_user_is_not_creator(regular_user, comp
 
 
 # ======================================================================================
-# TESTS: can_modify_competition()
-# ======================================================================================
-
-
-# ======================================================================================
 # TESTS: require_admin()
 # ======================================================================================
 
@@ -192,11 +187,6 @@ def test_require_admin_raises_403_for_non_admin_user(regular_user):
 
     assert exc_info.value.status_code == 403
     assert "administrator privileges" in exc_info.value.detail.lower()
-
-
-# ======================================================================================
-# TESTS: require_creator_or_admin()
-# ======================================================================================
 
 
 # ======================================================================================
@@ -308,8 +298,3 @@ async def test_is_player_in_returns_false_when_enrollment_is_not_approved():
 
     result = await is_player_in(user_id, competition_id, mock_uow)
     assert result is False
-
-
-# ======================================================================================
-# TESTS: require_player_in_competition() - Async con Mock UoW
-# ======================================================================================
