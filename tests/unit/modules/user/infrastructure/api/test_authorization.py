@@ -27,18 +27,15 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.value_objects.country_code import CountryCode
-from src.shared.domain.value_objects.play_mode import PlayMode
-from src.shared.infrastructure.security.authorization import (
-    can_modify_competition,
+from src.modules.user.infrastructure.api.authorization import (
     is_admin,
     is_creator_of,
     is_player_in,
     require_admin,
-    require_creator_or_admin,
-    require_player_in_competition,
     require_self_or_admin,
 )
+from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # ======================================================================================
 # FIXTURES
@@ -170,33 +167,6 @@ def test_is_creator_of_returns_false_when_user_is_not_creator(regular_user, comp
 # ======================================================================================
 
 
-def test_can_modify_competition_returns_true_for_admin(admin_user, competition):
-    """
-    Given: Un usuario admin (aunque no sea creator)
-    When: Se llama a can_modify_competition()
-    Then: Retorna True (admin override)
-    """
-    assert can_modify_competition(admin_user, competition) is True
-
-
-def test_can_modify_competition_returns_true_for_creator(creator_user, competition):
-    """
-    Given: Un usuario creador (aunque no sea admin)
-    When: Se llama a can_modify_competition()
-    Then: Retorna True
-    """
-    assert can_modify_competition(creator_user, competition) is True
-
-
-def test_can_modify_competition_returns_false_for_unauthorized_user(regular_user, competition):
-    """
-    Given: Un usuario que NO es admin NI creator
-    When: Se llama a can_modify_competition()
-    Then: Retorna False
-    """
-    assert can_modify_competition(regular_user, competition) is False
-
-
 # ======================================================================================
 # TESTS: require_admin()
 # ======================================================================================
@@ -227,37 +197,6 @@ def test_require_admin_raises_403_for_non_admin_user(regular_user):
 # ======================================================================================
 # TESTS: require_creator_or_admin()
 # ======================================================================================
-
-
-def test_require_creator_or_admin_succeeds_for_admin(admin_user, competition):
-    """
-    Given: Un usuario admin
-    When: Se llama a require_creator_or_admin()
-    Then: No lanza excepción (admin override)
-    """
-    require_creator_or_admin(admin_user, competition)
-
-
-def test_require_creator_or_admin_succeeds_for_creator(creator_user, competition):
-    """
-    Given: Un usuario creador
-    When: Se llama a require_creator_or_admin()
-    Then: No lanza excepción
-    """
-    require_creator_or_admin(creator_user, competition)
-
-
-def test_require_creator_or_admin_raises_403_for_unauthorized_user(regular_user, competition):
-    """
-    Given: Un usuario NO admin NI creator
-    When: Se llama a require_creator_or_admin()
-    Then: Lanza HTTPException 403 Forbidden
-    """
-    with pytest.raises(HTTPException) as exc_info:
-        require_creator_or_admin(regular_user, competition)
-
-    assert exc_info.value.status_code == 403
-    assert "creator or an administrator" in exc_info.value.detail.lower()
 
 
 # ======================================================================================
@@ -374,49 +313,3 @@ async def test_is_player_in_returns_false_when_enrollment_is_not_approved():
 # ======================================================================================
 # TESTS: require_player_in_competition() - Async con Mock UoW
 # ======================================================================================
-
-
-@pytest.mark.asyncio
-async def test_require_player_in_competition_succeeds_when_user_is_player(regular_user):
-    """
-    Given: Un usuario con enrollment APPROVED
-    When: Se llama a require_player_in_competition()
-    Then: No lanza excepción
-    """
-    competition_id = CompetitionId.generate()
-    user_id = UserId(str(regular_user.id))
-
-    # Mock enrollment APPROVED
-    enrollment = Enrollment(
-        id=EnrollmentId.generate(),
-        competition_id=competition_id,
-        user_id=user_id,
-        status=EnrollmentStatus.APPROVED,
-    )
-
-    # Mock UoW
-    mock_uow = Mock()
-    mock_uow.enrollments.find_by_user_and_competition = AsyncMock(return_value=enrollment)
-
-    # No debe lanzar excepción
-    await require_player_in_competition(regular_user, competition_id, mock_uow)
-
-
-@pytest.mark.asyncio
-async def test_require_player_in_competition_raises_403_when_user_is_not_player(regular_user):
-    """
-    Given: Un usuario SIN enrollment APPROVED
-    When: Se llama a require_player_in_competition()
-    Then: Lanza HTTPException 403 Forbidden
-    """
-    competition_id = CompetitionId.generate()
-
-    # Mock UoW - no enrollment
-    mock_uow = Mock()
-    mock_uow.enrollments.find_by_user_and_competition = AsyncMock(return_value=None)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await require_player_in_competition(regular_user, competition_id, mock_uow)
-
-    assert exc_info.value.status_code == 403
-    assert "enrolled players" in exc_info.value.detail.lower()

@@ -38,7 +38,7 @@ from src.modules.user.domain.errors.handicap_errors import (
     HandicapServiceUnavailableError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.security.authorization import (
+from src.modules.user.infrastructure.api.authorization import (
     require_admin,
     require_self_or_admin,
 )

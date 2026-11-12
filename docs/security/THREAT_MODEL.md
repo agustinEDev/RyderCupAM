@@ -65,7 +65,7 @@ Creator → API (competition data) → Validate limits → Validate dates → Cr
 
 | Threat | Risk | Mitigation | Status |
 |--------|------|------------|--------|
-| **Spoofing**: Non-creator modifies competition | ⚠️ MEDIUM | RBAC checks (`require_creator_or_admin`), JWT authentication | ✅ Mitigated |
+| **Spoofing**: Non-creator modifies competition | ⚠️ MEDIUM | Creator-or-admin check inside each use case (`NotCompetitionCreatorError`, 403), JWT authentication | ✅ Mitigated |
 | **Tampering**: Malicious modification of competition settings | ⚠️ MEDIUM | Input validation (Pydantic), business logic guards, value objects | ✅ Mitigated |
 | **Repudiation**: Creator denies creating competition | 🟢 LOW | `CompetitionCreatedEvent`, audit logs, `creator_id` field | ✅ Mitigated |
 | **Information Disclosure**: Unauthorized access to competition data | 🟢 LOW | Only creators/admins can view DRAFT competitions, public after ACTIVE | ✅ Mitigated |
