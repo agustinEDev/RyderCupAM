@@ -12,7 +12,6 @@ from src.config.dependencies import (
     get_anular_programacion_use_case,
     get_cancel_competition_use_case,
     get_close_enrollments_use_case,
-    get_competition_uow,
     get_complete_competition_use_case,
     get_current_user,
     get_fill_captain_use_case,
@@ -23,7 +22,7 @@ from src.config.dependencies import (
     get_revert_competition_status_use_case,
     get_revert_competition_to_in_progress_use_case,
     get_start_competition_use_case,
-    get_uow,
+    get_vista_de_competicion_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
@@ -55,9 +54,6 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
     RefrescoDesactivadoError,
-)
-from src.modules.competition.application.mappers.competition_mapper import (
-    CompetitionDTOMapper,
 )
 from src.modules.competition.application.services.franjas_al_cerrar import (
     PlayersWithoutTeeWindowError,
@@ -105,14 +101,14 @@ from src.modules.competition.application.use_cases.revert_competition_to_in_prog
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.vista_de_competicion_use_case import (
+    VistaDeCompeticionUseCase,
+)
 from src.modules.competition.domain.entities.competition import (
     CaptainNotEnrolledError,
     CaptainsLockedError,
     CompetitionStateError,
     TeamsNotAssignedError,
-)
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.ventana_de_actualizacion import (
     MOTIVOS,
@@ -126,9 +122,6 @@ from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainOnWrongTeamError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.repositories.user_unit_of_work_interface import (
-    UserUnitOfWorkInterface,
-)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 
@@ -164,8 +157,7 @@ async def activate_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ActivateCompetitionUseCase = Depends(get_activate_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: DRAFT → ACTIVE."""
     try:
@@ -174,14 +166,9 @@ async def activate_competition(
         request_dto = ActivateCompetitionRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -201,8 +188,7 @@ async def close_enrollments(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CloseEnrollmentsUseCase = Depends(get_close_enrollments_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: ACTIVE → CLOSED."""
     try:
@@ -211,14 +197,9 @@ async def close_enrollments(
         request_dto = CloseEnrollmentsRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except PlayersWithoutTeeWindowError as e:
         return respuesta_sin_franja(e)
@@ -242,8 +223,7 @@ async def start_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: StartCompetitionUseCase = Depends(get_start_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: CLOSED → IN_PROGRESS."""
     try:
@@ -252,14 +232,9 @@ async def start_competition(
         request_dto = StartCompetitionRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except PlayersWithoutTeeWindowError as e:
         return respuesta_sin_franja(e)
@@ -281,8 +256,7 @@ async def complete_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CompleteCompetitionUseCase = Depends(get_complete_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: IN_PROGRESS → COMPLETED."""
     try:
@@ -291,14 +265,9 @@ async def complete_competition(
         request_dto = CompleteCompetitionRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -318,8 +287,7 @@ async def revert_competition_status(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RevertCompetitionStatusUseCase = Depends(get_revert_competition_status_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: IN_PROGRESS → CLOSED."""
     try:
@@ -328,14 +296,9 @@ async def revert_competition_status(
         request_dto = RevertCompetitionStatusRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -357,8 +320,7 @@ async def revert_competition_to_in_progress(
     use_case: RevertCompetitionToInProgressUseCase = Depends(
         get_revert_competition_to_in_progress_use_case
     ),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: COMPLETED → IN_PROGRESS. No modifica rounds/matches existentes."""
     try:
@@ -367,14 +329,9 @@ async def revert_competition_to_in_progress(
         request_dto = RevertCompetitionToInProgressRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -394,8 +351,7 @@ async def reopen_enrollments(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ReopenEnrollmentsUseCase = Depends(get_reopen_enrollments_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: CLOSED → ACTIVE."""
     try:
@@ -404,14 +360,9 @@ async def reopen_enrollments(
         request_dto = ReopenEnrollmentsRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -431,8 +382,7 @@ async def cancel_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CancelCompetitionUseCase = Depends(get_cancel_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Transición de estado: cualquier estado → CANCELLED."""
     try:
@@ -441,14 +391,9 @@ async def cancel_competition(
         request_dto = CancelCompetitionRequestDTO(competition_id=competition_id)
         await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
-        competition_vo_id = CompetitionId(competition_id)
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(
+            CompetitionId(competition_id), current_user_id, es_admin=current_user.is_admin
+        )
 
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
