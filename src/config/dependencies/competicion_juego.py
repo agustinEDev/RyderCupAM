@@ -502,11 +502,6 @@ def get_entendido_use_case(
     return EntendidoUseCase(uow)
 
 
-# ======================================================================================
-# ROUND, MATCH & TEAM ASSIGNMENT USE CASE PROVIDERS (Sprint 2 - Block 7)
-# ======================================================================================
-
-
 def get_create_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
@@ -768,11 +763,6 @@ def get_reassign_match_players_use_case(
         scoring_service=scoring_service,
         actividad=actividad,
     )
-
-
-# ======================================================================================
-# SCORING USE CASE PROVIDERS (Sprint 4 - Live Scoring)
-# ======================================================================================
 
 
 def get_get_scoring_view_use_case(

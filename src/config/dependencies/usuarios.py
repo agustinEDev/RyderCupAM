@@ -667,11 +667,6 @@ def get_search_users_use_case(
     return SearchUsersUseCase(uow=uow, bloqueos=bloqueos)
 
 
-# ======================================================================================
-# ADMIN PANEL USE CASE PROVIDERS
-# ======================================================================================
-
-
 def get_admin_list_users_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> AdminListUsersUseCase:
@@ -733,11 +728,6 @@ def get_get_recent_matches_use_case(
     return GetRecentMatchesUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
 
 
-# ============================================================================
-# Account Lockout Use Cases (v1.13.0)
-# ============================================================================
-
-
 def get_unlock_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     freno: IFrenoDelLogin = Depends(get_freno_del_login),
@@ -745,11 +735,6 @@ def get_unlock_account_use_case(
 ) -> UnlockAccountUseCase:
     """Proveedor de UnlockAccountUseCase (v1.13.0; log desde 2.50.1, por red desde BE #732)."""
     return UnlockAccountUseCase(uow, freno, security_audit)
-
-
-# ============================================================================
-# Device Fingerprinting Use Cases (v1.13.0)
-# ============================================================================
 
 
 def get_list_user_devices_use_case(
@@ -779,11 +764,6 @@ def get_revoke_device_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
     """
     return RevokeDeviceUseCase(uow, security_audit)
-
-
-# ============================================================================
-# Google OAuth Use Cases (Sprint 3)
-# ============================================================================
 
 
 def get_google_oauth_service() -> IGoogleOAuthService:

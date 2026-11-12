@@ -74,10 +74,6 @@ from src.modules.golf_course.infrastructure.services.tzfpy_timezone_resolver imp
     TzfpyTimezoneResolver,
 )
 
-# ============================================================================
-# GOLF COURSE MODULE - Dependency Injection
-# ============================================================================
-
 
 def get_request_golf_course_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),

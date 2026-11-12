@@ -13,10 +13,6 @@ from src.modules.support.infrastructure.services.contact_mailer import (
     ContactMailer,
 )
 
-# ============================================================================
-# SUPPORT MODULE - Dependency Injection
-# ============================================================================
-
 
 def get_contact_mailer() -> IContactMailer:
     """El envío por correo de los mensajes de contacto (la pieza común de envío)."""

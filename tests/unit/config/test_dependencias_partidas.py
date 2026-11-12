@@ -94,18 +94,18 @@ def test_d3_las_ventanas_de_hoyos_son_una_por_proceso():
 
 def test_d3_el_lanzador_de_actualizaciones_es_uno_por_proceso(monkeypatch):
     """Given el refresco encendido, When se pide el lanzador dos veces, Then es el mismo y vive en su submódulo."""
-    juego = importlib.import_module("src.config.dependencies.comun")
-    monkeypatch.setattr(juego, "refresco_activado", lambda _entorno: True)
-    monkeypatch.setattr(juego, "LanzadorEnSegundoPlano", lambda *_: MagicMock())
-    monkeypatch.setattr(juego, "RFEGHandicapService", lambda **_: None)
-    monkeypatch.setattr(juego, "EmailService", lambda: None)
-    monkeypatch.setattr(juego, "_lanzador", None)
+    comun = importlib.import_module("src.config.dependencies.comun")
+    monkeypatch.setattr(comun, "refresco_activado", lambda _entorno: True)
+    monkeypatch.setattr(comun, "LanzadorEnSegundoPlano", lambda *_: MagicMock())
+    monkeypatch.setattr(comun, "RFEGHandicapService", lambda **_: None)
+    monkeypatch.setattr(comun, "EmailService", lambda: None)
+    monkeypatch.setattr(comun, "_lanzador", None)
 
     primero = dependencies.get_lanzador_de_actualizaciones()
 
     assert primero is not None
     assert dependencies.get_lanzador_de_actualizaciones() is primero
-    assert juego._lanzador is primero
+    assert comun._lanzador is primero
 
 
 @pytest.mark.parametrize("modulo", SUBMODULOS)

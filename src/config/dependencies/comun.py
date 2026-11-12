@@ -219,11 +219,6 @@ def get_fabrica_de_sesiones() -> async_sessionmaker[AsyncSession]:
     return async_session_maker
 
 
-# ============================================================================
-# AVATAR (v2.3.0)
-# ============================================================================
-
-
 def get_image_processor() -> IImageProcessor:
     """Proveedor del procesador de imágenes (Pillow) para avatares subidos."""
     return PillowImageProcessor()
@@ -374,11 +369,6 @@ async def get_current_user_optional(
     if not read_access_token(request):
         return None
     return await get_current_user(request, credentials, uow)
-
-
-# ============================================================================
-# COMPETITION MODULE - Dependency Injection
-# ============================================================================
 
 
 # Enrollment Use Cases
@@ -637,11 +627,6 @@ def get_reloj_del_servidor() -> Callable[[], datetime]:
     torneo.
     """
     return lambda: datetime.now(UTC)
-
-
-# ======================================================================================
-# INVITATION USE CASE PROVIDERS (Sprint 3 - Block 2)
-# ======================================================================================
 
 
 def get_invitation_email_service() -> IInvitationEmailService:

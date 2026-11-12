@@ -583,11 +583,6 @@ def get_reorder_golf_courses_use_case(
     return ReorderGolfCoursesUseCase(uow)
 
 
-# ======================================================================================
-# ENROLLMENT USE CASE PROVIDERS
-# ======================================================================================
-
-
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
