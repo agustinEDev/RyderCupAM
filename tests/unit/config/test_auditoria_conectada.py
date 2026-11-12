@@ -1,7 +1,7 @@
 """
 La composición conecta el log de auditoría de verdad (#750, 7 nov 2026).
 
-Los ocho casos de uso reciben el log por su puerto, obligatorio: si `dependencies.py` no
+Los ocho casos de uso reciben el log por su puerto, obligatorio: si `src.config.dependencies` no
 se lo diera, fallaría al construirlos; y si le diera otra cosa, la auditoría se perdería
 en silencio. Este guardián comprueba que es el adaptador de verdad.
 """
@@ -30,7 +30,7 @@ CASOS = [
 @pytest.mark.parametrize("proveedor", CASOS, ids=[c.__name__ for c in CASOS])
 def test_each_use_case_gets_the_real_audit_logger(proveedor):
     """
-    Given: El proveedor de cada caso de uso de dependencies.py
+    Given: El proveedor de cada caso de uso de src.config.dependencies
     When: Se construye con lo que FastAPI le inyecta
     Then: El log de auditoría es el de `get_security_audit_logger`, y es el de verdad
     """

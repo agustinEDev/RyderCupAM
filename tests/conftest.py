@@ -605,7 +605,7 @@ async def get_user_by_email(client: AsyncClient, email: str):
 # ======================================================================================
 # MOCK AUTOMÁTICO DE SERVICIOS EXTERNOS (EMAIL Y TOKEN)
 # ======================================================================================
-# Para tests de integración, mockeamos los servicios en dependencies.py para evitar
+# Para tests de integración, mockeamos los servicios en src.config.dependencies para evitar
 # llamadas reales a Mailgun y mantener los tests rápidos y sin límites de API.
 
 
@@ -617,7 +617,7 @@ def mock_external_services():
     Mockea:
     - EmailService: Para evitar envíos reales a Mailgun
     - Los tests unitarios usan sus propios mocks
-    - Los tests de integración usan estos mocks via dependencies.py
+    - Los tests de integración usan estos mocks via src.config.dependencies
     """
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -645,12 +645,16 @@ def mock_external_services():
     # Y el de la sesión cerrada por seguridad (F-02, robo de un refresh token)
     mock_email.send_session_closed_for_security_notice = AsyncMock(return_value=True)
 
-    # Patchear el factory en dependencies.py
+    # Patchear la clase donde la crean los proveedores de correo (src.config.dependencies.comun)
     _CORREO_DEL_TEST["mock"] = mock_email
-    with patch("src.config.dependencies.EmailService", return_value=mock_email):
+    with patch(RUTA_DEL_SERVICIO_DE_CORREO, return_value=mock_email):
         yield mock_email
     _CORREO_DEL_TEST.pop("mock", None)
 
+
+# Dónde se parchea el correo: los tres servicios de correo y el lanzador de actualizaciones lo
+# crean en `comun` (src.config.dependencies es un paquete desde la fase 5)
+RUTA_DEL_SERVICIO_DE_CORREO = "src.config.dependencies.comun.EmailService"
 
 # El mock de correo del test en curso: de él salen los tokens en claro de los enlaces,
 # que la BD ya no guarda (fase 3, solo su SHA-256)
