@@ -225,3 +225,127 @@ class TestVariosEstados:
         resultado = await ListCompetitionsUseCase(uow).listar(None, viewer_id=str(YO.value))
 
         assert _nombres(resultado) == ["Activa", "Borrador"]
+
+
+class TestLasProgramadasConFiltroDeEstado:
+    """BE #814: con filtro de estado, la programada a la que le toca abrir salía o no según el orden."""
+
+    def _programada(self, **como) -> Competition:
+        return _competicion("Programada", abre_dias_antes=5, empieza_en=3, **como)
+
+    @pytest.mark.parametrize(
+        "estados",
+        [["ACTIVE"], ["ACTIVE", "DRAFT"], ["DRAFT", "ACTIVE"], ["active"]],
+        ids=["P1-activas", "P2-activas-y-borradores", "P3-borradores-y-activas", "P10-minusculas"],
+    )
+    async def test_p1_p2_p3_p10_la_que_toca_abrir_sale_abierta_y_una_vez(self, estados):
+        """Given una programada a la que ya le toca abrir, When pido activas (con o sin borradores, en cualquier orden), Then sale una vez, abierta."""
+        programada = self._programada()
+        uow = await _bd(programada)
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            estados, viewer_id=str(YO.value)
+        )
+
+        assert [(str(c.name), c.status) for c in resultado] == [
+            ("Programada", CompetitionStatus.ACTIVE)
+        ]
+        async with uow:
+            guardada = await uow.competitions.find_by_id(programada.id)
+        assert guardada.status is CompetitionStatus.ACTIVE
+
+    async def test_p4_pidiendo_borradores_ya_no_sale(self):
+        """Given una programada a la que ya le toca abrir, When pido solo borradores, Then no sale: ya está abierta."""
+        uow = await _bd(self._programada())
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["DRAFT"], viewer_id=str(YO.value)
+        )
+
+        assert resultado == []
+
+    async def test_p5_la_que_todavia_espera_no_sale_en_activas(self):
+        """Given una programada que aún espera, When pido activas, Then no sale y sigue en borrador."""
+        espera = _competicion("Espera", abre_dias_antes=5, empieza_en=30)
+        uow = await _bd(espera)
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["ACTIVE"], viewer_id=str(YO.value)
+        )
+
+        assert resultado == []
+        assert espera.status is CompetitionStatus.DRAFT
+
+    async def test_p6_el_creador_no_inscrito_la_ve_en_sus_activas(self):
+        """Given mi programada, sin inscribirme, a la que ya le toca abrir, When pido mis activas, Then sale."""
+        uow = await _bd(self._programada(creador=YO))
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).mis_competiciones(
+            YO, ["ACTIVE"]
+        )
+
+        assert _nombres(resultado) == ["Programada"]
+
+    async def test_p7_la_privada_ajena_ni_sale_ni_se_abre(self):
+        """Given una privada ajena programada, When pido activas, Then ni sale ni se abre (BE #318)."""
+        privada = self._programada(visibility=Visibility.PRIVATE)
+        uow = await _bd(privada)
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["ACTIVE"], viewer_id=str(YO.value)
+        )
+
+        assert resultado == []
+        assert privada.status is CompetitionStatus.DRAFT
+
+    async def test_p8_tambien_buscando_por_nombre(self):
+        """Given la programada y otra activa que no coincide, When pido activas buscando por su nombre, Then solo sale la programada."""
+        uow = await _bd(
+            self._programada(), _competicion("Copa del club", estado=CompetitionStatus.ACTIVE)
+        )
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["ACTIVE"], search_name="Progra", viewer_id=str(YO.value)
+        )
+
+        assert _nombres(resultado) == ["Programada"]
+
+    async def test_p9_sin_programadas_el_mismo_resultado_y_orden(self):
+        """Given activas y cerradas, When pido activas y cerradas, Then primero las activas y luego las cerradas, como antes."""
+        uow = await _bd(
+            _competicion("Cerrada", estado=CompetitionStatus.CLOSED),
+            _competicion("Activa 1", estado=CompetitionStatus.ACTIVE),
+            _competicion("Borrador"),
+            _competicion("Activa 2", estado=CompetitionStatus.ACTIVE),
+        )
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["ACTIVE", "CLOSED"], viewer_id=str(YO.value)
+        )
+
+        assert [str(c.name) for c in resultado] == ["Activa 1", "Activa 2", "Cerrada"]
+
+    async def test_p11_pidiendo_solo_cerradas_no_se_abre_la_programada(self):
+        """Given una programada a la que ya le toca abrir, When pido solo cerradas, Then ni sale ni se abre de paso."""
+        programada = self._programada()
+        uow = await _bd(programada)
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["CLOSED"], viewer_id=str(YO.value)
+        )
+
+        assert resultado == []
+        assert programada.status is CompetitionStatus.DRAFT
+
+    @pytest.mark.parametrize("busqueda", [None, "Progra"], ids=["sin-busqueda", "con-busqueda"])
+    async def test_p12_un_estado_que_no_existe_sigue_siendo_un_error(self, busqueda):
+        """Given un estado que no existe entre los pedidos, When pido el listado, Then ValueError (la ruta da 400) sin abrir nada."""
+        programada = self._programada()
+        uow = await _bd(programada)
+
+        with pytest.raises(ValueError):
+            await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+                ["ACTIVE", "NO_EXISTE"], search_name=busqueda, viewer_id=str(YO.value)
+            )
+
+        assert programada.status is CompetitionStatus.DRAFT
