@@ -51,7 +51,7 @@ from src.modules.competition.application.use_cases.partidas_use_case import (
     MoverJugadorUseCase,
     ReordenarPartidasUseCase,
 )
-from src.modules.competition.domain.services.marcadores_en_cadena import (
+from src.modules.competition.domain.policies.marcadores_en_cadena import (
     MarcadoresInvalidosError,
 )
 from src.modules.competition.domain.services.movimientos_de_partidas import (

@@ -28,7 +28,7 @@ from src.modules.competition.domain.entities.draft import (
     NotYourTurnError,
     PlayerAlreadyPickedError,
 )
-from src.modules.competition.domain.services.snake_draft_service import PlayerForDraft
+from src.modules.competition.domain.policies.snake_draft_service import PlayerForDraft
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.user.domain.value_objects.user_id import UserId

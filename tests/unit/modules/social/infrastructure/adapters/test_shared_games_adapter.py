@@ -45,7 +45,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePart
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
-from src.modules.competition.domain.services.marcadores_en_cadena import MarcadoresEnCadena
+from src.modules.competition.domain.policies.marcadores_en_cadena import MarcadoresEnCadena
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange

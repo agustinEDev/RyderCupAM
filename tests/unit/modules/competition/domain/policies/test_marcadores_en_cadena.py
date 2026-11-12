@@ -21,7 +21,7 @@ El organizador puede cambiarla, pero nadie se marca a sí mismo.
 
 import pytest
 
-from src.modules.competition.domain.services.marcadores_en_cadena import (
+from src.modules.competition.domain.policies.marcadores_en_cadena import (
     MarcadoresEnCadena,
     MarcadoresInvalidosError,
 )

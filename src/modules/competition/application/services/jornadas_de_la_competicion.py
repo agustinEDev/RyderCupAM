@@ -15,8 +15,8 @@ from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.services.ventana_de_actualizacion import Jornada
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 

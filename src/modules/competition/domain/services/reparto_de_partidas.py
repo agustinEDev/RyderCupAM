@@ -20,8 +20,8 @@ from decimal import Decimal
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
+from ..policies.marcadores_en_cadena import MIN_PARA_MARCAR
 from ..value_objects.orden_de_salida import OrdenDeSalida
-from .marcadores_en_cadena import MIN_PARA_MARCAR
 
 
 class RepartoImposibleError(ValueError):

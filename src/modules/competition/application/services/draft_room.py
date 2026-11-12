@@ -28,10 +28,10 @@ from src.modules.competition.application.services.team_assignment_writer import 
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.draft import Draft
+from src.modules.competition.domain.policies.snake_draft_service import PlayerForDraft
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.snake_draft_service import PlayerForDraft
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus

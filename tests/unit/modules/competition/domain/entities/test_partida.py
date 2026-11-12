@@ -38,7 +38,7 @@ from src.modules.competition.domain.entities.partida import (
     TarjetaYaAbiertaError,
     TieneGolpesError,
 )
-from src.modules.competition.domain.services.marcadores_en_cadena import (
+from src.modules.competition.domain.policies.marcadores_en_cadena import (
     MarcadoresEnCadena,
     MarcadoresInvalidosError,
 )

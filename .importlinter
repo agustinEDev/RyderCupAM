@@ -287,3 +287,28 @@ layers =
     events
     errors | exceptions | value_objects
     ports
+
+[importlinter:contract:dominio-de-competiciones-por-capas]
+name = El dominio de competiciones va en una dirección: repositorios > servicios > entidades > eventos y reglas > excepciones y valores (B10, fase 5)
+type = layers
+containers =
+    src.modules.competition.domain
+exhaustive = true
+layers =
+    repositories
+    services
+    entities
+    events | policies
+    exceptions | value_objects
+
+[importlinter:contract:aplicacion-de-competiciones-por-capas]
+name = La aplicación de competiciones va en una dirección: casos de uso > mappers > servicios > DTO, excepciones y puertos (B10, fase 5)
+type = layers
+containers =
+    src.modules.competition.application
+exhaustive = true
+layers =
+    use_cases
+    mappers
+    services
+    dto | exceptions | ports

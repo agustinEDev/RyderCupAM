@@ -35,7 +35,7 @@ from ..events.competition_reverted_to_in_progress_event import (
 )
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
-from ..services.enrollment_opening_service import EnrollmentOpeningService
+from ..policies.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus

@@ -34,13 +34,13 @@ from src.modules.competition.application.services.quien_ve_los_inscritos import 
     lo_que_ve,
 )
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas

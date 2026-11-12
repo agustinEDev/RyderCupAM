@@ -15,7 +15,10 @@ from src.modules.competition.application.dto.envelope_dto import (
     matchups_to_dto,
 )
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
-from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.envelope_desk import (
+    EnvelopeDesk,
+    GeneradorDePartidos,
+)
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -34,7 +37,7 @@ class GetEnvelopesUseCase:
         user_repository,
         clock=None,
         timezone_service=None,
-        generador=None,
+        generador: GeneradorDePartidos | None = None,
     ):
         """
         Args:
