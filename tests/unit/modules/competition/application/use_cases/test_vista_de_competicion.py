@@ -167,6 +167,16 @@ class TestFicha:
 
         uow.invitations.competiciones_con_invitacion_pendiente.assert_not_called()
 
+    @pytest.mark.parametrize("es_admin", [True, False])
+    async def test_v1_la_ficha_pide_al_mapper_lo_mismo_que_de(self, mapper, es_admin):
+        """Given quien mira, When abre la ficha, Then el mapper recibe quién es y si es admin."""
+        comp = _competicion()
+        uow, user_uow = _uows(comp)
+
+        await VistaDeCompeticionUseCase(uow, user_uow).ficha(comp.id, YO, es_admin=es_admin)
+
+        assert mapper == [(comp, YO, uow, user_uow, es_admin)]
+
     async def test_v6_ficha_de_una_que_no_existe_lanza_no_encontrada(self, mapper):
         """Given ninguna competición con ese id, When se pide la ficha, Then CompetitionNotFoundError."""
         uow, user_uow = _uows(None)
