@@ -351,7 +351,7 @@ class ListCompetitionsUseCase:
 
         quien = UserId(viewer_id)
         # UNA consulta por quien mira, no una por competicion: el listado trae
-        # hasta 100 y el endpoint llama una vez por cada estado del filtro
+        # hasta 100 por estado pedido
         inscripciones = await self._uow.enrollments.find_by_user(quien)
         dentro_de = {e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER}
         dentro_de |= await self._uow.invitations.competiciones_con_invitacion_pendiente(
