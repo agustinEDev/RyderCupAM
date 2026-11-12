@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.62.0] - 2026-11-12
+
+**Errores traducidos en un solo sitio y rutas sin lógica** (#809, #810, #812, #813, #815,
+fase 5 del plan de calidad), más el arreglo de las programadas que no salían en los listados
+filtrados (#814). Sin migraciones y sin cambios de contrato: compatible con el frontend en
+producción.
+
+### Fixed
+
+- Un listado filtrado por estado (`GET /competitions?status=ACTIVE`, o ACTIVE y DRAFT en ese
+  orden) no enseñaba la competición programada a la que ya le tocaba abrir inscripciones,
+  hasta que alguien abría su ficha. Al creador no inscrito le pasaba también en «Mis
+  competiciones». Ahora se abren antes de filtrar y el orden de los estados no importa
+  (#814, #816).
+- Un error de dominio traducido en el mapa central que se escapaba de una ruta que no lo
+  capturaba respondía 500; ahora responde su 4xx (#810).
+- Si la competición desaparece entre una transición de estado y su lectura, la respuesta es
+  404 en vez de 500, como ya pasaba al editarla (#813).
+- Al editar un campo, un texto del cliente (el nombre de una barra) con «not found» o
+  «permission» elegía el código de la respuesta (404 o 403). Ahora es un 400 como cualquier
+  dato inválido (#812).
+- El log de seguridad conserva el nombre de la tarea asyncio (`taskName`) y solo lo quita
+  cuando es nulo (#809).
+
+### Changed
+
+- Los errores de dominio se traducen a su código HTTP en un solo sitio: un mapa por módulo
+  que registra la composition root, en vez de un `except` en cada ruta (ADR-049). Fuera 292
+  cláusulas repetidas; una prueba fija el código de cada error y avisa si una ruta vuelve a
+  traducir a mano uno que ya está en el mapa (#810).
+- Los campos de golf lanzan errores con tipo (`GolfCourseMissingError`, `CountryNotFoundError`,
+  `GolfCourseEditForbiddenError`) y sus rutas eligen el código por el tipo, no leyendo el
+  texto del error. Mismos códigos y mismos textos (#812).
+- Las rutas de competición ya no tocan la unidad de trabajo: la vista tras escribir, la ficha
+  y los listados («mis competiciones», «las de los demás», varios estados) viven en
+  `VistaDeCompeticionUseCase` y `ListCompetitionsUseCase`, con guardianes que lo comprueban
+  (#813, #815).
+- El formateador JSON del log de seguridad es un `logging.Formatter` normal (#809).
+
+### Removed
+
+- Segunda tanda de código muerto: siete métodos de repositorio sin llamadas con todas sus
+  implementaciones, excepciones que nada lanza (entre ellas el paquete `shared/domain/errors`)
+  y la configuración de logging que nadie leía (#809).
+
 ## [2.61.0] - 2026-11-12
 
 **Limpieza de código muerto** (#806, fase 5 del plan de calidad). Sin migraciones ni cambios
