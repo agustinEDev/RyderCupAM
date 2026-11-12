@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from src.modules.user.domain.services.terms_of_service import (
+from src.modules.user.domain.value_objects.terms_of_service import (
     TERMS_VERSION_MAX_LENGTH,
     require_utc,
     validate_terms_version,

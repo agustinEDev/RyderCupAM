@@ -30,7 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.config.csrf_config import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
-from src.modules.user.domain.services.terms_of_service import current_terms_version
+from src.modules.user.domain.value_objects.terms_of_service import current_terms_version
 from tests.conftest import _URL_DE_LA_BD_DE_TEST
 
 

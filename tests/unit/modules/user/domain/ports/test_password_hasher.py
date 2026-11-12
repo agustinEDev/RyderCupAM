@@ -6,8 +6,8 @@ variables de entorno para decidir cuántas rondas usar.
 
 import pytest
 
-from src.modules.user.domain.services import password_hasher
-from src.modules.user.domain.services.password_hasher import (
+from src.modules.user.domain.ports import password_hasher
+from src.modules.user.domain.ports.password_hasher import (
     HasherNoInstaladoError,
     hasher_de_contrasenas,
     instala_el_hasher,

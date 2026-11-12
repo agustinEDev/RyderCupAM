@@ -15,7 +15,7 @@ import os
 from collections.abc import Mapping
 
 from src.config.env import env_int
-from src.modules.user.domain.services.password_hasher import instala_el_hasher
+from src.modules.user.domain.ports.password_hasher import instala_el_hasher
 from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
     BcryptPasswordHasher,
 )

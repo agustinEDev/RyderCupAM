@@ -6,7 +6,7 @@ POR QUE
 La prueba de que alguien aceptó los Términos (tabla `terms_acceptances`) se
 conserva después de borrar su cuenta, pero no para siempre: decisión de
 Agustín del 20 oct 2026, TERMS_ACCEPTANCE_RETENTION_YEARS (3) años naturales
-desde el borrado (ver src/modules/user/domain/services/terms_of_service.py).
+desde el borrado (ver src/modules/user/domain/value_objects/terms_of_service.py).
 Este script borra las filas que ya han cumplido ese plazo. Las de cuentas que
 siguen existiendo no se tocan nunca.
 

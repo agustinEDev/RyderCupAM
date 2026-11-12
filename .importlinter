@@ -273,3 +273,16 @@ modules =
     src.config.dependencies.partida_rapida
     src.config.dependencies.social
     src.config.dependencies.soporte
+
+[importlinter:contract:dominio-de-usuarios-por-capas]
+name = El dominio de usuarios va en una dirección: servicios > repositorios > entidades > eventos > valores > puertos (B10, fase 5)
+type = layers
+containers =
+    src.modules.user.domain
+layers =
+    services
+    repositories
+    entities
+    events
+    errors | exceptions | value_objects
+    ports
