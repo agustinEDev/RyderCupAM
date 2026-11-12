@@ -250,3 +250,202 @@ async def test_r4_el_alta_pide_la_vista_de_quien_la_crea_sin_ser_admin():
 
     assert respuesta.status_code == 500, respuesta.text
     assert espia.llamadas == [("de", COMPETICION, UUID(_Usuario.id), False, None)]
+
+
+RUTAS_CRUD = RAIZ / "src/modules/competition/infrastructure/api/v1/competition_crud_routes.py"
+
+
+class _ListadoEspia:
+    """ListCompetitionsUseCase falso: apunta qué método se llama y con qué."""
+
+    def __init__(self) -> None:
+        self.llamadas: list[tuple] = []
+
+    async def listar(self, estados, **kwargs):
+        """Apunta la llamada."""
+        self.llamadas.append(("listar", estados, kwargs))
+        return ["c"]
+
+    async def mis_competiciones(self, quien, estados, **kwargs):
+        """Apunta la llamada."""
+        self.llamadas.append(("mis_competiciones", quien.value, estados, kwargs))
+        return ["c"]
+
+    async def las_de_los_demas(self, quien, estados, **kwargs):
+        """Apunta la llamada."""
+        self.llamadas.append(("las_de_los_demas", quien.value, estados, kwargs))
+        return ["c"]
+
+
+class _VistaDeListado:
+    """Vista falsa del listado: apunta con qué se le pide y no devuelve ninguna."""
+
+    def __init__(self) -> None:
+        self.llamadas: list[tuple] = []
+
+    async def de_varias(self, competiciones, quien, *, es_admin=False):
+        """Apunta la llamada."""
+        self.llamadas.append((competiciones, quien.value, es_admin))
+        return []
+
+
+QUIEN = UUID(_Usuario.id)
+FILTROS = {"search_name": "copa", "search_creator": "ana"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consulta", "esperada"),
+    [
+        (
+            "?my_competitions=true&status=ACTIVE&search_name=copa&search_creator=ana",
+            ("mis_competiciones", QUIEN, ["ACTIVE"], {**FILTROS, "viewer_email": _Usuario.email}),
+        ),
+        (
+            "?my_competitions=false&status=ACTIVE&creator_id=undefined&search_name=copa&search_creator=ana",
+            (
+                "las_de_los_demas",
+                QUIEN,
+                ["ACTIVE"],
+                {
+                    "creator_id": None,
+                    **FILTROS,
+                    "is_admin": True,
+                    "viewer_email": _Usuario.email,
+                },
+            ),
+        ),
+        (
+            "?status=ACTIVE&status=DRAFT&creator_id=abc&search_name=copa&search_creator=ana",
+            (
+                "listar",
+                ["ACTIVE", "DRAFT"],
+                {
+                    "creator_id": "abc",
+                    **FILTROS,
+                    "viewer_id": str(QUIEN),
+                    "is_admin": True,
+                    "viewer_email": _Usuario.email,
+                },
+            ),
+        ),
+    ],
+    ids=["mias", "de-los-demas", "todas"],
+)
+async def test_l9_el_listado_llama_al_metodo_que_toca(consulta, esperada):
+    """Given un filtro del listado, When se pide, Then la ruta llama al método que toca con quien mira."""
+    listado, vista = _ListadoEspia(), _VistaDeListado()
+    app.dependency_overrides[d.get_current_user] = _Usuario
+    app.dependency_overrides[d.get_list_competitions_use_case] = lambda: listado
+    app.dependency_overrides[d.get_vista_de_competicion_use_case] = lambda: vista
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as cliente:
+            respuesta = await cliente.get(BASE + consulta)
+    finally:
+        for dep in (
+            d.get_current_user,
+            d.get_list_competitions_use_case,
+            d.get_vista_de_competicion_use_case,
+        ):
+            app.dependency_overrides.pop(dep, None)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert listado.llamadas == [esperada]
+    assert vista.llamadas == [(["c"], QUIEN, True)]
+
+
+def test_g2_las_rutas_crud_no_tocan_la_unidad_de_trabajo():
+    """Given las rutas CRUD, When se recorren, Then ninguna recibe ni usa la unidad de trabajo ni el mapper."""
+    arbol = ast.parse(RUTAS_CRUD.read_text())
+    prohibidos = {"uow", "user_uow", "get_competition_uow", "get_uow", "CompetitionDTOMapper"}
+    usos = sorted(
+        {
+            f"{n.lineno}: {ast.unparse(n)}"
+            for n in ast.walk(arbol)
+            if (isinstance(n, ast.arg) and n.arg in prohibidos)
+            or (isinstance(n, ast.Name) and n.id in prohibidos)
+            or (isinstance(n, ast.alias) and n.name in prohibidos)
+        }
+    )
+    assert usos == []
+
+
+class _JugadorSinVerificar:
+    """Quien no es admin y no ha verificado su correo: su correo no cuenta para invitaciones."""
+
+    id = "7d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6"
+    is_admin = False
+    email = "jugador@t.com"
+    email_verified = False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consulta", "esperada"),
+    [
+        (
+            "?my_competitions=true",
+            (
+                "mis_competiciones",
+                UUID(_JugadorSinVerificar.id),
+                None,
+                {"search_name": None, "search_creator": None, "viewer_email": None},
+            ),
+        ),
+        (
+            "?my_competitions=false",
+            (
+                "las_de_los_demas",
+                UUID(_JugadorSinVerificar.id),
+                None,
+                {
+                    "creator_id": None,
+                    "search_name": None,
+                    "search_creator": None,
+                    "is_admin": False,
+                    "viewer_email": None,
+                },
+            ),
+        ),
+        (
+            "",
+            (
+                "listar",
+                None,
+                {
+                    "creator_id": None,
+                    "search_name": None,
+                    "search_creator": None,
+                    "viewer_id": _JugadorSinVerificar.id,
+                    "is_admin": False,
+                    "viewer_email": None,
+                },
+            ),
+        ),
+    ],
+    ids=["mias", "de-los-demas", "todas"],
+)
+async def test_l9_un_jugador_sin_verificar_no_lista_como_admin_ni_con_su_correo(consulta, esperada):
+    """Given un jugador con el correo sin verificar, When pide un listado, Then ni admin ni correo (A01)."""
+    listado, vista = _ListadoEspia(), _VistaDeListado()
+    app.dependency_overrides[d.get_current_user] = _JugadorSinVerificar
+    app.dependency_overrides[d.get_list_competitions_use_case] = lambda: listado
+    app.dependency_overrides[d.get_vista_de_competicion_use_case] = lambda: vista
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as cliente:
+            respuesta = await cliente.get(BASE + consulta)
+    finally:
+        for dep in (
+            d.get_current_user,
+            d.get_list_competitions_use_case,
+            d.get_vista_de_competicion_use_case,
+        ):
+            app.dependency_overrides.pop(dep, None)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert listado.llamadas == [esperada]
+    assert vista.llamadas == [(["c"], UUID(_JugadorSinVerificar.id), False)]
