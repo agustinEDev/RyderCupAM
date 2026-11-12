@@ -11,6 +11,7 @@ arregle: el motivo, y **a quien le falta que**, no solo que fallo.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -57,7 +58,7 @@ class MatchGenerationBlock:
     players: tuple[BlockedPlayer, ...] = field(default_factory=tuple)
     at: datetime | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Para guardarlo en una columna JSON."""
         return {
             "reason": self.reason,
@@ -74,7 +75,7 @@ class MatchGenerationBlock:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MatchGenerationBlock":
+    def from_dict(cls, data: dict[str, Any]) -> "MatchGenerationBlock":
         """Lo contrario de `to_dict`."""
         return cls(
             reason=data["reason"],

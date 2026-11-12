@@ -334,7 +334,7 @@ class Invitation:
             f"{self._status.value})"
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, Invitation) and self._id == other._id
 
     def __hash__(self) -> int:

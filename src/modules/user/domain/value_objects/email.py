@@ -25,7 +25,7 @@ class Email:
 
     value: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validación y normalización automática."""
         if not isinstance(self.value, str):
             raise InvalidEmailError("El email debe ser un string")
@@ -52,7 +52,7 @@ class Email:
         """Representación string legible."""
         return self.value
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Operador de igualdad."""
         return isinstance(other, Email) and self.value == other.value
 

@@ -167,14 +167,20 @@ class StrokeAllocationService:
     # ===========================================
 
     def _allocate_free_play(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
+        self,
+        participants: list[QuickMatchParticipant],
+        handicaps: dict[ParticipantId, Decimal | None],
+        tee_ratings: dict[tuple[str, str | None], TeeRating],
+        holes_by_stroke_index: list[int],
+        allowance: int,
+        by_tee: dict[tuple[str, str | None], list[int]],
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Cada uno contra el campo: su Playing Handicap individual, entero.
 
         Un jugador de handicap plus lo tiene negativo y cede golpes al campo.
         """
-        result = {}
+        result: dict[ParticipantId, ParticipantStrokes] = {}
         for p in participants:
             ph = self._playing_handicap(p, handicaps, tee_ratings, allowance)
             result[p.participant_id] = self._build(
@@ -183,7 +189,13 @@ class StrokeAllocationService:
         return result
 
     def _allocate_singles(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
+        self,
+        participants: list[QuickMatchParticipant],
+        handicaps: dict[ParticipantId, Decimal | None],
+        tee_ratings: dict[tuple[str, str | None], TeeRating],
+        holes_by_stroke_index: list[int],
+        allowance: int,
+        by_tee: dict[tuple[str, str | None], list[int]],
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Metodo diferencial WHS: solo el de mayor PH recibe, y recibe la diferencia.
@@ -217,7 +229,13 @@ class StrokeAllocationService:
         }
 
     def _allocate_fourball(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
+        self,
+        participants: list[QuickMatchParticipant],
+        handicaps: dict[ParticipantId, Decimal | None],
+        tee_ratings: dict[tuple[str, str | None], TeeRating],
+        holes_by_stroke_index: list[int],
+        allowance: int,
+        by_tee: dict[tuple[str, str | None], list[int]],
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """Diferencias respecto al menor Course Handicap de los cuatro, con allowance."""
         course_handicaps = [
@@ -228,7 +246,7 @@ class StrokeAllocationService:
             course_handicaps, allowance
         )
 
-        result = {}
+        result: dict[ParticipantId, ParticipantStrokes] = {}
         for p in participants:
             allocated = differential_phs[str(p.participant_id.value)]
             # Se guarda el Playing Handicap del jugador, no la diferencia. Si no,
@@ -243,7 +261,13 @@ class StrokeAllocationService:
         return result
 
     def _allocate_foursomes(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
+        self,
+        participants: list[QuickMatchParticipant],
+        handicaps: dict[ParticipantId, Decimal | None],
+        tee_ratings: dict[tuple[str, str | None], TeeRating],
+        holes_by_stroke_index: list[int],
+        allowance: int,
+        by_tee: dict[tuple[str, str | None], list[int]],
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         A nivel de equipo: allowance sobre la diferencia de promedios de Course Handicap.
@@ -264,7 +288,7 @@ class StrokeAllocationService:
             team_a_chs, team_b_chs, allowance
         )
 
-        result = {}
+        result: dict[ParticipantId, ParticipantStrokes] = {}
         for team, allocated in ((team_a, team_a_ph), (team_b, team_b_ph)):
             # Golpe alterno: una sola bola, asi que un solo orden de dificultad
             # para los dos. Se usa el del campo aunque cada uno juegue una barra

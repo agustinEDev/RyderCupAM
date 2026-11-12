@@ -10,6 +10,7 @@ las hereda: las usan también la partida rápida y las estadísticas.
 """
 
 from collections.abc import Sequence
+from typing import Any
 
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
@@ -189,7 +190,7 @@ class ScoringService(MatchPlayScoring):
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
         fuera: BolasFuera | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """
         El resultado del partido si ya esta decidido en el orden de los hoyos
         (`decided_in_hole_order`), o None si sigue en juego.
@@ -203,7 +204,7 @@ class ScoringService(MatchPlayScoring):
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
         fuera: BolasFuera | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Como va el partido (`standing_in_hole_order`)."""
         return self.standing_in_hole_order(
             self.hole_results_by_hole(hole_scores, match_format, fuera)
@@ -282,7 +283,9 @@ class ScoringService(MatchPlayScoring):
                 return [mp.user_id for mp in team_b_players]
         return [player_id]
 
-    def calculate_ryder_cup_points(self, result: dict | None, status: str) -> dict:
+    def calculate_ryder_cup_points(
+        self, result: dict[str, Any] | None, status: str
+    ) -> dict[str, float]:
         """
         Calcula los puntos Ryder Cup para un partido.
 

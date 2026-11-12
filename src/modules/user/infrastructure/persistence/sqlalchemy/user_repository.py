@@ -68,7 +68,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Busca múltiples usuarios por sus IDs en una sola consulta."""
         if not user_ids:
             return []
-        statement = select(User).where(User._id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
+        statement = select(User).where(User._id.in_([str(uid) for uid in user_ids]))
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
@@ -125,7 +125,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         email_verified: bool | None = None,
     ) -> list[User]:
         """Devuelve una página de usuarios, opcionalmente filtrada."""
-        statement = select(User).order_by(User._created_at.desc(), User._id.desc())  # type: ignore[union-attr]
+        statement = select(User).order_by(User._created_at.desc(), User._id.desc())
         for condition in self._build_filters(search, is_admin, is_active, email_verified):
             statement = statement.where(condition)
         statement = statement.limit(limit).offset(offset)
@@ -232,7 +232,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         # Quienes bloquearon a quien busca (F-09), también en la consulta
         if exclude_user_ids:
             fuera = [str(u) for u in exclude_user_ids]
-            statement = statement.filter(User._id.not_in(fuera))  # type: ignore[union-attr]
+            statement = statement.filter(User._id.not_in(fuera))
         # Por apellido, nombre e id: sin orden, con más coincidencias que el
         # límite cada petición podía devolver otras distintas (/code-review)
         statement = statement.order_by(User._last_name, User._first_name, User._id).limit(limit)

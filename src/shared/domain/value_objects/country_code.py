@@ -48,7 +48,7 @@ class CountryCode:
     CODE_LENGTH = 2
     value: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Validación y normalización automática del código de país.
 
@@ -82,7 +82,7 @@ class CountryCode:
         """Representación string legible."""
         return self.value
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Operador de igualdad - Comparación por valor.
 

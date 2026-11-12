@@ -44,7 +44,7 @@ class ParticipantId:
     def __str__(self) -> str:
         return str(self.value)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, ParticipantId) and self.value == other.value
 
     def __hash__(self) -> int:

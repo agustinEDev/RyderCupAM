@@ -7,12 +7,27 @@ BE #175). Y tiene que ser **la misma** en ambos: si una tarjeta no es fiable par
 la media del jugador, tampoco lo es para presumir de ella delante de sus amigos.
 """
 
+from collections.abc import Mapping
+from typing import Protocol, TypeVar
+
+
+class _NumberedHole(Protocol):
+    """Lo único que la regla necesita de un hoyo: su número."""
+
+    @property
+    def number(self) -> int: ...
+
+
+_HoleT = TypeVar("_HoleT", bound=_NumberedHole)
+
 # Media vuelta: los nueve de ida o los nueve de vuelta. Cuenta como vuelta
 # terminada, siempre que la partida esté cerrada.
 HALF_ROUND_HOLES = 9
 
 
-def countable_holes(scores_by_hole: dict, hole_card: list) -> list | None:
+def countable_holes(
+    scores_by_hole: Mapping[int, object], hole_card: list[_HoleT]
+) -> list[_HoleT] | None:
     """
     Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
@@ -37,7 +52,7 @@ def countable_holes(scores_by_hole: dict, hole_card: list) -> list | None:
     if not holes:
         return None
 
-    def all_scored(subset: list) -> bool:
+    def all_scored(subset: list[_HoleT]) -> bool:
         return all(hole.number in scores_by_hole for hole in subset)
 
     if all_scored(holes):

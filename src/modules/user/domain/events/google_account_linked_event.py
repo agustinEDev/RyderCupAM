@@ -27,5 +27,5 @@ class GoogleAccountLinkedEvent(DomainEvent):
     provider_email: str
     linked_at: datetime
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()

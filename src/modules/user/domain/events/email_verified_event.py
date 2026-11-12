@@ -7,6 +7,7 @@ Este evento se dispara cuando un usuario confirma su dirección de correo electr
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -38,7 +39,7 @@ class EmailVerifiedEvent(DomainEvent):
         """El ID del agregado es el ID del usuario."""
         return self.user_id
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialización específica para EmailVerifiedEvent.
 

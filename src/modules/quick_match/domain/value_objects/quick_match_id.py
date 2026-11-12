@@ -49,10 +49,10 @@ class QuickMatchId:
     def __str__(self) -> str:
         return str(self.value)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, QuickMatchId) and self.value == other.value
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, QuickMatchId):
             return NotImplemented
         return self.value < other.value

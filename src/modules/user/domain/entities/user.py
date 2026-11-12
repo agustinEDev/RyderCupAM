@@ -94,8 +94,13 @@ class User:
     """
 
     def _validate_profile_update(
-        self, first_name, last_name, country_code_str, gender_str=None, alias=None
-    ):
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        country_code_str: str | None,
+        gender_str: str | None = None,
+        alias: str | None = None,
+    ) -> None:
         """Valida los datos nuevos del perfil antes de aplicarlos."""
         if (
             first_name is None
@@ -114,8 +119,26 @@ class User:
             raise ValueError("last_name cannot be empty")
 
     def _detect_profile_changes(
-        self, first_name, last_name, country_code_str, gender_str=None, alias=None
-    ):
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        country_code_str: str | None,
+        gender_str: str | None = None,
+        alias: str | None = None,
+    ) -> tuple[
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        CountryCode | None,
+        Gender | None,
+        str | None,
+        str,
+        str,
+        CountryCode | None,
+        str | None,
+    ]:
         """Qué campos del perfil cambian respecto a los actuales."""
         old_first_name = self.first_name
         old_last_name = self.last_name
@@ -159,8 +182,8 @@ class User:
 
     def __init__(
         self,
-        id: UserId | None,
-        email: Email | None,
+        id: UserId,
+        email: Email,
         password: Password | None,
         first_name: str,
         last_name: str,
@@ -189,7 +212,7 @@ class User:
         failed_login_day_window_started_at: datetime | None = None,
         is_admin: bool = False,
         is_active: bool = True,
-        feed_last_seen_at=None,
+        feed_last_seen_at: datetime | None = None,
         share_activity: bool = True,
         gender: Gender | None = None,
         avatar_source: AvatarSource = AvatarSource.NONE,
@@ -249,11 +272,11 @@ class User:
     # ===========================================
 
     @property
-    def id(self) -> UserId | None:
+    def id(self) -> UserId:
         return self._id
 
     @property
-    def email(self) -> Email | None:
+    def email(self) -> Email:
         return self._email
 
     @property
@@ -390,7 +413,7 @@ class User:
         return self._is_active
 
     @property
-    def feed_last_seen_at(self):
+    def feed_last_seen_at(self) -> datetime | None:
         """Cuándo miró su feed por última vez. None si nunca lo ha abierto."""
         return self._feed_last_seen_at
 
@@ -399,7 +422,7 @@ class User:
         """Si sus logros se publican en el feed de sus amigos."""
         return self._share_activity
 
-    def mark_feed_as_seen(self, at) -> None:
+    def mark_feed_as_seen(self, at: datetime) -> None:
         """
         Deja de avisar de lo publicado hasta esta fecha.
 
@@ -913,9 +936,11 @@ class User:
         ):
             return
 
-        if first_name_changed:
+        # `*_changed` ya exige que el valor no sea None; repetirlo aquí no cambia nada y
+        # deja que mypy lo compruebe
+        if first_name_changed and first_name is not None:
             self._first_name = first_name
-        if last_name_changed:
+        if last_name_changed and last_name is not None:
             self._last_name = last_name
         if country_code_changed:
             self._country_code = new_country_code

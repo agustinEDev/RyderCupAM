@@ -8,6 +8,7 @@ Aplica validaciones de negocio y normalización automática.
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import Any
 
 # Constantes de validación
 MIN_COMPETITION_NAME_LENGTH = 3
@@ -76,7 +77,7 @@ class CompetitionName:
 
     value: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Validación y normalización automática.
 
@@ -139,7 +140,7 @@ class CompetitionName:
         """Representación string legible."""
         return self.value
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Operador de igualdad - Comparación por valor.
 
@@ -155,7 +156,7 @@ class CompetitionName:
         """
         return hash(self.value)
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Retorna los valores para SQLAlchemy composite mapping.
 

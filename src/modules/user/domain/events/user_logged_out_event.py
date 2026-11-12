@@ -7,6 +7,7 @@ Este evento se dispara cuando un usuario hace logout del sistema.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -37,7 +38,7 @@ class UserLoggedOutEvent(DomainEvent):
     ip_address: str | None = None
     user_agent: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Post-inicialización que llama al __post_init__ de la clase base
         para generar automáticamente los metadatos del evento.
@@ -59,7 +60,7 @@ class UserLoggedOutEvent(DomainEvent):
             f"token_present={self.token_used is not None})"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convierte el evento a diccionario para serialización.
 

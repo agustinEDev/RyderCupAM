@@ -310,7 +310,7 @@ class Friendship:
     def __str__(self) -> str:
         return f"Friendship({self._requester_id} -> {self._addressee_id}, {self._status.value})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, Friendship) and self._id == other._id
 
     def __hash__(self) -> int:

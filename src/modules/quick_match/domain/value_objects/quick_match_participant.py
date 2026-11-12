@@ -55,7 +55,7 @@ class QuickMatchParticipant:
     starting_handicap: float | None = None
     handicap_frozen: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Valida equipo, variante (registrado o invitado), rangos de hándicap y barra."""
         if self.team is not None and self.team not in VALID_TEAMS:
             raise ValueError(f"team debe ser 'A', 'B' o None, recibido: {self.team!r}")
@@ -173,7 +173,7 @@ class QuickMatchParticipant:
             tee_gender=tee_gender,
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return (
             isinstance(other, QuickMatchParticipant) and self.participant_id == other.participant_id
         )

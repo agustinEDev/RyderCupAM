@@ -7,6 +7,7 @@ Este evento se dispara cuando un usuario hace login exitoso en el sistema.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -40,7 +41,7 @@ class UserLoggedInEvent(DomainEvent):
     session_id: str | None = None
     login_method: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Post-inicialización que llama al __post_init__ de la clase base
         para generar automáticamente los metadatos del evento.
@@ -62,7 +63,7 @@ class UserLoggedInEvent(DomainEvent):
             f"login_method={self.login_method or 'email'})"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convierte el evento a diccionario para serialización.
 
@@ -83,9 +84,7 @@ class UserLoggedInEvent(DomainEvent):
             # Metadatos base del evento (generados automáticamente)
             "event_id": getattr(self, "_event_id", None),
             "occurred_on": (
-                getattr(self, "_occurred_on", None).isoformat()
-                if hasattr(self, "_occurred_on")
-                else None
+                self.occurred_on.isoformat() if hasattr(self, "_occurred_on") else None
             ),
             "event_version": getattr(self, "_event_version", None),
             "aggregate_id": getattr(self, "_aggregate_id", None),
