@@ -2,23 +2,10 @@
 Sistema de Logging - Infraestructura Compartida
 
 La aplicación usa el logging estándar de Python (``logging.getLogger``) y,
-para la auditoría, el log de seguridad (``security_logger``).
-
-Componentes:
-- HandlerConfig: configuración de los handlers
-- JsonFormatter: formato JSON del log de seguridad
-- LogLevel: niveles de logging
+para la auditoría, el log de seguridad (``security_logger``), que escribe cada
+evento como una línea JSON (``JsonFormatter``).
 """
 
-# Re-exportaciones principales
-from .config import HandlerConfig, LogFormat, LogHandler
 from .formatters import JsonFormatter
-from .logger import LogLevel
 
-__all__ = [
-    "HandlerConfig",
-    "JsonFormatter",
-    "LogFormat",
-    "LogHandler",
-    "LogLevel",
-]
+__all__ = ["JsonFormatter"]

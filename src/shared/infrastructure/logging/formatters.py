@@ -1,103 +1,64 @@
 """
-🎨 Formatters - Formateadores de Logging
+Formato JSON del log de seguridad.
 
-Formateador JSON del log de seguridad (JsonFormatter) y su adaptador al
-logging estándar de Python (PythonLoggingFormatter).
-
-Características:
-- Formateo consistente
-- Metadatos enriquecidos
-- Correlation IDs
-- Contexto de aplicación
+Cada registro sale en una línea JSON:
+{
+    "timestamp": "2026-11-12 04:43:00",
+    "level": "INFO",
+    "logger": "security_audit",
+    "message": "...",
+    "module": "...", "function": "...", "line": 42,
+    "correlation_id": "...",   # si viene
+    "context": {...},          # si viene
+    "extra": {...},            # el resto de campos propios del registro
+    "exception": "..."         # si hay excepción
+}
 """
 
 import json
 import logging
-from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
-from .config import HandlerConfig
-
-
-class BaseFormatter(ABC):
-    """Formateador base abstracto"""
-
-    def __init__(self, config: HandlerConfig):
-        self.config = config
-        self.include_correlation_id = config.include_correlation_id
-        self.include_context = config.include_context
-        self.date_format = config.date_format
-
-    @abstractmethod
-    def format(self, record: logging.LogRecord) -> str:
-        """Formatea un registro de logging"""
-        pass
-
-    def _get_timestamp(self, record: logging.LogRecord) -> str:
-        """Obtiene timestamp formateado"""
-        dt = datetime.fromtimestamp(record.created)
-        return dt.strftime(self.date_format)
-
-    def _extract_extra_data(self, record: logging.LogRecord) -> dict[str, Any]:
-        """Extrae datos adicionales del record"""
-        extra = {}
-
-        # Campos estándar que ignoramos
-        standard_fields = {
-            "name",
-            "msg",
-            "args",
-            "levelname",
-            "levelno",
-            "pathname",
-            "filename",
-            "module",
-            "lineno",
-            "funcName",
-            "created",
-            "msecs",
-            "relativeCreated",
-            "thread",
-            "threadName",
-            "processName",
-            "process",
-            "message",
-            "exc_info",
-            "exc_text",
-            "stack_info",
-            "getMessage",
-        }
-
-        # Extraer campos adicionales
-        for key, value in record.__dict__.items():
-            if key not in standard_fields:
-                extra[key] = value
-
-        return extra
-
-
-class JsonFormatter(BaseFormatter):
-    """
-    Formateador JSON estructurado para producción.
-
-    Produce JSON con estructura consistente:
+# Atributos que todo LogRecord trae de serie: no son datos del evento.
+# `taskName` lo añade Python 3.12+ a todos los registros (None fuera de una tarea).
+_CAMPOS_DE_SERIE = frozenset(
     {
-        "timestamp": "2024-11-03T15:30:45.123Z",
-        "level": "INFO",
-        "logger": "app.users",
-        "message": "Usuario registrado",
-        "correlation_id": "abc-def",
-        "context": {...},
-        "extra": {...}
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "taskName",
+        "message",
+        "exc_info",
+        "exc_text",
+        "stack_info",
     }
-    """
+)
+
+_FORMATO_DE_FECHA = "%Y-%m-%d %H:%M:%S"
+
+
+class JsonFormatter(logging.Formatter):
+    """Escribe cada registro del log de seguridad como una línea JSON."""
 
     def format(self, record: logging.LogRecord) -> str:
-        """Formatea como JSON estructurado"""
-        # Estructura base
-        log_entry = {
-            "timestamp": self._get_timestamp(record),
+        """Formatea el registro como JSON compacto."""
+        log_entry: dict[str, Any] = {
+            "timestamp": datetime.fromtimestamp(record.created).strftime(_FORMATO_DE_FECHA),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -106,38 +67,19 @@ class JsonFormatter(BaseFormatter):
             "line": record.lineno,
         }
 
-        # Datos adicionales
-        extra = self._extract_extra_data(record)
-
-        # Correlation ID
-        if "correlation_id" in extra and self.include_correlation_id:
+        extra = {
+            clave: valor
+            for clave, valor in record.__dict__.items()
+            if clave not in _CAMPOS_DE_SERIE
+        }
+        if "correlation_id" in extra:
             log_entry["correlation_id"] = extra.pop("correlation_id")
-
-        # Contexto
-        if "context" in extra and self.include_context:
+        if "context" in extra:
             log_entry["context"] = extra.pop("context")
-
-        # Resto de campos extra
         if extra:
             log_entry["extra"] = extra
 
-        # Información de excepción
         if record.exc_info:
-            log_entry["exception"] = logging.Formatter().formatException(record.exc_info)
+            log_entry["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(log_entry, ensure_ascii=False, separators=(",", ":"))
-
-
-# Clase para integración con logging estándar de Python
-class PythonLoggingFormatter(logging.Formatter):
-    """
-    Adapter para usar nuestros formatters con el logging estándar de Python.
-    """
-
-    def __init__(self, formatter: BaseFormatter):
-        super().__init__()
-        self.custom_formatter = formatter
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Delega el formateo a nuestro formatter personalizado"""
-        return self.custom_formatter.format(record)

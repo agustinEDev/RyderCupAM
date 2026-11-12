@@ -61,8 +61,7 @@ from ...domain.events.security_events import (
     TermsAcceptedEvent,
     UnverifiedAccountClaimedAuditEvent,
 )
-from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
-from .formatters import JsonFormatter, PythonLoggingFormatter
+from .formatters import JsonFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -340,27 +339,15 @@ class SecurityLogger:
 
         log_path = self.log_dir / self.log_file
 
-        # Formatter JSON para logs estructurados
-        handler_config = HandlerConfig(
-            type=LogHandler.ROTATING_FILE,
-            level=LogLevel.INFO,
-            format=LogFormat.JSON,
-            filename=str(log_path),
-            max_bytes=self.MAX_BYTES,
-            backup_count=self.BACKUP_COUNT,
-            date_format="%Y-%m-%d %H:%M:%S",
-            include_correlation_id=True,
-            include_context=True,
-        )
-        json_formatter = JsonFormatter(config=handler_config)
+        # Una línea JSON por evento, igual en stdout y en el fichero
+        json_formatter = JsonFormatter()
 
         # La misma línea JSON por la salida estándar: Render la guarda, y el
         # fichero se pierde en cada despliegue (F-05b). Va primero y no depende
         # del fichero: si este no se puede abrir, el log sigue aquí
         salida = _SalidaEstandar()
         salida.setLevel(logging.INFO)
-        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
-        salida.setFormatter(PythonLoggingFormatter(json_formatter))
+        salida.setFormatter(json_formatter)
         destinos.append(salida)
 
         try:
@@ -381,7 +368,7 @@ class SecurityLogger:
             )
         else:
             handler.setLevel(logging.INFO)
-            handler.setFormatter(PythonLoggingFormatter(json_formatter))
+            handler.setFormatter(json_formatter)
             destinos.append(handler)
 
         # La petición solo encola; stdout y el fichero los escribe un hilo, en orden
