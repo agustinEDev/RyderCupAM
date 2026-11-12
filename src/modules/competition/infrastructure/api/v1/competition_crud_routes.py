@@ -20,6 +20,7 @@ from src.config.dependencies import (
     get_update_competition_use_case,
     get_update_stroke_play_settings_use_case,
     get_ventana_de_actualizacion_use_case,
+    get_vista_de_competicion_use_case,
 )
 from src.config.rate_limit import limite_de_lo_publico, limiter
 from src.modules.competition.application.dto.competition_dto import (
@@ -29,7 +30,6 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
     GetCompetitionSummaryRequestDTO,
-    MyPendingInvitationDTO,
     StrokePlaySettingsDTO,
     StrokePlaySettingsResponseDTO,
     UpdateCompetitionRequestDTO,
@@ -42,14 +42,6 @@ from src.modules.competition.application.mappers.competition_mapper import (
 )
 from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
-)
-from src.modules.competition.application.services.invitacion_de_la_ficha import (
-    invitacion_pendiente,
-    se_le_ofrece_aceptar,
-)
-from src.modules.competition.application.services.quien_ve_los_inscritos import (
-    VISIBILIDAD_DE_LOS_INSCRITOS,
-    alcance_de,
 )
 from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
     VentanaDeActualizacionUseCase,
@@ -80,6 +72,9 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
 )
 from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
     UpdateStrokePlaySettingsUseCase,
+)
+from src.modules.competition.application.use_cases.vista_de_competicion_use_case import (
+    VistaDeCompeticionUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -332,8 +327,7 @@ async def create_competition(
     competition_data: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Endpoint para crear una nueva competición."""
     try:
@@ -341,48 +335,43 @@ async def create_competition(
 
         response = await use_case.execute(competition_data, creator_id)
 
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(response.id))
+        try:
+            enriched_dto = await vista.de(CompetitionId(response.id), creator_id)
+        except CompetitionNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Competition created but not found",
+            ) from e
 
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Competition created but not found",
-                )
-
-            enriched_dto = await CompetitionDTOMapper.to_response_dto(
-                competition, creator_id, uow, user_uow
-            )
-
-            return CreateCompetitionResponseDTO(
-                id=enriched_dto.id,
-                creator_id=enriched_dto.creator_id,
-                creator=enriched_dto.creator,
-                name=enriched_dto.name,
-                status=enriched_dto.status,
-                start_date=enriched_dto.start_date,
-                end_date=enriched_dto.end_date,
-                country_code=enriched_dto.country_code,
-                secondary_country_code=enriched_dto.secondary_country_code,
-                tertiary_country_code=enriched_dto.tertiary_country_code,
-                location=enriched_dto.location,
-                countries=enriched_dto.countries,
-                play_mode=enriched_dto.play_mode,
-                max_players=enriched_dto.max_players,
-                team_assignment=enriched_dto.team_assignment,
-                enrollment_opens_days_before=competition.enrollment_opens_days_before,
-                visibility=str(competition.visibility),
-                setup_mode=enriched_dto.setup_mode,
-                team_1_name=enriched_dto.team_1_name,
-                team_2_name=enriched_dto.team_2_name,
-                tournament_type=enriched_dto.tournament_type,
-                modality=enriched_dto.modality,
-                stroke_play=enriched_dto.stroke_play,
-                is_creator=True,
-                enrolled_count=0,
-                created_at=enriched_dto.created_at,
-                updated_at=enriched_dto.updated_at,
-            )
+        return CreateCompetitionResponseDTO(
+            id=enriched_dto.id,
+            creator_id=enriched_dto.creator_id,
+            creator=enriched_dto.creator,
+            name=enriched_dto.name,
+            status=enriched_dto.status,
+            start_date=enriched_dto.start_date,
+            end_date=enriched_dto.end_date,
+            country_code=enriched_dto.country_code,
+            secondary_country_code=enriched_dto.secondary_country_code,
+            tertiary_country_code=enriched_dto.tertiary_country_code,
+            location=enriched_dto.location,
+            countries=enriched_dto.countries,
+            play_mode=enriched_dto.play_mode,
+            max_players=enriched_dto.max_players,
+            team_assignment=enriched_dto.team_assignment,
+            enrollment_opens_days_before=enriched_dto.enrollment_opens_days_before,
+            visibility=enriched_dto.visibility,
+            setup_mode=enriched_dto.setup_mode,
+            team_1_name=enriched_dto.team_1_name,
+            team_2_name=enriched_dto.team_2_name,
+            tournament_type=enriched_dto.tournament_type,
+            modality=enriched_dto.modality,
+            stroke_play=enriched_dto.stroke_play,
+            is_creator=True,
+            enrolled_count=0,
+            created_at=enriched_dto.created_at,
+            updated_at=enriched_dto.updated_at,
+        )
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -513,9 +502,8 @@ async def get_competition_summary(
 async def get_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
     delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
     handicaps_uc: GetHandicapUpdateStatusUseCase = Depends(get_handicap_update_status_use_case),
     ventana_uc: VentanaDeActualizacionUseCase = Depends(get_ventana_de_actualizacion_use_case),
@@ -530,56 +518,23 @@ async def get_competition(
         # hay ningun proceso de fondo que lo haga por su cuenta (BE #319)
         try:
             await get_competition_uc.execute(competition_vo_id)
+            # Con la invitación pendiente de quien mira (para aceptarla desde la
+            # ficha) y lo que ve de los inscritos
+            dto = await vista.ficha(
+                competition_vo_id,
+                current_user_id,
+                es_admin=current_user.is_admin,
+                email=correo_de_quien_mira(current_user),
+            )
         except CompetitionNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Competition {competition_vo_id.value} not found",
             ) from e
 
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition {competition_vo_id.value} not found",
-                )
-
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-            # La invitación pendiente de quien mira, para aceptarla o rechazarla
-            # desde la ficha: solo si aceptarla puede salir bien (27 oct 2026)
-            pendiente = await invitacion_pendiente(
-                uow,
-                competition,
-                current_user_id,
-                correo_de_quien_mira(current_user),
-                datetime.now(),
-            )
-            if se_le_ofrece_aceptar(
-                competition, pendiente, inscrito=dto.user_enrollment_status is not None
-            ):
-                dto.my_pending_invitation = MyPendingInvitationDTO(
-                    id=pendiente.id.value, expires_at=pendiente.expires_at
-                )
-            # Lo que ve de los inscritos, para que la ficha no lo adivine
-            # comparando la lista con el número (/code-review del front). La
-            # invitación ya está leída; quien organiza, la regla lo resuelve antes
-            alcance = await alcance_de(
-                uow,
-                competition,
-                current_user_id,
-                es_admin=current_user.is_admin,
-                email=correo_de_quien_mira(current_user),
-                invitado=None if competition.is_creator(current_user_id) else pendiente is not None,
-            )
-            dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
-
         # Solo aquí y no en el mapper, que usan también los listados: saberlo
         # exige recorrer lo jugado. La regla es la misma que aplica el borrado,
-        # no una copia (BE #347). Fuera del bloque de arriba: el caso de uso abre
-        # su propia unidad de trabajo
+        # no una copia (BE #347). El caso de uso abre su propia unidad de trabajo
         dto.can_delete = await delete_uc.puede_borrar(
             competition_vo_id, current_user_id, is_admin=current_user.is_admin
         )
@@ -621,8 +576,7 @@ async def update_competition(
     competition_data: UpdateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UpdateCompetitionUseCase = Depends(get_update_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):
     """Endpoint para actualizar una competición."""
     try:
@@ -633,20 +587,7 @@ async def update_competition(
             competition_vo_id, competition_data, current_user_id, is_admin=current_user.is_admin
         )
 
-        async with uow, user_uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition {competition_vo_id.value} not found after update",
-                )
-
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
-            )
-
-        return dto
+        return await vista.de(competition_vo_id, current_user_id, es_admin=current_user.is_admin)
 
     # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
     # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:

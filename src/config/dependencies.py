@@ -282,6 +282,9 @@ from src.modules.competition.application.use_cases.update_stroke_play_settings_u
 from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
     VerAnotacionDePartidaUseCase,
 )
+from src.modules.competition.application.use_cases.vista_de_competicion_use_case import (
+    VistaDeCompeticionUseCase,
+)
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
@@ -2186,6 +2189,14 @@ def get_list_competitions_use_case(
         uow,
         zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
     )
+
+
+def get_vista_de_competicion_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> VistaDeCompeticionUseCase:
+    """La vista de una competición: la respuesta tras escribir y la ficha (fase 5)."""
+    return VistaDeCompeticionUseCase(uow, user_uow)
 
 
 def get_update_competition_use_case(
