@@ -1,14 +1,13 @@
 """
 Los nombres que expone `src.config.dependencies`, tal como estaban antes de partirlo (fase 5).
 
-Instantánea tomada del fichero único de 3.769 líneas: todo lo que definía más lo que otros
-importaban desde él (`EmailService`, `settings`). Fuera `_lanzador`, que se reasigna con
+Instantánea tomada del fichero único de 3.769 líneas: todo lo que definía más `settings`, que
+otros importaban desde él. Fuera `EmailService` (ver el `__init__` del paquete), `_lanzador`, que se reasigna con
 `global` en su submódulo (una copia en el paquete se quedaría en None), y `T`, un TypeVar.
 """
 
 NOMBRES_DE_ANTES = (
     "ActivityUnitsOfWork",
-    "EmailService",
     "_construir_generador",
     "_de_las_partidas",
     "_generador_al_abrir",

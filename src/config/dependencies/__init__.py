@@ -8,7 +8,10 @@ valiendo y FastAPI ve las mismas funciones, así que `Depends` y `dependency_ove
 cambian. Un proveedor nuevo se añade en su módulo y aquí.
 
 `_lanzador` no se reexporta a propósito: se reasigna con `global` en `comun`, y una copia
-aquí se quedaría en None. Se pide con `get_lanzador_de_actualizaciones()`.
+aquí se quedaría en None. Se pide con `get_lanzador_de_actualizaciones()`. Tampoco
+`EmailService`: parchearlo aquí no llegaría a nadie, porque los proveedores de correo lo crean
+en `comun`. Así, el parche viejo (`src.config.dependencies.EmailService`) falla en vez de
+dejar pasar correos de verdad en las pruebas.
 """
 
 from src.config.dependencies.campos import (
@@ -287,13 +290,11 @@ from src.config.dependencies.usuarios import (
     get_verify_email_use_case,
 )
 
-# Los dos que otros importaban de aquí sin ser proveedores: el mismo objeto de siempre
+# Lo que otros importaban de aquí sin ser un proveedor: el mismo objeto de siempre
 from src.config.settings import settings
-from src.shared.infrastructure.email.email_service import EmailService
 
 __all__ = [
     "ActivityUnitsOfWork",
-    "EmailService",
     "_construir_generador",
     "_de_las_partidas",
     "_generador_al_abrir",

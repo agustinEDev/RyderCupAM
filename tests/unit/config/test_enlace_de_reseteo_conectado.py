@@ -2,7 +2,7 @@
 La composición da al reseteo de contraseña la URL del frontend (auditoría 9 nov 2026).
 
 El caso de uso leía `FRONTEND_URL` instanciando `src.config.settings.Settings`;
-ahora la recibe por constructor, y quien se la da es `dependencies.py`. Si no
+ahora la recibe por constructor, y quien se la da es `src.config.dependencies`. Si no
 se la diera bien, los enlaces de los correos apuntarían a otro sitio.
 """
 
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.asyncio
 async def test_el_enlace_de_reseteo_usa_el_frontend_url_de_la_configuracion(monkeypatch):
     """
     Given: FRONTEND_URL configurado como https://front.ejemplo.test
-    When: el proveedor de dependencies.py construye el caso de uso y se pide un reseteo
+    When: el proveedor de src.config.dependencies construye el caso de uso y se pide un reseteo
     Then: el enlace del correo apunta a ese frontend
     """
     monkeypatch.setattr(d.settings, "FRONTEND_URL", "https://front.ejemplo.test")

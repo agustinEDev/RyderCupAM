@@ -126,3 +126,28 @@ def test_d6_el_parche_del_correo_de_las_pruebas_llega_a_los_tres_servicios():
         assert dependencies.get_email_service() is falso
         assert dependencies.get_social_email_service() is falso
         assert dependencies.get_invitation_email_service() is falso
+
+
+def test_d6_el_parche_del_correo_llega_tambien_al_lanzador(monkeypatch):
+    """Given el parche de conftest y el refresco encendido, When se crea el lanzador, Then lleva el mock."""
+    from unittest.mock import patch
+
+    from tests.conftest import RUTA_DEL_SERVICIO_DE_CORREO
+
+    comun = importlib.import_module("src.config.dependencies.comun")
+    monkeypatch.setattr(comun, "refresco_activado", lambda _entorno: True)
+    monkeypatch.setattr(comun, "RFEGHandicapService", lambda **_: None)
+    monkeypatch.setattr(comun, "LanzadorEnSegundoPlano", lambda _fabrica, _rfeg, avisos: avisos)
+    monkeypatch.setattr(comun, "_lanzador", None)
+    falso = MagicMock()
+
+    with patch(RUTA_DEL_SERVICIO_DE_CORREO, return_value=falso):
+        assert dependencies.get_lanzador_de_actualizaciones() is falso
+
+
+def test_d6_el_parche_viejo_falla_en_vez_de_no_hacer_nada():
+    """Given la ruta de antes del paquete, When se intenta parchear, Then falla: no hay nada que parchear ahí."""
+    from unittest.mock import patch
+
+    with pytest.raises(AttributeError), patch("src.config.dependencies.EmailService"):
+        pass
