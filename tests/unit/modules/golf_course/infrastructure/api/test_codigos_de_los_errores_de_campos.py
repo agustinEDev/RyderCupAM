@@ -40,7 +40,8 @@ pytestmark = pytest.mark.asyncio
 
 CAMPO = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b"
 BASE = "/api/v1/golf-courses"
-RUTAS = Path("src/modules/golf_course/infrastructure/api/v1/golf_course_routes.py")
+RAIZ = Path(__file__).resolve().parents[6]
+RUTAS = RAIZ / "src/modules/golf_course/infrastructure/api/v1/golf_course_routes.py"
 
 CUERPO_DE_CAMPO = {
     "name": "Real Club de Golf El Prat",
