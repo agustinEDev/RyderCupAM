@@ -79,18 +79,21 @@ class TestCampoQueNoEsta:
     """GolfCourseMissingError con el texto de siempre."""
 
     async def test_ver_un_campo_que_no_existe(self):
+        """Given ningún campo con ese id, When se pide verlo, Then GolfCourseMissingError con el texto de siempre."""
         caso = GetGolfCourseByIdUseCase(_uow())
         with pytest.raises(GolfCourseMissingError) as error:
             await caso.execute(GetGolfCourseByIdRequestDTO(golf_course_id=CAMPO))
         assert str(error.value) == f"Golf course not found: {CAMPO}"
 
     async def test_aprobar_un_campo_que_no_existe(self):
+        """Given ningún campo con ese id, When el admin lo aprueba, Then GolfCourseMissingError con el texto de siempre."""
         caso = ApproveGolfCourseUseCase(_uow())
         with pytest.raises(GolfCourseMissingError) as error:
             await caso.execute(ApproveGolfCourseRequestDTO(golf_course_id=CAMPO))
         assert str(error.value) == f"Golf course not found: {CAMPO}"
 
     async def test_rechazar_un_campo_que_no_existe(self):
+        """Given ningún campo con ese id, When el admin lo rechaza, Then GolfCourseMissingError con el texto de siempre."""
         caso = RejectGolfCourseUseCase(_uow())
         peticion = RejectGolfCourseRequestDTO(golf_course_id=CAMPO, reason="Datos incompletos")
         with pytest.raises(GolfCourseMissingError) as error:
@@ -98,6 +101,7 @@ class TestCampoQueNoEsta:
         assert str(error.value) == f"Golf course not found: {CAMPO}"
 
     async def test_editar_un_campo_que_no_existe(self):
+        """Given ningún campo con ese id, When se edita, Then GolfCourseMissingError con el texto de siempre."""
         caso = UpdateGolfCourseUseCase(_uow())
         with pytest.raises(GolfCourseMissingError) as error:
             await caso.execute(
@@ -116,6 +120,7 @@ class TestCampoQueNoEsta:
         ],
     )
     async def test_resolver_una_propuesta_que_no_existe(self, caso_de_uso, peticion):
+        """Given ninguna propuesta (clon) con ese id, When el admin la aprueba o rechaza, Then GolfCourseMissingError."""
         caso = caso_de_uso(_uow())
         with pytest.raises(GolfCourseMissingError) as error:
             await caso.execute(peticion(clone_id=CAMPO))
@@ -129,6 +134,7 @@ class TestCampoQueNoEsta:
         ],
     )
     async def test_resolver_una_propuesta_cuyo_original_falta(self, caso_de_uso, peticion):
+        """Given una propuesta cuyo original ya no está, When el admin la resuelve, Then GolfCourseMissingError."""
         clon = MagicMock(original_golf_course_id=GolfCourseId(ORIGINAL))
         uow = _uow()
         uow.golf_courses.find_by_id = AsyncMock(side_effect=[clon, None])
@@ -147,7 +153,7 @@ class TestCampoQueNoEsta:
     async def test_lo_que_no_es_una_propuesta_sigue_siendo_un_valueerror_sin_tipo(
         self, caso_de_uso, peticion
     ):
-        """«No es un clon» no es «no está»: la ruta lo deja en 400 (G8)."""
+        """Given algo que no es una propuesta, When el admin la resuelve, Then ValueError sin tipo (la ruta da 400, G8)."""
         caso = caso_de_uso(_uow(campo=MagicMock(original_golf_course_id=None)))
         with pytest.raises(ValueError, match="is not a clone") as error:
             await caso.execute(peticion(clone_id=CAMPO))
@@ -158,6 +164,7 @@ class TestEditarSinPermiso:
     """GolfCourseEditForbiddenError con el texto de siempre."""
 
     async def test_quien_no_es_creador_ni_admin(self):
+        """Given un campo de otro creador, When lo edita quien no es admin, Then GolfCourseEditForbiddenError."""
         campo = MagicMock(creator_id=UserId(CREADOR))
         caso = UpdateGolfCourseUseCase(_uow(campo=campo))
         with pytest.raises(GolfCourseEditForbiddenError) as error:
@@ -176,6 +183,7 @@ class TestPaisQueNoExiste:
     """CountryNotFoundError con el texto de siempre, al editar y al crear."""
 
     async def test_al_editar(self):
+        """Given un país que no existe, When se edita un campo con él, Then CountryNotFoundError."""
         caso = UpdateGolfCourseUseCase(_uow(campo=MagicMock(creator_id=UserId(CREADOR))))
         with pytest.raises(CountryNotFoundError) as error:
             await caso.execute(
@@ -190,6 +198,7 @@ class TestPaisQueNoExiste:
         "caso_de_uso", [RequestGolfCourseUseCase, CreateDirectGolfCourseUseCase]
     )
     async def test_al_crear(self, caso_de_uso):
+        """Given un país que no existe, When se solicita o crea un campo con él, Then CountryNotFoundError."""
         caso = caso_de_uso(_uow())
         with pytest.raises(CountryNotFoundError) as error:
             await caso.execute(_peticion_de_campo(), UserId(CREADOR))
@@ -197,6 +206,6 @@ class TestPaisQueNoExiste:
 
 
 def test_los_tres_siguen_siendo_valueerror():
-    """Un `except ValueError` de cualquier sitio los sigue capturando como antes."""
+    """Given los tres errores nuevos, When se miran sus bases, Then son ValueError: todo `except ValueError` los captura."""
     for clase in (GolfCourseMissingError, CountryNotFoundError, GolfCourseEditForbiddenError):
         assert issubclass(clase, ValueError)

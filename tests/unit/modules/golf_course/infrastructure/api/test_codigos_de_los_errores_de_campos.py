@@ -185,6 +185,7 @@ def pide() -> Iterator:
     ids=lambda v: v if isinstance(v, str) else None,
 )
 async def test_el_codigo_y_el_texto_son_los_de_antes(pide, caso, ruta, error, codigo):
+    """Given el caso de uso lanza `error`, When se llama a la ruta, Then responde `codigo` y su texto."""
     respuesta = await pide(ruta, error)
     assert respuesta.status_code == codigo, respuesta.text
     assert respuesta.json() == {"detail": str(error)}
@@ -192,7 +193,7 @@ async def test_el_codigo_y_el_texto_son_los_de_antes(pide, caso, ruta, error, co
 
 def test_g11_las_rutas_no_eligen_el_codigo_leyendo_el_texto_del_error():
     """
-    Ningún `except ... as e` de las rutas de campos compara el error ni algo sacado de él
+    Given las rutas de campos, When se recorren sus `except ... as e`, Then ninguno compara el error ni algo sacado de él
     (`"not found" in str(e).lower()`, o `texto = str(e).lower()` y luego `"x" in texto`).
     """
     arbol = ast.parse(RUTAS.read_text())
