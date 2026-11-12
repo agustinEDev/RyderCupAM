@@ -324,3 +324,28 @@ class TestLasProgramadasConFiltroDeEstado:
         )
 
         assert [str(c.name) for c in resultado] == ["Activa 1", "Activa 2", "Cerrada"]
+
+    async def test_p11_pidiendo_solo_cerradas_no_se_abre_la_programada(self):
+        """Given una programada a la que ya le toca abrir, When pido solo cerradas, Then ni sale ni se abre de paso."""
+        programada = self._programada()
+        uow = await _bd(programada)
+
+        resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+            ["CLOSED"], viewer_id=str(YO.value)
+        )
+
+        assert resultado == []
+        assert programada.status is CompetitionStatus.DRAFT
+
+    @pytest.mark.parametrize("busqueda", [None, "Progra"], ids=["sin-busqueda", "con-busqueda"])
+    async def test_p12_un_estado_que_no_existe_sigue_siendo_un_error(self, busqueda):
+        """Given un estado que no existe entre los pedidos, When pido el listado, Then ValueError (la ruta da 400) sin abrir nada."""
+        programada = self._programada()
+        uow = await _bd(programada)
+
+        with pytest.raises(ValueError):
+            await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
+                ["ACTIVE", "NO_EXISTE"], search_name=busqueda, viewer_id=str(YO.value)
+            )
+
+        assert programada.status is CompetitionStatus.DRAFT
