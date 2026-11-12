@@ -5,7 +5,7 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 """
 
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -261,47 +261,6 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .order_by(Competition._created_at.desc())
             .limit(limit)
             .offset(offset)
-        )
-        result = await self._session.execute(statement)
-        return list(result.scalars().all())
-
-    async def find_active_in_date_range(
-        self, start_date: date, end_date: date
-    ) -> list[Competition]:
-        """
-        Busca competiciones activas que se superpongan con un rango de fechas.
-
-        La query busca competiciones donde:
-        - Status sea ACTIVE, CLOSED, IN_PROGRESS (estados "activos")
-        - Las fechas se superpongan con el rango dado
-
-        Solapamiento de rangos:
-        - comp.start_date <= end_date AND comp.end_date >= start_date
-
-        Args:
-            start_date: Fecha de inicio del rango
-            end_date: Fecha de fin del rango
-
-        Returns:
-            List[Competition]: Competiciones activas en el rango
-        """
-        # Estados considerados "activos" (no DRAFT, CANCELLED, COMPLETED)
-        active_statuses = [
-            CompetitionStatus.ACTIVE.value,
-            CompetitionStatus.CLOSED.value,
-            CompetitionStatus.IN_PROGRESS.value,
-        ]
-
-        statement = (
-            select(Competition)
-            .where(
-                and_(
-                    Competition._status_value.in_(active_statuses),
-                    Competition._start_date <= end_date,
-                    Competition._end_date >= start_date,
-                )
-            )
-            .order_by(Competition._start_date.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

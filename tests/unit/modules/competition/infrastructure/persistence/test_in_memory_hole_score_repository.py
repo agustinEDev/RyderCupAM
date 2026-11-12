@@ -55,21 +55,6 @@ class TestInMemoryHoleScoreRepositoryAdd:
 class TestInMemoryHoleScoreRepositoryFind:
     """Tests para find methods."""
 
-    async def test_find_by_match_and_hole(self):
-        """Buscar scores por match y hoyo."""
-        repo = InMemoryHoleScoreRepository()
-        match_id = MatchId.generate()
-        a, b = UserId.generate(), UserId.generate()
-        hs_a = _make_hole_score(match_id=match_id, hole_number=1, player_user_id=a)
-        hs_b = _make_hole_score(match_id=match_id, hole_number=1, player_user_id=b, team="B")
-        hs_other = _make_hole_score(match_id=match_id, hole_number=2, player_user_id=a)
-        await repo.add(hs_a)
-        await repo.add(hs_b)
-        await repo.add(hs_other)
-
-        found = await repo.find_by_match_and_hole(match_id, 1)
-        assert len(found) == 2
-
     async def test_find_one(self):
         """Buscar un score especifico."""
         repo = InMemoryHoleScoreRepository()
@@ -131,28 +116,3 @@ class TestInMemoryHoleScoreRepositoryUpdate:
         found = await repo.find_one(match_id, 1, player)
         assert found.own_score == 5
         assert found.own_submitted is True
-
-
-class TestInMemoryHoleScoreRepositoryDelete:
-    """Tests para delete_by_match()."""
-
-    async def test_delete_by_match(self):
-        """Eliminar todos los scores de un match."""
-        repo = InMemoryHoleScoreRepository()
-        match_id = MatchId.generate()
-        for h in range(1, 4):
-            await repo.add(_make_hole_score(match_id=match_id, hole_number=h))
-        # Another match
-        other_match = MatchId.generate()
-        await repo.add(_make_hole_score(match_id=other_match, hole_number=1))
-
-        count = await repo.delete_by_match(match_id)
-        assert count == 3
-        assert await repo.find_by_match(match_id) == []
-        assert len(await repo.find_by_match(other_match)) == 1
-
-    async def test_delete_by_match_empty(self):
-        """Delete de match sin scores retorna 0."""
-        repo = InMemoryHoleScoreRepository()
-        count = await repo.delete_by_match(MatchId.generate())
-        assert count == 0

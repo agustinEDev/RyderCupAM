@@ -225,7 +225,7 @@ class TestInMemoryInvitationRepositoryFindPending:
 
 
 class TestInMemoryInvitationRepositoryCounting:
-    """Tests para count_by_competition() y count_by_invitee()."""
+    """Tests para count_by_competition()."""
 
     async def test_count_by_competition(self):
         repo = InMemoryInvitationRepository()
@@ -293,35 +293,3 @@ class TestInMemoryInvitationRepositoryCounting:
         one_hour_ago = datetime.now() - timedelta(hours=1)
         count_recent = await repo.count_by_competition(comp_id, since=one_hour_ago)
         assert count_recent == 1
-
-    async def test_count_by_invitee_email(self):
-        repo = InMemoryInvitationRepository()
-        inv = _make_invitation(invitee_email="test@test.com")
-        await repo.add(inv)
-
-        count = await repo.count_by_invitee(email="test@test.com")
-        assert count == 1
-
-    async def test_count_by_invitee_user_id(self):
-        repo = InMemoryInvitationRepository()
-        user_id = UserId(uuid4())
-        inv = _make_invitation(invitee_email="test@test.com", invitee_user_id=user_id)
-        await repo.add(inv)
-
-        count = await repo.count_by_invitee(user_id=user_id)
-        assert count == 1
-
-    async def test_count_by_invitee_with_status(self):
-        repo = InMemoryInvitationRepository()
-        user_id = UserId(uuid4())
-        inv1 = _make_invitation(invitee_email="test@test.com", invitee_user_id=user_id)
-        inv2 = _make_invitation(
-            invitee_email="test@test.com",
-            invitee_user_id=user_id,
-            status=InvitationStatus.DECLINED,
-        )
-        await repo.add(inv1)
-        await repo.add(inv2)
-
-        count = await repo.count_by_invitee(user_id=user_id, status=InvitationStatus.PENDING)
-        assert count == 1

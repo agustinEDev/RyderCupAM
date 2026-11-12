@@ -185,27 +185,6 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def exists_for_user_in_competition(
-        self, user_id: UserId, competition_id: CompetitionId
-    ) -> bool:
-        """
-        Verifica si existe una inscripción para un usuario en una competición específica.
-
-        Útil para: Prevenir inscripción duplicada (mismo usuario, mismo torneo).
-
-        Args:
-            user_id: El ID del usuario
-            competition_id: El ID de la competición
-
-        Returns:
-            bool: True si existe, False si no existe
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
-        """
-        pass
-
-    @abstractmethod
     async def find_by_user_and_competition(
         self, user_id: UserId, competition_id: CompetitionId
     ) -> Enrollment | None:
@@ -288,27 +267,6 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             int: Número total de inscripciones con estado REQUESTED
-
-        Raises:
-            RepositoryError: Si ocurre un error de consulta
-        """
-        pass
-
-    @abstractmethod
-    async def find_by_competition_and_team(
-        self, competition_id: CompetitionId, team_id: str
-    ) -> list[Enrollment]:
-        """
-        Busca todas las inscripciones asignadas a un equipo específico.
-
-        Útil para: Listar jugadores de cada equipo (Team 1 vs Team 2).
-
-        Args:
-            competition_id: El ID de la competición
-            team_id: El ID del equipo (típicamente "1" o "2")
-
-        Returns:
-            List[Enrollment]: Lista de inscripciones del equipo
 
         Raises:
             RepositoryError: Si ocurre un error de consulta

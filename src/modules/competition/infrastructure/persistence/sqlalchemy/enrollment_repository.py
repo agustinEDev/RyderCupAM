@@ -215,34 +215,6 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def exists_for_user_in_competition(
-        self, user_id: UserId, competition_id: CompetitionId
-    ) -> bool:
-        """
-        Verifica si existe una inscripción para un usuario en una competición.
-
-        Útil para prevenir inscripciones duplicadas (constraint de BD también lo hace).
-
-        Args:
-            user_id: ID del usuario
-            competition_id: ID de la competición
-
-        Returns:
-            bool: True si existe, False si no existe
-        """
-        statement = (
-            select(func.count())
-            .select_from(Enrollment)
-            .where(
-                and_(
-                    Enrollment._user_id == user_id,
-                    Enrollment._competition_id == competition_id,
-                )
-            )
-        )
-        result = await self._session.execute(statement)
-        return result.scalar_one() > 0
-
     async def count_approved(self, competition_id: CompetitionId) -> int:
         """
         Cuenta el total de inscripciones aprobadas en una competición.
@@ -331,29 +303,3 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return result.scalar_one()
-
-    async def find_by_competition_and_team(
-        self, competition_id: CompetitionId, team_id: str
-    ) -> list[Enrollment]:
-        """
-        Busca todas las inscripciones asignadas a un equipo específico.
-
-        Args:
-            competition_id: ID de la competición
-            team_id: ID del equipo (típicamente "1" o "2")
-
-        Returns:
-            List[Enrollment]: Lista de inscripciones del equipo
-        """
-        statement = (
-            select(Enrollment)
-            .where(
-                and_(
-                    Enrollment._competition_id == competition_id,
-                    Enrollment._team_id == team_id,
-                )
-            )
-            .order_by(Enrollment._created_at.asc())
-        )
-        result = await self._session.execute(statement)
-        return list(result.scalars().all())

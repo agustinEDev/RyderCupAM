@@ -61,15 +61,6 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         ]
         return _pagina(enrollments, limit, offset)
 
-    async def exists_for_user_in_competition(
-        self, user_id: UserId, competition_id: CompetitionId
-    ) -> bool:
-        """Verifica si un usuario ya tiene una inscripción en una competición."""
-        return any(
-            enr.user_id == user_id and enr.competition_id == competition_id
-            for enr in self._enrollments.values()
-        )
-
     async def find_by_competition(
         self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
@@ -85,16 +76,6 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         """Busca todas las inscripciones de un usuario."""
         enrollments = [enr for enr in self._enrollments.values() if enr.user_id == user_id]
         return _pagina(enrollments, limit, offset)
-
-    async def find_by_competition_and_team(
-        self, competition_id: CompetitionId, team_id: str
-    ) -> list[Enrollment]:
-        """Busca inscripciones de una competición filtradas por equipo."""
-        return [
-            enr
-            for enr in self._enrollments.values()
-            if enr.competition_id == competition_id and enr.team_id == team_id
-        ]
 
     async def count_approved(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones aprobadas (nuevo nombre de método)."""

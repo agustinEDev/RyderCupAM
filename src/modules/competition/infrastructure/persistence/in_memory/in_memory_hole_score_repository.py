@@ -34,13 +34,6 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
         # los tests espían cuál de las dos lecturas usa cada camino
         return [hs for hs in self._scores.values() if hs.match_id == match_id]
 
-    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
-        return [
-            hs
-            for hs in self._scores.values()
-            if hs.match_id == match_id and hs.hole_number == hole_number
-        ]
-
     async def find_one(
         self, match_id: MatchId, hole_number: int, player_user_id: UserId
     ) -> HoleScore | None:
@@ -74,12 +67,6 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
             ),
             key=lambda hs: hs.hole_number,
         )
-
-    async def delete_by_match(self, match_id: MatchId) -> int:
-        to_delete = [hs_id for hs_id, hs in self._scores.items() if hs.match_id == match_id]
-        for hs_id in to_delete:
-            del self._scores[hs_id]
-        return len(to_delete)
 
     async def exists_by_player(self, player_user_id: UserId) -> bool:
         return any(hs.player_user_id == player_user_id for hs in self._scores.values())

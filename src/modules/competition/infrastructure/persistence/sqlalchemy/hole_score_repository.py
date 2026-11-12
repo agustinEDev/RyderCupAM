@@ -1,6 +1,6 @@
 """HoleScore Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.competition.domain.entities.hole_score import HoleScore
@@ -49,14 +49,6 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
-        statement = select(HoleScore).where(
-            HoleScore._match_id == match_id,
-            HoleScore._hole_number == hole_number,
-        )
-        result = await self._session.execute(statement)
-        return list(result.scalars().all())
-
     async def find_one(
         self, match_id: MatchId, hole_number: int, player_user_id: UserId
     ) -> HoleScore | None:
@@ -97,11 +89,6 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
-
-    async def delete_by_match(self, match_id: MatchId) -> int:
-        statement = delete(HoleScore).where(HoleScore._match_id == match_id)
-        result = await self._session.execute(statement)
-        return result.rowcount
 
     async def exists_by_player(self, player_user_id: UserId) -> bool:
         statement = (
