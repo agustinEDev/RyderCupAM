@@ -17,7 +17,7 @@ hora entra sin problema si llega despues, que es el caso normal.
 import logging
 from datetime import date, datetime, time
 
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.session_type import SessionType
 
 logger = logging.getLogger(__name__)

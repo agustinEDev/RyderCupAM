@@ -4,11 +4,11 @@ Token Service Interface - Application Layer Port
 Define el contrato para servicios de tokens de autenticación.
 """
 
-from abc import ABC, abstractmethod
 from datetime import timedelta
+from typing import Protocol
 
 
-class ITokenService(ABC):
+class ITokenService(Protocol):
     """
     Puerto para servicios de generación y verificación de tokens.
 
@@ -20,7 +20,6 @@ class ITokenService(ABC):
     - MockTokenService (testing)
     """
 
-    @abstractmethod
     def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         """
         Crea un token de acceso.
@@ -34,7 +33,6 @@ class ITokenService(ABC):
         """
         pass
 
-    @abstractmethod
     def verify_access_token(self, token: str) -> dict | None:
         """
         Verifica y decodifica un token.
@@ -47,7 +45,6 @@ class ITokenService(ABC):
         """
         pass
 
-    @abstractmethod
     def verify_refresh_token(self, token: str) -> dict | None:
         """
         Verifica y decodifica un refresh token.
@@ -56,7 +53,6 @@ class ITokenService(ABC):
             Payload si es válido (firma, caducidad y tipo), None si no
         """
 
-    @abstractmethod
     def refresh_token_expired(self, token: str) -> bool:
         """
         Si es un refresh token de esta API, con la firma buena, que ya ha caducado.
@@ -64,11 +60,9 @@ class ITokenService(ABC):
         Distingue el final normal de una sesión de un token inválido (FE #1042).
         """
 
-    @abstractmethod
     def create_refresh_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         """Crea un refresh token (7 días por defecto)."""
 
-    @abstractmethod
     def create_csrf_token(self, user_id: str) -> str:
         """
         Crea el token CSRF de la sesión, firmado para ese usuario (BE #724).

@@ -80,6 +80,11 @@ from src.modules.user.domain.exceptions import (
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.api.authorization import (
+    is_admin,
+    is_creator_of,
+    is_player_in,
+)
 from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
     CURRENT_PASSWORD_INCORRECT,
     EMAIL_ALREADY_IN_USE,
@@ -96,11 +101,6 @@ from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_cod
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
-)
-from src.shared.infrastructure.security.authorization import (
-    is_admin,
-    is_creator_of,
-    is_player_in,
 )
 
 router = APIRouter()

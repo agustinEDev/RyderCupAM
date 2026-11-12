@@ -5,6 +5,7 @@ Define los estados posibles de una competición desde su creación hasta su fina
 """
 
 from enum import StrEnum
+from typing import Any
 
 
 class CompetitionStatus(StrEnum):
@@ -171,7 +172,7 @@ class CompetitionStatus(StrEnum):
             CompetitionStatus.CLOSED,
         }
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Retorna los valores para SQLAlchemy composite mapping.
 

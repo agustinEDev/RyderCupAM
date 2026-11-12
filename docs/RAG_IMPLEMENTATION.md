@@ -268,7 +268,7 @@ COMMON_GOLF_FAQS = {
 
 ### Dependency Injection
 
-**Configurar en `src/config/dependencies.py`:**
+**Configurar en `src/config/dependencies/` (el módulo de su contexto, reexportado en `__init__.py`):**
 ```python
 def get_query_golf_rules_use_case():
     redis_url = settings.REDIS_URL

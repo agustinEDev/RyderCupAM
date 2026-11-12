@@ -20,7 +20,7 @@ Las fechas son UTC sin zona, como las que se guardan: `created_at` y
 servidor (BE #635).
 """
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..value_objects.quick_match_status import QuickMatchStatus
@@ -51,7 +51,7 @@ def closes_at(
     return cierre.astimezone(UTC).replace(tzinfo=None)
 
 
-def _zona(timezone: str | None):
+def _zona(timezone: str | None) -> tzinfo:
     """
     La zona del campo, o UTC si no se sabe o no existe: el campo leído de la BD
     no pasa por su validación, y una zona rara no puede tumbar el cierre.

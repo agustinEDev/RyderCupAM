@@ -46,11 +46,11 @@ from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     GetScheduleRequestDTO,
 )
+from src.modules.competition.application.services.bloqueos_al_generar import PlayersWithoutTeeError
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
-    PlayersWithoutTeeError,
-    TeeColorNotFoundError,
 )
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,

@@ -24,7 +24,7 @@ class MarkerAssignment:
     marks_user_id: UserId
     marked_by_user_id: UserId
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validaciones de integridad."""
         if self.scorer_user_id == self.marks_user_id:
             raise ValueError("Un jugador no puede marcarse a si mismo")

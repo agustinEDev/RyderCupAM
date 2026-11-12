@@ -5,11 +5,11 @@ Define el contrato para envio de emails de invitacion.
 Vive en el Competition module (Interface Segregation Principle).
 """
 
-from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Protocol
 
 
-class IInvitationEmailService(ABC):
+class IInvitationEmailService(Protocol):
     """
     Puerto para envio de emails de invitacion a competiciones.
 
@@ -17,7 +17,6 @@ class IInvitationEmailService(ABC):
     La implementacion concreta (EmailService) puede implementar ambas interfaces.
     """
 
-    @abstractmethod
     async def send_invitation_email(
         self,
         to_email: str,

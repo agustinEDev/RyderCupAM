@@ -122,7 +122,7 @@ class Clasificacion:
             raise ValueError("El scratch no tiene categorías.")
         medal = tipo == TournamentType.MEDAL
         filas_sin_puesto: list[Fila] = []
-        clasificados: list[tuple[tuple, Participante, _Resultado]] = []
+        clasificados: list[tuple[tuple[int | Decimal, ...], Participante, _Resultado]] = []
         for participante in participantes:
             if categoria is not None and participante.categoria != categoria:
                 continue
@@ -131,15 +131,18 @@ class Clasificacion:
                 filas_sin_puesto.append(_fila(participante, resultado, None, False))
                 continue
             # El hándicap va en la clave: solo empatan quienes tienen el mismo
-            clave = (*_clave(resultado, medal, regla), handicap_tiebreak_key(participante.handicap))
+            clave: tuple[int | Decimal, ...] = (
+                *_clave(resultado, medal, regla),
+                handicap_tiebreak_key(participante.handicap),
+            )
             clasificados.append((clave, participante, resultado))
 
         clasificados.sort(key=lambda c: (c[0], str(c[1].user_id)))
-        repeticiones: dict[tuple, int] = {}
+        repeticiones: dict[tuple[int | Decimal, ...], int] = {}
         for clave, _, _ in clasificados:
             repeticiones[clave] = repeticiones.get(clave, 0) + 1
         filas: list[Fila] = []
-        puesto_de: dict[tuple, int] = {}
+        puesto_de: dict[tuple[int | Decimal, ...], int] = {}
         for indice, (clave, participante, resultado) in enumerate(clasificados, start=1):
             puesto = puesto_de.setdefault(clave, indice)
             filas.append(_fila(participante, resultado, puesto, repeticiones[clave] > 1))
@@ -200,7 +203,7 @@ def _resultado(
     return _Resultado(EstadoEnClasificacion.CLASIFICADO, mejor, len(candidatas))
 
 
-def _clave(resultado: _Resultado, medal: bool, regla: OverallStanding) -> tuple:
+def _clave(resultado: _Resultado, medal: bool, regla: OverallStanding) -> tuple[int, ...]:
     """Menor es mejor."""
     if resultado.valor is None:
         raise ValueError("Solo los clasificados tienen clave de orden.")

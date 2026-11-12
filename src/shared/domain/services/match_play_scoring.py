@@ -10,6 +10,7 @@ clase y añade lo de la Ryder (marcadores y puntos).
 """
 
 from collections.abc import Mapping
+from typing import Any
 
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -93,7 +94,7 @@ class MatchPlayScoring:
     def calculate_match_standing(
         self,
         hole_results: list[str],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Calcula el standing actual del partido.
 
@@ -129,7 +130,7 @@ class MatchPlayScoring:
             "holes_remaining": holes_remaining,
         }
 
-    def is_match_decided(self, standing: dict) -> bool:
+    def is_match_decided(self, standing: dict[str, Any]) -> bool:
         """
         Determina si el partido esta matematicamente decidido.
 
@@ -139,9 +140,10 @@ class MatchPlayScoring:
             return False
 
         lead = int(standing["status"].replace("UP", ""))
-        return lead > standing["holes_remaining"]
+        holes_remaining: int = standing["holes_remaining"]
+        return lead > holes_remaining
 
-    def format_decided_result(self, hole_results: list[str]) -> dict:
+    def format_decided_result(self, hole_results: list[str]) -> dict[str, Any]:
         """
         Formatea el resultado de un partido decidido.
 
@@ -167,7 +169,7 @@ class MatchPlayScoring:
             "score": f"{lead}&{holes_remaining}",
         }
 
-    def decided_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict | None:
+    def decided_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict[str, Any] | None:
         """
         El resultado del partido si ya esta decidido, o None si sigue en juego
         (`holes_until_decided`).
@@ -183,7 +185,7 @@ class MatchPlayScoring:
             return None
         return self.format_decided_result(hasta_la_decision)
 
-    def result_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+    def result_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict[str, Any]:
         """
         El resultado con lo anotado: el de la decision si la hay y, si no, la
         ventaja tal cual («5UP», «AS»). Con hoyos sin cerrar, `format_decided_result`
@@ -198,7 +200,7 @@ class MatchPlayScoring:
             return {"winner": "HALVED", "score": "AS"}
         return {"winner": standing["leading_team"], "score": standing["status"]}
 
-    def standing_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+    def standing_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict[str, Any]:
         """
         Como va el partido: decidido, el estado del hoyo en que se decidio (lo
         anotado despues no lo mueve); si no, el de todos los hoyos cerrados.

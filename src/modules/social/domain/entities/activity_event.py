@@ -1,6 +1,7 @@
 """Entidad: ActivityEvent — un logro publicado en el feed de los amigos."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
@@ -42,7 +43,7 @@ class ActivityEvent:
         type: ActivityEventType,
         occurred_at: datetime,
         source_match_id: str,
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
         published_at: datetime | None = None,
         visible_to_friends: bool = True,
     ):
@@ -74,7 +75,7 @@ class ActivityEvent:
         type: ActivityEventType,
         occurred_at: datetime,
         source_match_id: str,
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
         published_at: datetime | None = None,
         visible_to_friends: bool = True,
     ) -> "ActivityEvent":
@@ -90,7 +91,7 @@ class ActivityEvent:
         )
 
     @classmethod
-    def reconstruct(cls, **props) -> "ActivityEvent":
+    def reconstruct(cls, **props: Any) -> "ActivityEvent":
         return cls(**props)
 
     # === Getters ===
@@ -120,7 +121,7 @@ class ActivityEvent:
         return self._visible_to_friends
 
     @property
-    def payload(self) -> dict:
+    def payload(self) -> dict[str, Any]:
         return dict(self._payload)
 
     @property
@@ -165,7 +166,7 @@ class ActivityEvent:
         """Deja de verlo nadie mas que su autor (apagar la publicacion)."""
         self._visible_to_friends = False
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, ActivityEvent) and self._id == other._id
 
     def __hash__(self) -> int:

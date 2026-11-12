@@ -243,7 +243,7 @@ class GetScoringViewUseCase:
         for hs in hole_scores:
             scores_by_hole.setdefault(hs.hole_number, []).append(hs)
 
-        hole_results_list = []
+        hole_results_list: list[str] = []
         scores_dto = []
         match_format = round_entity.match_format
 

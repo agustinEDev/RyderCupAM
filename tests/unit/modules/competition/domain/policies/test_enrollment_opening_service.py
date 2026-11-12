@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from src.modules.competition.domain.services.enrollment_opening_service import (
+from src.modules.competition.domain.policies.enrollment_opening_service import (
     EnrollmentOpeningService,
 )
 

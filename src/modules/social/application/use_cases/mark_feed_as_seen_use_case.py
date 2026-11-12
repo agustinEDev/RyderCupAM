@@ -41,7 +41,7 @@ class MarkFeedAsSeenUseCase:
         self._user_uow = user_uow
         self._reloj = reloj or utc_now
 
-    async def execute(self, user_id_raw: str) -> datetime:
+    async def execute(self, user_id_raw: str) -> datetime | None:
         """Marca el feed como visto y devuelve la marca que queda guardada."""
         user_id = UserId(user_id_raw)
         visto_en = self._reloj()

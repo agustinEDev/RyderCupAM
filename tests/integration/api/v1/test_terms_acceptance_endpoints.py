@@ -18,8 +18,8 @@ from httpx import AsyncClient
 from main import app
 from src.config.dependencies import get_accept_terms_use_case, get_google_oauth_service
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
-from src.modules.user.domain.services import terms_of_service
 from src.modules.user.domain.services.descripcion_del_dispositivo import ip_tapada
+from src.modules.user.domain.value_objects import terms_of_service
 from tests.conftest import (
     create_admin_user,
     create_authenticated_user,

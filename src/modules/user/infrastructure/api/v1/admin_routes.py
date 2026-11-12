@@ -42,6 +42,7 @@ from src.modules.user.application.use_cases.get_admin_stats_use_case import (
     GetAdminStatsUseCase,
 )
 from src.modules.user.domain.errors.user_errors import DuplicateEmailError
+from src.modules.user.infrastructure.api.authorization import require_admin
 from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
     EMAIL_ALREADY_IN_USE,
     TEXTOS as TEXTOS_DE_CUENTA,
@@ -51,7 +52,6 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
-from src.shared.infrastructure.security.authorization import require_admin
 
 router = APIRouter()
 

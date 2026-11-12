@@ -25,5 +25,5 @@ class GoogleAccountUnlinkedEvent(DomainEvent):
     provider: str
     unlinked_at: datetime
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()

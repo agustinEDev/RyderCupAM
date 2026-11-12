@@ -50,7 +50,7 @@ class MatchPlayer:
     ]  # Hoyos donde recibe golpe (puede tener duplicados si PH > 18)
     player_handicap: Decimal | None = None  # HM-1b: snapshot del HI usado al generar el partido
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validaciones después de inicialización."""
         # Un jugador plus tiene Playing Handicap negativo (BE #165)
 

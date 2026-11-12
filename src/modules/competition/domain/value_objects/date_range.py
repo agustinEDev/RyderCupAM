@@ -7,6 +7,7 @@ Garantiza que el rango sea lógicamente válido.
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 
 class InvalidDateRangeError(Exception):
@@ -40,7 +41,7 @@ class DateRange:
     start_date: date
     end_date: date
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Validación automática del rango de fechas.
 
@@ -109,7 +110,7 @@ class DateRange:
         """Representación string legible."""
         return f"{self.start_date} to {self.end_date}"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Operador de igualdad - Comparación por valor.
 
@@ -125,7 +126,7 @@ class DateRange:
         """Hash del objeto - Permite usar en sets y como keys de dict."""
         return hash((self.start_date, self.end_date))
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Retorna los valores para SQLAlchemy composite mapping.
 

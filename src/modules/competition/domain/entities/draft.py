@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
-from ..services.snake_draft_service import PlayerForDraft
+from ..policies.snake_draft_service import PlayerForDraft
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.draft_id import DraftId
 from ..value_objects.draft_status import DraftStatus

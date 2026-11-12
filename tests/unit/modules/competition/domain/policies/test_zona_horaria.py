@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 
 
 def test_una_zona_que_existe():

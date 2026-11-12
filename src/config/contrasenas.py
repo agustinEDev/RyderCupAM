@@ -2,7 +2,7 @@
 Instala el hasher de contraseñas del proceso (auditoría de arquitectura del 9 nov
 2026, B2).
 
-Lo llama la composition root (`src/config/dependencies.py`) al importarse, y
+Lo llama la composition root (`src/config/dependencies/comun.py`) al importarse, y
 también los scripts que crean usuarios sin cargar la app. Las rondas salen de
 `BCRYPT_ROUNDS`: 12 si no está o no sirve, y menos de 12 solo con
 `ENVIRONMENT=development` (local, Kind y los tests, que ponen 4).
@@ -15,7 +15,7 @@ import os
 from collections.abc import Mapping
 
 from src.config.env import env_int
-from src.modules.user.domain.services.password_hasher import instala_el_hasher
+from src.modules.user.domain.ports.password_hasher import instala_el_hasher
 from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
     BcryptPasswordHasher,
 )

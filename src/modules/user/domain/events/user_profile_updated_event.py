@@ -7,6 +7,7 @@ Este evento se dispara cuando un usuario actualiza su nombre o apellidos.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -64,7 +65,7 @@ class UserProfileUpdatedEvent(DomainEvent):
         """Verifica si el alias cambió."""
         return self.old_alias != self.new_alias
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialización específica para UserProfileUpdatedEvent.
 

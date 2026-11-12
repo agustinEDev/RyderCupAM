@@ -9,6 +9,7 @@ No lee nada nuevo. Trabaja sobre los hoyos que ya se guardan, reducidos antes a
 `HoleOutcome` por quien conoce las reglas del WHS.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES
@@ -121,7 +122,7 @@ class ScoringBreakdownCalculator:
         )
 
     @staticmethod
-    def _distribution(to_par_values) -> Distribution:
+    def _distribution(to_par_values: Iterable[int]) -> Distribution:
         cestas = {BIRDIE_OR_BETTER: 0, PAR: 0, BOGEY: 0, DOUBLE_OR_WORSE: 0}
         total = 0
         for to_par in to_par_values:

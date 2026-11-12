@@ -7,6 +7,7 @@ Representa un partido individual dentro de una sesión de competición.
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
 from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
@@ -51,13 +52,13 @@ class Match:
         status: MatchStatus,
         handicap_strokes_given: int,
         strokes_given_to_team: str,
-        result: dict | None,
+        result: dict[str, Any] | None,
         created_at: datetime,
         updated_at: datetime,
         marker_assignments: tuple[MarkerAssignment, ...] = (),
         scorecard_submitted_by: tuple[UserId, ...] = (),
         is_decided: bool = False,
-        decided_result: dict | None = None,
+        decided_result: dict[str, Any] | None = None,
         withdrawn_player_ids: tuple[UserId, ...] = (),
         holes_without_ball: dict[UserId, tuple[int, ...]] | None = None,
     ):
@@ -180,13 +181,13 @@ class Match:
         status: MatchStatus,
         handicap_strokes_given: int,
         strokes_given_to_team: str,
-        result: dict | None,
+        result: dict[str, Any] | None,
         created_at: datetime,
         updated_at: datetime,
         marker_assignments: list[MarkerAssignment] | None = None,
         scorecard_submitted_by: list[UserId] | None = None,
         is_decided: bool = False,
-        decided_result: dict | None = None,
+        decided_result: dict[str, Any] | None = None,
         withdrawn_player_ids: list[UserId] | None = None,
         holes_without_ball: dict[UserId, tuple[int, ...]] | None = None,
     ) -> "Match":
@@ -223,7 +224,7 @@ class Match:
         self._status = MatchStatus.IN_PROGRESS
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-    def complete(self, result: dict) -> None:
+    def complete(self, result: dict[str, Any]) -> None:
         """
         Completa el partido con un resultado.
         Transición: IN_PROGRESS → COMPLETED
@@ -331,7 +332,7 @@ class Match:
         self._scorecard_submitted_by = (*self._scorecard_submitted_by, user_id)
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-    def mark_decided(self, result: dict) -> None:
+    def mark_decided(self, result: dict[str, Any]) -> None:
         """Marca el partido como matematicamente decidido."""
         self._is_decided = True
         self._decided_result = result
@@ -597,7 +598,7 @@ class Match:
         return self._strokes_given_to_team
 
     @property
-    def result(self) -> dict | None:
+    def result(self) -> dict[str, Any] | None:
         return self._result
 
     @property
@@ -651,6 +652,7 @@ class Match:
         for asignacion in self._marker_assignments:
             if asignacion.marks_user_id in retirados:
                 continue
+            anotador: UserId | None
             anotador = asignacion.scorer_user_id
             if anotador in retirados:
                 anotador = self._pareja_de(anotador)
@@ -681,7 +683,7 @@ class Match:
         return self._is_decided
 
     @property
-    def closing_result(self) -> dict | None:
+    def closing_result(self) -> dict[str, Any] | None:
         """El resultado de un partido cerrado sin jugarlo hasta el final.
 
         Concedido o ganado por walkover, ese resultado —quien gana y por que—
@@ -693,7 +695,7 @@ class Match:
         return None
 
     @property
-    def decided_result(self) -> dict | None:
+    def decided_result(self) -> dict[str, Any] | None:
         return self._decided_result
 
     # ==================== Equality ====================

@@ -242,8 +242,6 @@ class LoginUserUseCase:
 
     async def _avisa_de_los_fallos(self, user: User, request: LoginRequestDTO, motivo) -> None:
         """El correo al dueño (BE #732). En segundo plano: no lanza ni espera."""
-        if user.email is None:
-            return
         await self._aviso_de_fallos.avisa(
             AvisoDeFallosRequestDTO(
                 user_id=str(user.id.value),

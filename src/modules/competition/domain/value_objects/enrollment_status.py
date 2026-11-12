@@ -5,6 +5,7 @@ Define los estados posibles de la inscripción de un jugador.
 """
 
 from enum import StrEnum
+from typing import Any
 
 
 class EnrollmentStatus(StrEnum):
@@ -112,7 +113,7 @@ class EnrollmentStatus(StrEnum):
 
         return new_status in valid_transitions.get(self, set())
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Método requerido por SQLAlchemy composite().
 

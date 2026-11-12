@@ -5,13 +5,12 @@ Si una actualización con la RFEG termina con alguien sin actualizar, se le
 avisa por correo para que lo haga con el botón (decidido el 7 oct 2026).
 """
 
-from abc import ABC, abstractmethod
+from typing import Protocol
 
 
-class IHandicapUpdateEmailService(ABC):
+class IHandicapUpdateEmailService(Protocol):
     """Correo al organizador cuando una actualización de hándicaps queda incompleta."""
 
-    @abstractmethod
     async def send_handicaps_pending_email(
         self,
         to_email: str,
@@ -32,7 +31,6 @@ class IHandicapUpdateEmailService(ABC):
             True si se envió
         """
 
-    @abstractmethod
     async def send_scheduled_handicaps_update_skipped_email(
         self,
         to_email: str,

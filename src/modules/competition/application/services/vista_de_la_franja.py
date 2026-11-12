@@ -29,6 +29,7 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -36,7 +37,6 @@ from src.modules.competition.domain.services.plazo_de_partidas import (
     PlazoCerradoError,
     PlazoDePartidas,
 )
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas

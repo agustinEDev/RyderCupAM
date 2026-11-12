@@ -49,10 +49,10 @@ class FriendshipId:
     def __str__(self) -> str:
         return str(self.value)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, FriendshipId) and self.value == other.value
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, FriendshipId):
             return NotImplemented
         return self.value < other.value

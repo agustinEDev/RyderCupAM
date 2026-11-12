@@ -14,7 +14,7 @@
 src/
 ├── config/              # Configuración global
 │   ├── database.py     # DB setup
-│   ├── dependencies.py # Composition Root (DI)
+│   ├── dependencies/   # Composition Root (DI): un módulo por contexto
 │   └── settings.py     # Environment vars
 │
 ├── modules/            # Módulos de negocio

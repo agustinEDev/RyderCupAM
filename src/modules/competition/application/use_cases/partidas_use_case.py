@@ -66,11 +66,11 @@ from src.modules.competition.application.services.vista_de_la_franja import (
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.policies.marcadores_en_cadena import (
+    MarcadoresInvalidosError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
-)
-from src.modules.competition.domain.services.marcadores_en_cadena import (
-    MarcadoresInvalidosError,
 )
 from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,

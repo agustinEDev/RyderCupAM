@@ -25,10 +25,10 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 
+from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.services.scoring_opening_service import (
     OPENING_HOUR_BY_SESSION,
 )
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (

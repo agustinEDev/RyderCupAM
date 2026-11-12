@@ -20,7 +20,7 @@ from src.modules.competition.application.dto.round_match_dto import AssignTeamsR
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
 )
-from src.modules.competition.domain.services.snake_draft_service import (
+from src.modules.competition.domain.policies.snake_draft_service import (
     PlayerForDraft,
     SnakeDraftService,
     Team,

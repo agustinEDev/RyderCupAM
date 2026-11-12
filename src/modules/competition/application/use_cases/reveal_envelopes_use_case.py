@@ -21,6 +21,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 )
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
+    GeneradorDePartidos,
 )
 from src.modules.competition.domain.entities.envelope import EnvelopeAlreadyRevealedError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -44,7 +45,7 @@ class RevealEnvelopesUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository,
         timezone_service: ICompetitionTimezone | None = None,
-        generador=None,
+        generador: GeneradorDePartidos | None = None,
     ):
         """
         Args:

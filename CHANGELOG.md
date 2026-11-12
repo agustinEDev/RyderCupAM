@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.63.0] - 2026-11-12
+
+**Arquitectura y tipos de la fase 5 del plan de calidad** (#819 a #824). Sin migraciones ni
+cambios de contrato ni de comportamiento: compatible con el frontend en producción. Probado en
+el Kind con una simulación completa por la API real: dos Ryder (sobres que abre la app, sobres
+de los capitanes, draft, fourball con un retirado, individuales, foursomes, clasificación y
+cierre), invitaciones, amistad, partida rápida y los cuatro tipos de correo, sin errores.
+
+### Changed
+
+- Los proveedores de dependencias de FastAPI (`src/config/dependencies.py`, 3.769 líneas) se
+  reparten en un paquete con un módulo por contexto. Solo comparten `comun`, y un contrato de
+  import-linter lo vigila. Se siguen importando igual (#819).
+- Sin ciclos de importación dentro de los módulos de usuarios y de competiciones: el puerto
+  del hasher pasa a `domain/ports`, las reglas puras de competición a `domain/policies`, y el
+  generador de partidos y las filas de hoyo se ven por `Protocol`. Hay contratos de capas
+  exhaustivos para el dominio de usuarios y para el dominio y la aplicación de competiciones
+  (#820, #821).
+- `shared` ya no importa ningún módulo. La autorización pasa al módulo de usuarios (sin tres
+  ayudas que nadie usaba), las rutas de países leen del repositorio de países, y los puertos
+  de tokens y de correo son `Protocol` (#822).
+- mypy revisa por dentro las funciones sin anotar y trata los dominios en modo estricto y sin
+  exenciones. `User.id` y `User.email` ya no admiten None en el tipo (#823, #824).
+
 ## [2.62.0] - 2026-11-12
 
 **Errores traducidos en un solo sitio y rutas sin lógica** (#809, #810, #812, #813, #815,

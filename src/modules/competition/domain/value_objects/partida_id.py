@@ -10,7 +10,7 @@ class PartidaId:
 
     value: UUID
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.value, UUID):
             raise TypeError(f"PartidaId debe ser UUID, no {type(self.value).__name__}")
 

@@ -16,7 +16,7 @@ Design Patterns:
 
 Usage:
     from fastapi import Depends, HTTPException
-    from src.shared.infrastructure.security.authorization import require_admin
+    from src.modules.user.infrastructure.api.authorization import require_admin
 
     @router.delete("/admin/users/{user_id}")
     async def delete_user(user_id: str, current_user: User = Depends(get_current_user)):
@@ -116,36 +116,6 @@ async def is_player_in(user_id: UserId, competition_id: CompetitionId, uow) -> b
     return enrollment.status == EnrollmentStatus.APPROVED
 
 
-def can_modify_competition(user: UserResponseDTO, competition: Competition) -> bool:
-    """
-    Verifica si el usuario puede modificar una competición.
-
-    Puede modificar si:
-    - Es administrador del sistema (ADMIN), o
-    - Es el creador de la competición (CREATOR)
-
-    Args:
-        user: Usuario actual autenticado (DTO)
-        competition: Competición a verificar
-
-    Returns:
-        bool: True si puede modificar la competición
-
-    Example:
-        >>> admin = UserResponseDTO(..., is_admin=True)
-        >>> creator = UserResponseDTO(id="123...", is_admin=False)
-        >>> comp = Competition(creator_id=UserId("123..."), ...)
-        >>> can_modify_competition(admin, comp)  # Admin override
-        True
-        >>> can_modify_competition(creator, comp)  # Creator owns it
-        True
-        >>> other = UserResponseDTO(id="999...", is_admin=False)
-        >>> can_modify_competition(other, comp)  # Not authorized
-        False
-    """
-    return is_admin(user) or is_creator_of(user, competition)
-
-
 # ===========================================
 # GUARD FUNCTIONS (Raises HTTPException)
 # ===========================================
@@ -194,75 +164,4 @@ def require_self_or_admin(user: UserResponseDTO, target_user_id: UUID) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only perform this action on yourself",
-        )
-
-
-def require_creator_or_admin(user: UserResponseDTO, competition: Competition) -> None:
-    """
-    Guard que requiere ser creador de la competición o administrador.
-
-    Lanza HTTPException 403 si el usuario no puede modificar la competición.
-
-    Args:
-        user: Usuario actual autenticado (DTO)
-        competition: Competición a verificar
-
-    Raises:
-        HTTPException: 403 Forbidden si no es creator ni admin
-
-    Example:
-        >>> @router.put("/competitions/{id}")
-        ... async def update_competition(
-        ...     id: str,
-        ...     current_user: UserResponseDTO = Depends(get_current_user),
-        ...     uow = Depends(get_competition_uow)
-        ... ):
-        ...     async with uow:
-        ...         comp = await uow.competitions.find_by_id(CompetitionId(id))
-        ...         require_creator_or_admin(current_user, comp)
-        ...         # ... lógica de actualización
-    """
-    if not can_modify_competition(user, competition):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the competition creator or an administrator can perform this action",
-        )
-
-
-async def require_player_in_competition(
-    user: UserResponseDTO, competition_id: CompetitionId, uow
-) -> None:
-    """
-    Guard que requiere estar enrollado en la competición.
-
-    Lanza HTTPException 403 si el usuario no está enrollado con status APPROVED.
-
-    Args:
-        user: Usuario actual autenticado (DTO)
-        competition_id: ID de la competición
-        uow: Unit of Work para acceder al repositorio
-
-    Raises:
-        HTTPException: 403 Forbidden si no está enrollado
-
-    Note:
-        Esta función es async porque consulta la base de datos.
-
-    Example:
-        >>> @router.post("/matches/{match_id}/scores/holes/{hole_number}")
-        ... async def submit_score(
-        ...     match_id: str,
-        ...     current_user: UserResponseDTO = Depends(get_current_user),
-        ...     uow = Depends(get_competition_uow)
-        ... ):
-        ...     async with uow:
-        ...         await require_player_in_competition(current_user, comp_id, uow)
-        ...         # ... lógica de scoring (solo jugadores enrollados)
-    """
-    is_player = await is_player_in(UserId(str(user.id)), competition_id, uow)
-
-    if not is_player:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only enrolled players in this competition can perform this action",
         )

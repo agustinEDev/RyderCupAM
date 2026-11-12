@@ -30,7 +30,7 @@ class DomainEvent:
     se generan automáticamente en __post_init__ de cada subclase.
     """
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Genera automáticamente los metadatos del evento.
 

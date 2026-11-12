@@ -84,7 +84,7 @@ class Country:
         """Representación string legible."""
         return f"{self.code} - {self.name_en}"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Operador de igualdad - Comparación por identidad (code).
 

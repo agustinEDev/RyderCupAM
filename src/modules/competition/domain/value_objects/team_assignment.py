@@ -5,6 +5,7 @@ Define cómo se asignan los jugadores a los equipos en un torneo formato Ryder C
 """
 
 from enum import StrEnum
+from typing import Any
 
 
 class TeamAssignment(StrEnum):
@@ -27,7 +28,7 @@ class TeamAssignment(StrEnum):
     MANUAL = "MANUAL"
     AUTOMATIC = "AUTOMATIC"
 
-    def __composite_values__(self):
+    def __composite_values__(self) -> tuple[Any, ...]:
         """
         Retorna los valores para SQLAlchemy composite mapping.
 

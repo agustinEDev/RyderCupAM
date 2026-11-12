@@ -76,6 +76,10 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.baja_de_la_competicion import (
     DraftInProgressError,
 )
+from src.modules.competition.application.services.bloqueos_al_generar import (
+    NoGolfCourseForHandicapError,
+    NoTeamAssignmentError,
+)
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresSinBarraError,
@@ -87,6 +91,7 @@ from src.modules.competition.application.services.jugadores_del_partido import (
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
     NoPuedeVerloError,
 )
+from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     DuplicatePlayerInTeamsError,
@@ -109,9 +114,6 @@ from src.modules.competition.application.use_cases.delete_round_use_case import 
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
     InsufficientPlayersError as GenMatchesInsufficientError,
-    NoGolfCourseForHandicapError,
-    NoTeamAssignmentError,
-    TeeColorNotFoundError,
     motivo_apuntado,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
