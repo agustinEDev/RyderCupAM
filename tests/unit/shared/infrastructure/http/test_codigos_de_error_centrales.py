@@ -287,21 +287,29 @@ def _except_triviales():
             for tipo in nodo.type.elts if isinstance(nodo.type, ast.Tuple) else [nodo.type]:
                 valor = eval(compile(ast.Expression(tipo), ruta.name, "eval"), modulo)
                 clases.extend(valor if isinstance(valor, tuple) else [valor])
-            yield ruta.name, funcion.name, clases
+            codigo = next(k.value for k in cuerpo[0].exc.keywords if k.arg == "status_code")
+            yield (
+                ruta.name,
+                funcion.name,
+                clases,
+                eval(compile(ast.Expression(codigo), ruta.name, "eval"), modulo),
+            )
 
 
 def test_no_route_translates_by_hand_an_error_the_central_map_already_translates():
     """
     Given: Las rutas y el mapa central
-    When: Se buscan except triviales cuyos errores están todos en el mapa
-    Then: No queda ninguno, salvo los que se quedan a propósito
+    When: Se buscan except triviales que dan a sus errores el mismo código que el mapa
+    Then: No queda ninguno, salvo los que se quedan a propósito (una ruta que quiera
+          otro código para un error del mapa sí puede traducirlo ella)
     """
-    en_el_mapa = set(todos_los_codigos())
+    mapa = todos_los_codigos()
 
     repetidos = [
         (fichero, funcion, [c.__name__ for c in clases])
-        for fichero, funcion, clases in _except_triviales()
-        if all(c in en_el_mapa for c in clases) and (fichero, funcion) not in SE_QUEDAN_A_PROPOSITO
+        for fichero, funcion, clases, codigo in _except_triviales()
+        if all(mapa.get(c) == codigo for c in clases)
+        and (fichero, funcion) not in SE_QUEDAN_A_PROPOSITO
     ]
 
     assert repetidos == []
