@@ -183,3 +183,31 @@ class TestFicha:
 
         with pytest.raises(CompetitionNotFoundError):
             await VistaDeCompeticionUseCase(uow, user_uow).ficha(CompetitionId(uuid4()), YO)
+
+
+class TestDeVarias:
+    @pytest.mark.parametrize("es_admin", [True, False])
+    async def test_l8_de_varias_da_los_dto_del_mapper_de_listados(self, monkeypatch, es_admin):
+        """Given varias competiciones, When se pide su vista, Then es la de `to_response_dtos` con quien mira."""
+        llamadas = []
+
+        async def _to_response_dtos(
+            competitions, current_user_id, uow, user_uow=None, is_admin=False
+        ):
+            llamadas.append((competitions, current_user_id, uow, user_uow, is_admin))
+            return ["dto"] * len(competitions)
+
+        monkeypatch.setattr(
+            CompetitionDTOMapper, "to_response_dtos", staticmethod(_to_response_dtos)
+        )
+        comps = [_competicion(), _competicion()]
+        uow, user_uow = _uows(None)
+
+        dtos = await VistaDeCompeticionUseCase(uow, user_uow).de_varias(
+            comps, YO, es_admin=es_admin
+        )
+
+        assert dtos == ["dto", "dto"]
+        assert llamadas == [(comps, YO, uow, user_uow, es_admin)]
+        uow.__aenter__.assert_awaited()
+        user_uow.__aenter__.assert_awaited()

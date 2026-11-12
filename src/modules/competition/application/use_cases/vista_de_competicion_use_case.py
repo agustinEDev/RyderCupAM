@@ -1,5 +1,5 @@
 """
-Vista de una competición: lo que devuelven las rutas tras escribir y la ficha.
+Vista de competiciones: lo que devuelven las rutas tras escribir, la ficha y los listados.
 
 Antes cada ruta, después de su caso de uso, volvía a leer la competición con el
 repositorio y la pasaba por el mapper; la ficha además buscaba la invitación
@@ -107,6 +107,15 @@ class VistaDeCompeticionUseCase:
             )
             dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
             return dto
+
+    async def de_varias(
+        self, competiciones: list[Competition], quien: UserId, *, es_admin: bool = False
+    ) -> list[CompetitionResponseDTO]:
+        """Las de un listado, en el mismo orden: los campos de todas en una sola lectura (FE #846)."""
+        async with self._uow, self._user_uow:
+            return await CompetitionDTOMapper.to_response_dtos(
+                competiciones, quien, self._uow, self._user_uow, is_admin=es_admin
+            )
 
     async def _lee(self, competition_id: CompetitionId) -> Competition:
         """La competición, o CompetitionNotFoundError. Con el `uow` abierto."""
