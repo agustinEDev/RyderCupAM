@@ -141,10 +141,9 @@ class EnsureSystemUserUseCase:
         """
         Devuelve el id del usuario, que a estas alturas siempre existe.
 
-        `User.id` es opcional en el tipo porque el constructor admite None al
-        hidratar, pero tanto un usuario recién creado como uno recuperado de la
-        base de datos lo tienen. Fallar aquí sería un fallo de programación, no
-        un caso que el importador deba manejar.
+        Desde la fase 5, `User.id` ya no admite None en el tipo: un usuario
+        recién creado y uno recuperado de la base de datos lo tienen siempre.
+        Esta comprobación sobra y se quitará con la capa de aplicación estricta.
         """
         if user.id is None:
             raise ValueError("The system user has no id, which should never happen")
