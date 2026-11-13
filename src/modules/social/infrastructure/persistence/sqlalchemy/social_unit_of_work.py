@@ -84,9 +84,10 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
         """Deshace la transacción y traduce el choque con `uq_friendship_pair`."""
         await self._session.rollback()
         if UQ_FRIENDSHIP_PAIR_CONSTRAINT in str(error.orig):
+            # Texto neutro: no dice qué relación hay entre los dos, para no
+            # delatar un bloqueo si llegara al cliente (regla F-09)
             raise DuplicateFriendshipViolation(
-                "A friendship or block relationship between these users "
-                "was just created concurrently."
+                "Conflict with a concurrent request. Please try again."
             ) from error
         raise error
 

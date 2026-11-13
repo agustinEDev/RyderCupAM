@@ -238,7 +238,7 @@ class TestLaUnidadDeTrabajoTraduceElChoqueAlConfirmar:
         sesion = await anext(sesiones)
         try:
             uow = SQLAlchemySocialUnitOfWork(sesion)
-            with pytest.raises(DuplicateFriendshipViolation):
+            with pytest.raises(DuplicateFriendshipViolation) as choque:
                 async with uow:
                     await uow.friendships.add(
                         Friendship.create(
@@ -252,3 +252,7 @@ class TestLaUnidadDeTrabajoTraduceElChoqueAlConfirmar:
             await sesiones.aclose()
 
         assert await _filas_de_la_pareja() == [(id_a, id_b, "PENDING", None)]
+        # El texto no dice qué relación hay: si alguna vez llegara al cliente,
+        # no puede delatar un bloqueo que la regla F-09 esconde con un 404
+        texto = str(choque.value).lower()
+        assert "block" not in texto and "friend" not in texto
