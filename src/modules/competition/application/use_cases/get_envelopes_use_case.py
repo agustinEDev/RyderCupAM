@@ -6,6 +6,8 @@ ya lo entrego —nunca su contenido, que verlo antes de tiempo es el juego
 entero—. Abiertos, los ve todo el mundo con sus enfrentamientos.
 """
 
+from collections.abc import Callable
+from datetime import datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import (
@@ -15,6 +17,7 @@ from src.modules.competition.application.dto.envelope_dto import (
     matchups_to_dto,
 )
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
     GeneradorDePartidos,
@@ -25,6 +28,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -34,9 +38,9 @@ class GetEnvelopesUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository,
-        clock=None,
-        timezone_service=None,
+        user_repository: UserRepositoryInterface,
+        clock: Callable[[], datetime] | None = None,
+        timezone_service: ICompetitionTimezone | None = None,
         generador: GeneradorDePartidos | None = None,
     ):
         """
@@ -143,7 +147,9 @@ class GetEnvelopesUseCase:
                     sin_plazo=self._desk.sin_plazo_que_vencer(programado),
                 ),
                 reveal_scheduled_at=programado,
-                matchups=matchups_to_dto(sobre_a, sobre_b) if abiertos else [],
+                matchups=(
+                    matchups_to_dto(sobre_a, sobre_b) if abiertos and sobre_a and sobre_b else []
+                ),
                 my_players=[
                     EnvelopePlayerDTO(
                         user_id=uid.value,

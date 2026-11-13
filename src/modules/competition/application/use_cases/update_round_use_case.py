@@ -43,7 +43,10 @@ from src.modules.competition.application.services.partidas_de_la_franja import (
 from src.modules.competition.application.services.partidas_del_jugador import (
     salidas_por_hora,
 )
-from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
+from src.modules.competition.application.services.salidas_de_la_ronda import (
+    Salidas,
+    de_las_partidas,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
@@ -383,7 +386,7 @@ class UpdateRoundUseCase:
         self,
         competition: Competition,
         round_entity: Round,
-        antes: dict,
+        antes: Salidas,
         partidas: list[Partida],
         asignadas: list[tuple[Round, UserId]],
     ) -> None:

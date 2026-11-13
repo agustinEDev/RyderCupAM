@@ -306,7 +306,9 @@ class RequestEnrollmentUseCase:
             tee_color=tee_color,
         )
 
-    async def _exigir_que_puede(self, competition: Competition, user_id: UserId, existente) -> None:
+    async def _exigir_que_puede(
+        self, competition: Competition, user_id: UserId, existente: Enrollment | None
+    ) -> None:
         """Duplicados, límite por jugador y fecha, con los «no» traducidos (BE #372)."""
         user_total_enrollments = await self._uow.enrollments.count_active_by_user(user_id)
         try:
@@ -315,9 +317,11 @@ class RequestEnrollmentUseCase:
                 competition_id=competition.id,
                 # Una cerrada no impide volver: se reutiliza (release social 2); una
                 # solicitud pendiente de antes tampoco: entra (code-review, 28 oct)
+                # `viva` devuelve la misma inscripción, o None
                 existing_enrollment_id=(
-                    str(existente.id.value)
-                    if viva(existente) and existente.status is not EnrollmentStatus.REQUESTED
+                    str(vigente.id.value)
+                    if (vigente := viva(existente))
+                    and vigente.status is not EnrollmentStatus.REQUESTED
                     else None
                 ),
                 competition_status=competition.status,

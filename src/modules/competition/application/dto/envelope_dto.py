@@ -117,7 +117,7 @@ class RevealEnvelopesResponseDTO(BaseModel):
     )
 
 
-def envelope_to_dto(sobre) -> EnvelopeDTO:
+def envelope_to_dto(sobre: Envelope) -> EnvelopeDTO:
     """El sobre tal como lo ve quien puede verlo.
 
     Aqui y no dentro de un caso de uso: los tres lo necesitan, y tenerlo en uno
@@ -134,7 +134,7 @@ def envelope_to_dto(sobre) -> EnvelopeDTO:
     )
 
 
-def matchups_to_dto(sobre_a, sobre_b) -> list[list[list[UUID]]]:
+def matchups_to_dto(sobre_a: Envelope, sobre_b: Envelope) -> list[list[list[UUID]]]:
     """Los enfrentamientos, cruzados por posicion."""
     return [
         [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]

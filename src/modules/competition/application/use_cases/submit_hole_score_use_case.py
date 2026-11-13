@@ -39,6 +39,7 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -46,6 +47,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class SubmitHoleScoreUseCase:
@@ -166,7 +168,8 @@ class SubmitHoleScoreUseCase:
                 await self._update_own_scores(
                     match, match_id, hole_number, body, user_id, match_format
                 )
-            if marked_score_recibido and not marker_score_locked:
+            # `marker_score_locked` ya es True sin marcado: el `is not None` lo dice al tipo
+            if marked_score_recibido and marked_player_uid is not None and not marker_score_locked:
                 await self._update_marker_scores(
                     match, match_id, hole_number, body, marked_player_uid, match_format
                 )
@@ -229,7 +232,7 @@ class SubmitHoleScoreUseCase:
             raise NotYourMarkedPlayerError()
         return marked
 
-    async def _abre_si_toca(self, match, llegada):
+    async def _abre_si_toca(self, match: Match, llegada: datetime) -> Match:
         """
         Abre la anotacion del partido si ya es su hora, y devuelve el partido abierto.
 
@@ -295,22 +298,24 @@ class SubmitHoleScoreUseCase:
         # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
         # hoyos de cada jugador —`add_many` no deduplica—. El segundo se
         # encuentra el partido ya abierto y solo anota lo suyo
-        match = await self._uow.matches.find_by_id_for_update(match.id)
-        if match is None:
+        bloqueado = await self._uow.matches.find_by_id_for_update(match.id)
+        if bloqueado is None:
             raise no_se_puede
-        if match.status.can_record_scores():
-            return match
+        if bloqueado.status.can_record_scores():
+            return bloqueado
         # Y si en ese rato lo concedieron o lo terminaron, tampoco se abre: sin
         # esto, `match.start()` reventaria con un 500 en vez del 409 de siempre
-        if not match.status.can_start():
+        if not bloqueado.status.can_start():
             raise no_se_puede
 
-        await MatchOpener.open(match, round_entity, self._uow)
-        await self._uow.matches.update(match)
+        await MatchOpener.open(bloqueado, round_entity, self._uow)
+        await self._uow.matches.update(bloqueado)
         await self._uow.rounds.update(round_entity)
-        return match
+        return bloqueado
 
-    async def _arranca_la_competicion(self, competition_id, no_se_puede) -> list[Enrollment]:
+    async def _arranca_la_competicion(
+        self, competition_id: CompetitionId, no_se_puede: MatchNotScoringError
+    ) -> list[Enrollment]:
         """Pone la competición en juego con su fila bloqueada (BE #375).
 
         Dos primeros golpes a la vez la arrancarían dos veces: el segundo espera
@@ -330,7 +335,15 @@ class SubmitHoleScoreUseCase:
         # las devuelve para avisar en Actividad cuando se haya guardado (BE-2)
         return await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
 
-    async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
+    async def _update_own_scores(
+        self,
+        match: Match,
+        match_id: MatchId,
+        hole_number: int,
+        body: SubmitHoleScoreBodyDTO,
+        user_id: UserId,
+        match_format: MatchFormat,
+    ) -> None:
         """Actualiza own_score para los jugadores afectados."""
         affected_own_ids = self._scoring_service.get_affected_player_ids(
             match.team_a_players, match.team_b_players, user_id, match_format
@@ -343,8 +356,14 @@ class SubmitHoleScoreUseCase:
                 await self._uow.hole_scores.update(hs)
 
     async def _update_marker_scores(
-        self, match, match_id, hole_number, body, marked_player_id, match_format
-    ):
+        self,
+        match: Match,
+        match_id: MatchId,
+        hole_number: int,
+        body: SubmitHoleScoreBodyDTO,
+        marked_player_id: UserId,
+        match_format: MatchFormat,
+    ) -> None:
         """Actualiza marker_score para los jugadores marcados afectados."""
         affected_marked_ids = self._scoring_service.get_affected_marked_player_ids(
             match.team_a_players, match.team_b_players, marked_player_id, match_format
@@ -356,7 +375,9 @@ class SubmitHoleScoreUseCase:
                 hs.recalculate_validation()
                 await self._uow.hole_scores.update(hs)
 
-    async def _check_decided(self, match, match_id, match_format):
+    async def _check_decided(
+        self, match: Match, match_id: MatchId, match_format: MatchFormat
+    ) -> None:
         """La decision, revisada tras cada golpe (`revisa_la_decision`)."""
         if await revisa_la_decision(self._uow, self._scoring_service, match, match_format):
             await self._uow.matches.update(match)

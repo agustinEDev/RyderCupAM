@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, overload, runtime_checkable
 
 from src.modules.competition.application.dto.round_match_dto import ManualPairingDTO
 from src.modules.competition.application.exceptions import (
@@ -128,7 +128,7 @@ class EnvelopeDesk:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository: UserRepositoryInterface,
+        user_repository: UserRepositoryInterface | None,
         clock: Callable[[], datetime] | None = None,
         timezone_service: ICompetitionTimezone | None = None,
         generador: GeneradorDePartidos | None = None,
@@ -137,7 +137,9 @@ class EnvelopeDesk:
         Args:
             uow: Unit of Work del modulo
             user_repository: De donde sale el handicap de quien no tiene uno
-                propio en esta competicion, que es casi todo el mundo
+                propio en esta competicion, que es casi todo el mundo. None
+                solo para quien no pide nombres ni handicaps (la lista de
+                sobres pendientes)
             clock: El reloj del SERVIDOR, para el revelado del plazo. Se
                 inyecta para poder moverlo en los tests, nunca para que lo
                 ponga el cliente
@@ -163,6 +165,8 @@ class EnvelopeDesk:
     @property
     def user_repository(self) -> UserRepositoryInterface:
         """De donde salen nombres y handicaps."""
+        if self._user_repo is None:
+            raise RuntimeError("EnvelopeDesk se creo sin repositorio de usuarios")
         return self._user_repo
 
     async def ronda_y_competicion(
@@ -264,7 +268,7 @@ class EnvelopeDesk:
             )
         }
         de_los_jugadores = [inscripciones[uid] for uid in jugadores if uid in inscripciones]
-        handicaps = await HandicapsDeLaCompeticion.de(de_los_jugadores, self._user_repo)
+        handicaps = await HandicapsDeLaCompeticion.de(de_los_jugadores, self.user_repository)
         return [(e.user_id, para_jugar_la_ryder(handicaps[e.user_id])) for e in de_los_jugadores]
 
     @staticmethod
@@ -284,6 +288,12 @@ class EnvelopeDesk:
             raise RoundAlreadyScheduledError(
                 "Esta sesión ya tiene sus partidos: los sobres se entregan antes de generarlos"
             )
+
+    @overload
+    async def sobre_de(self, ronda: Round, team: str, crear: Literal[True]) -> Envelope: ...
+
+    @overload
+    async def sobre_de(self, ronda: Round, team: str, crear: bool = False) -> Envelope | None: ...
 
     async def sobre_de(self, ronda: Round, team: str, crear: bool = False) -> Envelope | None:
         """El sobre de ese equipo para esa sesion, creandolo si hace falta."""
@@ -610,8 +620,6 @@ class EnvelopeDesk:
         ahora_sin_huso = self.ahora.replace(tzinfo=None)
         for team in ("A", "B"):
             sobre = await self.sobre_de(ronda, team, crear=True)
-            if sobre is None:  # `crear=True` siempre devuelve uno; esto es para el tipo
-                continue
             if not sobre.is_submitted():
                 sobre.fill(relleno[team], ahora=ahora_sin_huso)
             sobre.reveal()

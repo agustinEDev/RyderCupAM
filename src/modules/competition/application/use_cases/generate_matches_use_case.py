@@ -1,5 +1,6 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -40,8 +41,10 @@ from src.modules.competition.application.services.salidas_de_la_ronda import (
     de_los_partidos,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -59,6 +62,7 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.services.handicap_service import HandicapService
@@ -67,6 +71,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
+from src.shared.domain.services.tee_lookup import TeeKey
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -236,7 +241,9 @@ class GenerateMatchesUseCase:
             # caducado que volver a leer, al contrario que al abrir los sobres
             round_entity.block_match_generation(motivo)
             await self._uow.rounds.update(round_entity)
-            error._motivo_apuntado = motivo
+            # Un atributo ad hoc de la excepción (se lee con `getattr`): con
+            # `setattr` el tipo no lo exige declarado en `Exception`
+            setattr(error, "_motivo_apuntado", motivo)  # noqa: B010
             return 0, error
 
     async def generar_dentro(
@@ -426,7 +433,12 @@ class GenerateMatchesUseCase:
         """
         del self._salidas_por_avisar[desde:]
 
-    async def _comprobar_inscripciones(self, pairings, enrollment_map, competition) -> None:
+    async def _comprobar_inscripciones(
+        self,
+        pairings: list[ManualPairingDTO],
+        enrollment_map: Mapping[str, Enrollment],
+        competition: Competition,
+    ) -> None:
         """Todos los emparejados tienen que tener la inscripción aprobada.
 
         Raises:
@@ -452,7 +464,12 @@ class GenerateMatchesUseCase:
         )
 
     @staticmethod
-    def _jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team) -> list[UserId]:
+    def _jugadores_que_juegan(
+        pairings: list[ManualPairingDTO] | None,
+        team_a_ids: list[UserId],
+        team_b_ids: list[UserId],
+        players_per_team: int,
+    ) -> list[UserId]:
         """Quién va a jugar esta sesión, en el orden en que saldrá.
 
         Con emparejamientos, los que traen; sin ellos, los que caben en los
@@ -469,13 +486,13 @@ class GenerateMatchesUseCase:
 
     async def _comprobar_que_todos_tienen_barras(
         self,
-        jugadores,
+        jugadores: list[UserId],
         *,
-        competition,
-        enrollment_map,
-        tee_ratings,
-        user_handicap_map,
-        user_gender_map,
+        competition: Competition,
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        user_handicap_map: Mapping[str, Decimal],
+        user_gender_map: Mapping[str, Gender | None],
     ) -> None:
         """
         Raises:
@@ -511,12 +528,18 @@ class GenerateMatchesUseCase:
 
     async def _build_handicap_data(
         self,
-        golf_course,
-        is_scratch,
-        team_assignment,
-        enrollment_map,
+        golf_course: GolfCourse | None,
+        is_scratch: bool,
+        team_assignment: TeamAssignment,
+        enrollment_map: Mapping[str, Enrollment],
         refrescar_handicap_rfeg: bool = True,
-    ):
+    ) -> tuple[
+        dict[TeeKey, TeeRating],
+        list[int],
+        dict[str, Decimal],
+        dict[str, Gender | None],
+        dict[TeeKey, list[int]],
+    ]:
         """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
@@ -568,20 +591,20 @@ class GenerateMatchesUseCase:
 
     async def _generate_auto(
         self,
-        round_entity,
-        team_a_ids,
-        team_b_ids,
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        players_per_team,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        round_entity: Round,
+        team_a_ids: list[UserId],
+        team_b_ids: list[UserId],
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        players_per_team: int,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> list[Match]:
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
@@ -635,18 +658,18 @@ class GenerateMatchesUseCase:
 
     async def _generate_manual(
         self,
-        pairings,
-        round_entity,
-        enrollment_map,
-        tee_ratings,
-        calculator,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
+        pairings: list[ManualPairingDTO],
+        round_entity: Round,
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        calculator: PlayingHandicapCalculator,
+        allowance: int,
+        is_scratch: bool,
+        user_handicap_map: Mapping[str, Decimal],
+        holes_by_stroke_index: list[int],
+        user_gender_map: Mapping[str, Gender | None],
+        max_playing_handicap: int | None = None,
+        holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
     ) -> list[Match]:
         """Genera partidos según emparejamientos ya decididos.
 

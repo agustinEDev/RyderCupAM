@@ -1,5 +1,7 @@
 """Caso de Uso: Entregar tarjeta de scores."""
 
+from collections.abc import Sequence
+
 from src.modules.competition.application.dto.scoring_dto import (
     ScorecardResultDTO,
     ScorecardStatsDTO,
@@ -18,11 +20,16 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
@@ -50,7 +57,7 @@ class SubmitScorecardUseCase:
         self._actividad = AvisosDeActividad(actividad)
 
     @staticmethod
-    def _puede_entregar(match, user_id: UserId) -> None:
+    def _puede_entregar(match: Match, user_id: UserId) -> None:
         """Juega el partido y no esta retirado: el retirado no entrega (W12, W19)."""
         if match.find_player(user_id) is None:
             raise NotMatchPlayerError("No eres jugador de este partido")
@@ -163,7 +170,9 @@ class SubmitScorecardUseCase:
             match_complete=match_complete,
         )
 
-    async def _avisar_del_resultado(self, competition, round_entity, match) -> None:
+    async def _avisar_del_resultado(
+        self, competition: Competition | None, round_entity: Round, match: Match
+    ) -> None:
         """
         Con la ultima tarjeta el partido queda cerrado: a cada jugador, su
         resultado en Actividad, ya guardado (BE-2). Solo se lee la competicion
@@ -173,7 +182,7 @@ class SubmitScorecardUseCase:
             await self._actividad.match_finished(competition, round_entity, match)
 
     @staticmethod
-    def _comprueba_que_todo_esta_validado(player_scores) -> None:
+    def _comprueba_que_todo_esta_validado(player_scores: Sequence[HoleScore]) -> None:
         """Todos los hoyos jugados tienen que estar validados (MATCH)."""
         unvalidated = [
             hs
@@ -186,7 +195,9 @@ class SubmitScorecardUseCase:
                 f"Hoyos sin validar: {holes}. Todos los hoyos jugados deben tener validation_status MATCH."
             )
 
-    async def _pars_del_jugador(self, round_entity, player) -> dict[int, int]:
+    async def _pars_del_jugador(
+        self, round_entity: Round, player: MatchPlayer | None
+    ) -> dict[int, int]:
         """El par de cada hoyo en la barra del jugador, o vacío si no se sabe."""
         if self._gc_repo is None or player is None:
             return {}
@@ -198,7 +209,13 @@ class SubmitScorecardUseCase:
             for hole in course.hole_card_for(player.tee_color, player.tee_gender)
         }
 
-    def _calculate_player_stats(self, player_scores, player_team, hole_results, pars=None):
+    def _calculate_player_stats(
+        self,
+        player_scores: Sequence[HoleScore],
+        player_team: str,
+        hole_results: list[str],
+        pars: dict[int, int] | None = None,
+    ) -> ScorecardStatsDTO:
         """
         Calcula estadisticas del jugador.
 

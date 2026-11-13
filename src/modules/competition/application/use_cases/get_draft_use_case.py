@@ -79,6 +79,10 @@ class GetDraftUseCase:
                 # bloqueada antes de tocar nada
                 competition = await self._room.competicion(comp_id)
                 draft = await self._uow.drafts.find_by_competition_for_update(comp_id)
+                if draft is None:
+                    # Mientras se esperaba la fila, otra petición terminó el draft y otra
+                    # deshizo los equipos: es como si no hubiera sorteo (fase 5, mypy)
+                    return None
                 elegibles = await self._room.elegibles(competition)
                 await self._room.al_dia(competition, draft, elegibles)
             else:

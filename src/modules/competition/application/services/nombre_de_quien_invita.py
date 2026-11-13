@@ -16,6 +16,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -42,7 +43,7 @@ async def quieren_su_nombre_legal(
     return legales
 
 
-def nombre_de_quien_invita(usuario, quiere_su_nombre_legal: bool) -> str:
+def nombre_de_quien_invita(usuario: User | None, quiere_su_nombre_legal: bool) -> str:
     """El nombre con el que se le enseña, o «Unknown» si ya no existe."""
     if usuario is None:
         return "Unknown"

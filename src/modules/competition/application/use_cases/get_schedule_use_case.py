@@ -33,7 +33,10 @@ from src.modules.competition.application.services.quien_ve_los_inscritos import 
     alcance_de,
     lo_que_ve,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -64,7 +67,9 @@ def _jugadores(match: Match) -> list[UserId]:
     return [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
 
 
-def _descansan(team_assignment, inscritos: set[UserId], matches: list) -> list[UserId]:
+def _descansan(
+    team_assignment: TeamAssignment | None, inscritos: set[UserId], matches: list[Match]
+) -> list[UserId]:
     """Los inscritos de los equipos que no juegan ningún partido de la sesión (#710).
 
     Con equipos desiguales el que sobra se quedaba sin partido y nadie lo decía.
@@ -147,7 +152,7 @@ class GetScheduleUseCase:
 
             # 3. Obtener partidos para cada ronda
             total_matches = 0
-            rounds_with_matches: list[tuple] = []
+            rounds_with_matches: list[tuple[Round, list[Match]]] = []
             for round_entity in rounds:
                 matches = await self._uow.matches.find_by_round(round_entity.id)
                 rounds_with_matches.append((round_entity, matches))
@@ -198,7 +203,7 @@ class GetScheduleUseCase:
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
         # (y su nombre, para «Mis Próximos Partidos», BE #532)
-        zonas_por_campo: dict = {}
+        zonas_por_campo: dict[GolfCourseId, str | None] = {}
         nombres_por_campo: dict[GolfCourseId, str | None] = {}
         if self._gc_repo:
             for round_entity, _ in rounds_with_matches:
@@ -282,7 +287,7 @@ class GetScheduleUseCase:
         session_order = {"MORNING": 0, "AFTERNOON": 1, "EVENING": 2}
         days = [
             ScheduleDayDTO(
-                date=d,
+                day_date=d,
                 rounds=sorted(r, key=lambda x: session_order.get(x.session_type.upper(), 99)),
             )
             for d, r in sorted(days_map.items())
@@ -318,7 +323,9 @@ class GetScheduleUseCase:
             ),
         )
 
-    async def _abre_los_sobres_que_tocan(self, competition, rounds) -> None:
+    async def _abre_los_sobres_que_tocan(
+        self, competition: Competition, rounds: list[Round]
+    ) -> None:
         """Abre los sobres vencidos de las sesiones que esperan partidos.
 
         Solo en modo Ryder, que es donde hay sobres: en el manual, leer la
@@ -376,7 +383,7 @@ def _hoja(
     )
 
 
-def _abre(ronda, zona: str | None) -> datetime | None:
+def _abre(ronda: Round, zona: str | None) -> datetime | None:
     """
     Una franja de stroke play abre a su primera salida, como en su vista de
     anotar (#551); una sesión de Ryder, a la hora de su sesión (BE #305).

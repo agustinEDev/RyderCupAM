@@ -29,6 +29,7 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
@@ -41,6 +42,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -67,7 +69,9 @@ class SendInvitationByEmailUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
-    async def _avisar(self, competition, invitation, caducada) -> None:
+    async def _avisar(
+        self, competition: Competition, invitation: Invitation, caducada: Invitation | None
+    ) -> None:
         """
         Ya guardada: si tiene cuenta, le sale en Actividad (BE-2); y la que
         caducó sin abrirse y dio paso a esta pierde su aviso (CodeRabbit).
@@ -76,7 +80,7 @@ class SendInvitationByEmailUseCase:
         if caducada is not None:
             await self._actividad.invitations_closed([caducada])
 
-    async def _cuenta_del_correo(self, invitee_email: str, inviter_id: UserId):
+    async def _cuenta_del_correo(self, invitee_email: str, inviter_id: UserId) -> User | None:
         """La cuenta de ese correo, verificada o no, o None; nunca la de quien invita."""
         async with self._user_uow:
             try:

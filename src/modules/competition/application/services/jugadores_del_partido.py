@@ -32,6 +32,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
+from src.shared.domain.services.tee_lookup import TeeKey
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -102,7 +103,15 @@ class JugadoresDelPartido:
             holes_by_tee,
         )
 
-    async def _datos_de_handicap(self, round_entity: Round, is_scratch: bool, player_ids):
+    async def _datos_de_handicap(
+        self, round_entity: Round, is_scratch: bool, player_ids: list[UserId]
+    ) -> tuple[
+        dict[TeeKey, TeeRating],
+        list[int],
+        dict[str, Decimal],
+        dict[str, Gender | None],
+        dict[TeeKey, list[int]],
+    ]:
         """Barras y hoyos del campo, y hándicap y género de cada jugador."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []

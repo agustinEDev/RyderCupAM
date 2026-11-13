@@ -65,6 +65,7 @@ from src.modules.competition.application.services.vista_de_la_franja import (
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.policies.marcadores_en_cadena import (
     MarcadoresInvalidosError,
@@ -212,7 +213,7 @@ class _ConLaFranja:
         return _Abierta(franja, competicion, hoja, partidas, ahora, frozenset(salidas), libres)
 
     async def _vista(
-        self, abierta: _Abierta, partidas: list[Partida], plazas: list | None = None
+        self, abierta: _Abierta, partidas: list[Partida], plazas: list[PlazaEnFranja] | None = None
     ) -> TeeGroupsResponseDTO:
         return await vista_de_la_franja(
             self._uow,

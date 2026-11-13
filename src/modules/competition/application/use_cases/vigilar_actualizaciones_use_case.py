@@ -15,8 +15,9 @@ el vigilante está para dos cosas y nada más:
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from typing import TypeVar
 
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
@@ -45,6 +46,8 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 # Una pasada apunta a alguien cada pocos segundos (como mucho ~42 s por jugador
 # con la RFEG lenta): 10 minutos sin nada es que ya no corre
@@ -83,7 +86,9 @@ class VigilarActualizacionesUseCase:
             await self._con_cuidado(self._cortada, actualizacion, ahora)
         return len(vencidas) + len(cortadas)
 
-    async def _con_cuidado(self, accion, sobre, ahora: datetime) -> None:
+    async def _con_cuidado(
+        self, accion: Callable[[_T, datetime], Awaitable[None]], sobre: _T, ahora: datetime
+    ) -> None:
         """Una que falla no impide atender a las demás."""
         try:
             await accion(sobre, ahora)

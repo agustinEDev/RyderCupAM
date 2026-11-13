@@ -46,10 +46,12 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class VerAnotacionDePartidaUseCase:
@@ -122,7 +124,7 @@ class VerAnotacionDePartidaUseCase:
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
         marca = partida.marcadores.get(quien)
         # Una vez por barra: quienes salen de la misma comparten tarjeta
-        por_barra: dict[tuple, dict[int, int | None]] = {}
+        por_barra: dict[tuple[TeeColor, Gender | None], dict[int, int | None]] = {}
         metros = {
             foto.user_id: por_barra.setdefault(
                 (foto.tee_color, foto.tee_gender), _metros(campo, foto)

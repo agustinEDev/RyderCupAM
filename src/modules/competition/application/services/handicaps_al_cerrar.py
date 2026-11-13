@@ -154,7 +154,9 @@ class HandicapsAlCerrar:
             )
             await self._uow.enrollments.update(inscripcion)
 
-    async def _de_los_inscritos(self, competition: Competition):
+    async def _de_los_inscritos(
+        self, competition: Competition
+    ) -> tuple[list[Enrollment], dict[UserId, Decimal | None]]:
         inscripciones = await self._uow.enrollments.find_by_competition_and_status(
             competition.id, EnrollmentStatus.APPROVED
         )
