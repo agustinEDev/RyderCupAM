@@ -47,6 +47,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -191,14 +192,16 @@ async def list_competition_golf_courses(
 
             golf_courses_list = []
             for gc in competition.golf_courses:
-                if gc.golf_course is None:
+                # La relación la añade el mapeo imperativo (persistence/sqlalchemy/mappers.py),
+                # no la entidad, y el repositorio la carga con selectinload
+                golf_course: GolfCourse | None = gc.golf_course  # type: ignore[attr-defined]
+                if golf_course is None:
                     logger.error(
                         f"golf_course is None for CompetitionGolfCourse {gc.id}, "
                         f"golf_course_id={gc.golf_course_id.value}"
                     )
                     continue
 
-                golf_course = gc.golf_course
                 golf_courses_list.append(
                     CompetitionGolfCourseResponseDTO(
                         golf_course_id=gc.golf_course_id.value,

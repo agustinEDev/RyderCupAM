@@ -46,7 +46,7 @@ class UserIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: UserId | str, dialect) -> str | None:
+    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
         """Convierte el objeto UserId o un string a un string para guardarlo en la BD."""
         if isinstance(value, UserId):
             return str(value.value)
@@ -54,7 +54,7 @@ class UserIdDecorator(TypeDecorator):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> UserId | None:
+    def process_result_value(self, value: str | None, dialect) -> UserId | None:
         """Convierte el string de la BD de vuelta a un objeto UserId."""
         if value is None:
             return None
@@ -138,7 +138,7 @@ class HandicapDecorator(TypeDecorator):
             return float(value)
         return None
 
-    def process_result_value(self, value: float, dialect):
+    def process_result_value(self, value: float | None, dialect) -> Handicap | None:
         """Convierte el float de la BD de vuelta a un objeto Handicap."""
 
         if value is None:

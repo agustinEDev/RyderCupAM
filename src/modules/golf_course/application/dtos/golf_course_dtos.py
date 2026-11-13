@@ -199,11 +199,6 @@ class ListApprovedGolfCoursesRequestDTO(BaseModel):
             raise ValueError("radius_km requires latitude and longitude")
         return self
 
-    @property
-    def has_position(self) -> bool:
-        """True si la petición trae una posición desde la que medir distancias."""
-        return self.latitude is not None and self.longitude is not None
-
 
 class ListPendingGolfCoursesRequestDTO(BaseModel):
     """Request para listar campos pendientes (Admin only)."""

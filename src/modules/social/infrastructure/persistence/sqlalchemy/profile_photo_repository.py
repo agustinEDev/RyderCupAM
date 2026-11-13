@@ -13,6 +13,7 @@ from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper 
     profile_photos_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 
 class SQLAlchemyProfilePhotoRepository(ProfilePhotoRepositoryInterface):
@@ -81,4 +82,4 @@ class SQLAlchemyProfilePhotoRepository(ProfilePhotoRepositoryInterface):
     async def delete(self, photo_id: ProfilePhotoId) -> bool:
         stmt = delete(profile_photos_table).where(profile_photos_table.c.id == photo_id)
         result = await self._session.execute(stmt)
-        return bool(result.rowcount)
+        return bool(filas_afectadas(result))

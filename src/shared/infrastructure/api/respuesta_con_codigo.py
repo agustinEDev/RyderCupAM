@@ -7,18 +7,21 @@ código: la excepción solo aporta el código, y la pantalla lo traduce.
 """
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi.responses import JSONResponse
 
 # Para un código sin texto: nunca el mensaje de la excepción
 DETALLE_GENERICO = "No se ha podido completar la operación."
 
+# El código es un str o un StrEnum (los motivos de la ventana): los textos van por él
+Codigo = TypeVar("Codigo", bound=str)
+
 
 def respuesta_con_codigo(
     status_code: int,
-    textos: Mapping[str, str],
-    codigo: str | None,
+    textos: Mapping[Codigo, str],
+    codigo: Codigo | None,
     **campos: Any,
 ) -> JSONResponse:
     """

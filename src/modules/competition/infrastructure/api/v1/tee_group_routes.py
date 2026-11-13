@@ -85,7 +85,7 @@ _CON_CODIGO: dict[type[Exception], tuple[int, str]] = {
     PartidasError: (status.HTTP_400_BAD_REQUEST, "NOT_A_TEE_WINDOW"),
 }
 # Error con la lista de jugadores afectados -> error_code (400)
-_CON_JUGADORES: dict[type[Exception], str] = {
+_CON_JUGADORES: dict[type[JugadoresSinHandicapError | JugadoresSinBarraError], str] = {
     JugadoresSinHandicapError: "PLAYERS_WITHOUT_HANDICAP",
     JugadoresSinBarraError: "PLAYERS_WITHOUT_TEE",
 }
@@ -136,8 +136,8 @@ def _respuesta(error: Exception) -> JSONResponse:
     if isinstance(error, MovimientoImposibleError):
         # Cada movimiento imposible trae su clave
         return _con_codigo(status.HTTP_400_BAD_REQUEST, error.codigo)
-    for tipo, codigo in _CON_JUGADORES.items():
-        if isinstance(error, tipo):
+    for con_jugadores, codigo in _CON_JUGADORES.items():
+        if isinstance(error, con_jugadores):
             return respuesta_con_jugadores(codigo, error.players)
     for tipo, (status_code, codigo) in _CON_CODIGO.items():
         if isinstance(error, tipo):

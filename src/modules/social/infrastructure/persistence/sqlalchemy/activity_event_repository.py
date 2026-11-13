@@ -49,6 +49,7 @@ from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.utc_clock import utc_now
+from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 UQ_ACTIVITY_EVENTS_MATCH_TYPE = "uq_activity_events_match_type"
 
@@ -392,7 +393,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 return 0
             stmt = stmt.where(activity_events_table.c.type.in_(sorted(types)))
         result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return filas_afectadas(result) or 0
 
     async def delete_from_source(
         self,
@@ -567,7 +568,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             .values(visible_to_friends=False)
         )
         result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return filas_afectadas(result) or 0
 
     async def remember_withdrawn_tee_times(
         self, round_id: str, competition_id: str, user_ids: Collection[UserId]

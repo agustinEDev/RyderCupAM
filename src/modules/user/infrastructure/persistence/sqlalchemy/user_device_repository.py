@@ -29,6 +29,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
     user_devices_table,
 )
+from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 
 class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
@@ -293,4 +294,4 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
             delete(user_devices_table).where(user_devices_table.c.last_used_at < antes)
         )
         await self._session.flush()
-        return result.rowcount or 0
+        return filas_afectadas(result) or 0

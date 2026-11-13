@@ -6,6 +6,7 @@ Endpoints FastAPI para gestión de inscripciones siguiendo Clean Architecture.
 
 import logging
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -241,7 +242,8 @@ class EnrollmentDTOMapper:
             last_name=user.last_name,
             display_name=user.display_name_or_legal(enrollment.use_real_name),
             email=str(user.email) if con_correo else "",
-            handicap=user.handicap.value if user.handicap else None,
+            # Por su texto, como haría Pydantic con el float: 15.3 y no 15.29999...
+            handicap=Decimal(str(user.handicap.value)) if user.handicap else None,
             country_code=user.country_code.value if user.country_code else None,
             avatar_url=None,  # TODO: Implementar cuando tengamos sistema de avatares
         )

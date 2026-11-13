@@ -27,14 +27,14 @@ class OAuthAccountIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: OAuthAccountId | str, dialect) -> str | None:
+    def process_bind_param(self, value: OAuthAccountId | str | None, dialect) -> str | None:
         if isinstance(value, OAuthAccountId):
             return str(value.value)
         if isinstance(value, str):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> OAuthAccountId | None:
+    def process_result_value(self, value: str | None, dialect) -> OAuthAccountId | None:
         if value is None:
             return None
         return OAuthAccountId(uuid.UUID(value))
@@ -47,14 +47,14 @@ class UserIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: UserId | str, dialect) -> str | None:
+    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
         if isinstance(value, UserId):
             return str(value.value)
         if isinstance(value, str):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> UserId | None:
+    def process_result_value(self, value: str | None, dialect) -> UserId | None:
         if value is None:
             return None
         return UserId(uuid.UUID(value))
@@ -67,14 +67,14 @@ class OAuthProviderDecorator(TypeDecorator):
     impl = String(20)
     cache_ok = True
 
-    def process_bind_param(self, value: OAuthProvider | str, dialect) -> str | None:
+    def process_bind_param(self, value: OAuthProvider | str | None, dialect) -> str | None:
         if isinstance(value, OAuthProvider):
             return value.value
         if isinstance(value, str):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> OAuthProvider | None:
+    def process_result_value(self, value: str | None, dialect) -> OAuthProvider | None:
         if value is None:
             return None
         return OAuthProvider(value)

@@ -36,8 +36,8 @@ class Settings:
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # Swagger/Docs HTTP Basic Auth (sin defaults - DEBE estar en .env)
-    DOCS_USERNAME: str = os.getenv("DOCS_USERNAME")
-    DOCS_PASSWORD: str = os.getenv("DOCS_PASSWORD")
+    DOCS_USERNAME: str | None = os.getenv("DOCS_USERNAME")
+    DOCS_PASSWORD: str | None = os.getenv("DOCS_PASSWORD")
 
     # Database Configuration
     DATABASE_URL: str = os.getenv(

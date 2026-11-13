@@ -26,14 +26,14 @@ class UserAvatarUploadIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: UserAvatarUploadId | str, dialect) -> str | None:
+    def process_bind_param(self, value: UserAvatarUploadId | str | None, dialect) -> str | None:
         if isinstance(value, UserAvatarUploadId):
             return str(value.value)
         if isinstance(value, str):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> UserAvatarUploadId | None:
+    def process_result_value(self, value: str | None, dialect) -> UserAvatarUploadId | None:
         if value is None:
             return None
         return UserAvatarUploadId(uuid.UUID(value))
@@ -45,14 +45,14 @@ class _AvatarUploadUserIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: UserId | str, dialect) -> str | None:
+    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
         if isinstance(value, UserId):
             return str(value.value)
         if isinstance(value, str):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> UserId | None:
+    def process_result_value(self, value: str | None, dialect) -> UserId | None:
         if value is None:
             return None
         return UserId(uuid.UUID(value))

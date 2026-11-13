@@ -287,7 +287,7 @@ async def get_current_user(
         )
 
     # Extraer user_id del payload
-    user_id_str: str = payload.get("sub")
+    user_id_str: str | None = payload.get("sub")
     if not user_id_str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

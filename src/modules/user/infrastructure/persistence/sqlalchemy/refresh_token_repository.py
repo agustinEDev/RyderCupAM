@@ -20,6 +20,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (
     refresh_tokens_table,
 )
+from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 
 class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
@@ -188,7 +189,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
 
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return (result.rowcount or 0) > 0
+        return (filas_afectadas(result) or 0) > 0
 
     async def revoke_all_for_device(self, device_id: UserDeviceId) -> int:
         """
@@ -268,4 +269,4 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             delete(refresh_tokens_table).where(refresh_tokens_table.c.expires_at < antes)
         )
         await self._session.flush()
-        return result.rowcount or 0
+        return filas_afectadas(result) or 0
