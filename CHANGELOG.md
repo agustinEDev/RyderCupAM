@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.64.0] - 2026-11-13
+
+**Correos que sobreviven a un despliegue, cinco errores 500 y un bloqueo perdido arreglados, y
+mypy estricto en toda la aplicación** (#828 a #831 y #835, fase 5 del plan de calidad). Sin migraciones ni cambios de contrato:
+compatible con el frontend en producción. Probado en el Kind: apagado con correos en vuelo
+(Mailpit congelado) y simulación completa de dos Ryder por la API real.
+
+### Fixed
+
+- Un reinicio (cada despliegue de Render) perdía los avisos de seguridad y los correos de
+  verificación que estaban saliendo en segundo plano. Al apagar, la API los espera, y también
+  las actualizaciones de hándicap en marcha, como mucho 10 s; lo que no acabe se cancela y
+  queda en el log con su nombre (#829).
+- Bloquear a alguien en el mismo instante en que esa persona te enviaba una solicitud de
+  amistad dejaba la solicitud pendiente y el bloqueo sin aplicar. Ahora se bloquea igual (#828).
+- Bloquear cuando la fila de la amistad desaparecía a la vez respondía 500; ahora es 409 (#828).
+- Abrir la sala del draft justo cuando el draft terminaba y se deshacían los equipos respondía
+  500; ahora responde como cuando aún no hay draft (#828).
+- Enviar una solicitud de amistad en el mismo instante en que el otro te bloqueaba (o te enviaba
+  la suya) respondía 500 en vez de lo de siempre: 404 si te ha bloqueado, sin delatarlo; 403 si
+  le has bloqueado tú; 409 si ya hay una solicitud (#835).
+- Editar un campo de golf como administrador, o aprobar el cambio que propone su creador,
+  respondía 500 si se mantenía alguna barra: se insertaban las nuevas antes de borrar las viejas
+  (#835).
+- Quitar de una competición un campo que no era el último respondía 500 al renumerar los que
+  quedaban (#835).
+
+### Changed
+
+- mypy revisa en modo estricto la capa de aplicación (con el plugin de pydantic) y la de
+  infraestructura sin exenciones generales; solo 17 repositorios de SQLAlchemy conservan tres
+  códigos exentos, con el motivo escrito. Sin cambios de comportamiento: el OpenAPI es idéntico
+  (#828, #830, #831).
+- Los repositorios en memoria de los tests cumplen sus interfaces (filtros, paginación y orden
+  de SQL); los de producción no cambian (#831).
+
 ## [2.63.0] - 2026-11-12
 
 **Arquitectura y tipos de la fase 5 del plan de calidad** (#819 a #824). Sin migraciones ni
