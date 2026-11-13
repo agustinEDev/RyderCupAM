@@ -26,20 +26,22 @@ from src.modules.competition.domain.services.clasificacion import (
 )
 from src.modules.competition.domain.services.tarjeta_de_stroke_play import TarjetaDeStrokePlay
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
 def participantes_de(
     partidas: Sequence[Partida],
     golpes: Sequence[GolpeDePartida],
-    franjas: Mapping,
+    franjas: Mapping[RoundId, Round],
     categorias: Mapping[UserId, int | None],
 ) -> tuple[list[Participante], dict[UserId, str | None]]:
     """
     Los participantes con sus tarjetas, en orden de calendario, y el género de
     las barras de cada uno. `franjas` son las rondas de esas partidas, por id.
     """
-    validados: dict[tuple, dict[int, int | None]] = {}
+    validados: dict[tuple[PartidaId, UserId], dict[int, int | None]] = {}
     for golpe in golpes:
         if golpe.validado:
             validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (

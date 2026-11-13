@@ -1,5 +1,7 @@
 """Caso de Uso: Responder a una Invitacion (ACCEPT/DECLINE)."""
 
+from uuid import UUID
+
 from src.modules.competition.application.dto.invitation_dto import (
     RespondInvitationRequestDTO,
     RespondInvitationResponseDTO,
@@ -236,7 +238,7 @@ class RespondToInvitationUseCase:
         return invitation
 
     @staticmethod
-    def _es_el_invitado(invitation, user_id: UserId, email: str | None) -> bool:
+    def _es_el_invitado(invitation: Invitation, user_id: UserId, email: str | None) -> bool:
         """Si quien responde es el invitado, por su cuenta o por su email verificado."""
         return invitation.is_for_user(user_id) or (
             email is not None and invitation.is_for_email(email)
@@ -244,7 +246,7 @@ class RespondToInvitationUseCase:
 
     @staticmethod
     def _solo_por_un_correo_sin_verificar(
-        invitation, user_id: UserId, email_verificado: str | None, correo: str
+        invitation: Invitation, user_id: UserId, email_verificado: str | None, correo: str
     ) -> bool:
         """Si solo seria suya por un correo que aun no ha verificado (F-07)."""
         return (
@@ -253,13 +255,13 @@ class RespondToInvitationUseCase:
             and invitation.is_for_email(correo)
         )
 
-    async def _inscripcion_cerrada(self, invitation) -> bool:
+    async def _inscripcion_cerrada(self, invitation: Invitation) -> bool:
         """Si su competicion ya cerro la inscripcion: no quedan plazas."""
         competition = await self._uow.competitions.find_by_id(invitation.competition_id)
         return competition is not None and competition.status in INSCRIPCION_CERRADA
 
     async def _handle_accept(
-        self, invitation, current_user_id: UserId
+        self, invitation: Invitation, current_user_id: UserId
     ) -> tuple[Competition, Enrollment, list[Invitation]]:
         """
         Procesa la aceptacion de una invitacion. Retorna la competicion, la
@@ -325,13 +327,16 @@ class RespondToInvitationUseCase:
 
         return competition, enrollment, cerradas
 
-    async def _handle_decline(self, invitation):
+    async def _handle_decline(self, invitation: Invitation) -> None:
         """Procesa el rechazo de una invitacion."""
         invitation.decline()
         await self._uow.invitations.update(invitation)
 
     async def _build_response(
-        self, invitation, enrollment_id, competition_name=None
+        self,
+        invitation: Invitation,
+        enrollment_id: UUID | None,
+        competition_name: str | None = None,
     ) -> RespondInvitationResponseDTO:
         """Construye el DTO de respuesta enriquecido con nombres."""
         # El mismo nombre que la lista sobre la que se pinta: con uno distinto,

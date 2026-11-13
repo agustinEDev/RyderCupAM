@@ -1,6 +1,7 @@
 """DTOs para Rounds, Matches y TeamAssignment - Application Layer."""
 
 from datetime import date, datetime, time
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from src.modules.competition.application.dto.match_generation_block_dto import (
     MatchGenerationBlockDTO,
 )
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 
 # ======================================================================================
@@ -34,7 +36,7 @@ class MatchPlayerResponseDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     @classmethod
-    def from_domain(cls, p) -> "MatchPlayerResponseDTO":
+    def from_domain(cls, p: MatchPlayer) -> "MatchPlayerResponseDTO":
         """Construye el DTO a partir de un MatchPlayer de dominio (VO)."""
         return cls(
             user_id=p.user_id.value,
@@ -63,7 +65,7 @@ class MatchResponseDTO(BaseModel):
     status: str = Field(..., description="Estado del partido.")
     handicap_strokes_given: int = Field(..., description="Golpes de ventaja.")
     strokes_given_to_team: str = Field(..., description="Equipo que recibe golpes (A/B/'').")
-    result: dict | None = Field(None, description="Resultado del partido.")
+    result: dict[str, Any] | None = Field(None, description="Resultado del partido.")
     created_at: datetime = Field(..., description="Fecha de creación.")
     updated_at: datetime = Field(..., description="Fecha de actualización.")
 
@@ -217,7 +219,7 @@ class CreateRoundRequestDTO(BaseModel):
 
     @field_validator("session_type", mode="before")
     @classmethod
-    def uppercase_session_type(cls, v):
+    def uppercase_session_type(cls, v: Any) -> Any:
         """Convierte session_type a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -225,7 +227,7 @@ class CreateRoundRequestDTO(BaseModel):
 
     @field_validator("match_format", mode="before")
     @classmethod
-    def uppercase_match_format(cls, v):
+    def uppercase_match_format(cls, v: Any) -> Any:
         """Convierte match_format a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -233,7 +235,7 @@ class CreateRoundRequestDTO(BaseModel):
 
     @field_validator("handicap_mode", mode="before")
     @classmethod
-    def uppercase_handicap_mode(cls, v):
+    def uppercase_handicap_mode(cls, v: Any) -> Any:
         """Convierte handicap_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -268,7 +270,7 @@ class CreateRoundBodyDTO(BaseModel):
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
-    def uppercase_enums(cls, v):
+    def uppercase_enums(cls, v: Any) -> Any:
         """Convierte enums a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -276,7 +278,7 @@ class CreateRoundBodyDTO(BaseModel):
 
     @field_validator("handicap_mode", mode="before")
     @classmethod
-    def uppercase_handicap(cls, v):
+    def uppercase_handicap(cls, v: Any) -> Any:
         """Convierte handicap_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -305,7 +307,7 @@ class UpdateRoundRequestDTO(BaseModel):
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
-    def uppercase_enums(cls, v):
+    def uppercase_enums(cls, v: Any) -> Any:
         """Convierte enums a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -313,7 +315,7 @@ class UpdateRoundRequestDTO(BaseModel):
 
     @field_validator("handicap_mode", mode="before")
     @classmethod
-    def uppercase_handicap(cls, v):
+    def uppercase_handicap(cls, v: Any) -> Any:
         """Convierte handicap_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -346,7 +348,7 @@ class UpdateRoundBodyDTO(BaseModel):
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
-    def uppercase_enums(cls, v):
+    def uppercase_enums(cls, v: Any) -> Any:
         """Convierte enums a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -354,7 +356,7 @@ class UpdateRoundBodyDTO(BaseModel):
 
     @field_validator("handicap_mode", mode="before")
     @classmethod
-    def uppercase_handicap(cls, v):
+    def uppercase_handicap(cls, v: Any) -> Any:
         """Convierte handicap_mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -443,7 +445,7 @@ class GetMatchDetailResponseDTO(BaseModel):
     status: str = Field(..., description="Estado del partido.")
     handicap_strokes_given: int = Field(..., description="Golpes de ventaja.")
     strokes_given_to_team: str = Field(..., description="Equipo que recibe golpes.")
-    result: dict | None = Field(None, description="Resultado.")
+    result: dict[str, Any] | None = Field(None, description="Resultado.")
     round_date: date | None = Field(None, description="Fecha de la ronda.")
     session_type: str | None = Field(None, description="Tipo de sesión.")
     match_format: str | None = Field(None, description="Formato de partido.")
@@ -472,7 +474,7 @@ class AssignTeamsRequestDTO(BaseModel):
 
     @field_validator("mode", mode="before")
     @classmethod
-    def uppercase_mode(cls, v):
+    def uppercase_mode(cls, v: Any) -> Any:
         """Convierte mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -501,7 +503,7 @@ class AssignTeamsBodyDTO(BaseModel):
 
     @field_validator("mode", mode="before")
     @classmethod
-    def uppercase_mode(cls, v):
+    def uppercase_mode(cls, v: Any) -> Any:
         """Convierte mode a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -594,11 +596,11 @@ class UpdateMatchStatusRequestDTO(BaseModel):
 
     match_id: UUID = Field(..., description="ID del partido.")
     action: str = Field(..., description="Acción: START o COMPLETE.")
-    result: dict | None = Field(None, description="Resultado (solo para COMPLETE).")
+    result: dict[str, Any] | None = Field(None, description="Resultado (solo para COMPLETE).")
 
     @field_validator("action", mode="before")
     @classmethod
-    def uppercase_action(cls, v):
+    def uppercase_action(cls, v: Any) -> Any:
         """Convierte action a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -620,11 +622,11 @@ class UpdateMatchStatusBodyDTO(BaseModel):
     """DTO para el body del endpoint. match_id viene del path."""
 
     action: str = Field(..., description="Acción: START o COMPLETE.")
-    result: dict | None = Field(None, description="Resultado (solo COMPLETE).")
+    result: dict[str, Any] | None = Field(None, description="Resultado (solo COMPLETE).")
 
     @field_validator("action", mode="before")
     @classmethod
-    def uppercase_action(cls, v):
+    def uppercase_action(cls, v: Any) -> Any:
         """Convierte action a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -645,7 +647,7 @@ class DeclareWalkoverRequestDTO(BaseModel):
 
     @field_validator("winning_team", mode="before")
     @classmethod
-    def uppercase_winning_team(cls, v):
+    def uppercase_winning_team(cls, v: Any) -> Any:
         """Convierte winning_team a mayúsculas."""
         if v:
             return v.upper().strip()
@@ -672,7 +674,7 @@ class DeclareWalkoverBodyDTO(BaseModel):
 
     @field_validator("winning_team", mode="before")
     @classmethod
-    def uppercase_winning_team(cls, v):
+    def uppercase_winning_team(cls, v: Any) -> Any:
         """Convierte winning_team a mayúsculas."""
         if v:
             return v.upper().strip()

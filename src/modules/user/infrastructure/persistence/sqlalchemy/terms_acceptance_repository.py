@@ -13,6 +13,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.terms_acceptance_mapper import (
     terms_acceptances_table,
 )
+from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 
 class SQLAlchemyTermsAcceptanceRepository(TermsAcceptanceRepositoryInterface):
@@ -40,4 +41,4 @@ class SQLAlchemyTermsAcceptanceRepository(TermsAcceptanceRepositoryInterface):
             .where(terms_acceptances_table.c.user_deleted_at < cutoff)
             .execution_options(synchronize_session=False)
         )
-        return int(result.rowcount or 0)
+        return int(filas_afectadas(result) or 0)

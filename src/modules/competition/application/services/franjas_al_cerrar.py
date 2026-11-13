@@ -23,6 +23,7 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class PlayersWithoutTeeWindowError(Exception):
@@ -97,7 +98,7 @@ class FranjasAlCerrar:
         if sin:
             await self._faltan(competition, sin)
 
-    async def _faltan(self, competition: Competition, sin: list) -> None:
+    async def _faltan(self, competition: Competition, sin: list[UserId]) -> None:
         """
         Raises:
             PlayersWithoutTeeWindowError: Siempre, con el nombre de cada uno

@@ -270,7 +270,9 @@ class GolfCourseIdDecorator(TypeDecorator):
     impl = UUID(as_uuid=True)
     cache_ok = True
 
-    def process_bind_param(self, value: GolfCourseId | None, dialect) -> uuid.UUID | None:
+    def process_bind_param(
+        self, value: GolfCourseId | uuid.UUID | str | None, dialect
+    ) -> uuid.UUID | None:
         if value is None:
             return None
         if isinstance(value, GolfCourseId):
@@ -726,7 +728,7 @@ class CompetitionNameComposite:
 
     def __init__(self, name: str):
         if name:
-            self.value = CompetitionName.guardado(name)
+            self.value: CompetitionName | None = CompetitionName.guardado(name)
         else:
             self.value = None
 
@@ -748,7 +750,7 @@ class DateRangeComposite:
 
     def __init__(self, start_date: date, end_date: date):
         if start_date and end_date:
-            self.value = DateRange(start_date, end_date)
+            self.value: DateRange | None = DateRange(start_date, end_date)
         else:
             self.value = None
 
@@ -779,7 +781,7 @@ class LocationComposite:
         tertiary_country_code: CountryCode | None = None,
     ):
         if country_code:
-            self.value = Location(
+            self.value: Location | None = Location(
                 main_country=country_code,
                 adjacent_country_1=secondary_country_code,
                 adjacent_country_2=tertiary_country_code,
@@ -819,7 +821,7 @@ class CompetitionStatusComposite:
 
     def __init__(self, status: str):
         if status:
-            self.value = CompetitionStatus(status)
+            self.value: CompetitionStatus | None = CompetitionStatus(status)
         else:
             self.value = None
 
@@ -841,7 +843,7 @@ class EnrollmentStatusComposite:
 
     def __init__(self, status: str):
         if status:
-            self.value = EnrollmentStatus(status)
+            self.value: EnrollmentStatus | None = EnrollmentStatus(status)
         else:
             self.value = None
 

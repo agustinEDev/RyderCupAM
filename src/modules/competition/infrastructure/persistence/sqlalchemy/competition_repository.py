@@ -7,7 +7,7 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import class_mapper, selectinload
 
@@ -40,6 +40,9 @@ from src.shared.infrastructure.persistence.leidos_en_la_sesion import (
     sin_cargar,
     ya_leido,
 )
+
+# Fuera del rango de cualquier orden real, como la fase 1 de reordenar en el dominio
+_DESPLAZAMIENTO_DEL_ORDEN = 10000
 
 
 class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
@@ -83,7 +86,41 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Args:
             competition: Entidad Competition con datos actualizados
         """
+        await self._aparta_el_orden_de_los_que_cambian(competition)
         self._session.add(competition)
+
+    async def _aparta_el_orden_de_los_que_cambian(self, competition: Competition) -> None:
+        """
+        Al quitar un campo, aparta en BD el orden del quitado y de los que se renumeran.
+
+        Quitar un campo que no es el último renumera los que quedan (1..n sin
+        huecos), y SQLAlchemy manda esos UPDATE antes que el DELETE del huérfano:
+        el índice único (competition_id, display_order), que solo crea la
+        migración, los rechazaba (500). Entre los renumerados también se
+        pisarían, según en qué orden salgan sus UPDATE. Así que antes del flush
+        se desplazan todos ellos a valores altos, que no chocan con nada; el
+        flush deja luego a cada uno en su número final y borra el quitado.
+        Sin autoflush: si no, el propio execute mandaría antes los UPDATE.
+        """
+        estado = inspect(competition)
+        if estado is None or not estado.persistent:
+            return
+        retirados = list(estado.attrs._golf_courses.history.deleted)
+        if not retirados:
+            return
+        movidos = [
+            campo.id
+            for campo in competition._golf_courses
+            if inspect(campo).persistent
+            and inspect(campo).attrs._display_order.history.has_changes()
+        ]
+        tabla = competition_golf_courses_table
+        with self._session.no_autoflush:
+            await self._session.execute(
+                update(tabla)
+                .where(tabla.c.id.in_([campo.id for campo in retirados] + movidos))
+                .values(display_order=tabla.c.display_order + _DESPLAZAMIENTO_DEL_ORDEN)
+            )
 
     async def delete(self, competition_id: CompetitionId) -> bool:
         """

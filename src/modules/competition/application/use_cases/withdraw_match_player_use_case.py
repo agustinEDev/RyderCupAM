@@ -14,6 +14,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.decision_del_partido import (
     revisa_la_decision,
 )
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -96,7 +97,7 @@ class WithdrawMatchPlayerUseCase:
         )
 
     @staticmethod
-    def _autoriza(match, actor_id: UserId, player_id: UserId, gestiona: bool) -> None:
+    def _autoriza(match: Match, actor_id: UserId, player_id: UserId, gestiona: bool) -> None:
         """Él mismo, su pareja, el organizador o un admin (W1)."""
         equipo = match.get_player_team(player_id)
         if equipo is None:

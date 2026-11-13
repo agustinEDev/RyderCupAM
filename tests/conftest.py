@@ -44,6 +44,7 @@ os.environ["TRUSTED_PROXIES"] = "127.0.0.1,testclient"
 from main import app as fastapi_app
 from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
+    async_session_maker,
 )
 from src.config.dependencies import get_db_session, get_fabrica_de_sesiones, get_handicap_service
 from src.config.mappers import start_all_mappers
@@ -833,6 +834,32 @@ async def sql_en_la_bd_de_test(sentencia: str, **parametros):
             await sesion.commit()
             return resultado
     return None
+
+
+@pytest_asyncio.fixture
+async def sesion_como_en_produccion(client: AsyncClient) -> AsyncGenerator[None, None]:
+    """
+    Las peticiones con una sesión configurada como la de producción.
+
+    La de `client` va con `autoflush=False` y la de producción con el autoflush
+    por defecto: lo que dependa del orden en que el autoflush manda las
+    sentencias (los choques con un índice único que solo crea la migración) no
+    se ve sin esto.
+    """
+    motor = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    fabrica = async_sessionmaker(**{**async_session_maker.kw, "bind": motor})
+
+    async def sesion() -> AsyncGenerator[AsyncSession, None]:
+        async with fabrica() as abierta:
+            yield abierta
+
+    anterior = fastapi_app.dependency_overrides[get_db_session]
+    fastapi_app.dependency_overrides[get_db_session] = sesion
+    try:
+        yield
+    finally:
+        fastapi_app.dependency_overrides[get_db_session] = anterior
+        await motor.dispose()
 
 
 async def estado_en_bd(competition_id: str) -> str | None:

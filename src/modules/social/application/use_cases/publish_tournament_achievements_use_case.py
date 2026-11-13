@@ -1,18 +1,29 @@
 """Caso de Uso: Publicar en el feed los logros de un torneo terminado."""
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time
+from typing import Any
 
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
+from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.social.application.exclusive_achievements import (
     PLAYED_AT,
     PlayedRound,
@@ -94,7 +105,7 @@ class _TournamentRound:
     # Lo que el logro necesita para abrir su tarjeta o la ficha del torneo:
     # `kind` (MATCH o TEE_GROUP), `competition_id`, en stroke play `group_id`,
     # y `player_ids`: quien jugo ese partido o grupo puede abrir la tarjeta
-    link: dict = field(default_factory=dict)
+    link: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -102,9 +113,9 @@ class _Grupos:
     """Lo leido de los grupos de stroke play de los inscritos (bloque L)."""
 
     # Por jugador, sus grupos de este torneo con la tarjeta entregada
-    del_torneo: dict = field(default_factory=dict)
+    del_torneo: dict[UserId, list[Partida]] = field(default_factory=dict)
     # (grupo, jugador) -> hoyo -> golpes validados (None, una raya validada)
-    validados: dict = field(default_factory=dict)
+    validados: dict[tuple[PartidaId, UserId], dict[int, int | None]] = field(default_factory=dict)
 
 
 class PublishTournamentAchievementsUseCase:
@@ -349,7 +360,7 @@ class PublishTournamentAchievementsUseCase:
     @staticmethod
     def _exclusivo(tipo: ActivityEventType, ronda: PlayedRound, visible: bool) -> ActivityEvent:
         """Un logro exclusivo colgado de esa vuelta, con el contrato de siempre y `played_at`."""
-        payload: dict = {
+        payload: dict[str, Any] = {
             "golf_course_id": ronda.golf_course_id,
             "holes_played": ronda.holes_played,
             "from_tournament": True,
@@ -395,8 +406,8 @@ class PublishTournamentAchievementsUseCase:
                 competition_id
             )
             jugadores = [e.user_id for e in enrollments]
-            courses: dict = {}
-            rounds: dict = {}
+            courses: dict[GolfCourseId, GolfCourse | None] = {}
+            rounds: dict[RoundId, Round | None] = {}
             grupos = await self._grupos(competition_id, jugadores, rounds)
 
             for enrollment in enrollments:
@@ -432,7 +443,9 @@ class PublishTournamentAchievementsUseCase:
 
         return vueltas, visibles, jugadores
 
-    async def _campo(self, golf_course_id, courses: dict):
+    async def _campo(
+        self, golf_course_id: GolfCourseId, courses: dict[GolfCourseId, GolfCourse | None]
+    ) -> GolfCourse | None:
         """El campo, leido una vez por publicacion."""
         if golf_course_id not in courses:
             courses[golf_course_id] = await self._golf_course_uow.golf_courses.find_by_id(
@@ -440,7 +453,12 @@ class PublishTournamentAchievementsUseCase:
             )
         return courses[golf_course_id]
 
-    async def _partidos(self, user_id: UserId, competition_id: CompetitionId, rounds: dict) -> list:
+    async def _partidos(
+        self,
+        user_id: UserId,
+        competition_id: CompetitionId,
+        rounds: dict[RoundId, Round | None],
+    ) -> list[tuple[Match, Round]]:
         """Sus partidos de la Ryder en este torneo, con su ronda."""
         partidos = await self._competition_uow.matches.find_completed_for_player(
             user_id, limit=MAX_HISTORY_LOOKUP
@@ -459,7 +477,10 @@ class PublishTournamentAchievementsUseCase:
         return del_torneo
 
     async def _grupos(
-        self, competition_id: CompetitionId, user_ids: list[UserId], rounds: dict
+        self,
+        competition_id: CompetitionId,
+        user_ids: list[UserId],
+        rounds: dict[RoundId, Round | None],
     ) -> "_Grupos":
         """
         Los grupos de stroke play de este torneo con la tarjeta entregada,
@@ -500,11 +521,11 @@ class PublishTournamentAchievementsUseCase:
 
     async def _grupo_a_vuelta(
         self,
-        grupo,
-        ronda,
+        grupo: Partida,
+        ronda: Round | None,
         user_id: UserId,
-        courses: dict,
-        validados: dict,
+        courses: dict[GolfCourseId, GolfCourse | None],
+        validados: dict[tuple[PartidaId, UserId], dict[int, int | None]],
         visible_to_friends: bool,
     ) -> _TournamentRound | None:
         """
@@ -537,7 +558,12 @@ class PublishTournamentAchievementsUseCase:
         )
 
     async def _a_vuelta(
-        self, partido, ronda, user_id: UserId, courses: dict, visible_to_friends: bool
+        self,
+        partido: Match,
+        ronda: Round,
+        user_id: UserId,
+        courses: dict[GolfCourseId, GolfCourse | None],
+        visible_to_friends: bool,
     ) -> _TournamentRound | None:
         """La vuelta de un jugador en un partido, o None si su tarjeta no cuenta."""
         hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
@@ -576,10 +602,10 @@ class PublishTournamentAchievementsUseCase:
 
     async def _vuelta_de(
         self,
-        ronda,
-        courses: dict,
-        scores_by_hole: dict,
-        jugador,
+        ronda: Round,
+        courses: dict[GolfCourseId, GolfCourse | None],
+        scores_by_hole: dict[int, int | None],
+        jugador: MatchPlayer | JugadorDePartida | None,
         *,
         match_id: str,
         user_id: UserId,
@@ -641,8 +667,8 @@ class PublishTournamentAchievementsUseCase:
         ]
 
     @staticmethod
-    def _payload(logro: DetectedAchievement, vuelta: _TournamentRound) -> dict:
-        payload: dict = {
+    def _payload(logro: DetectedAchievement, vuelta: _TournamentRound) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "golf_course_id": vuelta.golf_course_id,
             "holes_played": len(vuelta.holes),
             # Distingue en el feed una vuelta de torneo de una entre amigos
@@ -662,7 +688,9 @@ class PublishTournamentAchievementsUseCase:
         return payload
 
 
-def _apuntar_grupo(leidos: _Grupos, partida, user_id: UserId, competition_id) -> None:
+def _apuntar_grupo(
+    leidos: _Grupos, partida: Partida, user_id: UserId, competition_id: CompetitionId
+) -> None:
     """Un grupo de este torneo con la tarjeta entregada: de el salen sus logros (L8)."""
     if (
         partida.competition_id == competition_id
@@ -671,6 +699,6 @@ def _apuntar_grupo(leidos: _Grupos, partida, user_id: UserId, competition_id) ->
         leidos.del_torneo.setdefault(user_id, []).append(partida)
 
 
-def _ids(user_ids) -> list[str]:
+def _ids(user_ids: Iterable[UserId]) -> list[str]:
     """Los ids de los jugadores, como texto y ordenados: el payload sale igual siempre."""
     return sorted({str(user_id.value) for user_id in user_ids})

@@ -1,5 +1,7 @@
 """Caso de Uso: Obtener leaderboard de una competicion."""
 
+from typing import Any
+
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
     LeaderboardMatchDTO,
@@ -19,15 +21,19 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition, TournamentTypeError
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class GetLeaderboardUseCase:
@@ -116,7 +122,7 @@ class GetLeaderboardUseCase:
 
             # Collect all user IDs and cache matches per round
             all_user_ids: set[UserId] = set()
-            matches_by_round: dict = {}
+            matches_by_round: dict[RoundId, list[Match]] = {}
 
             for round_entity in rounds:
                 matches = await self._uow.matches.find_by_round(round_entity.id)
@@ -156,7 +162,9 @@ class GetLeaderboardUseCase:
                         total_a_points += points["team_a"]
                         total_b_points += points["team_b"]
 
-                        final_result = await self._resolve_final_result(match, round_entity)
+                        final_result = await self._resolve_final_result(
+                            match, round_entity, match.result
+                        )
                         result_dto = DecidedResultDTO(
                             winner=final_result.get("winner", ""),
                             score=final_result.get("score", ""),
@@ -239,25 +247,31 @@ class GetLeaderboardUseCase:
         clasificacion.matches = [
             m
             for m in clasificacion.matches
-            if ve.ve_la_partida(UserId(p.user_id) for p in (*m.team_a_players, *m.team_b_players))
+            # Con `ve` no hay visitante, así que todos los ids van puestos
+            if ve.ve_la_partida(
+                UserId(p.user_id)
+                for p in (*m.team_a_players, *m.team_b_players)
+                if p.user_id is not None
+            )
         ]
         return clasificacion
 
-    async def _resolve_final_result(self, match, round_entity) -> dict:
-        """Determines the final result for a finished match."""
+    async def _resolve_final_result(
+        self, match: Match, round_entity: Round, stored_result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Determines the final result for a finished match (`stored_result`: `match.result`)."""
         # Concedido o walkover: manda ese resultado, no el de los hoyos, igual
         # que en la vista de anotacion (BE #384)
         if match.closing_result is not None:
             return match.closing_result
         if match.is_decided and match.decided_result:
             return match.decided_result
-        if round_entity.match_format is not None:
-            return (
-                await self._compute_decided_result(match, round_entity.match_format) or match.result
-            )
-        return match.result
+        # `Round.match_format` nunca es None: el `is not None` de antes no filtraba nada
+        return await self._compute_decided_result(match, round_entity.match_format) or stored_result
 
-    async def _compute_in_progress_standing(self, match, round_entity):
+    async def _compute_in_progress_standing(
+        self, match: Match, round_entity: Round
+    ) -> tuple[str | None, str | None, int | None]:
         """Computes standing for an in-progress match (`standing_in_hole_order`)."""
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         if hole_scores and round_entity.match_format:
@@ -269,7 +283,9 @@ class GetLeaderboardUseCase:
                 return standing["status"], standing["leading_team"], standing["holes_played"]
         return None, None, None
 
-    async def _compute_decided_result(self, match, match_format) -> dict | None:
+    async def _compute_decided_result(
+        self, match: Match, match_format: MatchFormat
+    ) -> dict[str, Any] | None:
         """
         El resultado con los hoyos anotados: el de la decision en el orden de
         los hoyos, como lo guarda `SubmitHoleScoreUseCase`, o la ventaja tal cual.

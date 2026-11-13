@@ -75,7 +75,7 @@ class SubmitHoleReportUseCase:
         """
         course_id = GolfCourseId(request.golf_course_id)
         hole = request.hole_number
-        reserved: tuple | None = None
+        reserved: tuple[str, GolfCourseId, int] | None = None
         accepted = False
         try:
             async with self._uow:

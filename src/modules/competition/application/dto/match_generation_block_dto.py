@@ -6,6 +6,7 @@ las pone en su idioma (BE #360). El nombre si va hecho: es el de la persona.
 """
 
 from datetime import date, datetime
+from typing import overload
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -47,6 +48,18 @@ class MatchGenerationBlockDTO(BaseModel):
         default_factory=list, description="Los jugadores afectados, cuando el motivo es de ellos."
     )
     at: datetime | None = Field(None, description="Cuándo se intentó.")
+
+
+@overload
+def block_to_dto(block: MatchGenerationBlock) -> MatchGenerationBlockDTO: ...
+
+
+@overload
+def block_to_dto(block: None) -> None: ...
+
+
+@overload
+def block_to_dto(block: MatchGenerationBlock | None) -> MatchGenerationBlockDTO | None: ...
 
 
 def block_to_dto(block: MatchGenerationBlock | None) -> MatchGenerationBlockDTO | None:

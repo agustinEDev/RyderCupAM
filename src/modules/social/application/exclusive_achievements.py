@@ -166,7 +166,7 @@ def player_scope(user_id: UserId) -> str:
     return f"player:{user_id.value}"
 
 
-async def lock_players(repo: ActivityEventRepositoryInterface, user_ids) -> None:
+async def lock_players(repo: ActivityEventRepositoryInterface, user_ids: Iterable[UserId]) -> None:
     """
     Bloquea a esos jugadores hasta el final de la transaccion, SIEMPRE en el
     mismo orden: dos publicaciones que comparten jugadores no se cruzan. El
@@ -198,7 +198,7 @@ async def keep_only_the_oldest(
         return list(events)
 
     usuarios = list({e.user_id for e in candidatos})
-    publicados: dict[tuple, list[ActivityEvent]] = {}
+    publicados: dict[tuple[UserId, ActivityEventType, str | None], list[ActivityEvent]] = {}
     for evento in await repo.find_for_users(usuarios, EXCLUSIVE_TYPES):
         if not is_own(evento):
             publicados.setdefault(scope_of(evento), []).append(evento)

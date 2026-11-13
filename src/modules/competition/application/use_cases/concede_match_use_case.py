@@ -1,5 +1,7 @@
 """Caso de Uso: Conceder un partido."""
 
+from typing import Any
+
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     MatchNotFoundError,
@@ -41,7 +43,7 @@ class ConcedeMatchUseCase:
         conceding_team: str,
         reason: str | None = None,
         is_admin: bool = False,
-    ) -> dict:
+    ) -> dict[str, Any]:
         async with self._uow:
             match_id = MatchId(match_id_str)
             # Bloqueada: la regla del retirado se mira con lo de ahora, no con una

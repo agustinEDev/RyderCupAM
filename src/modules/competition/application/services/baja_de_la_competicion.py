@@ -19,6 +19,7 @@ from src.modules.competition.application.services.esperas_de_la_competicion impo
 from src.modules.competition.application.services.partidas_del_jugador import (
     sacar_de_sus_partidas,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import Salidas
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
@@ -30,6 +31,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 DRAFT_IN_PROGRESS = "DRAFT_IN_PROGRESS"
@@ -69,7 +71,7 @@ async def sacar_de_la_competicion(
     zonas: ICompetitionTimezone | None,
     ahora: datetime,
     asignadas: list[tuple[Round, UserId]] | None = None,
-) -> dict:
+) -> dict[RoundId, tuple[Salidas, Salidas]]:
     """
     Le saca de todo lo de la competición. La inscripción ya está retirada.
 

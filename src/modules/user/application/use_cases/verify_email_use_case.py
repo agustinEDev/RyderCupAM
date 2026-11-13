@@ -6,6 +6,7 @@ Caso de uso para verificar el email de un usuario usando un token.
 
 import logging
 
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -26,7 +27,7 @@ class VerifyEmailUseCase:
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
 
-    async def execute(self, token: str):
+    async def execute(self, token: str) -> User:
         """
         Ejecuta el caso de uso de verificación de email.
 

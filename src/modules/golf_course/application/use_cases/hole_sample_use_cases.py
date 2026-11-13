@@ -56,6 +56,8 @@ from src.modules.golf_course.domain.value_objects.mapped_hole import (
     MAX_HOLE_NUMBER,
     MIN_HOLE_NUMBER,
 )
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.shared.domain.value_objects.gender import Gender
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +98,7 @@ class SubmitHoleSampleUseCase:
         """
         course_id = GolfCourseId(request.golf_course_id)
         hole = request.hole_number
-        reserved: tuple | None = None
+        reserved: tuple[str, GolfCourseId, int] | None = None
         accepted = False
         try:
             async with self._uow:
@@ -259,7 +261,7 @@ class ListHoleSamplesUseCase:
                 and not _mapped(hole_map, number)
             )
             # La primera vez que sale una barra es su primera muestra completa
-            tees: dict[tuple, HoleSample] = {}
+            tees: dict[tuple[TeeColor, Gender | None], HoleSample] = {}
             for sample in complete:
                 tees.setdefault((sample.tee_color, sample.tee_gender), sample)
             holes.append(

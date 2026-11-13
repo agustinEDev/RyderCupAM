@@ -4,6 +4,8 @@ Caso de Uso: Crear Competition.
 Permite a un usuario crear una nueva competición en estado DRAFT.
 """
 
+from typing import Any
+
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
@@ -184,7 +186,7 @@ class CreateCompetitionUseCase:
         return self._respuesta(competition)
 
     @staticmethod
-    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
+    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict[str, Any]:
         """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
         if request.stroke_play is None:
             return {}

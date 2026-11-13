@@ -12,7 +12,7 @@ CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double
 """
 
 from datetime import UTC, datetime
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
@@ -240,7 +240,12 @@ class LoginUserUseCase:
         if hasta is not None:
             self._rechaza(hasta, "Locked for this network", None, request, ip_address, user_agent)
 
-    async def _avisa_de_los_fallos(self, user: User, request: LoginRequestDTO, motivo) -> None:
+    async def _avisa_de_los_fallos(
+        self,
+        user: User,
+        request: LoginRequestDTO,
+        motivo: Literal["red", "aviso", "respaldo", "dia"],
+    ) -> None:
         """El correo al dueño (BE #732). En segundo plano: no lanza ni espera."""
         await self._aviso_de_fallos.avisa(
             AvisoDeFallosRequestDTO(
@@ -585,18 +590,17 @@ class LoginUserUseCase:
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No
         # lanza: un fallo del correo no tumba el login
-        if user.email is not None:
-            # Nunca a un correo sin confirmar: solo le llega el de confirmación
-            await self._aviso_de_nuevo_inicio.avisa(
-                AvisoDeNuevoInicioRequestDTO(
-                    user_id=str(user.id.value),
-                    email=user.email.value,
-                    nombre=user.first_name,
-                    device_id=device_id_str,
-                    desconocido=es_nuevo,
-                    verificado=user.is_email_verified(),
-                )
+        # Nunca a un correo sin confirmar: solo le llega el de confirmación
+        await self._aviso_de_nuevo_inicio.avisa(
+            AvisoDeNuevoInicioRequestDTO(
+                user_id=str(user.id.value),
+                email=user.email.value,
+                nombre=user.first_name,
+                device_id=device_id_str,
+                desconocido=es_nuevo,
+                verificado=user.is_email_verified(),
             )
+        )
 
         # Generar token CSRF (256 bits; vale lo que el refresh token más 1 h, y su cookie
         # dura 15 minutos)

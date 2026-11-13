@@ -1043,7 +1043,7 @@ class GolfCourse:
         )
 
     def find_tee(
-        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+        self, color: TeeColor | None, gender: Gender | None, identifier: str | None = None
     ) -> Tee | None:
         """Devuelve la salida que corresponde a ese color y género, si existe."""
         for tee in self._tees:
@@ -1056,7 +1056,7 @@ class GolfCourse:
         return None
 
     def tee_for(
-        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+        self, color: TeeColor | None, gender: Gender | None, identifier: str | None = None
     ) -> Tee | None:
         """
         Salida desde la que juega quien eligió ese color y ese género.
@@ -1088,7 +1088,7 @@ class GolfCourse:
 
         return self._last_tee(color, gender) or self._last_tee(color, None)
 
-    def _last_tee(self, color: TeeColor, gender: Gender | None) -> Tee | None:
+    def _last_tee(self, color: TeeColor | None, gender: Gender | None) -> Tee | None:
         """
         Última salida de ese color y género, sin mirar el identificador.
 
@@ -1102,7 +1102,7 @@ class GolfCourse:
         return found
 
     def hole_card_for(
-        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+        self, color: TeeColor | None, gender: Gender | None, identifier: str | None = None
     ) -> list[Hole]:
         """
         Tarjeta tal y como se juega desde esa salida: su par, su stroke index y

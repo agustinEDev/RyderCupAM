@@ -50,7 +50,7 @@ class HandicapsDeLaCompeticion:
         del_perfil: dict[UserId, Decimal] = {}
         if sin_propio:
             for user in await user_repository.find_by_ids(sin_propio):
-                if user.id is not None and user.handicap is not None:
+                if user.handicap is not None:
                     del_perfil[user.id] = Decimal(str(user.handicap.value))
 
         return {e.user_id: e.handicap_que_cuenta(del_perfil.get(e.user_id)) for e in inscripciones}

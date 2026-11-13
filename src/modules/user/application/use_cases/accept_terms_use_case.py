@@ -86,8 +86,8 @@ class AcceptTermsUseCase:
                 return user, None
 
             accepted_at = user.terms_accepted_at
-            if accepted_at is None or user.email is None:  # solo para el tipo
-                raise RuntimeError("usuario sin fecha de aceptación o sin email")
+            if accepted_at is None:  # solo para el tipo
+                raise RuntimeError("usuario sin fecha de aceptación")
             recorded = TermsAcceptance.record(
                 user_id=user_id,
                 user_email=user.email.value,

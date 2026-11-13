@@ -28,6 +28,7 @@ from src.modules.competition.application.services.salidas_de_la_franja import (
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
+from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -40,6 +41,7 @@ from src.modules.competition.domain.services.plazo_de_partidas import (
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -77,7 +79,7 @@ async def con_plaza_y_aprobados(
     uow: CompetitionUnitOfWorkInterface,
     franja: Round,
     aprobados: Sequence[Enrollment] | None = None,
-) -> list:
+) -> list[PlazaEnFranja]:
     """Las plazas de la franja de quien sigue aprobado, por orden de llegada.
 
     Un retirado con la competición iniciada conserva su plaza: no juega. Con
@@ -99,7 +101,7 @@ async def vista_de_la_franja(
     zonas: ICompetitionTimezone,
     usuarios: UserRepositoryInterface,
     ahora: datetime,
-    plazas: list | None = None,
+    plazas: list[PlazaEnFranja] | None = None,
 ) -> TeeGroupsResponseDTO:
     """
     La franja con sus partidas, para la pantalla.
@@ -152,7 +154,13 @@ def partida_dto(partida: Partida, hoja: HojaDeSalidas, nombres: dict[UserId, str
     )
 
 
-async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
+async def _editable(
+    competicion: Competition,
+    franja: Round,
+    partidas: Sequence[Partida],
+    zonas: ICompetitionTimezone,
+    ahora: datetime,
+) -> bool:
     """Generar o borrar (y todo lo demás): del cierre a la primera salida, sin ninguna fuera."""
     try:
         PlazoDePartidas.comprobar(
@@ -163,7 +171,14 @@ async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
     return True
 
 
-async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> set[PartidaId]:
+async def _tocables(
+    competicion: Competition,
+    franja: Round,
+    partidas: Sequence[Partida],
+    zonas: ICompetitionTimezone,
+    ahora: datetime,
+    editable: bool,
+) -> set[PartidaId]:
     """Las que aún se pueden mover o cambiar: todas en plazo; si no, las sin salir (#544)."""
     if editable:
         return {p.id for p in partidas}
@@ -179,7 +194,15 @@ async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> se
     return {p.id for p in partidas if p.id not in salidas}
 
 
-async def _cabe_una_nueva(competicion, franja, hoja, partidas, zonas, ahora, editable) -> bool:
+async def _cabe_una_nueva(
+    competicion: Competition,
+    franja: Round,
+    hoja: HojaDeSalidas,
+    partidas: Sequence[Partida],
+    zonas: ICompetitionTimezone,
+    ahora: datetime,
+    editable: bool,
+) -> bool:
     """Como al mover a una nueva: antes de salir, si quedan salidas; después, una libre."""
     if editable:
         return len(partidas) < hoja.numero_de_salidas
@@ -192,7 +215,10 @@ async def _cabe_una_nueva(competicion, franja, hoja, partidas, zonas, ahora, edi
 
 
 def _jugador(
-    jugador, partida: Partida, nombres: dict[UserId, str], tarjetas: dict[UserId, EstadoDeTarjeta]
+    jugador: JugadorDePartida,
+    partida: Partida,
+    nombres: dict[UserId, str],
+    tarjetas: dict[UserId, EstadoDeTarjeta],
 ) -> TeeGroupPlayerDTO:
     marca = partida.marcadores.get(jugador.user_id)
     return TeeGroupPlayerDTO(

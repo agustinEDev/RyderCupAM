@@ -95,11 +95,7 @@ async def profile_handicaps(
     partida sin cerrarla.
     """
     users = await user_uow.users.find_by_ids(user_ids)
-    return {
-        user.id: (user.handicap.value if user.handicap else None)
-        for user in users
-        if user.id is not None
-    }
+    return {user.id: (user.handicap.value if user.handicap else None) for user in users}
 
 
 async def check_tee_of_match(

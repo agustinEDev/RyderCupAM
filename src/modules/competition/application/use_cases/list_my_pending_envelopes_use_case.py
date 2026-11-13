@@ -13,6 +13,7 @@ sesion con los partidos hechos no son nada que atender.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import PendingEnvelopeDTO
 from src.modules.competition.application.ports.competition_timezone import (
@@ -80,7 +81,7 @@ class ListMyPendingEnvelopesUseCase:
             ahora = ahora if ahora.tzinfo else ahora.replace(tzinfo=UTC)
             desk = EnvelopeDesk(self._uow, None, timezone_service=self._timezone)
             pendientes: list[PendingEnvelopeDTO] = []
-            plazos: list[tuple] = []
+            plazos: list[tuple[UUID, datetime | None]] = []
             for competition in await self._mis_competiciones(user_id):
                 equipo = EnvelopeDesk.equipo_de(competition, user_id)
                 if equipo is None:

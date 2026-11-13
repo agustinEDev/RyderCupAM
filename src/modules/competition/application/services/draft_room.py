@@ -149,11 +149,12 @@ class DraftRoom:
         medias esperando a que alguien la mire diez veces.
         """
         cambios = False
-        while draft.turn_expired(self.ahora):
+        # Con el turno vencido siempre hay plazo: el `is not None` es para el tipo
+        while draft.turn_expired(self.ahora) and (vencio := draft.turn_deadline) is not None:
             # Con la hora del vencimiento, no con la de ahora: la aplicación
             # eligió cuando se acabó el minuto, y el turno siguiente empezó
             # ahí. Pasándole `ahora` solo se resolvería un turno por vistazo
-            draft.pick_for_expired_turn(elegibles, draft.turn_deadline)
+            draft.pick_for_expired_turn(elegibles, vencio)
             cambios = True
         if cambios:
             await self.guardar(competition, draft)

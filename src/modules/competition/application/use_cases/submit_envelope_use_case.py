@@ -6,12 +6,13 @@ enfrentamientos salen de cruzar las dos por posicion. Se puede corregir hasta
 que se abren; despues no, que seria rehacer el sorteo a escondidas.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO, envelope_to_dto
 from src.modules.competition.application.exceptions import RoundNotFoundError
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
     GeneradorDePartidos,
@@ -20,6 +21,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -35,9 +37,9 @@ class SubmitEnvelopeUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository,
-        clock=None,
-        timezone_service=None,
+        user_repository: UserRepositoryInterface,
+        clock: Callable[[], datetime] | None = None,
+        timezone_service: ICompetitionTimezone | None = None,
         generador: GeneradorDePartidos | None = None,
     ):
         """

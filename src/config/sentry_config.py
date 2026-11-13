@@ -144,7 +144,8 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     _recorta_los_eventos_de_seguridad(event)
 
     # Filtrar health checks del endpoint "/"
-    if event.get("request", {}).get("url", "").endswith("/"):
+    url = event.get("request", {}).get("url")
+    if isinstance(url, str) and url.endswith("/"):
         return None
 
     # Filtrar requests OPTIONS (CORS preflight)

@@ -1,5 +1,6 @@
 """Caso de Uso: Obtener el detalle de una Partida Rapida (con scores y standing)."""
 
+from collections.abc import Sequence
 from decimal import Decimal
 
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
@@ -18,6 +19,8 @@ from src.modules.quick_match.application.exceptions import (
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
 from src.modules.quick_match.application.services.course_context import course_context_for
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -33,6 +36,7 @@ from src.modules.quick_match.domain.services.stroke_allocation_service import (
 )
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -91,7 +95,11 @@ class GetQuickMatchUseCase:
         )
 
     async def build_detail(
-        self, quick_match, hole_scores, users_by_id: dict, requester_id: UserId
+        self,
+        quick_match: QuickMatch,
+        hole_scores: Sequence[QuickMatchHoleScore],
+        users_by_id: dict[UserId, User],
+        requester_id: UserId,
     ) -> QuickMatchDetailResponseDTO:
         """
         El detalle de una partida ya leida: datos, scores, standing y reparto.
@@ -137,7 +145,7 @@ class GetQuickMatchUseCase:
         )
 
     async def _allocate_strokes(
-        self, quick_match, users_by_id
+        self, quick_match: QuickMatch, users_by_id: dict[UserId, User]
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Reparte los golpes de handicap de la partida.
@@ -180,7 +188,9 @@ class GetQuickMatchUseCase:
         )
 
     @staticmethod
-    def _resolve_handicaps(quick_match, users_by_id) -> dict[ParticipantId, Decimal | None]:
+    def _resolve_handicaps(
+        quick_match: QuickMatch, users_by_id: dict[UserId, User]
+    ) -> dict[ParticipantId, Decimal | None]:
         """
         Handicap Index efectivo de cada participante.
 
@@ -195,7 +205,9 @@ class GetQuickMatchUseCase:
             handicaps[p.participant_id] = None if raw is None else Decimal(str(raw))
         return handicaps
 
-    def _build_assignments(self, quick_match, users_by_id) -> list[ScoringAssignmentDTO]:
+    def _build_assignments(
+        self, quick_match: QuickMatch, users_by_id: dict[UserId, User]
+    ) -> list[ScoringAssignmentDTO]:
         if not quick_match.scorer_ids:
             return []
 
@@ -209,7 +221,12 @@ class GetQuickMatchUseCase:
         result = []
         for scorer_id, covered_ids in assignments.items():
             scorer = quick_match.find_participant(scorer_id)
-            user = users_by_id.get(scorer.user_id) if scorer else None
+            # Un anotador invitado no tiene cuenta (`.get(None)` daba None igual)
+            user = (
+                users_by_id.get(scorer.user_id)
+                if scorer is not None and scorer.user_id is not None
+                else None
+            )
             # `display_name`: el alias de quien lo tenga, y si no su nombre
             # completo (BE #239). Este campo ya era «nombre para enseñar»
             scorer_name = user.display_name if user else "Unknown"
@@ -224,8 +241,8 @@ class GetQuickMatchUseCase:
 
     def _compute_standing(
         self,
-        quick_match,
-        hole_scores,
+        quick_match: QuickMatch,
+        hole_scores: Sequence[QuickMatchHoleScore],
         strokes_by_participant: dict[ParticipantId, ParticipantStrokes],
     ) -> QuickMatchStandingResponseDTO | None:
         if quick_match.match_format is None:
@@ -238,7 +255,7 @@ class GetQuickMatchUseCase:
             return None
         team_a_ids, team_b_ids = rosters
 
-        scores_by_hole: dict[int, dict] = {}
+        scores_by_hole: dict[int, dict[ParticipantId, int | None]] = {}
         for hs in hole_scores:
             scores_by_hole.setdefault(hs.hole_number, {})[hs.participant_id] = hs.score
 

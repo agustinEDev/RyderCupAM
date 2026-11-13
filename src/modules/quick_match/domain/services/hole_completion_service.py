@@ -7,13 +7,15 @@ seguia exigiendo los cuatro scores y dejaba **todas** las partidas de foursomes
 sin resultado mientras el detalle ya las puntuaba. Vive aqui una sola vez.
 """
 
+from collections.abc import Container
+
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..value_objects.participant_id import ParticipantId
 
 
 def hole_is_complete(
-    scored_ids: set[ParticipantId] | dict[ParticipantId, int],
+    scored_ids: Container[ParticipantId],
     team_a_ids: set[ParticipantId],
     team_b_ids: set[ParticipantId],
     match_format: MatchFormat | None,

@@ -167,14 +167,14 @@ class UpdateSecurityUseCase:
         return user
 
     async def _handle_email_change(
-        self, user: object, new_email: str, user_id: str
+        self, user: User, new_email: str, user_id: str
     ) -> tuple[bool, str | None]:
         """El correo nuevo queda pendiente hasta confirmarlo desde su dirección (#749)."""
         email_vo = Email(new_email)
         _rechaza_si_lo_usa_otro(await self._uow.users.find_by_email(email_vo), user_id, new_email)
 
         # El mismo correo que ya tiene: nada que cambiar (como antes)
-        if user.email is not None and email_vo == user.email:
+        if email_vo == user.email:
             return False, None
         token = user.request_email_change(new_email, ahora=datetime.now())
         return True, token
@@ -190,7 +190,8 @@ class UpdateSecurityUseCase:
         total_history_count = await self._uow.password_history.count_by_user(user_id_vo) + 1
         password_history = PasswordHistory.create(
             user_id=user_id_vo,
-            password_hash=user.password.hashed_value,
+            # `nueva` es la que acaba de quedar puesta (`user.password is nueva`)
+            password_hash=nueva.hashed_value,
             total_history_count=total_history_count,
         )
         await self._uow.password_history.save(password_history)
@@ -339,7 +340,8 @@ class UpdateSecurityUseCase:
         )
 
         # El enlace, al correo nuevo; el aviso, al de antes
-        if email_changed and token_del_cambio:
+        # Con el correo cambiado, `new_email` siempre llega: el `is not None` es para el tipo
+        if email_changed and token_del_cambio and request.new_email is not None:
             await self._avisa_del_cambio_de_correo(user, request.new_email, token_del_cambio)
 
         # Construir respuesta

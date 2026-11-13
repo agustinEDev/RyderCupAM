@@ -27,6 +27,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -48,7 +49,7 @@ class ResetEnvelopesUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository,
+        user_repository: UserRepositoryInterface,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """

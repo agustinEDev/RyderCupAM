@@ -13,6 +13,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_provenance import CourseProvenance
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -122,7 +123,7 @@ class CreateDirectGolfCourseUseCase:
 
             return RequestGolfCourseResponseDTO(golf_course=response_dto)
 
-    def _zona_de(self, location) -> str | None:
+    def _zona_de(self, location: CourseLocation | None) -> str | None:
         """La zona horaria del campo, deducida de sus coordenadas."""
         if self._timezone_resolver is None or location is None:
             return None

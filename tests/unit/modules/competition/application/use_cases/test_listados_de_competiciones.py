@@ -311,19 +311,26 @@ class TestLasProgramadasConFiltroDeEstado:
         assert _nombres(resultado) == ["Programada"]
 
     async def test_p9_sin_programadas_el_mismo_resultado_y_orden(self):
-        """Given activas y cerradas, When pido activas y cerradas, Then primero las activas y luego las cerradas, como antes."""
-        uow = await _bd(
+        """
+        Given activas y cerradas, When pido activas y cerradas,
+        Then primero las activas y luego las cerradas, y en cada estado la más reciente
+        primero (el orden del repositorio de SQL).
+        """
+        competiciones = [
             _competicion("Cerrada", estado=CompetitionStatus.CLOSED),
             _competicion("Activa 1", estado=CompetitionStatus.ACTIVE),
             _competicion("Borrador"),
             _competicion("Activa 2", estado=CompetitionStatus.ACTIVE),
-        )
+        ]
+        for dia, competicion in enumerate(competiciones, start=1):
+            competicion._created_at = datetime(2026, 1, dia, 10, 0)
+        uow = await _bd(*competiciones)
 
         resultado = await ListCompetitionsUseCase(uow, zona_del_campo=_Zona()).listar(
             ["ACTIVE", "CLOSED"], viewer_id=str(YO.value)
         )
 
-        assert [str(c.name) for c in resultado] == ["Activa 1", "Activa 2", "Cerrada"]
+        assert [str(c.name) for c in resultado] == ["Activa 2", "Activa 1", "Cerrada"]
 
     async def test_p11_pidiendo_solo_cerradas_no_se_abre_la_programada(self):
         """Given una programada a la que ya le toca abrir, When pido solo cerradas, Then ni sale ni se abre de paso."""
