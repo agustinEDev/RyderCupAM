@@ -178,7 +178,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         Returns:
             Lista de campos creados por ese usuario
         """
-        return [gc for gc in self._golf_courses.values() if gc.requested_by == creator_id]
+        return [gc for gc in self._golf_courses.values() if gc.creator_id == creator_id]
 
     async def count_by_approval_status(self, approval_status: ApprovalStatus) -> int:
         """

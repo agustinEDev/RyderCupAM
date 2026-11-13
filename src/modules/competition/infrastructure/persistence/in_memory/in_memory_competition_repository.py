@@ -68,9 +68,12 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         suyas = [comp for comp in self._competitions.values() if comp.creator_id == creator_id]
         return suyas[offset : offset + limit]
 
-    async def find_by_status(self, status: CompetitionStatus) -> list[Competition]:
-        """Busca todas las competiciones con un estado específico."""
-        return [comp for comp in self._competitions.values() if comp.status == status]
+    async def find_by_status(
+        self, status: CompetitionStatus, limit: int = 100, offset: int = 0
+    ) -> list[Competition]:
+        """Busca las competiciones con un estado, paginadas como la de SQL."""
+        con_ese = [comp for comp in self._competitions.values() if comp.status == status]
+        return con_ese[offset : offset + limit]
 
     async def exists_with_name(
         self,
@@ -84,10 +87,9 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
             for comp in self._competitions.values()
         )
 
-    async def delete(self, competition_id: CompetitionId) -> None:
-        """Elimina una competición por su ID."""
-        if competition_id in self._competitions:
-            del self._competitions[competition_id]
+    async def delete(self, competition_id: CompetitionId) -> bool:
+        """Elimina una competición por su ID: True si existía."""
+        return self._competitions.pop(competition_id, None) is not None
 
     async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
         """Retorna las competiciones, paginadas como el repositorio de verdad."""
