@@ -53,13 +53,28 @@ async def _dos_usuarios(client: AsyncClient) -> tuple[dict, dict]:
     return a, b
 
 
-def _gana_a_mitad(monkeypatch, *, requester_id: str, addressee_id: str, status: str, blocked_by):
-    """La primera lectura de la pareja no ve nada; justo después A confirma su fila."""
+def _gana_a_mitad(
+    monkeypatch,
+    *,
+    requester_id: str,
+    addressee_id: str,
+    status: str,
+    blocked_by,
+    antes_de_releer: str | None = None,
+):
+    """La primera lectura de la pareja no ve nada; justo después A confirma su fila.
+
+    Con `antes_de_releer`, ese SQL se confirma justo antes de la segunda lectura
+    (la que hace el caso de uso tras perder la carrera): la fila ganadora cambia
+    o desaparece entre medias.
+    """
     leer_de_verdad = SQLAlchemyFriendshipRepository.find_by_pair
     ya_gano = False
 
     async def find_by_pair(self, user_id_a, user_id_b):
         nonlocal ya_gano
+        if ya_gano and antes_de_releer is not None:
+            await sql_en_la_bd_de_test(antes_de_releer)
         encontrada = await leer_de_verdad(self, user_id_a, user_id_b)
         if not ya_gano:
             ya_gano = True
@@ -136,6 +151,41 @@ class TestSolicitudQuePierdeLaCarrera:
         # El de DuplicateFriendRequestViolation, no otro 409 cualquiera
         assert "already exists" in respuesta.json()["detail"], respuesta.text
         assert await _filas_de_la_pareja() == [(id_a, id_b, "PENDING", None)]
+
+    @pytest.mark.parametrize(
+        "antes_de_releer",
+        [
+            pytest.param("DELETE FROM friendships", id="ya_no_esta"),
+            pytest.param(
+                "UPDATE friendships SET status = 'DECLINED', responded_at = now()",
+                id="rechazada",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_si_al_releer_la_ganadora_ya_no_esta_o_se_rechazo_pide_reintentar(
+        self, client: AsyncClient, monkeypatch, antes_de_releer: str
+    ):
+        """A4: choca en el commit y al releer no hay fila (o es DECLINED) → 409 «try again»."""
+        a, b = await _dos_usuarios(client)
+        id_a, id_b = a["user"]["id"], b["user"]["id"]
+        _gana_a_mitad(
+            monkeypatch,
+            requester_id=id_a,
+            addressee_id=id_b,
+            status="PENDING",
+            blocked_by=None,
+            antes_de_releer=antes_de_releer,
+        )
+
+        set_auth_cookies(client, b["cookies"])
+        respuesta = await client.post("/api/v1/friends/requests", json={"addressee_id": id_a})
+
+        assert respuesta.status_code == 409, respuesta.text
+        # El de InvalidFriendshipStatusViolation, no el de «ya hay una solicitud»
+        assert "try again" in respuesta.json()["detail"], respuesta.text
+        # La solicitud de B no se ha guardado: lo que quede es solo lo de A
+        assert all(fila[0] == id_a for fila in await _filas_de_la_pareja())
 
 
 class TestLaUnidadDeTrabajoTraduceElChoqueAlConfirmar:
