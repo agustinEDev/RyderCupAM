@@ -29,11 +29,6 @@ class ApprovedCourseSearch:
     longitude: float | None = None
     radius_km: float | None = None
 
-    @property
-    def has_position(self) -> bool:
-        """True si hay una posición desde la que medir distancias."""
-        return self.latitude is not None and self.longitude is not None
-
 
 @dataclass(frozen=True)
 class ApprovedCoursePage:

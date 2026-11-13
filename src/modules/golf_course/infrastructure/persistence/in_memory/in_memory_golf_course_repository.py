@@ -126,15 +126,15 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
             courses = [gc for gc in courses if needle in gc.name.casefold()]
 
         distances: dict[str, float] = {}
-        if search.has_position:
+        # Las dos, para que el tipo sepa que no son None
+        latitude, longitude = search.latitude, search.longitude
+        if latitude is not None and longitude is not None:
             located = []
             for course in courses:
                 location = course.location
                 if location.latitude is None or location.longitude is None:
                     continue
-                distance = _haversine_km(
-                    search.latitude, search.longitude, location.latitude, location.longitude
-                )
+                distance = _haversine_km(latitude, longitude, location.latitude, location.longitude)
                 if search.radius_km is not None and distance > search.radius_km:
                     continue
                 distances[str(course.id)] = round(distance, 3)
@@ -178,7 +178,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         Returns:
             Lista de campos creados por ese usuario
         """
-        return [gc for gc in self._golf_courses.values() if gc.requested_by == creator_id]
+        return [gc for gc in self._golf_courses.values() if gc.creator_id == creator_id]
 
     async def count_by_approval_status(self, approval_status: ApprovalStatus) -> int:
         """

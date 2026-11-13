@@ -202,8 +202,10 @@ class GolfCourseRepository(IGolfCourseRepository):
             filters.append(columns.name.ilike(f"%{_escape_like(search.name)}%", escape="\\"))
 
         distance = None
-        if search.has_position:
-            distance = _distance_km(columns, search.latitude, search.longitude)
+        # Las dos, para que el tipo sepa que no son None
+        latitude, longitude = search.latitude, search.longitude
+        if latitude is not None and longitude is not None:
+            distance = _distance_km(columns, latitude, longitude)
             # Sin coordenadas no hay distancia que calcular, y ordenar por NULL
             # los pondría todos al final igualmente: mejor no devolverlos
             filters.append(columns.latitude.is_not(None))
@@ -225,34 +227,39 @@ class GolfCourseRepository(IGolfCourseRepository):
         # campo que ya tiene en la cabeza, y lo recorre por su nombre. Ordenar
         # por `created_at` descendente hacía además que el lote de la RFEG,
         # importado de la A a la Z, saliera justo del revés
-        stmt = select(GolfCourse).where(*filters)
-        if distance is not None:
-            stmt = stmt.add_columns(distance.label("distance_km")).order_by(
-                distance.asc(), columns.id.asc()
-            )
-        else:
-            stmt = stmt.order_by(columns.name.asc(), columns.id.asc())
-
+        #
         # selectinload y no joinedload: el join a las salidas multiplica las
         # filas, así que un LIMIT cortaría por la mitad las salidas de un campo
-        # en vez de por el número de campos pedido
-        stmt = stmt.options(selectinload(GolfCourse._tees))
-
-        if search.offset:
-            stmt = stmt.offset(search.offset)
-        if search.limit is not None:
-            stmt = stmt.limit(search.limit)
-
-        result = await self._session.execute(stmt)
+        # en vez de por el número de campos pedido. Un offset de 0 o un límite
+        # None no añaden nada a la consulta
+        tees = selectinload(GolfCourse._tees)
+        offset = search.offset or None
 
         courses: list[GolfCourse] = []
         distances: dict[str, float] = {}
         if distance is not None:
-            for course, distance_km in result.all():
+            # Una consulta por forma de fila: con la distancia, cada fila trae dos
+            with_distance = (
+                select(GolfCourse, distance.label("distance_km"))
+                .where(*filters)
+                .order_by(distance.asc(), columns.id.asc())
+                .options(tees)
+                .offset(offset)
+                .limit(search.limit)
+            )
+            for course, distance_km in (await self._session.execute(with_distance)).all():
                 courses.append(course)
                 distances[str(course.id)] = round(float(distance_km), 3)
         else:
-            courses = list(result.scalars().all())
+            by_name = (
+                select(GolfCourse)
+                .where(*filters)
+                .order_by(columns.name.asc(), columns.id.asc())
+                .options(tees)
+                .offset(offset)
+                .limit(search.limit)
+            )
+            courses = list((await self._session.execute(by_name)).scalars().all())
 
         return ApprovedCoursePage(courses=courses, total=int(total or 0), distances_km=distances)
 

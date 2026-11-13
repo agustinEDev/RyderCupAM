@@ -29,7 +29,7 @@ class PasswordHistoryIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: PasswordHistoryId | str, dialect) -> str | None:
+    def process_bind_param(self, value: PasswordHistoryId | str | None, dialect) -> str | None:
         """Convierte PasswordHistoryId o string a string para BD."""
         if isinstance(value, PasswordHistoryId):
             return str(value.value)
@@ -37,7 +37,7 @@ class PasswordHistoryIdDecorator(TypeDecorator):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> PasswordHistoryId | None:
+    def process_result_value(self, value: str | None, dialect) -> PasswordHistoryId | None:
         """Convierte el string de BD de vuelta a PasswordHistoryId."""
         if value is None:
             return None
@@ -51,7 +51,7 @@ class UserIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: UserId | str, dialect) -> str | None:
+    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
         """Convierte UserId o string a string para BD."""
         if isinstance(value, UserId):
             return str(value.value)
@@ -59,7 +59,7 @@ class UserIdDecorator(TypeDecorator):
             return value
         return None
 
-    def process_result_value(self, value: str, dialect) -> UserId | None:
+    def process_result_value(self, value: str | None, dialect) -> UserId | None:
         """Convierte el string de BD de vuelta a UserId."""
         if value is None:
             return None
