@@ -14,6 +14,8 @@ from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.exceptions.social_violations import (
     BlockedUserViolation,
     DuplicateFriendRequestViolation,
+    DuplicateFriendshipViolation,
+    InvalidFriendshipStatusViolation,
     SelfFriendRequestViolation,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -59,18 +61,7 @@ class SendFriendRequestUseCase:
             existing = await self._uow.friendships.find_by_pair(requester_id, addressee_id)
 
             if existing is not None:
-                # Si me bloqueó, no existe para mí: lo mismo que un destinatario que no
-                # está, sin pista del bloqueo (F-09). Si le bloqueé yo, el 403 de siempre
-                if existing.bloqueado_por(addressee_id):
-                    raise AddresseeNotFoundError(f"User not found: {request.addressee_id}")
-                if existing.is_blocked():
-                    raise BlockedUserViolation(
-                        "Cannot send a friend request: a block exists between both users."
-                    )
-                if existing.is_pending() or existing.is_accepted():
-                    raise DuplicateFriendRequestViolation(
-                        "A friendship or pending request already exists between both users."
-                    )
+                self._rechaza_si_ya_hay_relacion(existing, addressee_id)
                 # DECLINED es terminal: se elimina el registro anterior y se reenvia.
                 # Flush explicito: el indice unico uq_friendship_pair (LEAST/GREATEST)
                 # rechaza el INSERT si el DELETE no se ha aplicado ya en BD (SQLAlchemy
@@ -83,9 +74,38 @@ class SendFriendRequestUseCase:
                 requester_id=requester_id,
                 addressee_id=addressee_id,
             )
-            await self._uow.friendships.add(friendship)
+            try:
+                await self._uow.friendships.add(friendship)
+                await self._uow.flush()
+            except DuplicateFriendshipViolation:
+                # Otra petición ganó la carrera del índice uq_friendship_pair entre la
+                # lectura y el INSERT: A me bloqueó o me escribió a la vez. Se relee lo
+                # que dejó y se responde como si ya estuviera al leer. Si no hay nada
+                # (o un DECLINED), cambió por medio: que lo intente de nuevo
+                ganadora = await self._uow.friendships.find_by_pair(requester_id, addressee_id)
+                if ganadora is not None:
+                    self._rechaza_si_ya_hay_relacion(ganadora, addressee_id)
+                raise InvalidFriendshipStatusViolation(
+                    "The relationship changed while sending the request; try again."
+                ) from None
 
         return await self._build_response(friendship)
+
+    @staticmethod
+    def _rechaza_si_ya_hay_relacion(existing: Friendship, addressee_id: UserId) -> None:
+        """Lo que se responde si la pareja ya tiene una relación que no deja escribir."""
+        # Si me bloqueó, no existe para mí: lo mismo que un destinatario que no
+        # está, sin pista del bloqueo (F-09). Si le bloqueé yo, el 403 de siempre
+        if existing.bloqueado_por(addressee_id):
+            raise AddresseeNotFoundError(f"User not found: {addressee_id}")
+        if existing.is_blocked():
+            raise BlockedUserViolation(
+                "Cannot send a friend request: a block exists between both users."
+            )
+        if existing.is_pending() or existing.is_accepted():
+            raise DuplicateFriendRequestViolation(
+                "A friendship or pending request already exists between both users."
+            )
 
     async def _build_response(self, friendship: Friendship) -> FriendshipResponseDTO:
         async with self._user_uow:

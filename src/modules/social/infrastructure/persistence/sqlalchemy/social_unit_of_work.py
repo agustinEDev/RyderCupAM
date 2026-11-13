@@ -1,5 +1,7 @@
 """Social Unit of Work - SQLAlchemy Implementation."""
 
+from typing import NoReturn
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +64,12 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
             await self.commit()
 
     async def commit(self) -> None:
-        await self._session.commit()
+        # El commit vacía lo que quede pendiente: si ese INSERT choca con la pareja,
+        # el mismo error de dominio que en flush() y no un IntegrityError suelto (500)
+        try:
+            await self._session.commit()
+        except IntegrityError as e:
+            await self._traduce_la_pareja_repetida(e)
 
     async def rollback(self) -> None:
         await self._session.rollback()
@@ -71,13 +78,17 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
         try:
             await self._session.flush()
         except IntegrityError as e:
-            await self._session.rollback()
-            if UQ_FRIENDSHIP_PAIR_CONSTRAINT in str(e.orig):
-                raise DuplicateFriendshipViolation(
-                    "A friendship or block relationship between these users "
-                    "was just created concurrently."
-                ) from e
-            raise
+            await self._traduce_la_pareja_repetida(e)
+
+    async def _traduce_la_pareja_repetida(self, error: IntegrityError) -> NoReturn:
+        """Deshace la transacción y traduce el choque con `uq_friendship_pair`."""
+        await self._session.rollback()
+        if UQ_FRIENDSHIP_PAIR_CONSTRAINT in str(error.orig):
+            raise DuplicateFriendshipViolation(
+                "A friendship or block relationship between these users "
+                "was just created concurrently."
+            ) from error
+        raise error
 
     def is_active(self) -> bool:
         return self._session.is_active
