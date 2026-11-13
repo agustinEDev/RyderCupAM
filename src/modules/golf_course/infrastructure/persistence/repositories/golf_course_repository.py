@@ -107,11 +107,17 @@ class GolfCourseRepository(IGolfCourseRepository):
             tees_changed = insp is not None and insp.attrs._tees.history.has_changes()
 
             if tees_changed:
-                await self._session.execute(
-                    delete(golf_course_tees_table).where(
-                        golf_course_tees_table.c.golf_course_id == golf_course._id
+                # Sin autoflush: el execute del DELETE vacía antes la sesión, y con
+                # ella los INSERT de las salidas nuevas, que chocan con las viejas
+                # en el índice único si repiten color y género (500 al editar un
+                # campo cambiando solo el nombre). Los tests van con autoflush=False
+                # y no lo veían; producción lleva el de por defecto
+                with self._session.no_autoflush:
+                    await self._session.execute(
+                        delete(golf_course_tees_table).where(
+                            golf_course_tees_table.c.golf_course_id == golf_course._id
+                        )
                     )
-                )
                 await self._session.flush()
 
         # Ahora sí, agregar/actualizar el aggregate
