@@ -7,13 +7,16 @@ proveedor y tarda lo mismo exista o no el correo).
 
 El login contesta sin esperar al proveedor de correo: el aviso se lanza como una
 tarea del propio proceso, con su propia sesión de BD, porque la de la petición se
-cierra al contestar. Si el proceso se reinicia justo entonces, ese correo se pierde
-(decidido así: el login no espera).
+cierra al contestar. Al apagar (cada despliegue) se esperan como mucho
+TOPE_AL_APAGAR_S y lo que siga se cancela (`drena_al_apagar`, 13 nov 2026). Un correo
+que va por el respaldo de un proveedor lento (hasta PRESUPUESTO_TOTAL, 25 s) puede
+quedar cortado igualmente.
 """
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -64,8 +67,8 @@ _PENDIENTES: set[asyncio.Task[None]] = set()
 
 async def espera_los_avisos_pendientes(tope_s: float | None = None) -> None:
     """
-    Espera a los avisos en marcha de ESTE bucle de eventos (para los tests; producción
-    no los espera, ni al apagar).
+    Espera a los avisos en marcha de ESTE bucle de eventos (para los tests; al apagar,
+    producción usa `drena_al_apagar`, con tope y cancelando lo que no acabe).
 
     Los de un bucle ya cerrado (un test anterior que no los esperó) no van a acabar
     nunca ni se pueden esperar desde aquí: se descartan. Con `tope_s`, si alguno no
@@ -88,6 +91,54 @@ async def espera_los_avisos_pendientes(tope_s: float | None = None) -> None:
         if sin_acabar and limite is not None and bucle.time() >= limite:
             nombres = ", ".join(sorted(t.get_name() for t in sin_acabar))
             raise TimeoutError(f"Avisos en segundo plano sin acabar tras {tope_s} s: {nombres}")
+
+
+# Lo que se espera al apagar: Render da unos 30 s desde que avisa del cierre (SIGTERM)
+TOPE_AL_APAGAR_S = 10.0
+
+
+async def drena_al_apagar(
+    otras: Iterable[asyncio.Task[Any]] = (), tope_s: float = TOPE_AL_APAGAR_S
+) -> None:
+    """
+    Al apagar: espera a los avisos en marcha y a `otras` tareas, como mucho `tope_s`.
+
+    Lo que no acaba a tiempo se cancela, y un fallo se registra sin parar el apagado.
+    Decidido el 13 nov 2026 (opción 2): antes, un reinicio (cada despliegue) perdía los
+    correos que estuvieran saliendo; una cola persistente se descartó por excesiva.
+    """
+    bucle = asyncio.get_running_loop()
+    tareas = [t for t in (*tuple(_PENDIENTES), *otras) if t.get_loop() is bucle and not t.done()]
+    if not tareas:
+        return
+    acabadas, sin_acabar = await asyncio.wait(tareas, timeout=tope_s)
+    for tarea in acabadas:
+        if not tarea.cancelled() and tarea.exception() is not None:
+            # Solo el tipo: el mensaje puede llevar el correo (A09, como el resto)
+            logger.error(
+                "Background task failed while shutting down: %s (%s)",
+                tarea.get_name(),
+                type(tarea.exception()).__name__,
+            )
+    if sin_acabar:
+        nombres = ", ".join(sorted(t.get_name() for t in sin_acabar))
+        logger.warning(
+            "Shutting down: %d background task(s) still running after %s s are cancelled: %s",
+            len(sin_acabar),
+            tope_s,
+            nombres,
+        )
+        for tarea in sin_acabar:
+            tarea.cancel()
+        # Un segundo para que cierren (sesiones de BD); no se espera más
+        _, siguen = await asyncio.wait(sin_acabar, timeout=1)
+        for tarea in sin_acabar - siguen:
+            if not tarea.cancelled() and tarea.exception() is not None:
+                logger.error(
+                    "Background task failed while being cancelled: %s (%s)",
+                    tarea.get_name(),
+                    type(tarea.exception()).__name__,
+                )
 
 
 class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):

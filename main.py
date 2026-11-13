@@ -29,6 +29,7 @@ from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.arranque_seguro import comprueba_la_configuracion_de_seguridad  # noqa: E402
+from src.config.aviso_en_segundo_plano import drena_al_apagar  # noqa: E402
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
@@ -190,9 +191,16 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tarea.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await tarea
-    # El log de seguridad escribe en su hilo: lo pendiente se escribe y lo que llegue
-    # después, directamente (/code-review de la fase 2)
-    get_security_logger().para()
+    # Los correos en segundo plano que estén saliendo, y las actualizaciones de hándicaps
+    # en marcha: se esperan como mucho TOPE_AL_APAGAR_S y lo demás se cancela (13 nov)
+    try:
+        await drena_al_apagar(
+            lanzador.tareas_en_marcha() if isinstance(lanzador, LanzadorEnSegundoPlano) else ()
+        )
+    finally:
+        # El log de seguridad escribe en su hilo: lo pendiente se escribe y lo que llegue
+        # después, directamente (/code-review de la fase 2). También si el drenaje falla
+        get_security_logger().para()
     print("INFO:     Apagando aplicación...")
 
 

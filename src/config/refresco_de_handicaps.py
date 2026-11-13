@@ -84,6 +84,10 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         # Referencias fuertes: una tarea sin ellas puede desaparecer a medias
         self._tareas: set[asyncio.Task[int | None]] = set()
 
+    def tareas_en_marcha(self) -> list[asyncio.Task[int | None]]:
+        """Las actualizaciones que siguen corriendo, para esperarlas al apagar."""
+        return [t for t in self._tareas if not t.done()]
+
     def lanzar(self, update_id: uuid.UUID) -> None:
         tarea = asyncio.create_task(self.pasada(update_id))
         self._tareas.add(tarea)
