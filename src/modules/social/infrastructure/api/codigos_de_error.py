@@ -22,6 +22,7 @@ from src.modules.social.application.exceptions import (
 from src.modules.social.domain.exceptions.social_violations import (
     BlockedUserViolation,
     DuplicateFriendRequestViolation,
+    DuplicateFriendshipViolation,
     InvalidFriendshipStatusViolation,
     SelfFriendRequestViolation,
 )
@@ -41,6 +42,9 @@ CODIGOS: dict[type[Exception], int] = {
     PhotoNotFoundError: status.HTTP_404_NOT_FOUND,
     # 409: choca con lo que ya hay
     DuplicateFriendRequestViolation: status.HTTP_409_CONFLICT,
+    # La UoW traduce así el choque con uq_friendship_pair; si un caso de uso no
+    # lo recoge, es otra petición que ganó la carrera, no un error del servidor
+    DuplicateFriendshipViolation: status.HTTP_409_CONFLICT,
     InvalidFriendshipStatusViolation: status.HTTP_409_CONFLICT,
     ProfileGalleryFullError: status.HTTP_409_CONFLICT,
 }
