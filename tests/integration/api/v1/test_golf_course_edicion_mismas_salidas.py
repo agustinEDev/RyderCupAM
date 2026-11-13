@@ -19,24 +19,20 @@ las fixtures de abajo las quitan para estos tests:
 """
 
 import uuid
-from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from main import app as fastapi_app
-from src.config.database import async_session_maker
-from src.config.dependencies import get_db_session
 from tests.conftest import (
-    _URL_DE_LA_BD_DE_TEST,
     approve_golf_course,
     create_admin_user,
     create_authenticated_user,
     create_golf_course,
     sql_en_la_bd_de_test,
 )
+
+pytestmark = pytest.mark.usefixtures("sesion_como_en_produccion")
 
 HOYOS = [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)]
 
@@ -79,25 +75,6 @@ async def _indices_unicos_de_produccion(client: AsyncClient) -> None:
         "ON golf_course_tees (golf_course_id, identifier, COALESCE(tee_gender, 'NONE')) "
         "WHERE color = 'OTHER'"
     )
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _sesion_como_en_produccion(client: AsyncClient) -> AsyncGenerator[None, None]:
-    """La sesión de las peticiones, con la configuración de la de producción."""
-    motor = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
-    fabrica = async_sessionmaker(**{**async_session_maker.kw, "bind": motor})
-
-    async def sesion() -> AsyncGenerator[AsyncSession, None]:
-        async with fabrica() as abierta:
-            yield abierta
-
-    anterior = fastapi_app.dependency_overrides[get_db_session]
-    fastapi_app.dependency_overrides[get_db_session] = sesion
-    try:
-        yield
-    finally:
-        fastapi_app.dependency_overrides[get_db_session] = anterior
-        await motor.dispose()
 
 
 def _campo(nombre: str, salidas: list[dict]) -> dict:
