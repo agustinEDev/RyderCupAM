@@ -187,6 +187,44 @@ class TestSolicitudQuePierdeLaCarrera:
         # La solicitud de B no se ha guardado: lo que quede es solo lo de A
         assert all(fila[0] == id_a for fila in await _filas_de_la_pareja())
 
+    @pytest.mark.asyncio
+    async def test_contra_mi_propio_bloqueo_responde_el_403_de_siempre(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """N2: gana el bloqueo que B hace de A → 403, como si ya existiera."""
+        a, b = await _dos_usuarios(client)
+        id_a, id_b = a["user"]["id"], b["user"]["id"]
+        _gana_a_mitad(
+            monkeypatch, requester_id=id_b, addressee_id=id_a, status="BLOCKED", blocked_by=id_b
+        )
+
+        set_auth_cookies(client, b["cookies"])
+        respuesta = await client.post("/api/v1/friends/requests", json={"addressee_id": id_a})
+
+        assert respuesta.status_code == 403, respuesta.text
+        assert await _filas_de_la_pareja() == [(id_b, id_a, "BLOCKED", id_b)]
+
+
+class TestUnChoqueSinTraducirEnElCasoDeUso:
+    @pytest.mark.asyncio
+    async def test_si_el_choque_de_la_pareja_se_escapa_la_api_responde_409(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """N1: un DuplicateFriendshipViolation que sale del caso de uso → 409, no 500."""
+        a, b = await _dos_usuarios(client)
+
+        async def choca(self, user_id_a, user_id_b):
+            raise DuplicateFriendshipViolation("concurrently")
+
+        monkeypatch.setattr(SQLAlchemyFriendshipRepository, "find_by_pair", choca)
+
+        set_auth_cookies(client, b["cookies"])
+        respuesta = await client.post(
+            "/api/v1/friends/requests", json={"addressee_id": a["user"]["id"]}
+        )
+
+        assert respuesta.status_code == 409, respuesta.text
+
 
 class TestLaUnidadDeTrabajoTraduceElChoqueAlConfirmar:
     @pytest.mark.asyncio

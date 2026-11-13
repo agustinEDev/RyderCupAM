@@ -136,6 +136,9 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.social.application.exceptions.ProfileGalleryFullError": 409,
     "src.modules.social.domain.exceptions.social_violations.BlockedUserViolation": 403,
     "src.modules.social.domain.exceptions.social_violations.DuplicateFriendRequestViolation": 409,
+    # Nuevo tras la fase 5 (13 nov 2026): el choque con uq_friendship_pair que se escapa
+    # de un caso de uso era un 500; ahora el 409 de los demás conflictos sociales
+    "src.modules.social.domain.exceptions.social_violations.DuplicateFriendshipViolation": 409,
     "src.modules.social.domain.exceptions.social_violations.InvalidFriendshipStatusViolation": 409,
     "src.modules.social.domain.exceptions.social_violations.SelfFriendRequestViolation": 400,
     "src.modules.user.domain.errors.handicap_errors.HandicapNotFoundError": 404,
