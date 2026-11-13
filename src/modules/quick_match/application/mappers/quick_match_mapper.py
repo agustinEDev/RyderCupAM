@@ -51,7 +51,8 @@ class QuickMatchDTOMapper:
 
         participants_dto = []
         for p in quick_match.participants:
-            if p.is_guest:
+            # `is_guest` es esto mismo; mirado aquí, el tipo sabe que hay `user_id`
+            if p.user_id is None:
                 # Un invitado no tiene cuenta, así que tampoco alias: se queda
                 # con el nombre que tecleó quien lo añadió (BE #239)
                 name = f"{p.first_name} {p.last_name}"

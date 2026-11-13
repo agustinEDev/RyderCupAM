@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -305,12 +306,14 @@ class PublishRoundAchievementsUseCase:
         ]
 
     @staticmethod
-    def _payload(logro: DetectedAchievement, golf_course_id: str, holes_played: int) -> dict:
+    def _payload(
+        logro: DetectedAchievement, golf_course_id: str, holes_played: int
+    ) -> dict[str, Any]:
         """
         El detalle propio de cada tipo, para que el feed no tenga que ir a
         buscarlo a otras tablas al pintar la entrada.
         """
-        payload: dict = {
+        payload: dict[str, Any] = {
             "golf_course_id": golf_course_id,
             "holes_played": holes_played,
         }

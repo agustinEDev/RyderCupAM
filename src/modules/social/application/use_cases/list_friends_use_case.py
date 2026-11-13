@@ -42,7 +42,7 @@ class ListFriendsUseCase:
         user_ids = list({uid for f in friendships for uid in (f.requester_id, f.addressee_id)})
         async with self._user_uow:
             users = await self._user_uow.users.find_by_ids(user_ids) if user_ids else []
-        by_id = {user.id: user for user in users if user.id is not None}
+        by_id = {user.id: user for user in users}
 
         items = [self._to_dto(f, by_id) for f in friendships]
 

@@ -1,5 +1,7 @@
 """Caso de Uso: Ver el perfil de un jugador."""
 
+from typing import TypedDict
+
 from src.modules.social.application.dto.profile_dto import (
     FriendshipStateDTO,
     PlayerProfileResponseDTO,
@@ -25,6 +27,18 @@ from src.modules.user.domain.value_objects.user_id import UserId
 NO_RELATIONSHIP = "NONE"
 PENDING_SENT = "PENDING_SENT"
 PENDING_RECEIVED = "PENDING_RECEIVED"
+
+
+class _Ficha(TypedDict):
+    """Lo que se lee del perfil dentro de la transacción, con su tipo para el DTO."""
+
+    id: str
+    first_name: str
+    last_name: str
+    display_name: str
+    avatar_source: str
+    avatar_preset_id: int | None
+    has_avatar_upload: bool
 
 
 class GetPlayerProfileUseCase:
@@ -76,7 +90,7 @@ class GetPlayerProfileUseCase:
             if user is None or not user.is_active:
                 raise ProfileNotVisibleError("Profile not found")
 
-            ficha = {
+            ficha: _Ficha = {
                 "id": str(user.id.value),
                 "first_name": user.first_name,
                 "last_name": user.last_name,

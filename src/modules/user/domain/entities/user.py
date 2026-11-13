@@ -1,5 +1,6 @@
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from src.modules.user.domain.exceptions.email_change_exceptions import (
     EmailChangeExpiredError,
@@ -1344,7 +1345,9 @@ class User:
 
     # === Account Lockout Methods ===
 
-    def record_failed_login(self, ahora: datetime | None = None) -> str | None:
+    def record_failed_login(
+        self, ahora: datetime | None = None
+    ) -> Literal["dia", "respaldo", "aviso"] | None:
         """
         Apunta un login fallido en el RESPALDO de la cuenta (BE #732, ADR-043).
 

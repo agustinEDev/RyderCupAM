@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
@@ -152,11 +152,11 @@ class FindUserRequestDTO(BaseModel):
 
     @field_validator("email", "full_name", mode="before")
     @classmethod
-    def check_at_least_one_field(cls, v):
+    def check_at_least_one_field(cls, v: Any) -> Any:
         """Valida que se proporcione al menos un campo de búsqueda."""
         return v
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Valida que se proporcione al menos un criterio de búsqueda."""
         if not self.email and not self.full_name:
             raise ValueError("Debe proporcionar al menos 'email' o 'full_name' para la búsqueda.")
@@ -358,7 +358,7 @@ class UserResponseDTO(BaseModel):
 
     @field_validator("id", "email", "country_code", "handicap", "gender", mode="before")
     @classmethod
-    def convert_value_objects(cls, v):
+    def convert_value_objects(cls, v: Any) -> Any:
         """
         Convierte nuestros Value Objects a tipos primitivos que Pydantic entiende.
         Se ejecuta ANTES de la validación estándar de Pydantic.
@@ -586,7 +586,7 @@ class UpdateProfileRequestDTO(BaseModel):
 
     @field_validator("first_name", "last_name")
     @classmethod
-    def sanitize_and_validate_name(cls, v: str | None, info) -> str | None:
+    def sanitize_and_validate_name(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Sanitiza HTML y valida formato de nombre según NameValidator."""
         if v is None:
             return None
@@ -597,9 +597,9 @@ class UpdateProfileRequestDTO(BaseModel):
             raise ValueError(f"{info.field_name} no puede estar vacío")
 
         # Validar formato de nombre (sin números ni caracteres especiales)
-        return NameValidator.validate(sanitized, field_name=info.field_name)
+        return NameValidator.validate(sanitized, field_name=str(info.field_name))
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Valida que se proporcione al menos un campo."""
         # El alias se mira por si VINO en la petición, no por su valor: mandar
         # `alias: ""` es una petición legítima —«quítame el alias»— y con la
@@ -673,7 +673,7 @@ class UpdateSecurityRequestDTO(BaseModel):
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Valida que se proporcione al menos un campo y confirma password si aplica."""
         if not self.new_email and not self.new_password:
             raise ValueError("Debe proporcionar 'new_email' o 'new_password'.")

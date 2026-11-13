@@ -10,6 +10,7 @@ from src.modules.quick_match.application.exceptions import (
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
 from src.modules.quick_match.application.services.roster_checks import profile_handicaps
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -64,7 +65,7 @@ class StartQuickMatchUseCase:
             quick_match, self._user_uow, requester_id=requester_id
         )
 
-    async def _profile_handicaps(self, quick_match) -> dict[UserId, float | None]:
+    async def _profile_handicaps(self, quick_match: QuickMatch) -> dict[UserId, float | None]:
         """El del perfil de cada registrado, dentro de la transacción (ver `profile_handicaps`)."""
         user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
         return await profile_handicaps(self._user_uow, user_ids)

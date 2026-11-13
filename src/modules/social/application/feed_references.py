@@ -9,6 +9,7 @@ enseñaria a quien no debe.
 """
 
 from collections.abc import Sequence
+from typing import Any
 
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -116,14 +117,14 @@ async def campos_de(
     }
 
 
-def nombrados_en(payload: dict) -> set[UserId]:
+def nombrados_en(payload: dict[str, Any]) -> set[UserId]:
     """
     Los jugadores con cuenta que nombra un resultado: `opponent_ids` y
     `partner_ids` en los de torneo, `opponents` y `partners` en los de partida
     rapida (el invitado va por su nombre). Lo ilegible se ignora: el `payload`
     es JSONB y nada garantiza su forma con los años.
     """
-    crudos: list = []
+    crudos: list[Any] = []
     for clave in ("opponent_ids", "partner_ids"):
         valor = payload.get(clave)
         if isinstance(valor, list):

@@ -7,6 +7,7 @@ GeoJSON pone la longitud ANTES que la latitud, al revés que el resto de la app.
 from typing import Any
 
 from geojson_pydantic import Feature, FeatureCollection, LineString, Point, Polygon
+from geojson_pydantic.geometries import Geometry
 from geojson_pydantic.types import Position2D
 
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
@@ -26,7 +27,9 @@ def _xy(point: GeoPoint) -> Position2D:
     return Position2D(longitude=point.longitude, latitude=point.latitude)
 
 
-def _feature(geometry: Any, hole: int, kind: str, source: PositionSource) -> Feature:
+def _feature(
+    geometry: Any, hole: int, kind: str, source: PositionSource
+) -> Feature[Geometry, dict[str, Any]]:
     return Feature(
         type="Feature",
         geometry=geometry,
@@ -34,8 +37,8 @@ def _feature(geometry: Any, hole: int, kind: str, source: PositionSource) -> Fea
     )
 
 
-def _features(hole_map: CourseHoleMap) -> list[Feature]:
-    features: list[Feature] = []
+def _features(hole_map: CourseHoleMap) -> list[Feature[Geometry, dict[str, Any]]]:
+    features: list[Feature[Geometry, dict[str, Any]]] = []
     for hole in hole_map.holes:
         features.append(
             _feature(

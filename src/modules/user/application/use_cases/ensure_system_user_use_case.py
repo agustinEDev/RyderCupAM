@@ -84,7 +84,7 @@ class EnsureSystemUserUseCase:
             existing = await self._uow.users.find_by_email(Email(email_str))
             if existing is not None:
                 self._require_system_account(existing, email_str)
-                return self._require_id(existing)
+                return existing.id
 
         # El bcrypt, sin transacción abierta (BE #283)
         system_user = await run_bcrypt(
@@ -103,9 +103,9 @@ class EnsureSystemUserUseCase:
             existing = await self._uow.users.find_by_email(Email(email_str))
             if existing is not None:
                 self._require_system_account(existing, email_str)
-                return self._require_id(existing)
+                return existing.id
             await self._uow.users.save(system_user)
-            return self._require_id(system_user)
+            return system_user.id
 
     @staticmethod
     def _require_system_account(user: User, email_str: str) -> None:
@@ -135,16 +135,3 @@ class EnsureSystemUserUseCase:
                 f"The account for '{email_str}' is an administrator, so it is not the system "
                 "account. Refusing to attribute imported data to it."
             )
-
-    @staticmethod
-    def _require_id(user: User) -> UserId:
-        """
-        Devuelve el id del usuario, que a estas alturas siempre existe.
-
-        Desde la fase 5, `User.id` ya no admite None en el tipo: un usuario
-        recién creado y uno recuperado de la base de datos lo tienen siempre.
-        Esta comprobación sobra y se quitará con la capa de aplicación estricta.
-        """
-        if user.id is None:
-            raise ValueError("The system user has no id, which should never happen")
-        return user.id

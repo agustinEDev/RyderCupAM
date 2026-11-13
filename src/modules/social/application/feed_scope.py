@@ -9,6 +9,7 @@ discrepando en cuanto una de las dos cambiara.
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.entities.friendship import Friendship
@@ -112,7 +113,7 @@ async def resolve_feed_scope(
     )
 
 
-def payload_for(evento: ActivityEvent, viewer_id: UserId) -> dict:
+def payload_for(evento: ActivityEvent, viewer_id: UserId) -> dict[str, Any]:
     """
     El detalle de un evento tal como lo puede ver quien mira.
 

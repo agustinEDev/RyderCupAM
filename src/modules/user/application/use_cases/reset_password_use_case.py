@@ -213,6 +213,9 @@ class ResetPasswordUseCase:
                 ),
             )
             raise InvalidResetTokenError()
+        # El usuario leído, con su tipo: `user` se reasigna más abajo y las lambdas
+        # de los registros no ven el estrechamiento (mismo objeto)
+        encontrado = user
 
         # Lo barato antes del bcrypt y sin transacción (BE #283): un enlace que no vale
         # responde sin calcular nada; luego la política y el hash de la nueva
@@ -225,8 +228,8 @@ class ResetPasswordUseCase:
             registra_sin_romper(
                 "Reset password",
                 lambda: security_logger.log_password_reset_completed(
-                    user_id=str(user.id.value),
-                    email=str(user.email.value),
+                    user_id=str(encontrado.id.value),
+                    email=str(encontrado.email.value),
                     success=False,
                     failure_reason=fallo,
                     ip_address=ip_address,
@@ -245,8 +248,8 @@ class ResetPasswordUseCase:
                 registra_sin_romper(
                     "Reset password",
                     lambda: security_logger.log_password_reset_completed(
-                        user_id=str(user.id.value),
-                        email=str(user.email.value),
+                        user_id=str(encontrado.id.value),
+                        email=str(encontrado.email.value),
                         success=False,
                         failure_reason="Account deleted during reset",
                         ip_address=ip_address,
@@ -293,7 +296,8 @@ class ResetPasswordUseCase:
             total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
             password_history = PasswordHistory.create(
                 user_id=user.id,
-                password_hash=user.password.hashed_value,
+                # `nueva` es la que acaba de quedar puesta (`user.password is nueva`)
+                password_hash=nueva.hashed_value,
                 total_history_count=total_history_count,
             )
             await self._uow.password_history.save(password_history)

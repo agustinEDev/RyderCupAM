@@ -4,12 +4,16 @@ from dataclasses import dataclass, field
 from datetime import date as date_type
 from decimal import Decimal
 
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -49,6 +53,7 @@ from src.shared.domain.services.instante_utc import en_utc
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.services.stroke_play_scoring import (
     HoleSetup,
+    ParticipantTotals,
     StrokePlayScoring,
 )
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -77,7 +82,7 @@ class _QuickMatchRaw:
 
     match: QuickMatch
     participant: QuickMatchParticipant
-    scores_by_participant: dict = field(default_factory=dict)
+    scores_by_participant: dict[ParticipantId, dict[int, int | None]] = field(default_factory=dict)
 
 
 @dataclass
@@ -89,7 +94,7 @@ class _CompetitionMatchRaw:
     tournament_name: str | None
     # La tarjeta del jugador, para poder dar sus golpes y sus puntos: el
     # partido guarda quién ganó, no cómo jugó cada uno
-    hole_scores: list
+    hole_scores: list[HoleScore]
     # Una competición scratch: la vuelta propia va sin golpes (BE #517)
     scratch: bool = False
 
@@ -182,7 +187,7 @@ class GetRecentMatchesUseCase:
                 hole_scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(
                     match.id
                 )
-                scores_by_participant: dict = {}
+                scores_by_participant: dict[ParticipantId, dict[int, int | None]] = {}
                 for hole_score in hole_scores:
                     scores_by_participant.setdefault(hole_score.participant_id, {})[
                         hole_score.hole_number
@@ -208,9 +213,9 @@ class GetRecentMatchesUseCase:
         competición: un partido por sí solo no sabe cuándo ni dónde se jugó.
         """
         raws: list[_CompetitionMatchRaw] = []
-        rounds_cache: dict = {}
-        competition_names: dict = {}
-        scratch_competitions: set = set()
+        rounds_cache: dict[RoundId, Round | None] = {}
+        competition_names: dict[CompetitionId, str | None] = {}
+        scratch_competitions: set[CompetitionId] = set()
 
         async with self._competition_uow:
             matches = await self._competition_uow.matches.find_completed_for_player(
@@ -273,7 +278,7 @@ class GetRecentMatchesUseCase:
 
         async with self._user_uow:
             users = await self._user_uow.users.find_by_ids(list(user_ids))
-        return {user.id: user for user in users if user.id is not None}
+        return {user.id: user for user in users}
 
     async def _load_golf_courses(
         self,
@@ -444,7 +449,7 @@ class GetRecentMatchesUseCase:
         raw: _QuickMatchRaw,
         course: GolfCourse | None,
         users_by_id: dict[UserId, User],
-    ) -> dict:
+    ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Reparto de golpes de una partida rápida del historial.
 
@@ -563,7 +568,7 @@ class GetRecentMatchesUseCase:
 
     @staticmethod
     def _side_pars(
-        raw: _QuickMatchRaw, course: GolfCourse | None, side_in_order: list
+        raw: _QuickMatchRaw, course: GolfCourse | None, side_in_order: list[ParticipantId]
     ) -> dict[int, int]:
         """
         El par de cada hoyo para la barra del bando, o vacío si no se sabe.
@@ -591,7 +596,7 @@ class GetRecentMatchesUseCase:
         raw: _QuickMatchRaw,
         course: GolfCourse | None,
         strokes: dict[ParticipantId, ParticipantStrokes],
-    ):
+    ) -> ParticipantTotals | None:
         """Puntos y golpes del jugador en una partida libre; None si no hay con qué."""
         if course is None:
             return None
@@ -622,10 +627,10 @@ class GetRecentMatchesUseCase:
     def _scorecard_totals(
         self,
         raw: _CompetitionMatchRaw,
-        hole_card: list,
+        hole_card: list[Hole],
         playing_handicap: int | None,
         side_ball: bool = False,
-    ) -> tuple:
+    ) -> tuple[int | None, int | None, int | None]:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
@@ -731,6 +736,7 @@ class GetRecentMatchesUseCase:
         cls, participant: QuickMatchParticipant, users_by_id: dict[UserId, User]
     ) -> str:
         """Un invitado trae su nombre dentro de la partida; un registrado, en su perfil."""
-        if participant.is_guest:
+        # `is_guest` es esto mismo; mirado aquí, el tipo sabe que hay `user_id`
+        if participant.user_id is None:
             return f"{participant.first_name} {participant.last_name}"
         return cls._user_name(participant.user_id, users_by_id)
