@@ -1,7 +1,9 @@
 """El doble en memoria del repositorio de competiciones cumple la interfaz."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
+
+import pytest
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -44,6 +46,41 @@ async def test_find_by_status_with_limit_and_offset_returns_that_page():
     pagina = await repo.find_by_status(CompetitionStatus.DRAFT, limit=1, offset=1)
 
     assert len(pagina) == 1
+
+
+def _dos_de_un_creador_la_antigua_guardada_antes():
+    """Two competitions of the same creator: the older one is saved first, as in real life."""
+    antigua, nueva = _competicion("Antigua"), _competicion("Nueva")
+    nueva._creator_id = antigua.creator_id
+    antigua._created_at = datetime(2026, 1, 1, 10, 0)
+    nueva._created_at = datetime(2026, 6, 1, 10, 0)
+    return antigua, nueva
+
+
+@pytest.mark.parametrize(
+    "pide",
+    [
+        pytest.param(
+            lambda repo, c: repo.find_by_status(CompetitionStatus.DRAFT, limit=1), id="status"
+        ),
+        pytest.param(lambda repo, c: repo.find_by_creator(c.creator_id, limit=1), id="creator"),
+        pytest.param(lambda repo, c: repo.find_all(limit=1), id="all"),
+    ],
+)
+async def test_the_first_page_holds_the_newest_competition_as_in_sql(pide):
+    """
+    Given: An older competition saved before a newer one
+    When: Asking for the first page of one
+    Then: The newer one comes back, as the SQL repository orders by created_at descending
+    """
+    repo = InMemoryCompetitionRepository()
+    antigua, nueva = _dos_de_un_creador_la_antigua_guardada_antes()
+    await repo.save(antigua)
+    await repo.save(nueva)
+
+    pagina = await pide(repo, antigua)
+
+    assert [c.id for c in pagina] == [nueva.id]
 
 
 async def test_delete_existing_competition_returns_true():

@@ -1,6 +1,6 @@
 """In-Memory Competition Repository para testing."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from src.modules.competition.domain.entities.competition import Competition
@@ -19,6 +19,11 @@ from src.modules.competition.domain.value_objects.competition_status import (
 )
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
+
+
+def _mas_recientes_primero(competiciones: Iterable[Competition]) -> list[Competition]:
+    """El orden del repositorio de SQL (created_at descendente), para paginar igual."""
+    return sorted(competiciones, key=lambda c: c.created_at, reverse=True)
 
 
 class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
@@ -66,14 +71,14 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
     ) -> list[Competition]:
         """Busca las competiciones creadas por un usuario, paginadas como la de SQL."""
         suyas = [comp for comp in self._competitions.values() if comp.creator_id == creator_id]
-        return suyas[offset : offset + limit]
+        return _mas_recientes_primero(suyas)[offset : offset + limit]
 
     async def find_by_status(
         self, status: CompetitionStatus, limit: int = 100, offset: int = 0
     ) -> list[Competition]:
         """Busca las competiciones con un estado, paginadas como la de SQL."""
         con_ese = [comp for comp in self._competitions.values() if comp.status == status]
-        return con_ese[offset : offset + limit]
+        return _mas_recientes_primero(con_ese)[offset : offset + limit]
 
     async def exists_with_name(
         self,
@@ -93,7 +98,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
     async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
         """Retorna las competiciones, paginadas como el repositorio de verdad."""
-        return list(self._competitions.values())[offset : offset + limit]
+        return _mas_recientes_primero(self._competitions.values())[offset : offset + limit]
 
     async def count_all(self) -> int:
         """Cuenta el total de competiciones en el sistema."""
