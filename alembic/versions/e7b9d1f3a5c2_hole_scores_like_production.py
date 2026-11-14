@@ -17,8 +17,6 @@ Create Date: 2026-11-14
 
 """
 
-from sqlalchemy import text
-
 from alembic import op
 
 revision = "e7b9d1f3a5c2"
@@ -26,42 +24,49 @@ down_revision = "d4f6a8c0e2b5"
 branch_labels = None
 depends_on = None
 
-# La relación se busca por tabla y columna, no por su nombre: si en alguna base se llamara
-# distinto, se cambiaría igual (/code-review)
-_FKS_DEL_JUGADOR = """
-    SELECT c.conname, c.confdeltype
-    FROM pg_constraint c
-    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
-    WHERE c.conrelid = 'public.hole_scores'::regclass
-      AND c.contype = 'f'
-      AND a.attname = 'player_user_id'
+# Un bloque DO: decide dentro de la base, así que vale también para `upgrade --sql` (el
+# Build Docker del CI lo genera sin conexión). La relación se busca por tabla y columna,
+# no por su nombre: si en alguna base se llamara distinto, se cambiaría igual (/code-review)
+_ALINEA = """
+DO $$
+DECLARE
+    fk record;
+BEGIN
+    FOR fk IN
+        SELECT c.conname
+        FROM pg_constraint c
+        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+        WHERE c.conrelid = 'public.hole_scores'::regclass
+          AND c.contype = 'f'
+          AND a.attname = 'player_user_id'
+          AND c.confdeltype <> 'a'
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE public.hole_scores DROP CONSTRAINT %1$I, '
+            'ADD CONSTRAINT %1$I FOREIGN KEY (player_user_id) REFERENCES public.users(id)',
+            fk.conname
+        );
+    END LOOP;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'hole_scores'
+          AND column_name IN ('created_at', 'updated_at')
+          AND data_type = 'timestamp with time zone'
+    ) THEN
+        ALTER TABLE public.hole_scores
+            ALTER COLUMN created_at TYPE timestamp without time zone
+                USING created_at AT TIME ZONE 'UTC',
+            ALTER COLUMN updated_at TYPE timestamp without time zone
+                USING updated_at AT TIME ZONE 'UTC';
+    END IF;
+END
+$$;
 """
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-
-    for nombre, borrado in conn.execute(text(_FKS_DEL_JUGADOR)).all():
-        if borrado != "a":
-            op.execute(
-                f'ALTER TABLE hole_scores DROP CONSTRAINT "{nombre}", '
-                f'ADD CONSTRAINT "{nombre}" FOREIGN KEY (player_user_id) REFERENCES users(id)'
-            )
-
-    for columna in ("created_at", "updated_at"):
-        tipo = conn.execute(
-            text(
-                "SELECT data_type FROM information_schema.columns "
-                "WHERE table_schema = 'public' AND table_name = 'hole_scores' "
-                "AND column_name = :c"
-            ),
-            {"c": columna},
-        ).scalar()
-        if tipo == "timestamp with time zone":
-            op.execute(
-                f"ALTER TABLE hole_scores ALTER COLUMN {columna} "
-                f"TYPE timestamp without time zone USING {columna} AT TIME ZONE 'UTC'"
-            )
+    op.execute(_ALINEA)
 
 
 def downgrade() -> None:
