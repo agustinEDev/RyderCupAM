@@ -454,3 +454,32 @@ async def test_sign_out_does_not_touch_another_devices_refresh_tokens():
 
     async with uow:
         assert not (await uow.refresh_tokens.find_by_token_hash("jwt-ordenador")).revoked
+
+
+@pytest.mark.parametrize("cookie", [None, "jwt-del-ordenador"])
+async def test_sign_out_revokes_the_requests_device_refresh_tokens_without_its_cookie(cookie):
+    """
+    CodeRabbit en BE-1: sin la cookie de refresco (o con la de otro dispositivo), los
+    tokens del dispositivo de la petición quedaban vivos; uno copiado refrescaba y volvía
+    a entrar con un acceso posterior al cierre. Se revocan los suyos, nunca los del otro.
+    """
+    from src.modules.user.domain.entities.refresh_token import RefreshToken
+
+    uow = InMemoryUnitOfWork()
+    ana = await _persona(uow)
+    movil = await _dispositivo(uow, ana, "Movil/1.0")
+    ordenador = await _dispositivo(uow, ana, "Ordenador/1.0")
+    async with uow:
+        await uow.refresh_tokens.save(RefreshToken.create(ana.id, "jwt-del-movil", movil.id))
+        await uow.refresh_tokens.save(
+            RefreshToken.create(ana.id, "jwt-del-ordenador", ordenador.id)
+        )
+
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        LogoutRequestDTO(device_id=str(movil.id.value), refresh_token=cookie),
+        str(ana.id.value),
+    )
+
+    async with uow:
+        assert (await uow.refresh_tokens.find_by_token_hash("jwt-del-movil")).revoked
+        assert not (await uow.refresh_tokens.find_by_token_hash("jwt-del-ordenador")).revoked

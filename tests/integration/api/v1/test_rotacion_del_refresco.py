@@ -586,9 +586,13 @@ async def test_c_a_password_change_racing_a_refresh_leaves_nothing_alive(
     assert not isinstance(cambio, BaseException), cambio
     assert refresco.status_code < 500, refresco.text
     assert cambio.status_code == 200, cambio.text
-    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta
+    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta, del mismo
+    # dispositivo que la de antes (CodeRabbit: no vale un token vivo cualquiera)
     nuevo = cambio.cookies.get("refresh_token")
     assert nuevo and nuevo != cookies["refresh_token"]
+    fila_nueva = await _fila(nuevo)
+    assert not fila_nueva["revoked"] and fila_nueva["replaced_at"] is None
+    assert fila_nueva["device_id"] == (await _fila(cookies["refresh_token"]))["device_id"]
     assert await _vivos_del_usuario(email) == 1
 
 
@@ -646,9 +650,13 @@ async def test_c_logout_racing_a_password_change_does_not_deadlock(
     assert not isinstance(cambio, BaseException), cambio
     assert salida.status_code == 200, salida.text
     assert cambio.status_code == 200, cambio.text
-    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta
+    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta, del mismo
+    # dispositivo que la de antes (CodeRabbit: no vale un token vivo cualquiera)
     nuevo = cambio.cookies.get("refresh_token")
     assert nuevo and nuevo != cookies["refresh_token"]
+    fila_nueva = await _fila(nuevo)
+    assert not fila_nueva["revoked"] and fila_nueva["replaced_at"] is None
+    assert fila_nueva["device_id"] == (await _fila(cookies["refresh_token"]))["device_id"]
     assert await _vivos_del_usuario(email) == 1
 
 
