@@ -73,11 +73,13 @@ class LimitaElCuerpoDeLasSubidas:
             return
 
         recibidos = 0
-        cortado = False
+        cortado = False  # se dejó de leer
+        respondido = False  # y se respondió 413: lo que diga la app ya no sale
+        empezada = False  # la app ya empezó su respuesta
 
         async def recibe() -> Message:
             """El cuerpo, contado; pasado el máximo, 413 y «el cliente se fue»."""
-            nonlocal recibidos, cortado
+            nonlocal recibidos, cortado, respondido
             if cortado:
                 return {"type": "http.disconnect"}
             mensaje = await receive()
@@ -85,14 +87,22 @@ class LimitaElCuerpoDeLasSubidas:
                 recibidos += len(mensaje.get("body", b""))
                 if recibidos > maximo:
                     cortado = True
-                    await _responde_413(send, cuerpo_del_413)
+                    # Con la respuesta de la app ya empezada no cabe otro inicio: se
+                    # deja de leer y nada más (/code-review)
+                    if not empezada:
+                        respondido = True
+                        await _responde_413(send, cuerpo_del_413)
                     return {"type": "http.disconnect"}
             return mensaje
 
         async def envia(mensaje: Message) -> None:
-            """Lo que responda la app tras el corte se descarta: ya se respondió 413."""
-            if not cortado:
-                await send(mensaje)
+            """Lo que responda la app tras el 413 se descarta; si no, sale como siempre."""
+            nonlocal empezada
+            if respondido:
+                return
+            if mensaje["type"] == "http.response.start":
+                empezada = True
+            await send(mensaje)
 
         try:
             await self.app(scope, recibe, envia)

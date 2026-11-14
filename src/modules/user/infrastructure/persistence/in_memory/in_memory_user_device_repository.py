@@ -123,6 +123,11 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         """En memoria no hay transacciones: igual que find_by_id."""
         return await self.find_by_id(device_id)
 
+    async def find_active_by_user_for_update(self, user_id: UserId) -> list[UserDevice]:
+        """En memoria no hay bloqueos: los activos, por id."""
+        activos = await self.find_active_by_user(user_id)
+        return sorted(activos, key=lambda d: str(d.id.value))
+
     async def find_active_by_user(self, user_id: UserId) -> list[UserDevice]:
         """
         Lista todos los dispositivos activos de un usuario.

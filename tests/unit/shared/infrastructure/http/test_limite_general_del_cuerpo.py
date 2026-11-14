@@ -217,3 +217,51 @@ async def test_a_real_disconnect_before_the_cap_still_raises():
 
     with pytest.raises(ClientDisconnect):
         await _envia(app, "/login", _json(10), tipo=b"application/json")
+
+
+async def test_after_the_response_started_the_cut_does_not_send_a_second_start():
+    """
+    /code-review: una ruta que responde sin leer el cuerpo y sigue escuchando la
+    desconexión (como StreamingResponse) no puede recibir un 413 a mitad de su
+    respuesta: se corta la lectura y nada más.
+    """
+    inicios: list[int] = []
+
+    async def responde_sin_leer(_scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        while (await receive())["type"] != "http.disconnect":
+            pass
+        await send({"type": "http.response.body", "body": b"{}"})
+
+    app = LimitaElCuerpoDeLasSubidas(
+        responde_sin_leer, limites={}, margen=MARGEN, tope_general=TOPE_GENERAL
+    )
+    trozos = [b"x" * TROZO for _ in range(10)]
+
+    async def recibe():
+        if not trozos:
+            return {"type": "http.disconnect"}
+        return {"type": "http.request", "body": trozos.pop(0), "more_body": bool(trozos)}
+
+    async def envia(mensaje):
+        if mensaje["type"] == "http.response.start":
+            inicios.append(mensaje["status"])
+
+    await app({"type": "http", "method": "POST", "path": "/x", "headers": []}, recibe, envia)
+
+    assert inicios == [200]
+
+
+async def test_a_declared_upload_over_its_cap_is_refused_without_reading():
+    """El fast-fail por Content-Length de las subidas, ahora en este middleware."""
+    estado, leidos, cuerpo = await _envia(
+        _app(),
+        SUBIDA,
+        b"x",
+        declarado=TOPE_SUBIDA + MARGEN + 1,
+        tipo=b"multipart/form-data; boundary=xyz",
+    )
+
+    assert estado == 413
+    assert leidos == 0
+    assert "1MB" in cuerpo["detail"]

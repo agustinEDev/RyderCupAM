@@ -103,7 +103,7 @@ class LogoutUserUseCase:
         # persona no se toca, y sin token no hay sesión que cerrar aquí
         async with self._uow:
             tokens_revoked_count = await self._cierra_este_dispositivo(
-                user_id_vo, request.refresh_token
+                user_id_vo, request.refresh_token, request.device_id
             )
             # Y su acceso, al momento: tras revocar (y bloquear) los refrescos, así que
             # uno que terminara antes dejó un acceso emitido antes de esta hora (B-05)
@@ -158,7 +158,9 @@ class LogoutUserUseCase:
         dispositivo.cierra_las_sesiones(datetime.now(UTC))
         await self._uow.user_devices.save(dispositivo)
 
-    async def _cierra_este_dispositivo(self, user_id: UserId, refresh_token_jwt: str | None) -> int:
+    async def _cierra_este_dispositivo(
+        self, user_id: UserId, refresh_token_jwt: str | None, device_id: str | None = None
+    ) -> int:
         """
         Revoca en bloque los tokens del dispositivo del token que llega, tras bloquear
         el dispositivo como hacen los refrescos (F-02): un refresco a la vez espera, o
@@ -170,6 +172,11 @@ class LogoutUserUseCase:
             return 0
         actual = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
         if actual is None or actual.user_id != user_id:
+            return 0
+        # Una cookie de refresco de OTRO dispositivo que el de la petición no se toca:
+        # solo se cierra este (BE #376), y así no se bloquean dos filas sin orden
+        # (/code-review de B-05)
+        if device_id and actual.device_id is not None and str(actual.device_id.value) != device_id:
             return 0
         if actual.device_id is None:
             if actual.revoked:

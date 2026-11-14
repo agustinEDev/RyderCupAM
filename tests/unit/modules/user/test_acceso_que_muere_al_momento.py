@@ -323,11 +323,23 @@ class TestLaRutaDelCambio:
         assert "acceso-nuevo" not in cuerpo.model_dump_json()
 
     def test_the_dependency_gives_the_use_case_its_token_service(self):
-        from src.config.dependencies.usuarios import get_update_security_use_case
+        import inspect
 
-        caso = get_update_security_use_case(InMemoryUnitOfWork(), None, SecurityAuditLogger())
+        from fastapi.params import Depends as Dependencia
 
-        assert caso._token_service is not None
+        from src.config.dependencies.usuarios import get_token_service, get_update_security_use_case
+
+        # Inyectado como las demás factorías (/code-review): se puede sustituir en tests
+        por_defecto = (
+            inspect.signature(get_update_security_use_case).parameters["token_service"].default
+        )
+        assert isinstance(por_defecto, Dependencia)
+        assert por_defecto.dependency is get_token_service
+        servicio = get_token_service()
+        caso = get_update_security_use_case(
+            InMemoryUnitOfWork(), None, SecurityAuditLogger(), servicio
+        )
+        assert caso._token_service is servicio
 
 
 class TestLaRutaDelCierre:
@@ -390,3 +402,55 @@ async def test_b5_no_new_session_for_a_device_that_is_not_mine():
     )
 
     assert respuesta.sesion_nueva is None
+
+
+async def test_password_change_locks_devices_before_tokens_like_sign_out():
+    """
+    /code-review de B-05: el mismo orden de bloqueos que el cierre de sesión y los
+    refrescos (dispositivo, luego tokens), o se pueden interbloquear; y la hora del
+    cierre, tras bloquear (un cierre a la vez no se pisa).
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _persona(uow)
+    movil = await _dispositivo(uow, ana, "Movil/1.0")
+    orden: list[str] = []
+    bloquea = uow.user_devices.find_active_by_user_for_update
+    revoca = uow.refresh_tokens.revoke_all_for_user
+
+    async def bloquea_y_apunta(user_id):
+        orden.append("dispositivos")
+        return await bloquea(user_id)
+
+    async def revoca_y_apunta(user_id):
+        orden.append("tokens")
+        return await revoca(user_id)
+
+    uow.user_devices.find_active_by_user_for_update = bloquea_y_apunta
+    uow.refresh_tokens.revoke_all_for_user = revoca_y_apunta
+
+    await _caso_del_cambio(uow).execute(
+        str(ana.id.value), _cambio(movil, new_password=NUEVA, confirm_password=NUEVA)
+    )
+
+    assert orden == ["dispositivos", "tokens"]
+
+
+async def test_sign_out_does_not_touch_another_devices_refresh_tokens():
+    """/code-review de B-05: con la cookie de refresco de otro dispositivo, solo se cierra
+    el de la petición (BE #376), y no se bloquean dos filas."""
+    from src.modules.user.domain.entities.refresh_token import RefreshToken
+
+    uow = InMemoryUnitOfWork()
+    ana = await _persona(uow)
+    movil = await _dispositivo(uow, ana, "Movil/1.0")
+    ordenador = await _dispositivo(uow, ana, "Ordenador/1.0")
+    async with uow:
+        await uow.refresh_tokens.save(RefreshToken.create(ana.id, "jwt-ordenador", ordenador.id))
+
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        LogoutRequestDTO(device_id=str(movil.id.value), refresh_token="jwt-ordenador"),
+        str(ana.id.value),
+    )
+
+    async with uow:
+        assert not (await uow.refresh_tokens.find_by_token_hash("jwt-ordenador")).revoked

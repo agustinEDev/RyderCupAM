@@ -461,6 +461,7 @@ def get_update_security_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    token_service: ITokenService = Depends(get_token_service),
 ) -> UpdateSecurityUseCase:
     """
     Proveedor del caso de uso UpdateSecurityUseCase.
@@ -474,7 +475,7 @@ def get_update_security_use_case(
     # Con el servicio de tokens: quien cambia la contraseña sigue dentro con una
     # sesión nueva (auditoría de la fase 6, B-05)
     return UpdateSecurityUseCase(
-        uow, email_service, security_audit=security_audit, token_service=get_token_service()
+        uow, email_service, security_audit=security_audit, token_service=token_service
     )
 
 

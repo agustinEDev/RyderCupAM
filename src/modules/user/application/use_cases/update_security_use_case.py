@@ -209,13 +209,18 @@ class UpdateSecurityUseCase:
         # espera a los que estén en curso y los que lleguen después lo esperan a él;
         # ningún sucesor queda vivo ni hay interbloqueo (F-02). El cierre de sesión no
         # toca la fila de la cuenta: choca solo en los tokens, sin ciclo
+        # Primero los dispositivos, bloqueados y en orden de id, y después sus tokens: el
+        # mismo orden que los refrescos y el cierre de sesión, o se interbloquean
+        # (/code-review de B-05). La hora, ya con todos bloqueados: un cierre de sesión
+        # a la vez no se pisa
+        dispositivos = await self._uow.user_devices.find_active_by_user_for_update(user_id_vo)
         tokens_revoked_count = await self._uow.refresh_tokens.revoke_all_for_user(user_id_vo)
 
         # Y los accesos, al momento, en todos sus dispositivos: uno robado deja de valer
         # ya, no a los 15 minutos (auditoría de la fase 6, B-05). Los dispositivos siguen
         # activos y de fiar
         ahora = datetime.now(UTC)
-        for dispositivo in await self._uow.user_devices.find_active_by_user(user_id_vo):
+        for dispositivo in dispositivos:
             dispositivo.cierra_las_sesiones(ahora)
             await self._uow.user_devices.save(dispositivo)
 
