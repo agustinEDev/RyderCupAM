@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.65.0] - 2026-11-14
+
+**Tanda 1 de la auditoría de la fase 6** (#839, #841, #845). **Va con el frontend 2.79.0, que
+sale ANTES**: esta versión deja de mandar el correo del invitado en las invitaciones por id
+(`invitee_email` puede ser nulo, etiqueta `api-breaking`), y el frontend 2.78.0 no lo acepta.
+Dos migraciones nuevas, columnas nulas o con valor por defecto que no reescriben la tabla
+(`user_devices.session_closed_at`, `invitations.sent_by_email`), con tope de bloqueo de 5 s.
+Desplegar vaciando la caché de compilación de Render (INF-02). Probado en el Kind: 23 casos
+por la API real.
+
+### Security
+
+- **El acceso muere al momento al cerrar sesión o cambiar la contraseña** (B-05). Antes solo
+  se revocaba el refresco, y un token de acceso robado valía hasta 15 minutos. Ahora el token
+  lleva su hora y cada dispositivo la de su último cierre. Al cerrar sesión se cierra el
+  dispositivo de la petición con todos sus refrescos, llegue o no su cookie. Al cambiar la
+  contraseña se cierran todos, y quien la cambia **sigue dentro** con una sesión nueva
+  (decidido el 14 nov). El restablecimiento de contraseña sigue echando a todos.
+- **Tope de 256 KB para cualquier petición** (B-04): una petición enorme ya no puede agotar la
+  memoria del único proceso de la API. Lo que declara más se rechaza sin leer, lo que llega
+  por trozos se corta al pasar el tope, y las subidas siguen en 10 MB.
+- **Lo que ve el organizador de una invitación** (B-01/B-03):
+  - **Por id:** el nombre, nunca el correo, tampoco en el aviso de duplicada.
+  - **Por correo:** solo el correo tecleado, tenga cuenta o no, hasta que responda; entonces
+    también su nombre.
+  - **Un inscrito:** sigue diciendo «ya está inscrito».
+  - **Tope por organizador:** 100 invitaciones por hora entre todas sus competiciones
+    (`INVITATION_USER_RATE_LIMIT`).
+- **Una invitación ajena** responde 404, como si no existiera, al responderla o retirarla, sin
+  decir su estado ni bloquear nada (B-16).
+- **Una solicitud de amistad a una cuenta desactivada** responde como a una que no existe
+  (B-13).
+- **Los errores 5xx ya no enseñan texto interno**, y la causa de un fallo de la RFEG queda en
+  el log (B-15).
+- **Una sola regla de «producción»** en cookies, CORS, correo, bcrypt y Sentry: lo que no es un
+  desarrollo declarado es producción (B-09).
+- **Todos los 429 quedan en el log de seguridad**, vengan del limitador o de la propia ruta
+  (B-06).
+- **El job del SBOM** instala una versión fija y no guarda credenciales (INF-04).
+
 ## [2.64.0] - 2026-11-13
 
 **Correos que sobreviven a un despliegue, cinco errores 500 y un bloqueo perdido arreglados, y
