@@ -554,7 +554,9 @@ async def test_c_a_password_change_racing_a_refresh_leaves_nothing_alive(
     Given: Una sesión
     When: Una pestaña refresca y, con el refresco a medias, cambia la contraseña
     Then: Ninguna de las dos falla (sin interbloqueo: los dos bloquean primero la cuenta,
-          luego el dispositivo y luego los tokens) y no queda ningún token vivo
+          luego el dispositivo y luego los tokens) y no queda vivo ningún token de antes:
+          solo la sesión nueva que el cambio da a quien lo hizo (auditoría de la fase 6,
+          B-05, decidido por Agustín el 14 nov 2026)
     """
     email, cookies = await _sesion(client, "c6")
     client.cookies.clear()
@@ -584,7 +586,10 @@ async def test_c_a_password_change_racing_a_refresh_leaves_nothing_alive(
     assert not isinstance(cambio, BaseException), cambio
     assert refresco.status_code < 500, refresco.text
     assert cambio.status_code == 200, cambio.text
-    assert await _vivos_del_usuario(email) == 0
+    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta
+    nuevo = cambio.cookies.get("refresh_token")
+    assert nuevo and nuevo != cookies["refresh_token"]
+    assert await _vivos_del_usuario(email) == 1
 
 
 async def test_c_logout_racing_a_password_change_does_not_deadlock(
@@ -595,7 +600,8 @@ async def test_c_logout_racing_a_password_change_does_not_deadlock(
     When: Cierra sesión y, con el cierre a medias (dispositivo y tokens ya bloqueados),
           cambia la contraseña desde otra pestaña
     Then: Las dos salen bien (sin interbloqueo: el cierre bloquea antes la cuenta, como
-          los refrescos) y no queda ningún token vivo
+          los refrescos) y no queda vivo ningún token de antes: solo la sesión nueva que
+          el cambio da a quien lo hizo (B-05)
     """
     from src.modules.user.infrastructure.persistence.sqlalchemy import (
         refresh_token_repository as repo,
@@ -640,7 +646,10 @@ async def test_c_logout_racing_a_password_change_does_not_deadlock(
     assert not isinstance(cambio, BaseException), cambio
     assert salida.status_code == 200, salida.text
     assert cambio.status_code == 200, cambio.text
-    assert await _vivos_del_usuario(email) == 0
+    # Lo único vivo es la sesión nueva que el cambio puso en su respuesta
+    nuevo = cambio.cookies.get("refresh_token")
+    assert nuevo and nuevo != cookies["refresh_token"]
+    assert await _vivos_del_usuario(email) == 1
 
 
 async def test_c8_revoking_the_device_racing_a_refresh_does_not_deadlock(
