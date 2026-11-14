@@ -1107,7 +1107,9 @@ jobs:
           # For PRs and pushes: verify ONLY commits in THIS specific push event
           # NOT the entire PR history, NOT the entire branch history
           BASE_REF="${{ github.event.before }}"
-          HEAD_REF="${{ github.event.after || github.sha }}"
+          # In a PR, the head of the branch and never github.sha: on opened/reopened that
+          # is GitHub's temporary merge commit, which nobody signs (audit phase 6, INF-06)
+          HEAD_REF="${{ github.event.pull_request.head.sha || github.event.after || github.sha }}"
 
           echo "📋 Signature Verification Scope: CURRENT PUSH ONLY"
           echo "   Commits included: Those added in this specific push event"
@@ -1127,6 +1129,14 @@ jobs:
             else
               BASE_REF=""  # Falls through to the initial-push handling below
             fi
+          fi
+
+          # A PR just opened or reopened has no "before": every commit it adds over
+          # its base branch, from their merge-base
+          if [ -n "$PR_BASE" ] && { [ -z "$BASE_REF" ] || [ "$BASE_REF" == "0000000000000000000000000000000000000000" ]; } \
+             && MERGE_BASE=$(git merge-base "origin/$PR_BASE" "$HEAD_REF" 2>/dev/null); then
+            echo "   PR opened or reopened: every commit since the merge-base with $PR_BASE: $MERGE_BASE"
+            BASE_REF="$MERGE_BASE"
           fi
 
           # Handle initial push or forced push (no previous commit)

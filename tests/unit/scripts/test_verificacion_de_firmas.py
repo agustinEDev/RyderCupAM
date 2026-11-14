@@ -46,6 +46,22 @@ def entorno(tmp_path: Path):
     # En una ruta corta: el socket del agente de GPG no cabe en la de tmp_path
     gnupg = Path(tempfile.mkdtemp(prefix="g", dir="/tmp"))
     gnupg.chmod(0o700)
+    try:
+        yield _prepara(tmp_path, gnupg)
+    finally:
+        # También si la preparación falla a medias (/code-review)
+        if shutil.which("gpgconf"):
+            subprocess.run(
+                ["gpgconf", "--kill", "gpg-agent"],
+                check=False,
+                env={**os.environ, "GNUPGHOME": str(gnupg)},
+                capture_output=True,
+            )
+        shutil.rmtree(gnupg, ignore_errors=True)
+
+
+def _prepara(tmp_path: Path, gnupg: Path) -> dict:
+    """La clave, el `gh` falso y el repo con su primer commit, firmado."""
     env = {
         **os.environ,
         "GNUPGHOME": str(gnupg),
@@ -106,9 +122,7 @@ def entorno(tmp_path: Path):
     (repo / "a.txt").write_text("a")
     _git(repo, "add", ".", env=env)
     _git(repo, "commit", "-q", "-S", "-m", "base", env=env)
-    yield {"repo": repo, "env": env, "base": _git(repo, "rev-parse", "HEAD", env=env)}
-    subprocess.run(["gpgconf", "--kill", "gpg-agent"], check=False, env=env, capture_output=True)
-    shutil.rmtree(gnupg, ignore_errors=True)
+    return {"repo": repo, "env": env, "base": _git(repo, "rev-parse", "HEAD", env=env)}
 
 
 def _verifica(e: dict, **env_extra: str) -> subprocess.CompletedProcess:
@@ -163,6 +177,9 @@ def test_f3_an_unsigned_local_merge_fails(entorno):
     resultado = _verifica(entorno)
 
     assert resultado.returncode == 1, resultado.stdout
+    assert "NOT VERIFIED by GitHub" in resultado.stdout
+    # El recuento de merges no cuenta los que fallan (/code-review)
+    assert "Merge commits (verified by GitHub): 0" in resultado.stdout
 
 
 def test_f4_a_merge_that_github_verifies_passes(entorno):
@@ -181,4 +198,5 @@ def test_f5_without_an_answer_from_github_it_fails(entorno):
     resultado = _verifica(entorno, GH_VERIFICADO="fallo")
 
     assert resultado.returncode == 1, resultado.stdout
-    assert "GitHub" in resultado.stdout
+    assert "could not ask GitHub" in resultado.stdout
+    assert "Merge commits (verified by GitHub): 0" in resultado.stdout

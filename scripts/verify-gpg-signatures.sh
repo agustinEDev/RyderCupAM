@@ -129,11 +129,13 @@ while IFS= read -r commit; do
 
     # Merge commits and GitHub web-flow commits: GitHub must say they are verified
     if [ "$PARENT_COUNT" -ge 2 ] || [ "$IS_GITHUB_WEBFLOW" = true ]; then
-        MERGE_COUNT=$((MERGE_COUNT + 1))
-        [ "$IS_GITHUB_WEBFLOW" = true ] && GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         TIPO="MERGE COMMIT"
         [ "$IS_GITHUB_WEBFLOW" = true ] && TIPO="GITHUB WEB-FLOW"
 
+        # Outside CI, the repository of this clone, from gh itself
+        if [ -z "${GITHUB_REPOSITORY:-}" ]; then
+            GITHUB_REPOSITORY=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null) || GITHUB_REPOSITORY=""
+        fi
         if [ -z "${GITHUB_REPOSITORY:-}" ]; then
             VERIFIED="no-repo"
         else
@@ -146,6 +148,8 @@ while IFS= read -r commit; do
             echo "   Author: $COMMIT_AUTHOR"
             echo "   Type: $TIPO (verified by GitHub)"
             VALID_COUNT=$((VALID_COUNT + 1))
+            MERGE_COUNT=$((MERGE_COUNT + 1))
+            [ "$IS_GITHUB_WEBFLOW" = true ] && GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         elif [ "$VERIFIED" = "false" ]; then
             echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
             echo "   Author: $COMMIT_AUTHOR"
@@ -158,7 +162,7 @@ while IFS= read -r commit; do
             UNSIGNED_COMMITS+=("$COMMIT_SHORT")
         fi
     else
-        # Regular commit or manual merge - verify signature
+        # Regular commit (one parent): verify the signature with the local keyring
         SIG_STATUS=$(git verify-commit "$commit" 2>&1 || true)
 
         if echo "$SIG_STATUS" | grep -q "Good signature"; then
@@ -236,6 +240,8 @@ else
     echo "   1. Sign unsigned commits: git rebase --exec 'git commit --amend --no-edit -n -S' $BASE_REF"
     echo "   2. Or amend last commit: git commit --amend --no-edit -S"
     echo "   3. Force push: git push --force"
+    echo "   An unverified merge commit: redo the merge with -S (git merge -S), or merge"
+    echo "   through the pull request on GitHub, which signs its merges"
     echo ""
     echo "📖 Documentation:"
     echo "   See docs/ci-cd/PIPELINE_GUIDE.md section 'GPG Signature Setup' for setup instructions"
