@@ -6,7 +6,7 @@ Cierra la sesión de ESTE dispositivo, no las demás (BE #376).
 Security Logging (v1.8.0): Registra logout con cantidad de tokens revocados.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.user.application.dto.user_dto import (
     LogoutRequestDTO,
@@ -17,6 +17,7 @@ from src.modules.user.application.services.registra_sin_romper import registra_s
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -104,6 +105,9 @@ class LogoutUserUseCase:
             tokens_revoked_count = await self._cierra_este_dispositivo(
                 user_id_vo, request.refresh_token
             )
+            # Y su acceso, al momento: tras revocar (y bloquear) los refrescos, así que
+            # uno que terminara antes dejó un acceso emitido antes de esta hora (B-05)
+            await self._cierra_las_sesiones_del_dispositivo(user_id_vo, request.device_id)
 
             # Guardar usuario dentro de la misma transacción
             await self._uow.users.save(user)
@@ -134,6 +138,24 @@ class LogoutUserUseCase:
             )
 
         return LogoutResponseDTO(message="Logout exitoso", logged_out_at=logout_time)
+
+    async def _cierra_las_sesiones_del_dispositivo(
+        self, user_id: UserId, device_id: str | None
+    ) -> None:
+        """Los accesos de este dispositivo emitidos hasta ahora dejan de valer (B-05)."""
+        if not device_id:
+            return
+        try:
+            id_del_dispositivo = UserDeviceId.from_string(device_id)
+        except (ValueError, TypeError):
+            return
+        dispositivo = await self._uow.user_devices.find_by_id_and_user(
+            device_id=id_del_dispositivo, user_id=user_id
+        )
+        if dispositivo is None:
+            return
+        dispositivo.cierra_las_sesiones(datetime.now(UTC))
+        await self._uow.user_devices.save(dispositivo)
 
     async def _cierra_este_dispositivo(self, user_id: UserId, refresh_token_jwt: str | None) -> int:
         """

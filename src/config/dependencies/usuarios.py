@@ -471,7 +471,11 @@ def get_update_security_use_case(
     3. Crea una instancia de `UpdateSecurityUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateSecurityUseCase(uow, email_service, security_audit=security_audit)
+    # Con el servicio de tokens: quien cambia la contraseña sigue dentro con una
+    # sesión nueva (auditoría de la fase 6, B-05)
+    return UpdateSecurityUseCase(
+        uow, email_service, security_audit=security_audit, token_service=get_token_service()
+    )
 
 
 def get_avatar_preset_provider() -> IAvatarPresetProvider:

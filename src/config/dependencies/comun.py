@@ -341,6 +341,16 @@ async def get_current_user(
             detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Un acceso emitido antes de cerrar las sesiones de este dispositivo (cierre de
+    # sesión o cambio de contraseña) ya no vale, aunque no haya caducado. El mismo 401
+    # que un token caducado: la app refresca, y el refresco ya está revocado
+    # (auditoría de la fase 6, B-05)
+    if not dispositivo.admite_el_acceso(payload.get("iat")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     # El dispositivo de la petición, ya comprobado: la lista lo marca como el actual
     # sin volver a leer el token
     request.state.dispositivo_actual = str(dispositivo.id.value)

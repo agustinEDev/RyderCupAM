@@ -441,6 +441,9 @@ async def logout_user(
     # Solo se cierra la sesión de este dispositivo (BE #376): su token de
     # refresco sale de su cookie httpOnly, nunca de lo que mande el cliente
     logout_request.refresh_token = request.cookies.get(get_refresh_cookie_name())
+    # Y su acceso, al momento: el dispositivo es el del token, ya comprobado; nunca
+    # el que mande el cliente (auditoría de la fase 6, B-05)
+    logout_request.device_id = getattr(request.state, "dispositivo_actual", None)
 
     logout_response = await use_case.execute(logout_request, user_id, token)
 
