@@ -17,6 +17,7 @@ de nadie.
     F3 un merge sin firmar hecho en local              | falla
     F4 un merge que GitHub da por verificado           | pasa
     F5 no se puede preguntar a GitHub                  | falla, con su mensaje
+    F6 un commit de GitHub (no merge) que verifica     | pasa, y se le pregunta por él
 """
 
 import os
@@ -200,3 +201,18 @@ def test_f5_without_an_answer_from_github_it_fails(entorno):
     assert resultado.returncode == 1, resultado.stdout
     assert "could not ask GitHub" in resultado.stdout
     assert "Merge commits (verified by GitHub): 0" in resultado.stdout
+
+
+def test_f6_a_github_commit_that_github_verifies_passes(entorno):
+    """Un commit de un solo padre hecho en la web (committer noreply), no solo los merges."""
+    _commit(
+        entorno,
+        "desde-la-web",
+        env_extra={"GIT_COMMITTER_EMAIL": "noreply@github.com", "GIT_COMMITTER_NAME": "GitHub"},
+    )
+
+    resultado = _verifica(entorno, GH_VERIFICADO="true")
+
+    assert resultado.returncode == 0, resultado.stdout
+    commit = _git(entorno["repo"], "rev-parse", "HEAD", env=entorno["env"])
+    assert f"repos/dueno/repo/commits/{commit}" in Path(entorno["env"]["GH_LLAMADAS"]).read_text()
