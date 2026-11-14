@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -102,6 +103,8 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -537,9 +540,11 @@ async def get_my_roles_in_competition(
             detail=f"Invalid competition ID format: {e!s}",
         ) from e
     except Exception as e:
+        # El detalle, al log y a Sentry; al cliente, nada de lo de dentro (B-15)
+        logger.exception("Error al consultar los roles en la competición %s", competition_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {e!s}",
+            detail="Internal server error",
         ) from e
 
 

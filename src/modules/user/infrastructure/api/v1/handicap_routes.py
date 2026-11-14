@@ -222,10 +222,12 @@ async def update_user_handicap(
 
         return result
 
-    except HandicapServiceUnavailableError as e:
+    except HandicapServiceUnavailableError:
+        # Lo que dijo la conexión con la RFEG se queda en el log del servicio; al
+        # cliente, solo que no está disponible (auditoría de la fase 6, B-15)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"El servicio de hándicap no está disponible: {e!s}",
+            detail="El servicio de hándicap no está disponible",
         ) from None
 
 
