@@ -12,7 +12,7 @@ hora, el mismo que el de cada competición (una de 200 invita en dos tandas, BE 
     C1 invito por id                                       | su nombre, sin correo
     C2 invito por correo a alguien con cuenta              | solo el correo tecleado
     C3 invito por correo a alguien sin cuenta              | igual que C2
-    C4 invito por correo a alguien ya inscrito             | igual que C2; sin crear ni correo
+    C4 invito por correo a alguien ya inscrito             | «ya está inscrito», como antes
     C5 la de correo, aceptada o rechazada                  | ya con su nombre
     C1/C2 en la lista                                      | lo mismo que al enviar
     C7 más de 100 en una hora, sumando sus competiciones   | 429 INVITATION_USER_RATE_LIMIT
@@ -41,7 +41,10 @@ from src.modules.competition.application.use_cases.send_invitation_by_user_id_us
     SendInvitationByUserIdUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
+    AlreadyEnrolledInvitationViolation,
+    DuplicateInvitationViolation,
     InvitationUserRateLimitViolation,
 )
 from src.modules.competition.domain.services.competition_policy import (
@@ -154,7 +157,9 @@ async def test_c2_c3_by_email_answers_the_same_with_or_without_an_account():
     assert _visible(lista[con.id]) == ("con-cuenta@test.com", None, None)
 
 
-async def test_c4_by_email_to_someone_already_enrolled_answers_the_same_without_creating():
+async def test_c4_by_email_to_someone_already_enrolled_says_so_like_before():
+    """C4, cambiado por Agustín el 14 nov 2026: el organizador ya ve los correos de sus
+    inscritos (BE #531), así que se le dice claro, como antes, y no se crea nada."""
     comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
     org = await _usuario(user_uow, "org@test.com", "Org")
     bea = await _usuario(user_uow, "inscrita@test.com", "Bea")
@@ -165,17 +170,72 @@ async def test_c4_by_email_to_someone_already_enrolled_answers_the_same_without_
         )
     correo = AsyncMock()
 
-    r = await _por_correo(comp_uow, user_uow, correo).execute(
+    with pytest.raises(AlreadyEnrolledInvitationViolation):
+        await _por_correo(comp_uow, user_uow, correo).execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=cid, inviter_id=org.id.value, invitee_email="inscrita@test.com"
+            )
+        )
+    correo.send_invitation_email.assert_not_called()
+
+
+async def test_a_repeated_invitation_by_id_does_not_reveal_the_email():
+    """Revisor de B-01: el 409 de «ya hay una pendiente» llevaba el correo del elegido."""
+    comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
+    org = await _usuario(user_uow, "org@test.com", "Org")
+    bea = await _usuario(user_uow, "secreto@test.com", "Bea")
+    cid = await _competicion(comp_uow, org)
+    pedir = SendInvitationByUserIdRequestDTO(
+        competition_id=cid, inviter_id=org.id.value, invitee_user_id=bea.id.value
+    )
+    await _por_id(comp_uow, user_uow).execute(pedir)
+
+    with pytest.raises(DuplicateInvitationViolation) as duplicada:
+        await _por_id(comp_uow, user_uow).execute(pedir)
+
+    assert "secreto" not in str(duplicada.value)
+
+
+async def test_by_email_to_an_unverified_account_answers_like_no_account():
+    comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
+    org = await _usuario(user_uow, "org@test.com", "Org")
+    sin_verificar = User.create(
+        first_name="Ceci",
+        last_name="Golf",
+        email_str="sin-verificar@test.com",
+        plain_password="SecureP@ssw0rd123",
+    )
+    async with user_uow:
+        await user_uow.users.save(sin_verificar)
+    cid = await _competicion(comp_uow, org)
+
+    r = await _por_correo(comp_uow, user_uow).execute(
         SendInvitationByEmailRequestDTO(
-            competition_id=cid, inviter_id=org.id.value, invitee_email="inscrita@test.com"
+            competition_id=cid, inviter_id=org.id.value, invitee_email="sin-verificar@test.com"
         )
     )
 
-    assert _visible(r) == ("inscrita@test.com", None, None)
-    assert r.status == "PENDING"
-    correo.send_invitation_email.assert_not_called()
+    assert _visible(r) == ("sin-verificar@test.com", None, None)
+
+
+async def test_an_invitation_by_email_from_the_previous_release_still_shows_its_email():
+    """Revisor: mientras convivan las dos versiones, la anterior guarda las de correo sin
+    marcar. Sin usuario, es por correo: el organizador ve el correo, no nada."""
+    comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
+    org = await _usuario(user_uow, "org@test.com", "Org")
+    cid = await _competicion(comp_uow, org)
+    vieja = Invitation.create(
+        id=InvitationId.generate(),
+        competition_id=CompetitionId(cid),
+        inviter_id=org.id,
+        invitee_email="vieja@test.com",
+    )
     async with comp_uow:
-        assert await comp_uow.invitations.find_by_id(InvitationId(r.id)) is None
+        await comp_uow.invitations.add(vieja)
+
+    en_la_lista = (await _lista(comp_uow, user_uow, cid, org))[vieja.id.value]
+
+    assert _visible(en_la_lista) == ("vieja@test.com", None, None)
 
 
 async def test_c5_once_answered_the_organizer_sees_the_name():

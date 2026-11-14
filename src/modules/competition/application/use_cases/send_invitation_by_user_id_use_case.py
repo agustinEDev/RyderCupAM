@@ -179,8 +179,8 @@ class SendInvitationByUserIdUseCase:
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
-                    f"A pending invitation already exists for {invitee_email} "
-                    f"in competition {request.competition_id}."
+                    # Sin el correo del elegido: el mensaje sale en el 409 (revisor de B-01)
+                    f"A pending invitation already exists in competition {request.competition_id}."
                 )
 
             # 8. Crear invitation

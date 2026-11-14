@@ -25,6 +25,7 @@ from src.modules.competition.application.use_cases.send_invitation_by_email_use_
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
+    AlreadyEnrolledInvitationViolation,
     DuplicateInvitationViolation,
     InvitationRateLimitViolation,
     SelfInvitationViolation,
@@ -425,10 +426,8 @@ class TestSendInvitationByEmailUseCase:
         with pytest.raises(SelfInvitationViolation):
             await uc.execute(request)
 
-    async def test_already_enrolled_answers_like_any_email_without_creating(
-        self, comp_uow, user_uow
-    ):
-        """C4 (B-03): antes un 409 propio delataba que ese correo era de un inscrito."""
+    async def test_should_raise_already_enrolled(self, comp_uow, user_uow):
+        """C4: como siempre (el organizador ya ve los correos de sus inscritos, BE #531)."""
         creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
         created = await self._create_active_competition(comp_uow, creator.id)
@@ -449,15 +448,8 @@ class TestSendInvitationByEmailUseCase:
             invitee_email="invitee@test.com",
         )
 
-        result = await uc.execute(request)
-
-        assert (result.invitee_email, result.invitee_user_id, result.invitee_name) == (
-            "invitee@test.com",
-            None,
-            None,
-        )
-        async with comp_uow:
-            assert await comp_uow.invitations.find_by_id(InvitationId(result.id)) is None
+        with pytest.raises(AlreadyEnrolledInvitationViolation):
+            await uc.execute(request)
 
     async def test_should_raise_duplicate_invitation(self, comp_uow, user_uow):
         creator = await self._create_user(user_uow, email="creator@test.com")

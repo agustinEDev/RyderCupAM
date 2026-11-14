@@ -83,6 +83,26 @@ The `python-ecdsa` maintainers consider this vulnerability **out of scope** with
 
 ---
 
+### Invitation duplicate check can confirm a guessed email (accepted, 14 Nov 2026)
+
+**Context:** phase 6 audit, B-01/B-03. Organizers no longer see the email of a player
+invited by user id, nor whether a typed email has an account.
+
+**Residual risk:** an organizer who invited player U by id, and whose invitation is still
+pending, can type a guessed email into "invite by email". If the answer is "a pending
+invitation already exists", the guessed email is U's.
+
+**Why it is accepted (owner's decision):** the attacker must guess the exact address and
+can only test it against players they already invited; each probe still counts towards
+the per-organizer cap (100 invitations an hour). Hiding it would need a fake success,
+which an earlier attempt showed to be distinguishable (the invitation list, a repeated
+try).
+
+**Related:** inviting by email someone already enrolled still says so, as before:
+organizers already see their enrolled players' emails (BE #531).
+
+---
+
 ## 📊 Risk Assessment Summary
 
 | CVE | Package | Severity | Impact | Status | Last Review |
