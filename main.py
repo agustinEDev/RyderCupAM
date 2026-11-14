@@ -25,6 +25,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E4
 from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.arranque_seguro import (  # noqa: E402
@@ -123,7 +124,7 @@ from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
     LimitaElCuerpoDeLasSubidas,
 )
 from src.shared.infrastructure.http.limite_superado import (  # noqa: E402
-    responde_al_limite_superado,
+    ApuntaLosLimitesSuperados,
 )
 from src.shared.infrastructure.http.ruta_sin_barras_codificadas import (  # noqa: E402
     RutaSinBarrasCodificadas,
@@ -305,8 +306,7 @@ app.state.limiter = limiter
 # Registrar el exception handler para RateLimitExceeded
 # Cuando se excede el límite, se responde automáticamente con HTTP 429
 # slowapi's handler is sync but FastAPI accepts both sync and async
-# Y queda en el log de seguridad (auditoría de la fase 6, B-06)
-app.add_exception_handler(RateLimitExceeded, responde_al_limite_superado)  # type: ignore[arg-type]
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # Cada error de dominio con su código, en un solo sitio (antes, un except en cada ruta)
 registra_los_codigos(app, todos_los_codigos())
@@ -415,6 +415,10 @@ app.add_middleware(CORSMiddleware, **get_cors_config())
 
 # Sentry User Context Middleware (captura usuario de JWT para eventos)
 app.add_middleware(SentryUserContextMiddleware)
+
+# Cada 429, de slowapi o de una ruta, al log de seguridad (auditoría de la fase 6,
+# B-06). Solo mira el código de estado: la respuesta no cambia
+app.add_middleware(ApuntaLosLimitesSuperados)
 
 # Correlation ID Middleware (debe capturar todos los requests)
 app.add_middleware(CorrelationMiddleware)
