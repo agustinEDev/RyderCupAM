@@ -14,7 +14,7 @@ release anterior sigue funcionando con la tabla migrada (no la lee, y sus INSERT
 el valor por defecto).
 
 Revision ID: d4f6a8c0e2b5
-Revises: b7e9d1f3a5c8
+Revises: c2d4e6f8a1b3
 Create Date: 2026-11-14
 
 """
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d4f6a8c0e2b5"
-down_revision = "b7e9d1f3a5c8"
+down_revision = "c2d4e6f8a1b3"
 branch_labels = None
 depends_on = None
 
