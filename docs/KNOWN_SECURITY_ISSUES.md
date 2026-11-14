@@ -88,15 +88,19 @@ The `python-ecdsa` maintainers consider this vulnerability **out of scope** with
 **Context:** phase 6 audit, B-01/B-03. Organizers no longer see the email of a player
 invited by user id, nor whether a typed email has an account.
 
-**Residual risk:** an organizer who invited player U by id, and whose invitation is still
-pending, can type a guessed email into "invite by email". If the answer is "a pending
-invitation already exists", the guessed email is U's.
+**Residual risk:** the duplicate-pending check runs on the invitee's email in both ways of
+inviting, so it can confirm a guessed email in either direction:
+- an organizer who invited player U by id (still pending) types a guessed email into
+  "invite by email": "a pending invitation already exists" means it is U's;
+- an organizer who invited a guessed email (still pending) invites players by id: the same
+  answer for player V means the email is V's.
 
-**Why it is accepted (owner's decision):** the attacker must guess the exact address and
-can only test it against players they already invited; each probe still counts towards
-the per-organizer cap (100 invitations an hour). Hiding it would need a fake success,
-which an earlier attempt showed to be distinguishable (the invitation list, a repeated
-try).
+**Why it is accepted (owner's decision, 14 Nov 2026):** the attacker must guess the exact
+address and test it against a pending invitation of their own. A probe that ends in the
+duplicate answer does not create an invitation, so it does not count towards the
+per-organizer cap; only the API's general rate limit applies. Hiding it would need a fake
+success, which an earlier attempt showed to be distinguishable (the invitation list, a
+repeated try).
 
 **Related:** inviting by email someone already enrolled still says so, as before:
 organizers already see their enrolled players' emails (BE #531).

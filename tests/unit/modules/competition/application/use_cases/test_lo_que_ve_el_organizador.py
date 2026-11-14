@@ -295,3 +295,71 @@ async def test_c7_an_organizer_cannot_send_more_than_100_an_hour_across_competit
                 competition_id=otra, inviter_id=org.id.value, invitee_email="otro@test.com"
             )
         )
+
+
+async def test_c5_an_account_unverified_when_invited_shows_its_name_once_it_answers():
+    """/code-review: invitada por correo a una cuenta aún sin verificar (sin usuario), al
+    responder queda ligada a quien respondió, y el organizador ve su nombre."""
+    from src.modules.competition.application.dto.invitation_dto import (
+        RespondInvitationRequestDTO,
+    )
+    from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
+        RespondToInvitationUseCase,
+    )
+
+    comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
+    org = await _usuario(user_uow, "org@test.com", "Org")
+    ceci = User.create(
+        first_name="Ceci",
+        last_name="Golf",
+        email_str="ceci@test.com",
+        plain_password="SecureP@ssw0rd123",
+    )
+    async with user_uow:
+        await user_uow.users.save(ceci)
+    cid = await _competicion(comp_uow, org)
+    r = await _por_correo(comp_uow, user_uow).execute(
+        SendInvitationByEmailRequestDTO(
+            competition_id=cid, inviter_id=org.id.value, invitee_email="ceci@test.com"
+        )
+    )
+    ceci.confirm_email_ownership()
+    async with user_uow:
+        await user_uow.users.save(ceci)
+
+    await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+        RespondInvitationRequestDTO(invitation_id=r.id, user_id=ceci.id.value, action="DECLINE")
+    )
+
+    en_la_lista = (await _lista(comp_uow, user_uow, cid, org))[r.id]
+    assert en_la_lista.invitee_user_id == ceci.id.value
+    assert en_la_lista.invitee_name
+
+
+async def test_c5_an_answered_invitation_does_not_show_an_unverified_accounts_name():
+    """Ya respondida y sin usuario: solo una cuenta que tenga ese correo VERIFICADO es la
+    que respondió; una sin verificar no se enseña (no es de fiar que sea la misma)."""
+    comp_uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
+    org = await _usuario(user_uow, "org@test.com", "Org")
+    sin_verificar = User.create(
+        first_name="Dani",
+        last_name="Golf",
+        email_str="dani@test.com",
+        plain_password="SecureP@ssw0rd123",
+    )
+    async with user_uow:
+        await user_uow.users.save(sin_verificar)
+    cid = await _competicion(comp_uow, org)
+    r = await _por_correo(comp_uow, user_uow).execute(
+        SendInvitationByEmailRequestDTO(
+            competition_id=cid, inviter_id=org.id.value, invitee_email="dani@test.com"
+        )
+    )
+    async with comp_uow:
+        inv = await comp_uow.invitations.find_by_id(InvitationId(r.id))
+        inv.decline()
+        await comp_uow.invitations.update(inv)
+
+    en_la_lista = (await _lista(comp_uow, user_uow, cid, org))[r.id]
+
+    assert _visible(en_la_lista) == ("dani@test.com", None, None)

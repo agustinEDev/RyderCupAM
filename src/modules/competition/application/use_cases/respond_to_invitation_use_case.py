@@ -88,12 +88,13 @@ class RespondToInvitationUseCase:
             if not current_user:
                 raise NotInviteeError("Authenticated user not found. Cannot respond to invitation.")
             # Su correo casa invitaciones solo si esta verificado (F-07)
-            correo = str(current_user.email)
-            current_user_email = correo_del_invitado(correo, current_user.email_verified)
+            current_user_email = correo_del_invitado(
+                str(current_user.email), current_user.email_verified
+            )
 
         # Fase 1: Verificar expiracion y persistir si cambio
         non_pending_status, sin_plaza = await self._cerrar_si_toca(
-            invitation_id, action, current_user_id, current_user_email, correo
+            invitation_id, action, current_user_id, current_user_email
         )
 
         if sin_plaza:
@@ -156,7 +157,6 @@ class RespondToInvitationUseCase:
         action: str,
         current_user_id: UserId,
         current_user_email: str | None,
-        correo_sin_verificar: str,
     ) -> tuple[str | None, bool]:
         """
         La fase 1: si ya no esta pendiente (o caduco) se guarda tal cual, y si
@@ -173,16 +173,12 @@ class RespondToInvitationUseCase:
         cerrada_ahora: Invitation | None = None
         async with self._uow:
             invitation = await self._uow.invitations.find_by_id(invitation_id)
-            if (
-                not invitation
-                or self._solo_por_un_correo_sin_verificar(
-                    invitation, current_user_id, current_user_email, correo_sin_verificar
-                )
-                or not self._es_el_invitado(invitation, current_user_id, current_user_email)
+            if not invitation or not self._es_el_invitado(
+                invitation, current_user_id, current_user_email
             ):
-                # La de un correo que no ha verificado no existe para el (F-07), ni la de
-                # otro (auditoría de la fase 6, B-16): el mismo 404, antes de tocarla y sin
-                # decir su estado (caducada o sin plaza)
+                # La de otro no existe para él (auditoría de la fase 6, B-16), tampoco la de
+                # un correo que aún no ha verificado (F-07: sin verificar, su correo no
+                # cuenta): el mismo 404, antes de tocarla y sin decir su estado
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
 
             estaba_pendiente = invitation.is_pending()
@@ -196,8 +192,7 @@ class RespondToInvitationUseCase:
                     cerrada_ahora = invitation
             elif (
                 action == "ACCEPT"
-                # Solo el invitado: con el id de otra no se le cambia nada
-                and self._es_el_invitado(invitation, current_user_id, current_user_email)
+                # Ya es el invitado (lo de arriba): con el id de otra no se llega aquí
                 and await self._inscripcion_cerrada(invitation)
             ):
                 # Una pendiente de antes de que el cierre las rechazara (#710):
@@ -247,17 +242,6 @@ class RespondToInvitationUseCase:
         """Si quien responde es el invitado, por su cuenta o por su email verificado."""
         return invitation.is_for_user(user_id) or (
             email is not None and invitation.is_for_email(email)
-        )
-
-    @staticmethod
-    def _solo_por_un_correo_sin_verificar(
-        invitation: Invitation, user_id: UserId, email_verificado: str | None, correo: str
-    ) -> bool:
-        """Si solo seria suya por un correo que aun no ha verificado (F-07)."""
-        return (
-            email_verificado is None
-            and not invitation.is_for_user(user_id)
-            and invitation.is_for_email(correo)
         )
 
     async def _inscripcion_cerrada(self, invitation: Invitation) -> bool:

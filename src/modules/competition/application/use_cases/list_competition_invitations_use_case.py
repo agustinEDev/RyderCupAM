@@ -13,6 +13,7 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.lo_que_ve_el_organizador import (
+    RESPONDIDAS,
     lo_que_ve_el_organizador,
 )
 from src.modules.competition.application.services.nombre_de_quien_invita import (
@@ -27,6 +28,7 @@ from src.modules.competition.domain.value_objects.invitation_status import Invit
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -123,13 +125,22 @@ class ListCompetitionInvitationsUseCase:
                 )
 
                 invitee_name = None
+                quien_respondio = None
                 if inv.invitee_user_id:
                     invitee_user = await self._user_uow.users.find_by_id(inv.invitee_user_id)
                     if invitee_user:
                         invitee_name = invitee_user.display_name
+                elif inv.status in RESPONDIDAS:
+                    # Por correo a una cuenta que aún no lo había verificado: respondió
+                    # quien lo verificó después, y ya respondida se ve su nombre (B-03,
+                    # /code-review)
+                    cuenta = await self._user_uow.users.find_by_email(Email(inv.invitee_email))
+                    if cuenta and cuenta.email_verified:
+                        invitee_name = cuenta.display_name
+                        quien_respondio = cuenta.id
 
                 # Lo mismo que vio al enviarla: nombre o correo tecleado (B-01/B-03)
-                quien = lo_que_ve_el_organizador(inv, invitee_name)
+                quien = lo_que_ve_el_organizador(inv, invitee_name, quien_respondio)
                 invitation_dtos.append(
                     InvitationResponseDTO(
                         id=inv.id.value,

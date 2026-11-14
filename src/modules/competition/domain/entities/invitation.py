@@ -178,7 +178,7 @@ class Invitation:
     @property
     def sent_by_email(self) -> bool:
         """Si se mandó tecleando un correo (True) o eligiendo a un usuario (False)."""
-        return getattr(self, "_sent_by_email", False)
+        return self._sent_by_email
 
     @property
     def status(self) -> InvitationStatus:
