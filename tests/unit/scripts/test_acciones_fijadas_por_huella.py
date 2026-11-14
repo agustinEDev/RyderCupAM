@@ -42,6 +42,10 @@ def test_every_action_in_every_workflow_is_pinned_by_commit_with_its_version():
     ficheros = sorted(WORKFLOWS.glob("*.yml")) + sorted(WORKFLOWS.glob("*.yaml"))
     assert ficheros, "no se encontró ningún workflow"
 
+    textos = [f.read_text() for f in ficheros]
+    # Que el escáner vea acciones: si un día no casara con nada, pasaría en vacío
+    assert sum(1 for t in textos for linea in t.splitlines() if USES.match(linea)) > 0
+
     malas = {f.name: m for f in ficheros if (m := _mal_fijadas(f.read_text()))}
 
     assert malas == {}
