@@ -134,7 +134,9 @@ def test_h4_only_the_column_with_time_zone_changes(base_desechable):  # noqa: F8
                 "TYPE timestamp without time zone USING created_at AT TIME ZONE 'UTC'"
             )
         )
-        conn.execute(text("ALTER DATABASE CURRENT SET TimeZone = 'Europe/Madrid'"))
+        # Por su nombre: `ALTER DATABASE CURRENT` es de Postgres 16 y el CI usa la 15
+        nombre = conn.execute(text("SELECT current_database()")).scalar()
+        conn.exec_driver_sql(f"ALTER DATABASE \"{nombre}\" SET TimeZone = 'Europe/Madrid'")
         # Sin partido ni jugador de verdad: las claves foráneas, apagadas en esta sesión
         conn.execute(text("SET session_replication_role = replica"))
         conn.execute(
