@@ -4,6 +4,7 @@ Handicap API Routes - Infrastructure Layer
 Endpoints HTTP para gestión de hándicaps de usuarios.
 """
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -42,6 +43,8 @@ from src.modules.user.infrastructure.api.authorization import (
     require_admin,
     require_self_or_admin,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/handicaps")
 
@@ -223,9 +226,12 @@ async def update_user_handicap(
         return result
 
     except HandicapServiceUnavailableError as e:
+        # La causa, al log (que alguien se entere de que la RFEG falla); al cliente,
+        # solo que no está disponible (auditoría de la fase 6, B-15)
+        logger.warning("El servicio de hándicap no está disponible: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"El servicio de hándicap no está disponible: {e!s}",
+            detail="El servicio de hándicap no está disponible",
         ) from None
 
 

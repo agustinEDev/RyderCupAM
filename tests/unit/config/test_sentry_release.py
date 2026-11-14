@@ -74,6 +74,8 @@ class TestComportamientoQueNoCambia:
     ) -> None:
         monkeypatch.setattr(sentry_config.settings, "SENTRY_DSN", DSN)
         monkeypatch.setattr(sentry_config.settings, "SENTRY_ENVIRONMENT", "production")
+        # El modo depuración sigue a ENVIRONMENT, con la regla del arranque (B-09)
+        monkeypatch.setenv("ENVIRONMENT", "production")
         monkeypatch.setattr(sentry_config.settings, "SENTRY_TRACES_SAMPLE_RATE", 0.1)
         monkeypatch.setattr(sentry_config.settings, "SENTRY_PROFILES_SAMPLE_RATE", 0.2)
         with patch.object(sentry_config.sentry_sdk, "init") as init:

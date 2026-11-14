@@ -923,23 +923,19 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          # El token va por env al paso que envía el SBOM; git no lo necesita (INF-04)
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
-      - name: Restore pip cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install cyclonedx-bom
+      # Solo el generador, con versión fija: lee requirements.txt sin instalar lo
+      # que lista, así que no se instala nada más (auditoría de la fase 6, INF-04)
+      - name: Install SBOM generator
+        run: pip install cyclonedx-bom==8.0.1
 
       - name: Generate SBOM (CycloneDX JSON)
         run: |
@@ -1264,6 +1260,9 @@ jobs:
       - name: Generate OpenAPI (this PR and its base)
         env:
           BASE_REF: ${{ github.base_ref }}
+          # Sin ENVIRONMENT la app cuenta como producción y pide FRONTEND_ORIGINS
+          # (auditoría de la fase 6, B-09); el esquema no depende del entorno
+          ENVIRONMENT: development
         run: |
           # La app genera su esquema sin base de datos ni secretos: en el CI no hay .env
           GEN='import json; from main import app; json.dump(app.openapi(), open(__import__("sys").argv[1], "w"), sort_keys=True)'

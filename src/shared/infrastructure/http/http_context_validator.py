@@ -29,6 +29,8 @@ import os
 
 from fastapi import Request
 
+from src.config.arranque_seguro import en_desarrollo_declarado
+
 logger = logging.getLogger(__name__)
 
 # Constantes de validación
@@ -295,7 +297,7 @@ def informa_del_secreto_de_origen() -> None:
         )
     elif configurada:
         logger.info("Cabecera de origen de Cloudflare configurada (ADR-041)")
-    elif os.getenv("ENVIRONMENT", "development").lower() == "production":
+    elif not en_desarrollo_declarado():
         logger.warning(
             "Cabecera de origen de Cloudflare sin configurar: la IP real no se usa (ADR-041)"
         )
