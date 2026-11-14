@@ -27,7 +27,10 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
-from src.config.arranque_seguro import comprueba_la_configuracion_de_seguridad  # noqa: E402
+from src.config.arranque_seguro import (  # noqa: E402
+    comprueba_la_configuracion_de_seguridad,
+    en_desarrollo_declarado,
+)
 from src.config.aviso_en_segundo_plano import drena_al_apagar  # noqa: E402
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
@@ -418,8 +421,8 @@ app.add_middleware(CorrelationMiddleware)
 
 # Debug middleware para ver requests CORS (solo en desarrollo)
 # Va casi al final para ejecutarse casi primero (solo le envuelve el de las cabeceras)
-ENV = os.getenv("ENVIRONMENT", "development").lower()
-if ENV != "production":
+# Con la regla del arranque: un ENVIRONMENT mal escrito no lo monta (fase 6, B-09)
+if en_desarrollo_declarado():
 
     @app.middleware("http")
     async def debug_cors_requests(request, call_next):

@@ -1266,6 +1266,9 @@ jobs:
       - name: Generate OpenAPI (this PR and its base)
         env:
           BASE_REF: ${{ github.base_ref }}
+          # Sin ENVIRONMENT la app cuenta como producción y pide FRONTEND_ORIGINS
+          # (auditoría de la fase 6, B-09); el esquema no depende del entorno
+          ENVIRONMENT: development
         run: |
           # La app genera su esquema sin base de datos ni secretos: en el CI no hay .env
           GEN='import json; from main import app; json.dump(app.openapi(), open(__import__("sys").argv[1], "w"), sort_keys=True)'

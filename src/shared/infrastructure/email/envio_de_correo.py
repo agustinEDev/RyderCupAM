@@ -32,6 +32,8 @@ from functools import cache
 
 import httpx
 
+from src.config.arranque_seguro import en_desarrollo_declarado
+
 logger = logging.getLogger(__name__)
 
 # 10 s por paso (5 para conectar). Un paso entero cabe en 15 s: un respaldo solo empieza
@@ -385,7 +387,8 @@ def comprueba_el_envio_de_correo(entorno: Mapping[str, str]) -> None:
     transporte = _transporte(entorno)
     if transporte not in TRANSPORTES:
         raise RuntimeError(f"EMAIL_TRANSPORT must be one of {TRANSPORTES}, got {transporte!r}")
-    produccion = _valor(entorno, "ENVIRONMENT", "development").lower() == "production"
+    # La regla del arranque: solo ENVIRONMENT=development es desarrollo (fase 6, B-09)
+    produccion = not en_desarrollo_declarado(entorno)
     if produccion and transporte != "mailgun":
         raise RuntimeError("EMAIL_TRANSPORT must be 'mailgun' in production")
     if produccion and not _valor(entorno, "MAILGUN_API_KEY", ""):
@@ -438,7 +441,8 @@ def brevo_desde(entorno: Mapping[str, str]) -> BrevoTransport | None:
 
 def envia_por_mailgun_en_produccion(entorno: Mapping[str, str]) -> bool:
     """Producción y transporte mailgun (vacío o sin poner también)."""
-    produccion = _valor(entorno, "ENVIRONMENT", "development").lower() == "production"
+    # La regla del arranque: solo ENVIRONMENT=development es desarrollo (fase 6, B-09)
+    produccion = not en_desarrollo_declarado(entorno)
     return produccion and _transporte(entorno) == "mailgun"
 
 
