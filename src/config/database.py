@@ -31,18 +31,29 @@ if not DATABASE_URL:
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Tiempos límite de cada conexión (auditoría de la fase 6, DB-04): sin ellos, una consulta
-# lenta o una petición que muere a mitad de una transacción retenía una conexión del pool y
-# sus bloqueos sin límite. En milisegundos; un valor que no sirva (0 sería «sin límite» en
-# Postgres) vuelve al de por defecto
-AJUSTES_DE_LA_CONEXION = {
-    "server_settings": {
-        "statement_timeout": str(env_int("DB_STATEMENT_TIMEOUT_MS", default=15_000)),
-        "idle_in_transaction_session_timeout": str(
-            env_int("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", default=30_000)
-        ),
+
+def ajustes_de_la_conexion() -> dict[str, dict[str, str]]:
+    """
+    Los tiempos límite de cada conexión (auditoría de la fase 6, DB-04), en milisegundos.
+
+    Sin ellos, una consulta lenta o una petición que muere a mitad de una transacción
+    retenía una conexión del pool y sus bloqueos sin límite. La consulta, 15 s. La
+    transacción abierta y parada, 2 minutos: por encima de lo que puede esperar una
+    petición a un servicio externo (un correo que prueba tres proveedores, la RFEG), y
+    corta lo que de verdad se queda colgado (decidido por Agustín el 14 nov 2026). Un
+    valor que no sirva (0 sería «sin límite» en Postgres) vuelve al de por defecto.
+    """
+    return {
+        "server_settings": {
+            "statement_timeout": str(env_int("DB_STATEMENT_TIMEOUT_MS", default=15_000)),
+            "idle_in_transaction_session_timeout": str(
+                env_int("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", default=120_000)
+            ),
+        }
     }
-}
+
+
+AJUSTES_DE_LA_CONEXION = ajustes_de_la_conexion()
 
 # 2. Crear un motor (engine) asíncrono
 async_engine = create_async_engine(

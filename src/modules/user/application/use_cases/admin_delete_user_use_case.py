@@ -29,8 +29,9 @@ class AdminDeleteUserUseCase:
       borraria el torneo entero para todos sus participantes).
     - Ha creado alguna partida rapida (mismo motivo, quick_matches.creator_id CASCADE).
     - Ha solicitado algun campo de golf (golf_courses.creator_id sin ON DELETE: fallaria).
-    - Tiene algun hole score registrado (hole_scores.player_user_id es ON DELETE
-      CASCADE, pero borrarlos falsearia el resultado del partido para sus rivales).
+    - Tiene algun hole score registrado (hole_scores.player_user_id sin ON DELETE: la
+      base tambien lo impide, porque borrarlos falsearia el resultado del partido para
+      sus rivales; migracion e7b9d1f3a5c2).
 
     En esos casos, el panel de administracion debe ofrecer "Desactivar" en su lugar
     (ver AdminSetUserActiveUseCase).

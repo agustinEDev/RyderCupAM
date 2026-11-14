@@ -1241,7 +1241,9 @@ hole_scores_table = Table(
     Column(
         "player_user_id",
         UserIdDecorator,
-        ForeignKey("users.id", ondelete="CASCADE"),
+        # Sin cascada, como en producción (auditoría de la fase 6, DB-02): un usuario con
+        # golpes no se puede borrar, ni en una carrera con quien anota (migración e7b9d1f3a5c2)
+        ForeignKey("users.id"),
         nullable=False,
     ),
     Column("team", String(1), nullable=False),

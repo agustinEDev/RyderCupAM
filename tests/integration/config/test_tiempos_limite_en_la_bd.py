@@ -23,10 +23,12 @@ async def test_t1_t2_postgres_applies_the_connection_timeouts():
     motor = create_async_engine(_url(), connect_args=AJUSTES_DE_LA_CONEXION)
     try:
         async with motor.connect() as conexion:
-            consulta = await conexion.execute(text("SHOW statement_timeout"))
-            assert consulta.scalar() == "15s"
-            espera = await conexion.execute(text("SHOW idle_in_transaction_session_timeout"))
-            assert espera.scalar() == "30s"
+            ajustes = AJUSTES_DE_LA_CONEXION["server_settings"]
+            for nombre, valor in ajustes.items():
+                aplicado = await conexion.execute(
+                    text("SELECT setting FROM pg_settings WHERE name = :n"), {"n": nombre}
+                )
+                assert aplicado.scalar() == valor
     finally:
         await motor.dispose()
 

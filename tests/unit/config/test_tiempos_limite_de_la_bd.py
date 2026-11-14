@@ -9,63 +9,62 @@ a un bloqueo, con la API en cola detrás.
     caso                                                 | qué pasa
     -----------------------------------------------------|--------------------------------
     T1 cada conexión de la API                           | statement_timeout = 15 s
-    T2 cada conexión de la API                           | idle_in_transaction = 30 s
-    T1/T2 se pueden ajustar sin desplegar                | DB_STATEMENT_TIMEOUT_MS, DB_IDLE_IN_TRANSACTION_TIMEOUT_MS
+    T2 cada conexión de la API                           | idle_in_transaction = 2 min
+    T1/T2 se pueden ajustar sin desplegar                | DB_STATEMENT_TIMEOUT_MS,
+                                                         | DB_IDLE_IN_TRANSACTION_TIMEOUT_MS
+    un valor que no sirve                                | el de por defecto, nunca «sin límite»
+    el motor de la API                                   | usa esos ajustes
     T3 las migraciones                                   | lock_timeout = 5 s antes de migrar
 """
 
-import importlib
 import re
 from pathlib import Path
 
 import pytest
 
+from src.config.database import ajustes_de_la_conexion
+
 RAIZ = Path(__file__).resolve().parents[3]
 
 
-def _motor_con(monkeypatch, **entorno) -> dict:
-    """Recarga `src.config.database` y devuelve con qué argumentos crea el motor."""
-    import sqlalchemy.ext.asyncio as sa_async
-
-    from src.config import database
-
-    for nombre, valor in entorno.items():
-        monkeypatch.setenv(nombre, valor)
-    llamadas: list[dict] = []
-
-    def crea(url, **kwargs):
-        llamadas.append(kwargs)
-        return object()
-
-    monkeypatch.setattr(sa_async, "create_async_engine", crea)
-    monkeypatch.setattr(sa_async, "async_sessionmaker", lambda **_: None)
-    try:
-        importlib.reload(database)
-    finally:
-        monkeypatch.undo()
-        importlib.reload(database)
-    [kwargs] = llamadas
-    return kwargs
-
-
 def test_t1_t2_every_api_connection_has_statement_and_idle_transaction_timeouts(monkeypatch):
-    ajustes = _motor_con(monkeypatch)["connect_args"]["server_settings"]
+    monkeypatch.delenv("DB_STATEMENT_TIMEOUT_MS", raising=False)
+    monkeypatch.delenv("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", raising=False)
 
-    assert ajustes == {
-        "statement_timeout": "15000",
-        "idle_in_transaction_session_timeout": "30000",
+    assert ajustes_de_la_conexion() == {
+        "server_settings": {
+            "statement_timeout": "15000",
+            "idle_in_transaction_session_timeout": "120000",
+        }
     }
 
 
 def test_the_timeouts_can_be_changed_from_the_environment(monkeypatch):
-    ajustes = _motor_con(
-        monkeypatch,
-        DB_STATEMENT_TIMEOUT_MS="30000",
-        DB_IDLE_IN_TRANSACTION_TIMEOUT_MS="60000",
-    )["connect_args"]["server_settings"]
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "30000")
+    monkeypatch.setenv("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", "60000")
+
+    ajustes = ajustes_de_la_conexion()["server_settings"]
 
     assert ajustes["statement_timeout"] == "30000"
     assert ajustes["idle_in_transaction_session_timeout"] == "60000"
+
+
+@pytest.mark.parametrize("valor", ["0", "-1", "abc"])
+def test_a_wrong_value_does_not_remove_the_timeout(monkeypatch, valor):
+    """Un 0 en Postgres es «sin límite»: un valor que no sea un número positivo vuelve al
+    de por defecto, no quita el límite."""
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", valor)
+
+    assert ajustes_de_la_conexion()["server_settings"]["statement_timeout"] == "15000"
+
+
+def test_the_api_engine_is_created_with_those_settings():
+    fuente = (RAIZ / "src" / "config" / "database.py").read_text()
+
+    llamada = fuente[fuente.index("async_engine = create_async_engine(") :]
+    llamada = llamada[: llamada.index("\n)\n")]
+
+    assert "connect_args=AJUSTES_DE_LA_CONEXION" in llamada
 
 
 def test_t3_migrations_wait_at_most_five_seconds_for_a_lock():
@@ -77,17 +76,5 @@ def test_t3_migrations_wait_at_most_five_seconds_for_a_lock():
     online = env[env.index("def run_migrations_online") :]
 
     puesto = re.search(r"SET lock_timeout = '5s'", online)
-    configura = online.index("context.configure(")
     assert puesto is not None
-    assert puesto.start() < configura
-
-
-@pytest.mark.parametrize("valor", ["0", "-1", "abc"])
-def test_a_wrong_value_does_not_remove_the_timeout(monkeypatch, valor):
-    """Un 0 en Postgres es «sin límite»: un valor que no sea un número positivo vuelve al
-    de por defecto, no quita el límite."""
-    ajustes = _motor_con(monkeypatch, DB_STATEMENT_TIMEOUT_MS=valor)["connect_args"][
-        "server_settings"
-    ]
-
-    assert ajustes["statement_timeout"] == "15000"
+    assert puesto.start() < online.index("context.configure(")
