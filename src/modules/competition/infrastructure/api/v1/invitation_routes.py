@@ -20,6 +20,7 @@ from src.config.dependencies import (
     get_send_invitation_by_email_use_case,
     get_send_invitation_by_user_id_use_case,
 )
+from src.config.rate_limit import INVITATIONS_PER_USER_LIMIT, cabe, clave_de_usuario
 from src.modules.competition.application.dto.invitation_dto import (
     PaginatedInvitationResponseDTO,
     RespondInvitationRequestDTO,
@@ -50,6 +51,10 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
     InvitationNoRoomViolation,
     InvitationRateLimitViolation,
+    InvitationUserRateLimitViolation,
+)
+from src.modules.competition.domain.services.competition_policy import (
+    MAX_INVITATIONS_PER_USER_PER_HOUR,
 )
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -79,10 +84,26 @@ SIN_PLAZAS = "The competition is full: there are no places left to invite."
 FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
 
 
-def _freno_por_hora(e: InvitationRateLimitViolation) -> JSONResponse:
+# El de quien invita, sumando todas sus competiciones (auditoría de la fase 6, B-03)
+FRENO_DEL_ORGANIZADOR = "Too many invitations sent in the last hour."
+
+
+def _freno_por_hora(
+    e: InvitationRateLimitViolation | InvitationUserRateLimitViolation,
+) -> JSONResponse:
+    detalle = (
+        FRENO_DEL_ORGANIZADOR if isinstance(e, InvitationUserRateLimitViolation) else FRENO_POR_HORA
+    )
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content={"detail": FRENO_POR_HORA, "error_code": e.error_code, "limit": e.limit},
+        content={"detail": detalle, "error_code": e.error_code, "limit": e.limit},
+    )
+
+
+def _freno_del_organizador() -> InvitationUserRateLimitViolation:
+    """El mismo 429 que el tope por filas, para el freno por peticiones."""
+    return InvitationUserRateLimitViolation(
+        "Too many invitation requests in the last hour.", limit=MAX_INVITATIONS_PER_USER_PER_HOUR
     )
 
 
@@ -140,9 +161,16 @@ async def send_invitation_by_user_id(
             invitee_user_id=body.invitee_user_id,
             personal_message=body.personal_message,
         )
+        # Antes que nada: cada petición cuenta, salga bien o mal (B-03)
+        if not cabe(
+            INVITATIONS_PER_USER_LIMIT,
+            "invitations-per-user",
+            clave_de_usuario(str(current_user.id)),
+        ):
+            return _freno_por_hora(_freno_del_organizador())
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except InvitationRateLimitViolation as e:
+    except (InvitationRateLimitViolation, InvitationUserRateLimitViolation) as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
     except TeamsFormedError as e:
@@ -179,9 +207,16 @@ async def send_invitation_by_email(
             invitee_email=body.invitee_email,
             personal_message=body.personal_message,
         )
+        # Antes que nada: cada petición cuenta, salga bien o mal (B-03)
+        if not cabe(
+            INVITATIONS_PER_USER_LIMIT,
+            "invitations-per-user",
+            clave_de_usuario(str(current_user.id)),
+        ):
+            return _freno_por_hora(_freno_del_organizador())
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except InvitationRateLimitViolation as e:
+    except (InvitationRateLimitViolation, InvitationUserRateLimitViolation) as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
     except TeamsFormedError as e:
