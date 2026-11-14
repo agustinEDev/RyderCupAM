@@ -9,7 +9,13 @@
 #   base-ref: Base commit to compare from (default: origin/main)
 #   head-ref: Head commit to compare to (default: HEAD)
 #
-# Requirements: gpg, git
+# Requirements: gpg, git; gh and GITHUB_REPOSITORY for merge and GitHub web-flow commits
+#
+# Merge commits and GitHub web-flow commits are not verified with the local keyring:
+# GitHub signs them with its own key. They used to be skipped, but both can be forged
+# locally (`git merge` without -S, or GIT_COMMITTER_EMAIL=noreply@github.com), so
+# GitHub is asked whether each one is verified (audit phase 6, INF-06). No answer
+# from GitHub is not a pass.
 
 set -e
 
@@ -113,29 +119,44 @@ while IFS= read -r commit; do
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    # Detect GitHub web-flow commits (merge or squash merge via GitHub UI/API)
-    # Primary signal: committer email set by GitHub's server (not forgeable by users)
+    # GitHub web-flow commits (merge or squash merge via GitHub UI/API). The committer
+    # e-mail is only a hint (anyone can set it): GitHub is asked below
     IS_GITHUB_WEBFLOW=false
     COMMITTER_EMAIL=$(git log -1 --format="%ce" "$commit")
     if echo "$COMMITTER_EMAIL" | grep -iq "noreply@github.com"; then
         IS_GITHUB_WEBFLOW=true
     fi
 
-    # Skip merge commits and GitHub web-flow commits (squash merges)
+    # Merge commits and GitHub web-flow commits: GitHub must say they are verified
     if [ "$PARENT_COUNT" -ge 2 ] || [ "$IS_GITHUB_WEBFLOW" = true ]; then
         MERGE_COUNT=$((MERGE_COUNT + 1))
+        [ "$IS_GITHUB_WEBFLOW" = true ] && GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
+        TIPO="MERGE COMMIT"
+        [ "$IS_GITHUB_WEBFLOW" = true ] && TIPO="GITHUB WEB-FLOW"
 
-        if [ "$IS_GITHUB_WEBFLOW" = true ]; then
-            GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
-            echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-            echo "   Author: $COMMIT_AUTHOR"
-            echo "   Type: GITHUB WEB-FLOW (signature not required)"
-        elif [ "$PARENT_COUNT" -ge 2 ]; then
-            echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-            echo "   Author: $COMMIT_AUTHOR"
-            echo "   Type: MERGE COMMIT (signature not required)"
+        if [ -z "${GITHUB_REPOSITORY:-}" ]; then
+            VERIFIED="no-repo"
+        else
+            VERIFIED=$(gh api "repos/$GITHUB_REPOSITORY/commits/$commit" \
+                --jq '.commit.verification.verified' 2>/dev/null) || VERIFIED="no-answer"
         fi
-        VALID_COUNT=$((VALID_COUNT + 1))
+
+        if [ "$VERIFIED" = "true" ]; then
+            echo -e "🔀 ${GREEN}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Type: $TIPO (verified by GitHub)"
+            VALID_COUNT=$((VALID_COUNT + 1))
+        elif [ "$VERIFIED" = "false" ]; then
+            echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Type: $TIPO, NOT VERIFIED by GitHub"
+            UNSIGNED_COMMITS+=("$COMMIT_SHORT")
+        else
+            echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Type: $TIPO, could not ask GitHub whether it is verified ($VERIFIED)"
+            UNSIGNED_COMMITS+=("$COMMIT_SHORT")
+        fi
     else
         # Regular commit or manual merge - verify signature
         SIG_STATUS=$(git verify-commit "$commit" 2>&1 || true)
@@ -173,7 +194,7 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
-echo "   Merge commits (signature not required): $MERGE_COUNT"
+echo "   Merge commits (verified by GitHub): $MERGE_COUNT"
 echo "      ↳ GitHub auto-merges: $GITHUB_AUTO_MERGE_COUNT"
 echo "      ↳ Manual merges: $((MERGE_COUNT - GITHUB_AUTO_MERGE_COUNT))"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
