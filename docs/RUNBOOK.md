@@ -247,3 +247,28 @@ kubectl exec -it -n rydercup deployment/api-deployment -- bash
 - Docker Docs: http://localhost:8000/docs
 - Docker PostgreSQL: localhost:5432
 - K8s (port-forward): kubectl port-forward -n rydercup svc/api-service 8000:8000
+
+## Usuario de la API sin permisos de estructura (DB-01)
+
+La API puede entrar con `rydercup_app`, que solo lee y escribe filas; las migraciones del
+arranque entran con el dueño de la base. Sin `MIGRATIONS_DATABASE_URL` todo funciona como
+antes (las migraciones usan `DATABASE_URL`).
+
+1. **Comprobar quién es el dueño.** Con la URL actual de la API (la del dueño), en psql:
+   `SELECT current_user;` tiene que dar el dueño de las tablas
+   (`SELECT tableowner FROM pg_tables WHERE tablename = 'users';`). Si no coinciden,
+   parar: los permisos por defecto del paso 2 serían de otro usuario.
+2. **Crear el usuario.** En la misma sesión: `\i scripts/db/rol_de_la_api.sql` (se puede
+   repetir) y `\password rydercup_app`. La contraseña se escribe en el aviso de psql y no
+   se guarda en ningún fichero. Sin psql instalado:
+   `docker run --rm -it -v "$PWD/scripts/db:/s:ro" postgres:16 psql "<URL del dueño>"` y
+   `\i /s/rol_de_la_api.sql`.
+3. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
+   ACTUAL de `DATABASE_URL` y desplegar. Todo sigue igual.
+4. **Render, el cambio:** `DATABASE_URL` pasa a
+   `postgresql://rydercup_app:<contraseña>@<mismo host>:5432/<misma base>` y desplegar.
+   Mirar `/health`, entrar en la app y anotar algo de prueba en el Kind antes.
+5. **Volver atrás:** `DATABASE_URL` con el valor de `MIGRATIONS_DATABASE_URL` y desplegar.
+
+Las tablas que creen las migraciones futuras ya le dan permiso a `rydercup_app` solas (paso
+4 del script). Las copias (`backup_ro`) y n8n no cambian.

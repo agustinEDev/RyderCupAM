@@ -354,3 +354,51 @@ def test_s13_csrf_and_rate_limit_share_the_test_mode_predicate():
         codigo = (RAIZ / fichero).read_text(encoding="utf-8")
         assert "modo_de_tests(" in codigo, fichero
         assert "testing_activado(" not in codigo, fichero
+
+
+# --- R4: la URL de las migraciones (auditoría de la fase 6, DB-01) ---------------------
+
+
+@pytest.mark.parametrize("entorno_base", [{"ENVIRONMENT": "development"}, {}])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "mysql://u:clave-secreta@h/db",
+        "clave-secreta",
+        "http://x",
+        "postgresx://u:clave-secreta@h/db",
+        "postgresql:/u:clave-secreta@h/db",
+    ],
+)
+def test_r4_a_malformed_migrations_url_does_not_start_and_is_not_shown(entorno_base, url):
+    """
+    Given: MIGRATIONS_DATABASE_URL puesta, pero sin formato de URL de Postgres
+    When: Se comprueba la configuración (en desarrollo o fuera)
+    Then: No arranca, dice el motivo y no muestra la URL (lleva la contraseña del dueño)
+    """
+    entorno = {"SECRET_KEY": CLAVE_BUENA, **entorno_base, "MIGRATIONS_DATABASE_URL": url}
+
+    with pytest.raises(RuntimeError) as error:
+        comprueba_la_configuracion_de_seguridad(entorno)
+
+    assert "MIGRATIONS_DATABASE_URL" in str(error.value)
+    assert "clave-secreta" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "postgres://u:p@h:5432/db",
+        "postgresql://u:p@h/db",
+        "postgresql+psycopg2://u:p@h/db",
+        "postgresql+asyncpg://u:p@h/db",
+    ],
+)
+def test_r4_a_postgres_migrations_url_or_none_starts(url):
+    """Una URL de Postgres, o ninguna, no impide arrancar."""
+    entorno = {"ENVIRONMENT": "production", "SECRET_KEY": CLAVE_BUENA}
+    if url:
+        entorno["MIGRATIONS_DATABASE_URL"] = url
+
+    comprueba_la_configuracion_de_seguridad(entorno)

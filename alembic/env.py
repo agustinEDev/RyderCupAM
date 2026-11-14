@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -31,6 +30,7 @@ from sqlalchemy import engine_from_config, pool  # noqa: E402
 # migraciones (test_schema_parity)
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
+from src.config.migraciones import url_de_las_migraciones  # noqa: E402
 
 start_all_mappers()
 
@@ -77,8 +77,8 @@ target_metadata = metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    # Priorizar DATABASE_URL de entorno sobre alembic.ini
-    url = os.getenv("DATABASE_URL")
+    # Priorizar la URL de entorno sobre alembic.ini: la del dueño si la hay (DB-01)
+    url = url_de_las_migraciones()
     if not url:
         url = config.get_main_option("sqlalchemy.url")
 
@@ -98,7 +98,8 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    db_url = os.getenv("DATABASE_URL")
+    # La del dueño de la base si la hay; si no, la de la API (DB-01)
+    db_url = url_de_las_migraciones()
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
