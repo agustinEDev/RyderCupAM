@@ -113,6 +113,12 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Como mucho 5 s esperando un bloqueo (auditoría de la fase 6, DB-04): si una
+        # transacción larga tiene la tabla, el arranque falla y Render sigue con la versión
+        # anterior, en vez de dejar la API en cola detrás del ALTER. De la sesión, así que
+        # vale para todas las migraciones, también las de autocommit_block()
+        connection.exec_driver_sql("SET lock_timeout = '5s'")
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
