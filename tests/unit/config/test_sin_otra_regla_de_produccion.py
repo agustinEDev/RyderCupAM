@@ -13,6 +13,8 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[3]
 OTRA_REGLA = re.compile(r"""[!=]=\s*["']production["']""")
+# Y la de desarrollo escrita a mano: la regla vive solo en `arranque_seguro`
+OTRA_REGLA_DE_DESARROLLO = re.compile(r"""ENVIRONMENT.*[!=]=\s*["']development["']""")
 
 
 def test_ningun_fichero_compara_environment_con_production():
@@ -21,7 +23,7 @@ def test_ningun_fichero_compara_environment_con_production():
         f"{f.relative_to(RAIZ)}:{n}"
         for f in ficheros
         for n, linea in enumerate(f.read_text().splitlines(), 1)
-        if OTRA_REGLA.search(linea)
+        if OTRA_REGLA.search(linea) or OTRA_REGLA_DE_DESARROLLO.search(linea)
     ]
 
     assert usos == []
@@ -31,3 +33,6 @@ def test_el_escaner_ve_las_dos_formas():
     assert OTRA_REGLA.search('if env == "production":')
     assert OTRA_REGLA.search("if ENV != 'production':")
     assert not OTRA_REGLA.search('SENTRY_ENVIRONMENT = "production"')
+    assert OTRA_REGLA_DE_DESARROLLO.search(
+        'en_desarrollo = entorno.get("ENVIRONMENT", "").strip().lower() == "development"'
+    )

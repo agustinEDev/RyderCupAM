@@ -932,12 +932,6 @@ jobs:
         with:
           python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
-      - name: Restore pip cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
-
       # Solo el generador, con versión fija: lee requirements.txt sin instalar lo
       # que lista, así que no se instala nada más (auditoría de la fase 6, INF-04)
       - name: Install SBOM generator

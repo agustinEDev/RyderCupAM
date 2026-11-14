@@ -537,7 +537,8 @@ async def get_my_roles_in_competition(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid competition ID format: {e!s}",
+            # Sin el texto: aquí puede caer un ValueError de dentro (B-15)
+            detail="Invalid competition ID format",
         ) from e
     except Exception as e:
         # El detalle, al log y a Sentry; al cliente, nada de lo de dentro (B-15)

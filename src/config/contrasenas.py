@@ -14,6 +14,7 @@ import logging
 import os
 from collections.abc import Mapping
 
+from src.config.arranque_seguro import en_desarrollo_declarado
 from src.config.env import env_int
 from src.modules.user.domain.ports.password_hasher import instala_el_hasher
 from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
@@ -61,7 +62,7 @@ def rondas_de_bcrypt(entorno: Mapping[str, str] = os.environ) -> int:
         rondas = RONDAS_DE_PRODUCCION
     # Como en rate_limit: un entorno ausente o desconocido cuenta como producción.
     # Solo un desarrollo declarado (local, Kind, los tests) admite un coste bajo
-    en_desarrollo = entorno.get("ENVIRONMENT", "").strip().lower() == "development"
+    en_desarrollo = en_desarrollo_declarado(entorno)
     if rondas < RONDAS_DE_PRODUCCION and not en_desarrollo:
         raise RuntimeError(
             f"BCRYPT_ROUNDS={rondas} fuera de desarrollo: el mínimo es {RONDAS_DE_PRODUCCION}"

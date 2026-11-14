@@ -7,6 +7,8 @@ B-15 = Q-BE F-06).
     E1 roles: falla la base de datos               | 500 «Internal server error», sin más
     E1b roles: el detalle sí queda en el log       | logger.exception con la causa
     E2 hándicap: la RFEG no responde               | 503 sin el error de la conexión
+    E2b hándicap: la causa sí queda en el log      | aviso con el error de la RFEG
+    E4 roles: un ValueError de dentro              | 400 sin el texto del error
     E3 roles: competición que no existe (sin cambio)| 404 como siempre
 """
 
@@ -106,3 +108,36 @@ async def test_e3_una_competicion_que_no_existe_sigue_dando_404():
         await get_my_roles_in_competition(competition_id=uuid4(), current_user=_usuario(), uow=uow)
 
     assert fallo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_e2b_la_causa_del_503_queda_en_el_log(caplog):
+    caplog.set_level(logging.WARNING)
+    caso_de_uso = MagicMock()
+    caso_de_uso.execute = AsyncMock(
+        side_effect=HandicapServiceUnavailableError(f"La RFEG devolvió algo raro: {SECRETO}")
+    )
+    ruta = getattr(update_user_handicap, "__wrapped__", update_user_handicap)
+
+    with pytest.raises(HTTPException):
+        await ruta(
+            request=MagicMock(),
+            handicap_data=UpdateHandicapRequestDTO(user_id=uuid4()),
+            use_case=caso_de_uso,
+            current_user=_usuario(admin=True),
+        )
+
+    assert any(SECRETO in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_e4_el_400_de_los_roles_no_lleva_el_texto_de_un_error_de_dentro():
+    with pytest.raises(HTTPException) as fallo:
+        await get_my_roles_in_competition(
+            competition_id=uuid4(),
+            current_user=_usuario(),
+            uow=_uow_que_falla(ValueError(SECRETO)),
+        )
+
+    assert fallo.value.status_code == 400
+    assert SECRETO not in str(fallo.value.detail)
