@@ -14,7 +14,6 @@ from src.modules.competition.application.dto.invitation_dto import (
 )
 from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
-    NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
@@ -178,7 +177,8 @@ class TestRespondToInvitationUseCase:
         intruso = await self._create_user(user_uow, email="x@test.com")
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
-        with pytest.raises(NotInviteeError):
+        # C8 (B-16): como si no existiera, sin decir su estado
+        with pytest.raises(InvitationNotFoundError):
             await uc.execute(
                 RespondInvitationRequestDTO(
                     invitation_id=invitation.id.value, user_id=intruso.id.value, action="ACCEPT"
@@ -369,7 +369,7 @@ class TestRespondToInvitationUseCase:
             await uc.execute(request)
 
     async def test_should_raise_not_invitee(self, comp_uow, user_uow):
-        """Usuario que no es invitee lanza NotInviteeError."""
+        """C8 (B-16): quien no es el invitado recibe el mismo 404 que si no existiera."""
         creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
         other = await self._create_user(user_uow, email="other@test.com")
@@ -386,8 +386,37 @@ class TestRespondToInvitationUseCase:
             action="ACCEPT",
         )
 
-        with pytest.raises(NotInviteeError):
+        with pytest.raises(InvitationNotFoundError):
             await uc.execute(request)
+
+    async def test_c8_a_stranger_does_not_expire_it_nor_learn_its_status(self, comp_uow, user_uow):
+        """
+        C8 (B-16): con el id de una invitación ajena ya vencida, el 404 de siempre, y la
+        invitación sigue como estaba: no la hace caducar ni dice que lo está.
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        invitee = await self._create_user(user_uow, email="invitee@test.com")
+        other = await self._create_user(user_uow, email="other@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "invitee@test.com"
+        )
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            guardada._expires_at = datetime.now() - timedelta(days=1)
+            await comp_uow.invitations.update(guardada)
+
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+        with pytest.raises(InvitationNotFoundError):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=other.id.value, action="DECLINE"
+                )
+            )
+
+        async with comp_uow:
+            despues = await comp_uow.invitations.find_by_id(invitation.id)
+        assert despues.status == InvitationStatus.PENDING
 
     async def test_should_raise_invalid_status_for_already_accepted(self, comp_uow, user_uow):
         """Invitacion ya aceptada lanza InvalidInvitationStatusViolation."""

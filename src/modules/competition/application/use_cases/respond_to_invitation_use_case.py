@@ -173,11 +173,16 @@ class RespondToInvitationUseCase:
         cerrada_ahora: Invitation | None = None
         async with self._uow:
             invitation = await self._uow.invitations.find_by_id(invitation_id)
-            if not invitation or self._solo_por_un_correo_sin_verificar(
-                invitation, current_user_id, current_user_email, correo_sin_verificar
+            if (
+                not invitation
+                or self._solo_por_un_correo_sin_verificar(
+                    invitation, current_user_id, current_user_email, correo_sin_verificar
+                )
+                or not self._es_el_invitado(invitation, current_user_id, current_user_email)
             ):
-                # La de un correo que no ha verificado no existe para el (F-07):
-                # el mismo 404, y antes de tocarla (caducada o sin plaza)
+                # La de un correo que no ha verificado no existe para el (F-07), ni la de
+                # otro (auditoría de la fase 6, B-16): el mismo 404, antes de tocarla y sin
+                # decir su estado (caducada o sin plaza)
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
 
             estaba_pendiente = invitation.is_pending()
