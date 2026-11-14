@@ -17,7 +17,13 @@ genera el OpenAPI importando `main` sin ninguna variable (job «API contract»).
 """
 
 import os
+import re
 from collections.abc import Mapping
+
+from src.config.migraciones import VARIABLE_DE_LAS_MIGRACIONES
+
+# postgres://, postgresql:// y con driver (postgresql+psycopg2://), como entrypoint.sh
+_URL_DE_POSTGRES = re.compile(r"^postgres(ql)?(\+[a-zA-Z0-9_-]+)?://")
 
 ENTORNO_DE_DESARROLLO = "development"
 LONGITUD_MINIMA_DE_LA_CLAVE = 32  # bytes: 256 bits para el HMAC-SHA256 de los JWT
@@ -62,6 +68,13 @@ def comprueba_la_configuracion_de_seguridad(entorno: Mapping[str, str] = os.envi
     Raises:
         RuntimeError: con el motivo; la app no arranca
     """
+    # En cualquier entorno: si está puesta, es la que usarán las migraciones (DB-01). El
+    # mensaje no la muestra: lleva la contraseña del dueño de la base
+    migraciones = (entorno.get(VARIABLE_DE_LAS_MIGRACIONES) or "").strip()
+    if migraciones and not _URL_DE_POSTGRES.match(migraciones):
+        raise RuntimeError(
+            f"{VARIABLE_DE_LAS_MIGRACIONES} no es una URL de PostgreSQL; no se arranca"
+        )
     if en_desarrollo_declarado(entorno):
         # Render pone RENDER en todos sus servicios: un desarrollo ahí es un error de
         # configuración que se saltaría todo lo demás (revisión de la fase 2)

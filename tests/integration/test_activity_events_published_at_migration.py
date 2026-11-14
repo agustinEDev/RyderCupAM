@@ -38,7 +38,8 @@ def _alembic(url: str, *args: str) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=PROJECT_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        # Las dos: con MIGRATIONS_DATABASE_URL en el entorno o en .env, Alembic usaría esa
+        env={**os.environ, "DATABASE_URL": url, "MIGRATIONS_DATABASE_URL": url},
         capture_output=True,
         text=True,
         timeout=300,

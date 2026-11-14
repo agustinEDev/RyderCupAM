@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -31,6 +30,7 @@ from sqlalchemy import engine_from_config, pool  # noqa: E402
 # migraciones (test_schema_parity)
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
+from src.config.migraciones import url_de_las_migraciones  # noqa: E402
 
 start_all_mappers()
 
@@ -38,6 +38,7 @@ start_all_mappers()
 ASYNCPG_DRIVER = "postgresql+asyncpg"
 PSYCOPG2_DRIVER = "postgresql+psycopg2"
 SIN_DRIVER = "postgresql://"
+POSTGRES_CORTO = "postgres://"
 
 
 def _url_con_driver_sincrono(url: str) -> str:
@@ -52,6 +53,9 @@ def _url_con_driver_sincrono(url: str) -> str:
         return url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER, 1)
     if url.startswith(SIN_DRIVER):
         return url.replace(SIN_DRIVER, f"{PSYCOPG2_DRIVER}://", 1)
+    # SQLAlchemy 2 no conoce `postgres://`, y la guardia de arranque lo acepta (/code-review)
+    if url.startswith(POSTGRES_CORTO):
+        return url.replace(POSTGRES_CORTO, f"{PSYCOPG2_DRIVER}://", 1)
     return url
 
 
@@ -77,8 +81,8 @@ target_metadata = metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    # Priorizar DATABASE_URL de entorno sobre alembic.ini
-    url = os.getenv("DATABASE_URL")
+    # Priorizar la URL de entorno sobre alembic.ini: la del dueño si la hay (DB-01)
+    url = url_de_las_migraciones()
     if not url:
         url = config.get_main_option("sqlalchemy.url")
 
@@ -98,13 +102,16 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    db_url = os.getenv("DATABASE_URL")
+    # La del dueño de la base si la hay; si no, la de la API (DB-01)
+    db_url = url_de_las_migraciones()
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
     db_url = _url_con_driver_sincrono(db_url)
 
-    config.set_main_option("sqlalchemy.url", db_url)
+    # El ConfigParser de Alembic interpreta `%`: una contraseña codificada en la URL
+    # (`%40` por `@`) lo rompería; `%%` vuelve a ser `%` al leerla (CodeRabbit)
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
