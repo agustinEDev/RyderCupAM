@@ -140,6 +140,14 @@ class UserDeviceRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def find_active_by_user_for_update(self, user_id: UserId) -> list[UserDevice]:
+        """
+        Los dispositivos activos del usuario con sus filas bloqueadas, en orden de id
+        (siempre el mismo orden: dos que bloqueen varios no se interbloquean). Antes que
+        sus tokens, como los refrescos y el cierre de sesión (F-02, B-05).
+        """
+
+    @abstractmethod
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:

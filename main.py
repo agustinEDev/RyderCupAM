@@ -322,18 +322,13 @@ app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
 
 
 # ================================
-# AVATAR UPLOAD SIZE GUARD (Content-Length fast-fail)
+# TOPE DEL CUERPO (subidas y todo lo demás)
 # ================================
-# Rechaza subidas de avatar por encima del límite ANTES de que FastAPI/Starlette
-# parseen el multipart body: sin esto, un archivo enorme se bufferiza igualmente
-# durante el parseo del form (UploadFile ya se construye a partir del cuerpo ya
-# parseado), y el chequeo de tamaño dentro del endpoint llega demasiado tarde
-# para evitar ese coste. Solo inspecciona la cabecera (no toca el body), así
-# que su orden relativo a los demás middlewares no importa.
-# Nota: Content-Length es lo que el cliente DECLARA, no una garantía absoluta
-# (podría mentir, o usar chunked encoding sin esa cabecera) — la lectura por
-# trozos con corte temprano en el propio endpoint sigue siendo la protección
-# real; esto es un fast-fail adicional para el caso común.
+# El middleware ASGI de abajo rechaza sin leer lo que declara un Content-Length mayor
+# que su tope, y corta lo que llega por trozos sin declararlo: antes de que Starlette
+# parsee el multipart o el JSON entero. La comprobación exacta del fichero sigue en el
+# endpoint. (El fast-fail por Content-Length de las subidas vivía aquí aparte; desde la
+# auditoría de la fase 6 lo hace el mismo middleware, /code-review de B-04.)
 # Las rutas de subida de imágenes con su tope: el avatar y la galería (F-08)
 _UPLOAD_SIZE_LIMITS = {
     "/api/v1/users/me/avatar/upload": MAX_UPLOAD_BYTES,
@@ -347,39 +342,17 @@ _UPLOAD_SIZE_LIMITS = {
 _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES = 16 * 1024
 
 
-@app.middleware("http")
-async def limit_avatar_upload_content_length(request: Request, call_next):
-    max_bytes = _UPLOAD_SIZE_LIMITS.get(request.url.path)
-    if max_bytes is not None and request.method == "POST":
-        content_length = request.headers.get("content-length")
-        if content_length is not None:
-            try:
-                declared_size = int(content_length)
-            except ValueError:
-                declared_size = None
-            if (
-                declared_size is not None
-                and declared_size > max_bytes + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
-            ):
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "detail": (
-                            "El archivo supera el tamaño máximo permitido "
-                            f"({max_bytes // (1024 * 1024)}MB)"
-                        )
-                    },
-                )
-    return await call_next(request)
-
-
 # Y lo que no declara Content-Length (una subida chunked): se cuenta mientras llega y
 # se corta con 413 al pasar el tope más el margen, antes de que Starlette guarde el
 # multipart entero en /tmp (CodeRabbit en BE #774)
+# Y cualquier otro cuerpo, a 256 KB: el JSON más grande de verdad (el mapa de un campo)
+# pesa unos 14 KB, y Cloudflare corta igual lo que lo declara (auditoría de la fase 6, B-04)
+TOPE_GENERAL_DEL_CUERPO = 256 * 1024
 app.add_middleware(
     LimitaElCuerpoDeLasSubidas,
     limites=_UPLOAD_SIZE_LIMITS,
     margen=_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES,
+    tope_general=TOPE_GENERAL_DEL_CUERPO,
 )
 
 
