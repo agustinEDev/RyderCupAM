@@ -228,8 +228,15 @@ class Invitation:
     # METODOS DE COMANDO (CAMBIOS DE ESTADO)
     # ===========================================
 
-    def accept(self) -> None:
-        """Acepta la invitacion (PENDING -> ACCEPTED)."""
+    def _ata_a(self, quien: UserId | None) -> None:
+        """Una enviada a un correo sin cuenta verificada queda atada a quien la responde
+        (B-03: el organizador ve entonces su nombre, el de quien respondió)."""
+        if self._invitee_user_id is None and quien is not None:
+            self._invitee_user_id = quien
+
+    def accept(self, respondida_por: UserId | None = None) -> None:
+        """Acepta la invitacion (PENDING -> ACCEPTED). Sin invitado atado, la ata a quien
+        la responde."""
         if self.is_expired():
             self._transition_to_expired()
             raise InvitationExpiredViolation("Cannot accept an expired invitation.")
@@ -239,6 +246,7 @@ class Invitation:
                 f"Cannot accept invitation in status {self._status.value}."
             )
 
+        self._ata_a(respondida_por)
         now = datetime.now()
         self._status = InvitationStatus.ACCEPTED
         self._responded_at = now
@@ -253,8 +261,9 @@ class Invitation:
         )
         self.add_domain_event(event)
 
-    def decline(self) -> None:
-        """Rechaza la invitacion (PENDING -> DECLINED)."""
+    def decline(self, respondida_por: UserId | None = None) -> None:
+        """Rechaza la invitacion (PENDING -> DECLINED). Como `accept`, la ata a quien
+        responde si no lo estaba."""
         if self.is_expired():
             self._transition_to_expired()
             raise InvitationExpiredViolation("Cannot decline an expired invitation.")
@@ -264,6 +273,7 @@ class Invitation:
                 f"Cannot decline invitation in status {self._status.value}."
             )
 
+        self._ata_a(respondida_por)
         now = datetime.now()
         self._status = InvitationStatus.DECLINED
         self._responded_at = now

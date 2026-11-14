@@ -96,9 +96,9 @@ inviting, so it can confirm a guessed email in either direction:
   answer for player V means the email is V's.
 
 **Why it is accepted (owner's decision, 14 Nov 2026):** the attacker must guess the exact
-address and test it against a pending invitation of their own. A probe that ends in the
-duplicate answer does not create an invitation, so it does not count towards the
-per-organizer cap; only the API's general rate limit applies. Hiding it would need a fake
+address and test it against a pending invitation of their own. Every attempt to invite,
+including one that ends in the duplicate answer, counts towards a per-user brake of 100
+requests an hour on the two invite routes. Hiding it would need a fake
 success, which an earlier attempt showed to be distinguishable (the invitation list, a
 repeated try).
 

@@ -334,6 +334,11 @@ async def test_c5_an_account_unverified_when_invited_shows_its_name_once_it_answ
     en_la_lista = (await _lista(comp_uow, user_uow, cid, org))[r.id]
     assert en_la_lista.invitee_user_id == ceci.id.value
     assert en_la_lista.invitee_name
+    # Guardado en la invitación, no buscado por el correo (CodeRabbit en BE #845): si el
+    # correo cambiara de dueño, saldría otra persona
+    async with comp_uow:
+        guardada = await comp_uow.invitations.find_by_id(InvitationId(r.id))
+    assert guardada.invitee_user_id == ceci.id
 
 
 async def test_c5_an_answered_invitation_does_not_show_an_unverified_accounts_name():
@@ -363,3 +368,21 @@ async def test_c5_an_answered_invitation_does_not_show_an_unverified_accounts_na
     en_la_lista = (await _lista(comp_uow, user_uow, cid, org))[r.id]
 
     assert _visible(en_la_lista) == ("dani@test.com", None, None)
+
+
+def test_answering_never_replaces_an_invitee_already_set():
+    """Atar a quien responde solo rellena un invitado vacío; nunca pisa el que había."""
+    from src.modules.user.domain.value_objects.user_id import UserId
+
+    dueno, otro = UserId.generate(), UserId.generate()
+    inv = Invitation.create(
+        id=InvitationId.generate(),
+        competition_id=CompetitionId.generate(),
+        inviter_id=UserId.generate(),
+        invitee_email="a@test.com",
+        invitee_user_id=dueno,
+    )
+
+    inv.accept(respondida_por=otro)
+
+    assert inv.invitee_user_id == dueno

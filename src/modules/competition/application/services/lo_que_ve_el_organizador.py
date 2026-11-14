@@ -28,22 +28,16 @@ class QuienEsElInvitado:
     nombre: str | None
 
 
-def lo_que_ve_el_organizador(
-    invitation: Invitation, nombre: str | None, quien_respondio: UserId | None = None
-) -> QuienEsElInvitado:
+def lo_que_ve_el_organizador(invitation: Invitation, nombre: str | None) -> QuienEsElInvitado:
     """
     Args:
-        invitation: La invitación
+        invitation: La invitación (al responderla, queda atada a quien la respondió)
         nombre: El nombre del invitado si tiene cuenta (o None)
-        quien_respondio: La cuenta que la respondió, si la invitación no estaba atada a
-            ninguna (por correo a una cuenta que aún no lo había verificado)
     """
     # Sin usuario solo puede ser por correo, aunque no lleve la marca: así sale bien una
     # guardada por la release anterior mientras conviven (revisor de B-03)
     if not invitation.sent_by_email and invitation.invitee_user_id is not None:
         return QuienEsElInvitado(None, invitation.invitee_user_id, nombre)
     if invitation.status in RESPONDIDAS:
-        return QuienEsElInvitado(
-            invitation.invitee_email, invitation.invitee_user_id or quien_respondio, nombre
-        )
+        return QuienEsElInvitado(invitation.invitee_email, invitation.invitee_user_id, nombre)
     return QuienEsElInvitado(invitation.invitee_email, None, None)

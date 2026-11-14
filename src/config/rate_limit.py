@@ -104,6 +104,11 @@ NEW_EMAIL_REQUESTS_LIMIT = "3/hour"
 # GET /users/search?email=, por usuario (F-01b, fase 3 del plan a 9): con el de por
 # defecto (100/min) una cuenta probaba unos 144.000 correos al día y sacaba su nombre
 USER_SEARCH_BY_EMAIL_LIMIT = "20/hour"
+# Las dos rutas de invitar, por usuario y juntas (auditoría de la fase 6, B-03): el mismo
+# número que MAX_INVITATIONS_PER_USER_PER_HOUR, pero contando peticiones. El tope por
+# filas se pierde si se borra la competición con sus invitaciones, y este no; también
+# cuenta los intentos que acaban en «ya hay una pendiente» (CodeRabbit en BE #845)
+INVITATIONS_PER_USER_LIMIT = "100/hour"
 
 
 def _clave_de_red(ip: str) -> str:

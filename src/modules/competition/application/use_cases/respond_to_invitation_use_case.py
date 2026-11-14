@@ -131,6 +131,10 @@ class RespondToInvitationUseCase:
                 await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
             invitation = await self._releer_pendiente(invitation_id, bloqueada=True)
 
+            # Si tenía cuenta al invitarle (y por tanto aviso en Actividad), antes de que
+            # responder la ate a quien responde
+            tenia_aviso = invitation.invitee_user_id is not None
+
             # Ejecutar accion
             if action == "ACCEPT":
                 competition, enrollment, sin_plaza_ya = await self._handle_accept(
@@ -139,11 +143,12 @@ class RespondToInvitationUseCase:
                 inscrito = (competition, enrollment)
                 enrollment_id, competition_name = enrollment.id.value, str(competition.name)
             else:
-                await self._handle_decline(invitation)
+                await self._handle_decline(invitation, current_user_id)
 
         # Ya respondida, su aviso de invitado no pide nada: se retira (tabla
         # del 22 oct 2026, C). Luego, si entro, lo de inscrito
-        await self._actividad.invitation_answered(invitation)
+        if tenia_aviso:
+            await self._actividad.invitation_answered(invitation)
         await self._avisar_si_entro(inscrito)
         # Si ocupo la ultima plaza, las demas pendientes se cerraron solas
         await self._actividad.invitations_closed(sin_plaza_ya)
@@ -296,7 +301,7 @@ class RespondToInvitationUseCase:
         # Con franjas, el cupo es de sus plazas (28 oct 2026)
         approved_count = await exigir_sitio(self._uow, competition)
 
-        invitation.accept()
+        invitation.accept(respondida_por=current_user_id)
 
         if solicitud is not None:
             solicitud.approve()
@@ -316,9 +321,9 @@ class RespondToInvitationUseCase:
 
         return competition, enrollment, cerradas
 
-    async def _handle_decline(self, invitation: Invitation) -> None:
+    async def _handle_decline(self, invitation: Invitation, current_user_id: UserId) -> None:
         """Procesa el rechazo de una invitacion."""
-        invitation.decline()
+        invitation.decline(respondida_por=current_user_id)
         await self._uow.invitations.update(invitation)
 
     async def _build_response(
