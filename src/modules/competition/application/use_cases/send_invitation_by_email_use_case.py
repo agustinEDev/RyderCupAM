@@ -25,6 +25,9 @@ from src.modules.competition.application.services.equipos_formados import (
     exigir_sin_equipos_formados,
 )
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
+from src.modules.competition.application.services.lo_que_ve_el_organizador import (
+    lo_que_ve_el_organizador,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -142,15 +145,16 @@ class SendInvitationByEmailUseCase:
             invitee_name = atada.display_name if atada else None
 
             # 5b. Verificar no enrollment activo (ya dentro del UoW de competition):
-            # con cuenta, verificada o no
+            # con cuenta, verificada o no. Se dice claro: el organizador ya ve los correos
+            # de sus inscritos (BE #531), así que no revela nada (decidido por Agustín el
+            # 14 nov 2026, tras probar una respuesta igual que se distinguía)
             if invitee_user:
                 existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
                     invitee_user.id, competition_id
                 )
                 if existing_enrollment and existing_enrollment.is_approved():
                     raise AlreadyEnrolledInvitationViolation(
-                        f"User with email {request.invitee_email} is already "
-                        f"enrolled in competition {request.competition_id}."
+                        f"User is already enrolled in competition {request.competition_id}."
                     )
 
             # Solo mientras queden plazas (BE #359): libres = max_players menos
@@ -172,6 +176,13 @@ class SendInvitationByEmailUseCase:
                 recent_invitations, competition.max_players, competition_id
             )
 
+            # Y el de quien invita, sumando todas sus competiciones (auditoría de la
+            # fase 6, B-03)
+            del_organizador = await self._uow.invitations.count_by_inviter(
+                inviter_id, since=one_hour_ago
+            )
+            CompetitionPolicy.validate_user_invitation_rate(del_organizador)
+
             # 6. Verificar no invitation PENDING duplicada
             # Una pendiente que ya caducó sin que nadie la abriera no impide
             # invitar otra vez (release social 2)
@@ -180,8 +191,8 @@ class SendInvitationByEmailUseCase:
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
-                    f"A pending invitation already exists for {request.invitee_email} "
-                    f"in competition {request.competition_id}."
+                    # Sin el correo: el mensaje sale en la respuesta (revisor de B-01)
+                    f"A pending invitation already exists in competition {request.competition_id}."
                 )
 
             # 7. Crear invitation
@@ -192,6 +203,7 @@ class SendInvitationByEmailUseCase:
                 invitee_email=request.invitee_email,
                 invitee_user_id=invitee_user_id,
                 personal_message=request.personal_message,
+                sent_by_email=True,
             )
 
             # 8. Persistir
@@ -235,15 +247,26 @@ class SendInvitationByEmailUseCase:
                     str(e),
                 )
 
+        return self._respuesta(invitation, competition, inviter_name, invitee_name)
+
+    @staticmethod
+    def _respuesta(
+        invitation: Invitation,
+        competition: Competition,
+        inviter_name: str,
+        invitee_name: str | None,
+    ) -> InvitationResponseDTO:
+        """Al organizador, solo el correo que tecleó mientras no responda (B-03)."""
+        quien = lo_que_ve_el_organizador(invitation, invitee_name)
         return InvitationResponseDTO(
             id=invitation.id.value,
             competition_id=invitation.competition_id.value,
             competition_name=str(competition.name),
             inviter_id=invitation.inviter_id.value,
             inviter_name=inviter_name,
-            invitee_email=invitation.invitee_email,
-            invitee_user_id=invitee_user_id.value if invitee_user_id else None,
-            invitee_name=invitee_name,
+            invitee_email=quien.email,
+            invitee_user_id=quien.user_id.value if quien.user_id else None,
+            invitee_name=quien.nombre,
             status=invitation.status.value,
             personal_message=invitation.personal_message,
             expires_at=invitation.expires_at,

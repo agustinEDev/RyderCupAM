@@ -332,7 +332,12 @@ def _entorno(**valores):
 
 def test_e8_e17_mailpit_mounts_only_mailpit():
     envio = crea_el_envio(
-        _entorno(EMAIL_TRANSPORT="mailpit", BREVO_API_KEY="br", RESEND_API_KEY="re")
+        _entorno(
+            ENVIRONMENT="development",
+            EMAIL_TRANSPORT="mailpit",
+            BREVO_API_KEY="br",
+            RESEND_API_KEY="re",
+        )
     )
 
     assert isinstance(envio.primario, MailpitTransport)
@@ -361,6 +366,8 @@ def test_by_default_it_is_mailgun():
         ("production", "mailpit"),
         ("PRODUCTION", "mailpit"),
         ("development", "smtp"),
+        # Mal escrito: cuenta como producción, como en el arranque (fase 6, B-09)
+        ("prod", "mailpit"),
     ],
 )
 def test_e9_it_does_not_start(environment, transporte):
@@ -374,8 +381,10 @@ def test_e9_it_does_not_start(environment, transporte):
         {"ENVIRONMENT": "production", "EMAIL_TRANSPORT": "mailgun", "MAILGUN_API_KEY": "mg"},
         {"ENVIRONMENT": "production", "MAILGUN_API_KEY": "mg"},
         {"ENVIRONMENT": "development", "EMAIL_TRANSPORT": "mailpit"},
-        {"EMAIL_TRANSPORT": "MAILPIT"},
-        {},
+        # En desarrollo, dicho expresamente: sin ENVIRONMENT es producción, como en el
+        # arranque (auditoría de la fase 6, B-09; ver E9b)
+        {"ENVIRONMENT": "development", "EMAIL_TRANSPORT": "MAILPIT"},
+        {"ENVIRONMENT": "development"},
     ],
 )
 def test_e9_these_start(entorno):
@@ -697,3 +706,14 @@ async def test_r8_any_2xx_from_any_provider_counts_as_sent(estado):
     ).send(CORREO)
 
     assert (mailgun, brevo, resend) == (True, True, True)
+
+
+def test_e9b_without_environment_it_is_production_and_mailpit_does_not_start():
+    # Sin ENVIRONMENT, producción: como el arranque (auditoría de la fase 6, B-09)
+    with pytest.raises(RuntimeError, match="EMAIL_TRANSPORT"):
+        comprueba_el_envio_de_correo({"EMAIL_TRANSPORT": "mailpit"})
+
+
+def test_e9c_a_misspelt_environment_still_needs_the_mailgun_key():
+    with pytest.raises(RuntimeError, match="MAILGUN_API_KEY"):
+        comprueba_el_envio_de_correo({"ENVIRONMENT": "prod", "EMAIL_TRANSPORT": "mailgun"})

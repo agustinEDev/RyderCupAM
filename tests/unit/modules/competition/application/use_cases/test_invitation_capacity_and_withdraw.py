@@ -29,7 +29,6 @@ from src.modules.competition.application.dto.invitation_dto import (
 )
 from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
-    NotCompetitionCreatorError,
 )
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
@@ -226,12 +225,26 @@ class TestRetirar:
 
     @pytest.mark.parametrize("quien", ["otro", "invitado"])
     async def test_x4_nadie_mas_puede(self, comp_uow, user_uow, quien):
+        """
+        /code-review de B-16 (el gemelo de responder): el mismo 404 que si no existiera,
+        sin decir que existe, y sin bloquear la competición de otro antes de mirar quién
+        lo pide.
+        """
         _, invitado, _, invitacion = await self._montaje(comp_uow, user_uow)
         usuario = invitado.id.value if quien == "invitado" else uuid4()
+        bloqueos: list[object] = []
+        bloquea = comp_uow.competitions.find_by_id_for_update
 
-        with pytest.raises(NotCompetitionCreatorError):
+        async def bloquea_y_apunta(competition_id):
+            bloqueos.append(competition_id)
+            return await bloquea(competition_id)
+
+        comp_uow.competitions.find_by_id_for_update = bloquea_y_apunta
+
+        with pytest.raises(InvitationNotFoundError):
             await CancelInvitationUseCase(comp_uow).execute(invitacion.id.value, usuario)
 
+        assert bloqueos == []
         assert await _estado(comp_uow, invitacion) == InvitationStatus.PENDING
 
     async def test_x5_una_que_no_existe(self, comp_uow):

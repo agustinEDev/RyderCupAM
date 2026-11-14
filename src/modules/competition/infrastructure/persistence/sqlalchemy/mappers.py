@@ -1217,6 +1217,9 @@ invitations_table = Table(
     Column("responded_at", DateTime, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    # Tecleando un correo o eligiendo a un usuario: decide qué ve el organizador
+    # (auditoría de la fase 6, B-01/B-03; migración d4f6a8c0e2b5)
+    Column("sent_by_email", Boolean, nullable=False, server_default="false"),
 )
 
 
@@ -1768,6 +1771,7 @@ def start_competition_mappers():
                 "_responded_at": invitations_table.c.responded_at,
                 "_created_at": invitations_table.c.created_at,
                 "_updated_at": invitations_table.c.updated_at,
+                "_sent_by_email": invitations_table.c.sent_by_email,
             },
         )
 

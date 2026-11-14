@@ -12,6 +12,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.lo_que_ve_el_organizador import (
+    lo_que_ve_el_organizador,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -125,6 +128,8 @@ class ListCompetitionInvitationsUseCase:
                     if invitee_user:
                         invitee_name = invitee_user.display_name
 
+                # Lo mismo que vio al enviarla: nombre o correo tecleado (B-01/B-03)
+                quien = lo_que_ve_el_organizador(inv, invitee_name)
                 invitation_dtos.append(
                     InvitationResponseDTO(
                         id=inv.id.value,
@@ -132,11 +137,9 @@ class ListCompetitionInvitationsUseCase:
                         competition_name=competition_name,
                         inviter_id=inv.inviter_id.value,
                         inviter_name=inviter_name,
-                        invitee_email=inv.invitee_email,
-                        invitee_user_id=(
-                            inv.invitee_user_id.value if inv.invitee_user_id else None
-                        ),
-                        invitee_name=invitee_name,
+                        invitee_email=quien.email,
+                        invitee_user_id=quien.user_id.value if quien.user_id else None,
+                        invitee_name=quien.nombre,
                         status=inv.status.value,
                         personal_message=inv.personal_message,
                         expires_at=inv.expires_at,

@@ -40,7 +40,9 @@ class InvitationResponseDTO(BaseModel):
     competition_name: str
     inviter_id: UUID
     inviter_name: str
-    invitee_email: str
+    # Sin el correo de quien se eligió por id, y sin la cuenta de un correo tecleado
+    # mientras no responda (auditoría de la fase 6, B-01/B-03)
+    invitee_email: str | None = None
     invitee_user_id: UUID | None = None
     invitee_name: str | None = None
     status: str
