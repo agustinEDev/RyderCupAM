@@ -137,7 +137,16 @@ def test_h4_only_the_column_with_time_zone_changes(base_desechable):  # noqa: F8
         # Por su nombre: `ALTER DATABASE CURRENT` es de Postgres 16 y el CI usa la 15
         nombre = conn.execute(text("SELECT current_database()")).scalar()
         conn.exec_driver_sql(f"ALTER DATABASE \"{nombre}\" SET TimeZone = 'Europe/Madrid'")
-        # Sin partido ni jugador de verdad: las claves foráneas, apagadas en esta sesión
+        # Un jugador de verdad (la migración vuelve a comprobar esa relación) y sin partido:
+        # la clave del partido, apagada en esta sesión
+        user_id = str(uuid.uuid4())
+        conn.execute(
+            text(
+                "INSERT INTO users (id, first_name, last_name, email, created_at, updated_at) "
+                "VALUES (:id, 'Ana', 'Garcia', :email, now(), now())"
+            ),
+            {"id": user_id, "email": f"{user_id}@example.com"},
+        )
         conn.execute(text("SET session_replication_role = replica"))
         conn.execute(
             text(
@@ -145,7 +154,7 @@ def test_h4_only_the_column_with_time_zone_changes(base_desechable):  # noqa: F8
                 "created_at, updated_at) VALUES (:id, :m, 1, :u, 'A', "
                 "'2026-01-01 10:00:00', '2026-01-01 10:00:00+00')"
             ),
-            {"id": str(uuid.uuid4()), "m": str(uuid.uuid4()), "u": str(uuid.uuid4())},
+            {"id": str(uuid.uuid4()), "m": str(uuid.uuid4()), "u": user_id},
         )
     engine.dispose()
 
