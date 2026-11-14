@@ -95,6 +95,10 @@ user_devices_table = Table(
     Column("country_code", String(2), nullable=True),
     # Cuándo avisó de un nuevo inicio de sesión: el tope de uno por hora (BE #737)
     Column("new_login_notice_at", DateTime, nullable=True),
+    # Cuándo se cerraron sus sesiones (cierre de sesión o cambio de contraseña): los
+    # accesos emitidos antes no valen (auditoría de la fase 6, B-05). Con zona: se
+    # compara con el `iat` del token, que es UTC
+    Column("session_closed_at", DateTime(timezone=True), nullable=True),
     # El de la migración 50ccf425ff32, también aquí: sin él los tests no ven
     # el choque de dos altas a la vez (BE #692)
     Index(
@@ -135,6 +139,7 @@ def start_user_device_mappers():
                 "_installed_app": user_devices_table.c.installed_app,
                 "_country_code": user_devices_table.c.country_code,
                 "_new_login_notice_at": user_devices_table.c.new_login_notice_at,
+                "_session_closed_at": user_devices_table.c.session_closed_at,
             },
         )
 

@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
@@ -102,6 +102,11 @@ from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_cod
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
+)
+from src.shared.infrastructure.security.cookie_handler import (
+    set_auth_cookie,
+    set_csrf_cookie,
+    set_refresh_token_cookie,
 )
 
 logger = logging.getLogger(__name__)
@@ -415,6 +420,7 @@ def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | Non
 async def update_security(
     http_request: Request,
     request: UpdateSecurityRequestDTO,
+    response: Response,
     use_case: UpdateSecurityUseCase = Depends(get_update_security_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
 ):
@@ -447,10 +453,19 @@ async def update_security(
         request.ip_address = get_trusted_client_ip(http_request, settings.TRUSTED_PROXIES)
         request.user_agent = get_user_agent(http_request)
 
+        # El dispositivo del token, ya comprobado; nunca el que mande el cliente (B-05)
+        request.dispositivo_actual = getattr(http_request.state, "dispositivo_actual", None)
+
         # Ejecutar el caso de uso con el user_id del token JWT
         user_id = str(current_user.id)
-        response = await use_case.execute(user_id, request)
-        return response
+        resultado = await use_case.execute(user_id, request)
+        # Con la contraseña cambiada, la sesión nueva de este dispositivo, en cookies:
+        # sigue dentro y las de antes ya no valen (B-05)
+        if resultado.sesion_nueva is not None:
+            set_auth_cookie(response, resultado.sesion_nueva.access_token)
+            set_refresh_token_cookie(response, resultado.sesion_nueva.refresh_token)
+            set_csrf_cookie(response, resultado.sesion_nueva.csrf_token)
+        return resultado
 
     except InvalidCredentialsError:
         # Con su código, para que la app lo diga en su idioma

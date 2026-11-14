@@ -9,20 +9,24 @@ Security Logging (v1.8.0): Registra cambios de contraseña y email.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.user.application.dto.user_dto import (
+    SesionNuevaDTO,
     UpdateSecurityRequestDTO,
     UpdateSecurityResponseDTO,
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.avisa_del_cambio_de_correo import (
     avisa_del_cambio_de_correo,
 )
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
+from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
@@ -39,6 +43,7 @@ from src.modules.user.domain.value_objects.password import (
     InvalidPasswordError,
     Password,
 )
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
@@ -92,6 +97,7 @@ class UpdateSecurityUseCase:
         email_service: IEmailService | None = None,
         *,
         security_audit: ISecurityAuditLogger,
+        token_service: ITokenService | None = None,
     ):
         """
         Inicializa el caso de uso con sus dependencias.
@@ -103,6 +109,8 @@ class UpdateSecurityUseCase:
         self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
+        # Para la sesión nueva de quien cambia la contraseña (B-05)
+        self._token_service = token_service
 
     async def _prepara(self, user_id: str, request: UpdateSecurityRequestDTO) -> _Preparado:
         """
@@ -201,9 +209,57 @@ class UpdateSecurityUseCase:
         # espera a los que estén en curso y los que lleguen después lo esperan a él;
         # ningún sucesor queda vivo ni hay interbloqueo (F-02). El cierre de sesión no
         # toca la fila de la cuenta: choca solo en los tokens, sin ciclo
+        # Primero los dispositivos, bloqueados y en orden de id, y después sus tokens: el
+        # mismo orden que los refrescos y el cierre de sesión, o se interbloquean
+        # (/code-review de B-05). La hora, ya con todos bloqueados: un cierre de sesión
+        # a la vez no se pisa
+        dispositivos = await self._uow.user_devices.find_active_by_user_for_update(user_id_vo)
         tokens_revoked_count = await self._uow.refresh_tokens.revoke_all_for_user(user_id_vo)
 
+        # Y los accesos, al momento, en todos sus dispositivos: uno robado deja de valer
+        # ya, no a los 15 minutos (auditoría de la fase 6, B-05). Los dispositivos siguen
+        # activos y de fiar
+        ahora = datetime.now(UTC)
+        for dispositivo in dispositivos:
+            dispositivo.cierra_las_sesiones(ahora)
+            await self._uow.user_devices.save(dispositivo)
+
         return True, tokens_revoked_count
+
+    async def _sesion_nueva(
+        self, user: User, dispositivo_actual: str | None
+    ) -> SesionNuevaDTO | None:
+        """
+        El que cambió la contraseña sigue dentro: una sesión nueva para su dispositivo,
+        emitida tras cerrar las de antes (decidido por Agustín el 14 nov 2026, B-05).
+        Sin su dispositivo, o si ya no es suyo y activo, no hay sesión: le tocará entrar.
+        """
+        if self._token_service is None or not dispositivo_actual:
+            return None
+        try:
+            device_id = UserDeviceId.from_string(dispositivo_actual)
+        except (ValueError, TypeError):
+            return None
+        dispositivo = await self._uow.user_devices.find_by_id_and_user(
+            device_id=device_id, user_id=user.id
+        )
+        if dispositivo is None:
+            return None
+        user_id = str(user.id.value)
+        access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(user_id, dispositivo_actual)
+        )
+        refresh_token = self._token_service.create_refresh_token(data={"sub": user_id})
+        await self._uow.refresh_tokens.save(
+            RefreshToken.create(
+                user_id=user.id, token=refresh_token, device_id=device_id, expires_in_days=7
+            )
+        )
+        return SesionNuevaDTO(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            csrf_token=self._token_service.create_csrf_token(user_id),
+        )
 
     def _log_security_changes(
         self,
@@ -303,10 +359,12 @@ class UpdateSecurityUseCase:
                     )
 
                 # Procesar cambio de password
+                sesion_nueva = None
                 if preparado.nueva is not None:
                     password_changed, tokens_revoked_count = await self._handle_password_change(
                         user, preparado.nueva, user_id_vo
                     )
+                    sesion_nueva = await self._sesion_nueva(user, request.dispositivo_actual)
                     # Un correo pendiente que no se pide ahora, fuera: quizá lo pidió quien
                     # entró con la contraseña de antes (/code-review de la rama)
                     if not email_changed:
@@ -352,4 +410,5 @@ class UpdateSecurityUseCase:
                 if email_changed
                 else "Security settings updated successfully"
             ),
+            sesion_nueva=sesion_nueva,
         )
