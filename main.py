@@ -376,10 +376,14 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
 # Y lo que no declara Content-Length (una subida chunked): se cuenta mientras llega y
 # se corta con 413 al pasar el tope más el margen, antes de que Starlette guarde el
 # multipart entero en /tmp (CodeRabbit en BE #774)
+# Y cualquier otro cuerpo, a 256 KB: el JSON más grande de verdad (el mapa de un campo)
+# pesa unos 14 KB, y Cloudflare corta igual lo que lo declara (auditoría de la fase 6, B-04)
+TOPE_GENERAL_DEL_CUERPO = 256 * 1024
 app.add_middleware(
     LimitaElCuerpoDeLasSubidas,
     limites=_UPLOAD_SIZE_LIMITS,
     margen=_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES,
+    tope_general=TOPE_GENERAL_DEL_CUERPO,
 )
 
 
