@@ -254,21 +254,26 @@ La API puede entrar con `rydercup_app`, que solo lee y escribe filas; las migrac
 arranque entran con el dueño de la base. Sin `MIGRATIONS_DATABASE_URL` todo funciona como
 antes (las migraciones usan `DATABASE_URL`).
 
-1. **Comprobar quién es el dueño.** Con la URL actual de la API (la del dueño), en psql:
-   `SELECT current_user;` tiene que dar el dueño de las tablas
-   (`SELECT tableowner FROM pg_tables WHERE tablename = 'users';`). Si no coinciden,
-   parar: los permisos por defecto del paso 2 serían de otro usuario.
-2. **Crear el usuario.** En la misma sesión: `\i scripts/db/rol_de_la_api.sql` (se puede
-   repetir) y `\password rydercup_app`. La contraseña se escribe en el aviso de psql y no
-   se guarda en ningún fichero. Sin psql instalado:
-   `docker run --rm -it -v "$PWD/scripts/db:/s:ro" postgres:16 psql "<URL del dueño>"` y
-   `\i /s/rol_de_la_api.sql`.
-3. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
+Ninguna contraseña va en la línea de órdenes (quedaría en el historial y en `ps`): psql la
+pide en su aviso.
+
+1. **Entrar como el dueño.** Con los datos de la URL actual de la API, SIN la contraseña:
+   `psql "host=<host> port=5432 dbname=<base> user=<usuario> sslmode=require"`. Sin psql
+   instalado: `docker run --rm -it -v "$PWD/scripts/db:/s:ro" postgres:15 psql "<lo mismo>"`.
+2. **Comprobar quién es el dueño.** `SELECT current_user;` tiene que dar el dueño de las
+   tablas (`SELECT tableowner FROM pg_tables WHERE tablename = 'users';`). Si no
+   coinciden, parar: los permisos por defecto serían de otro usuario.
+3. **Crear el usuario.** `\i scripts/db/rol_de_la_api.sql` (o `\i /s/rol_de_la_api.sql`
+   con Docker; se puede repetir y se niega si la base no está migrada) y
+   `\password rydercup_app`. El script también quita a `n8n_lectura` la lectura automática
+   de las tablas futuras (DB-03); sus permisos de hoy no cambian.
+4. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
    ACTUAL de `DATABASE_URL` y desplegar. Todo sigue igual.
-4. **Render, el cambio:** `DATABASE_URL` pasa a
-   `postgresql://rydercup_app:<contraseña>@<mismo host>:5432/<misma base>` y desplegar.
-   Mirar `/health`, entrar en la app y anotar algo de prueba en el Kind antes.
-5. **Volver atrás:** `DATABASE_URL` con el valor de `MIGRATIONS_DATABASE_URL` y desplegar.
+5. **Render, el cambio:** `DATABASE_URL` pasa a
+   `postgresql://rydercup_app:<contraseña>@<mismo host>:5432/<misma base>`, con la
+   contraseña codificada para URL si lleva `@ : / # ? %` (mejor elegir una sin ellos), y
+   desplegar. Mirar `/health` y entrar en la app. Antes, todo esto en el Kind.
+6. **Volver atrás:** `DATABASE_URL` con el valor de `MIGRATIONS_DATABASE_URL` y desplegar.
 
 Las tablas que creen las migraciones futuras ya le dan permiso a `rydercup_app` solas (paso
-4 del script). Las copias (`backup_ro`) y n8n no cambian.
+4 del script) y a `backup_ro` (las copias las llevan).

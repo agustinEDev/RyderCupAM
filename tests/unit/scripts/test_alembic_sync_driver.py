@@ -33,8 +33,8 @@ _DESTINO = "u:p@127.0.0.1:1/nada"
 
 @pytest.mark.parametrize(
     "esquema",
-    ["postgresql", "postgresql+asyncpg", "postgresql+psycopg2"],
-    ids=["D1-sin-driver", "D2-asyncpg", "D3-psycopg2"],
+    ["postgresql", "postgresql+asyncpg", "postgresql+psycopg2", "postgres"],
+    ids=["D1-sin-driver", "D2-asyncpg", "D3-psycopg2", "D4-postgres"],
 )
 def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
     """
@@ -42,7 +42,8 @@ def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
     WHEN: Se ejecuta `alembic upgrade head` como en el arranque del contenedor
     THEN: Falla al CONECTAR con psycopg2, no por un driver que no está instalado
     """
-    entorno = {**os.environ, "DATABASE_URL": f"{esquema}://{_DESTINO}"}
+    url = f"{esquema}://{_DESTINO}"
+    entorno = {**os.environ, "DATABASE_URL": url, "MIGRATIONS_DATABASE_URL": url}
 
     proceso = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],

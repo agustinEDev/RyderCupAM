@@ -38,6 +38,7 @@ start_all_mappers()
 ASYNCPG_DRIVER = "postgresql+asyncpg"
 PSYCOPG2_DRIVER = "postgresql+psycopg2"
 SIN_DRIVER = "postgresql://"
+POSTGRES_CORTO = "postgres://"
 
 
 def _url_con_driver_sincrono(url: str) -> str:
@@ -52,6 +53,9 @@ def _url_con_driver_sincrono(url: str) -> str:
         return url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER, 1)
     if url.startswith(SIN_DRIVER):
         return url.replace(SIN_DRIVER, f"{PSYCOPG2_DRIVER}://", 1)
+    # SQLAlchemy 2 no conoce `postgres://`, y la guardia de arranque lo acepta (/code-review)
+    if url.startswith(POSTGRES_CORTO):
+        return url.replace(POSTGRES_CORTO, f"{PSYCOPG2_DRIVER}://", 1)
     return url
 
 

@@ -8,6 +8,16 @@
 -- Después, en Render: DATABASE_URL con rydercup_app y MIGRATIONS_DATABASE_URL con la URL
 -- de ahora (la del dueño). Guía: docs/RUNBOOK.md, «Usuario de la API sin permisos de estructura»
 
+-- 0. Solo sobre una base ya migrada: si no, alembic_version la crearían después las
+--    migraciones y heredaría los permisos del paso 4 (/code-review)
+DO $$
+BEGIN
+    IF to_regclass('public.alembic_version') IS NULL THEN
+        RAISE EXCEPTION 'Primero alembic upgrade head: falta alembic_version';
+    END IF;
+END
+$$;
+
 -- 1. El usuario, sin ningún poder sobre el servidor
 DO $$
 BEGIN
@@ -39,10 +49,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO rydercup_app;
 
 -- 5. La versión de las migraciones es solo del dueño
+REVOKE ALL ON public.alembic_version FROM rydercup_app;
+
+-- 6. n8n ya no lee sola cada tabla nueva (auditoría de la fase 6, DB-03; decidido por
+--    Agustín el 14 nov 2026). Sus permisos de hoy (las 4 tablas del informe de los lunes,
+--    dados a mano) no cambian; si necesita otra, se le da a mano. backup_ro sí sigue
+--    leyendo las tablas nuevas: las copias tienen que llevarlas
 DO $$
 BEGIN
-    IF to_regclass('public.alembic_version') IS NOT NULL THEN
-        REVOKE ALL ON public.alembic_version FROM rydercup_app;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'n8n_lectura') THEN
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM n8n_lectura;
     END IF;
 END
 $$;
