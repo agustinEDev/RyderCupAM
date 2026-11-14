@@ -82,6 +82,26 @@ class TestSendFriendRequestUseCase:
                 SendFriendRequestRequestDTO(requester_id=requester.id.value, addressee_id=uuid4())
             )
 
+    async def test_d1_a_deactivated_account_answers_like_a_missing_one(self, uow, user_uow):
+        """D1 (auditoría de la fase 6, B-13): a una cuenta desactivada, lo mismo que a
+        una que no existe, y sin guardar nada."""
+        requester = await self._create_user(user_uow, "requester-d1@test.com")
+        addressee = await self._create_user(user_uow, "desactivada@test.com")
+        addressee.deactivate(str(requester.id.value))
+        async with user_uow:
+            await user_uow.users.save(addressee)
+        use_case = SendFriendRequestUseCase(uow, user_uow)
+
+        with pytest.raises(AddresseeNotFoundError):
+            await use_case.execute(
+                SendFriendRequestRequestDTO(
+                    requester_id=requester.id.value, addressee_id=addressee.id.value
+                )
+            )
+
+        async with uow:
+            assert await uow.friendships.find_by_pair(requester.id, addressee.id) is None
+
     async def test_duplicate_pending_request_raises(self, uow, user_uow):
         requester = await self._create_user(user_uow, "requester3@test.com")
         addressee = await self._create_user(user_uow, "addressee3@test.com")
