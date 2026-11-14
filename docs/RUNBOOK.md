@@ -263,8 +263,9 @@ pide en su aviso.
 2. **Comprobar quién es el dueño.** `SELECT current_user;` tiene que dar el dueño de las
    tablas (`SELECT tableowner FROM pg_tables WHERE tablename = 'users';`). Si no
    coinciden, parar: los permisos por defecto serían de otro usuario.
-3. **Crear el usuario.** `\i scripts/db/rol_de_la_api.sql` (o `\i /s/rol_de_la_api.sql`
-   con Docker; se puede repetir y se niega si la base no está migrada) y
+3. **Crear el usuario.** `\set ON_ERROR_STOP on` y luego `\i scripts/db/rol_de_la_api.sql`
+   (o `\i /s/rol_de_la_api.sql` con Docker). Va en una transacción: si algo falla no
+   cambia nada. Se puede repetir y se niega si la base no está migrada. Después,
    `\password rydercup_app`. El script también quita a `n8n_lectura` la lectura automática
    de las tablas futuras (DB-03); sus permisos de hoy no cambian.
 4. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
@@ -276,4 +277,7 @@ pide en su aviso.
 6. **Volver atrás:** `DATABASE_URL` con el valor de `MIGRATIONS_DATABASE_URL` y desplegar.
 
 Las tablas que creen las migraciones futuras ya le dan permiso a `rydercup_app` solas (paso
-4 del script) y a `backup_ro` (las copias las llevan).
+4 del script). `backup_ro` las lee por un permiso por defecto que ya tiene en producción y
+que el script no toca: comprobarlo antes del cambio con `\ddp` (tiene que salir
+`backup_ro=r` en las tablas del dueño); si no sale, las copias no llevarían las tablas
+nuevas.

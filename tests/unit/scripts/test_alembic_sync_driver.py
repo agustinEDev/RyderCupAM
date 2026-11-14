@@ -58,3 +58,33 @@ def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
 
     assert "No module named 'psycopg'" not in salida, salida[-1500:]
     assert "psycopg2.OperationalError" in salida, salida[-1500:]
+
+
+def test_d5_an_encoded_password_in_the_owner_url_does_not_break_alembic():
+    """
+    GIVEN: MIGRATIONS_DATABASE_URL con un carácter codificado (`%40`) y una DATABASE_URL
+           distinta, cada una a un puerto cerrado distinto
+    WHEN: Se ejecuta `alembic upgrade head`
+    THEN: Intenta conectar con la del dueño (puerto 1), sin que el `%` rompa la
+          configuración de Alembic (CodeRabbit)
+    """
+    entorno = {
+        **os.environ,
+        "DATABASE_URL": "postgresql://api:p@127.0.0.1:2/nada",
+        "MIGRATIONS_DATABASE_URL": "postgresql://dueno:cl%40ve@127.0.0.1:1/nada",
+    }
+
+    proceso = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=_RAIZ,
+        env=entorno,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    salida = proceso.stdout + proceso.stderr
+
+    assert "interpolation" not in salida, salida[-1500:]
+    assert "psycopg2.OperationalError" in salida, salida[-1500:]
+    assert "port 1 failed" in salida, salida[-1500:]

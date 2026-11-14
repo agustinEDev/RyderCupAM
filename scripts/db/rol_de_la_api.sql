@@ -8,6 +8,10 @@
 -- Después, en Render: DATABASE_URL con rydercup_app y MIGRATIONS_DATABASE_URL con la URL
 -- de ahora (la del dueño). Guía: docs/RUNBOOK.md, «Usuario de la API sin permisos de estructura»
 
+-- Todo o nada: si algo falla, no queda ni el usuario ni ningún permiso a medias. En psql,
+-- con `\set ON_ERROR_STOP on` antes del `\i` (CodeRabbit)
+BEGIN;
+
 -- 0. Solo sobre una base ya migrada: si no, alembic_version la crearían después las
 --    migraciones y heredaría los permisos del paso 4 (/code-review)
 DO $$
@@ -36,6 +40,15 @@ END
 $$;
 GRANT USAGE ON SCHEMA public TO rydercup_app;
 REVOKE CREATE ON SCHEMA public FROM rydercup_app;
+-- Y que tampoco lo tenga por PUBLIC (en Postgres 14 o antes, PUBLIC crea en public): si
+-- lo tiene, se para aquí y no se crea nada (CodeRabbit)
+DO $$
+BEGIN
+    IF has_schema_privilege('rydercup_app', 'public', 'CREATE') THEN
+        RAISE EXCEPTION 'rydercup_app puede crear en public (por PUBLIC): quitarlo antes';
+    END IF;
+END
+$$;
 
 -- 3. Las filas de las tablas de hoy, y las secuencias
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rydercup_app;
@@ -62,3 +75,5 @@ BEGIN
     END IF;
 END
 $$;
+
+COMMIT;

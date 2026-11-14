@@ -109,7 +109,9 @@ def run_migrations_online() -> None:
 
     db_url = _url_con_driver_sincrono(db_url)
 
-    config.set_main_option("sqlalchemy.url", db_url)
+    # El ConfigParser de Alembic interpreta `%`: una contraseña codificada en la URL
+    # (`%40` por `@`) lo rompería; `%%` vuelve a ser `%` al leerla (CodeRabbit)
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
