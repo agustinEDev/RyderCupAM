@@ -25,6 +25,9 @@ from src.modules.competition.application.services.equipos_formados import (
     exigir_sin_equipos_formados,
 )
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
+from src.modules.competition.application.services.lo_que_ve_el_organizador import (
+    lo_que_ve_el_organizador,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -32,7 +35,6 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
-    AlreadyEnrolledInvitationViolation,
     DuplicateInvitationViolation,
     SelfInvitationViolation,
 )
@@ -141,17 +143,14 @@ class SendInvitationByEmailUseCase:
             invitee_user_id = atada.id if atada else None
             invitee_name = atada.display_name if atada else None
 
-            # 5b. Verificar no enrollment activo (ya dentro del UoW de competition):
-            # con cuenta, verificada o no
+            # 5b. ¿Ya inscrito? (con cuenta, verificada o no). No se dice aquí: la respuesta
+            # tiene que ser la misma que con un correo sin cuenta (B-03, abajo)
+            ya_inscrito = False
             if invitee_user:
                 existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
                     invitee_user.id, competition_id
                 )
-                if existing_enrollment and existing_enrollment.is_approved():
-                    raise AlreadyEnrolledInvitationViolation(
-                        f"User with email {request.invitee_email} is already "
-                        f"enrolled in competition {request.competition_id}."
-                    )
+                ya_inscrito = bool(existing_enrollment and existing_enrollment.is_approved())
 
             # Solo mientras queden plazas (BE #359): libres = max_players menos
             # aprobadas. Antes se invitaba a un torneo lleno y quien llegaba tarde
@@ -171,6 +170,13 @@ class SendInvitationByEmailUseCase:
             CompetitionPolicy.validate_invitation_rate(
                 recent_invitations, competition.max_players, competition_id
             )
+
+            # Y el de quien invita, sumando todas sus competiciones (auditoría de la
+            # fase 6, B-03)
+            del_organizador = await self._uow.invitations.count_by_inviter(
+                inviter_id, since=one_hour_ago
+            )
+            CompetitionPolicy.validate_user_invitation_rate(del_organizador)
 
             # 6. Verificar no invitation PENDING duplicada
             # Una pendiente que ya caducó sin que nadie la abriera no impide
@@ -192,7 +198,15 @@ class SendInvitationByEmailUseCase:
                 invitee_email=request.invitee_email,
                 invitee_user_id=invitee_user_id,
                 personal_message=request.personal_message,
+                sent_by_email=True,
             )
+
+            # Ya inscrito: la misma respuesta que con cualquier correo, pero sin guardarla
+            # ni avisar ni mandar correo. Antes un 409 propio decía que ese correo era de
+            # alguien inscrito (auditoría de la fase 6, B-03; decidido el 14 nov 2026). Aquí,
+            # tras las mismas comprobaciones que una de verdad (plazas, frenos, duplicada)
+            if ya_inscrito:
+                return await self._como_si_se_hubiera_enviado(invitation, competition)
 
             # 8. Persistir
             await self._uow.invitations.add(invitation)
@@ -235,15 +249,40 @@ class SendInvitationByEmailUseCase:
                     str(e),
                 )
 
+        return self._respuesta(invitation, competition, inviter_name, invitee_name)
+
+    async def _como_si_se_hubiera_enviado(
+        self, invitation: Invitation, competition: Competition
+    ) -> InvitationResponseDTO:
+        """La respuesta de una invitación por correo, sin haberla guardado (B-03)."""
+        legal = bool(
+            await quieren_su_nombre_legal(
+                self._uow, [(invitation.competition_id, invitation.inviter_id)]
+            )
+        )
+        async with self._user_uow:
+            inviter_user = await self._user_uow.users.find_by_id(invitation.inviter_id)
+            inviter_name = nombre_de_quien_invita(inviter_user, legal)
+        return self._respuesta(invitation, competition, inviter_name, None)
+
+    @staticmethod
+    def _respuesta(
+        invitation: Invitation,
+        competition: Competition,
+        inviter_name: str,
+        invitee_name: str | None,
+    ) -> InvitationResponseDTO:
+        """Al organizador, solo el correo que tecleó mientras no responda (B-03)."""
+        quien = lo_que_ve_el_organizador(invitation, invitee_name)
         return InvitationResponseDTO(
             id=invitation.id.value,
             competition_id=invitation.competition_id.value,
             competition_name=str(competition.name),
             inviter_id=invitation.inviter_id.value,
             inviter_name=inviter_name,
-            invitee_email=invitation.invitee_email,
-            invitee_user_id=invitee_user_id.value if invitee_user_id else None,
-            invitee_name=invitee_name,
+            invitee_email=quien.email,
+            invitee_user_id=quien.user_id.value if quien.user_id else None,
+            invitee_name=quien.nombre,
             status=invitation.status.value,
             personal_message=invitation.personal_message,
             expires_at=invitation.expires_at,

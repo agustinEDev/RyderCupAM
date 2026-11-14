@@ -54,6 +54,7 @@ class Invitation:
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
+        sent_by_email: bool = False,
     ):
         if not invitee_email or not invitee_email.strip():
             raise ValueError("invitee_email no puede estar vacio")
@@ -73,6 +74,9 @@ class Invitation:
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
+        # Si el organizador la mandó tecleando un correo (y no eligiendo a un usuario):
+        # decide qué ve de ella (auditoría de la fase 6, B-01/B-03)
+        self._sent_by_email = sent_by_email
 
     # ===========================================
     # FACTORY METHODS
@@ -87,6 +91,7 @@ class Invitation:
         invitee_email: str,
         invitee_user_id: UserId | None = None,
         personal_message: str | None = None,
+        sent_by_email: bool = False,
     ) -> "Invitation":
         """Factory method para crear una nueva invitacion con status PENDING."""
         now = datetime.now()
@@ -101,6 +106,7 @@ class Invitation:
             expires_at=now + timedelta(days=INVITATION_EXPIRATION_DAYS),
             created_at=now,
             updated_at=now,
+            sent_by_email=sent_by_email,
         )
 
         event = InvitationCreatedEvent(
@@ -127,6 +133,7 @@ class Invitation:
         responded_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        sent_by_email: bool = False,
     ) -> "Invitation":
         """Reconstruye una invitacion desde la base de datos (sin domain events)."""
         return cls(
@@ -141,6 +148,7 @@ class Invitation:
             responded_at=responded_at,
             created_at=created_at,
             updated_at=updated_at,
+            sent_by_email=sent_by_email,
         )
 
     # ===========================================
@@ -166,6 +174,11 @@ class Invitation:
     @property
     def invitee_user_id(self) -> UserId | None:
         return self._invitee_user_id
+
+    @property
+    def sent_by_email(self) -> bool:
+        """Si se mandó tecleando un correo (True) o eligiendo a un usuario (False)."""
+        return getattr(self, "_sent_by_email", False)
 
     @property
     def status(self) -> InvitationStatus:

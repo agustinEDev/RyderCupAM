@@ -20,6 +20,7 @@ from ..exceptions.competition_violations import (
     InvalidDateRangeViolation,
     InvitationCompetitionStatusViolation,
     InvitationRateLimitViolation,
+    InvitationUserRateLimitViolation,
     MaxCompetitionsExceededViolation,
     MaxDurationExceededViolation,
     MaxEnrollmentsExceededViolation,
@@ -44,6 +45,12 @@ MAX_COMPETITION_DURATION_DAYS = 365
 # dejar el freno en 100: una de 200 plazas invita en dos tandas, separadas una hora,
 # antes que enviar 200 correos por hora.
 MAX_INVITATIONS_PER_HOUR = 100
+
+# Y por organizador, sumando todas sus competiciones (auditoría de la fase 6, B-03): sin
+# él, repartiendo entre diez competiciones salían 1.000 por hora. El mismo número que el
+# de cada competición, para que una de 200 siga invitando en dos tandas (decidido por
+# Agustín el 14 nov 2026; se propuso 30 y lo cambió por BE #314)
+MAX_INVITATIONS_PER_USER_PER_HOUR = 100
 
 
 # Cerrada la inscripcion ya no quedan plazas: ni se invita ni se acepta (#710)
@@ -285,6 +292,22 @@ class CompetitionPolicy:
                 f"({recent_invitations}/{limite}). "
                 f"Limit is {limite} invitations per hour.",
                 limit=limite,
+            )
+
+    @staticmethod
+    def validate_user_invitation_rate(recent_invitations: int) -> None:
+        """
+        Valida el tope de invitaciones por hora de un organizador, sumando todas sus
+        competiciones (B-03).
+
+        Raises:
+            InvitationUserRateLimitViolation: Si se excede el limite
+        """
+        if recent_invitations >= MAX_INVITATIONS_PER_USER_PER_HOUR:
+            raise InvitationUserRateLimitViolation(
+                "Too many invitations sent in the last hour "
+                f"({recent_invitations}/{MAX_INVITATIONS_PER_USER_PER_HOUR}).",
+                limit=MAX_INVITATIONS_PER_USER_PER_HOUR,
             )
 
     @staticmethod

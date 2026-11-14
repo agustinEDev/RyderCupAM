@@ -50,6 +50,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
     InvitationNoRoomViolation,
     InvitationRateLimitViolation,
+    InvitationUserRateLimitViolation,
 )
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -79,10 +80,19 @@ SIN_PLAZAS = "The competition is full: there are no places left to invite."
 FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
 
 
-def _freno_por_hora(e: InvitationRateLimitViolation) -> JSONResponse:
+# El de quien invita, sumando todas sus competiciones (auditoría de la fase 6, B-03)
+FRENO_DEL_ORGANIZADOR = "Too many invitations sent in the last hour."
+
+
+def _freno_por_hora(
+    e: InvitationRateLimitViolation | InvitationUserRateLimitViolation,
+) -> JSONResponse:
+    detalle = (
+        FRENO_DEL_ORGANIZADOR if isinstance(e, InvitationUserRateLimitViolation) else FRENO_POR_HORA
+    )
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content={"detail": FRENO_POR_HORA, "error_code": e.error_code, "limit": e.limit},
+        content={"detail": detalle, "error_code": e.error_code, "limit": e.limit},
     )
 
 
@@ -142,7 +152,7 @@ async def send_invitation_by_user_id(
         )
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except InvitationRateLimitViolation as e:
+    except (InvitationRateLimitViolation, InvitationUserRateLimitViolation) as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
     except TeamsFormedError as e:
@@ -181,7 +191,7 @@ async def send_invitation_by_email(
         )
         return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
-    except InvitationRateLimitViolation as e:
+    except (InvitationRateLimitViolation, InvitationUserRateLimitViolation) as e:
         return _freno_por_hora(e)
     # Con los equipos formados no podría aceptarse (30 oct 2026)
     except TeamsFormedError as e:

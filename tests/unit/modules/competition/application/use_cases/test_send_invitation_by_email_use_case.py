@@ -25,7 +25,6 @@ from src.modules.competition.application.use_cases.send_invitation_by_email_use_
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
-    AlreadyEnrolledInvitationViolation,
     DuplicateInvitationViolation,
     InvitationRateLimitViolation,
     SelfInvitationViolation,
@@ -268,8 +267,13 @@ class TestSendInvitationByEmailUseCase:
 
         assert result.status == "PENDING"
         assert result.invitee_email == "invitee@test.com"
-        assert result.invitee_user_id == invitee.id.value
-        assert result.invitee_name == "Invitee Player"
+        # Mientras no responda, el organizador no sabe si ese correo tiene cuenta (B-03, C2)
+        assert result.invitee_user_id is None
+        assert result.invitee_name is None
+        # Pero queda atada a su cuenta, para que la vea en la app
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(InvitationId(result.id))
+        assert guardada.invitee_user_id == invitee.id
 
     async def test_f1_a_una_cuenta_sin_verificar_no_se_ata(self, comp_uow, user_uow):
         """
@@ -335,7 +339,11 @@ class TestSendInvitationByEmailUseCase:
             )
         )
 
-        assert result.invitee_user_id == invitee.id.value
+        # Atada a su cuenta y avisada, aunque el organizador no lo vea (B-03)
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(InvitationId(result.id))
+        assert guardada.invitee_user_id == invitee.id
+        assert result.invitee_user_id is None
         actividad.invited.assert_awaited_once()
 
     async def test_f1_sin_verificar_sigue_sin_poder_invitarse_a_si_mismo(self, comp_uow, user_uow):
@@ -417,7 +425,10 @@ class TestSendInvitationByEmailUseCase:
         with pytest.raises(SelfInvitationViolation):
             await uc.execute(request)
 
-    async def test_should_raise_already_enrolled(self, comp_uow, user_uow):
+    async def test_already_enrolled_answers_like_any_email_without_creating(
+        self, comp_uow, user_uow
+    ):
+        """C4 (B-03): antes un 409 propio delataba que ese correo era de un inscrito."""
         creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
         created = await self._create_active_competition(comp_uow, creator.id)
@@ -438,8 +449,15 @@ class TestSendInvitationByEmailUseCase:
             invitee_email="invitee@test.com",
         )
 
-        with pytest.raises(AlreadyEnrolledInvitationViolation):
-            await uc.execute(request)
+        result = await uc.execute(request)
+
+        assert (result.invitee_email, result.invitee_user_id, result.invitee_name) == (
+            "invitee@test.com",
+            None,
+            None,
+        )
+        async with comp_uow:
+            assert await comp_uow.invitations.find_by_id(InvitationId(result.id)) is None
 
     async def test_should_raise_duplicate_invitation(self, comp_uow, user_uow):
         creator = await self._create_user(user_uow, email="creator@test.com")
