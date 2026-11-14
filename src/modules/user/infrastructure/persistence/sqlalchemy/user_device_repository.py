@@ -128,6 +128,19 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
             UserDevice, device_id, with_for_update=True, populate_existing=True
         )
 
+    async def find_active_by_user_for_update(self, user_id: UserId) -> list[UserDevice]:
+        """SELECT … FOR UPDATE de los dispositivos activos, por id y leyendo la fila actual."""
+        statement = (
+            select(UserDevice)
+            .where(UserDevice._user_id == user_id)
+            .where(UserDevice._is_active == True)  # noqa: E712
+            .order_by(UserDevice._id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:

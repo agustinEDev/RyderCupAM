@@ -10,12 +10,12 @@ from uuid import UUID
 
 from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
-    NotCompetitionCreatorError,
 )
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
 )
@@ -38,11 +38,17 @@ class CancelInvitationUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
+    async def _puede_retirarla(self, invitation: Invitation, quien: UserId, is_admin: bool) -> bool:
+        """El admin, quien la mandó o quien organiza la competición."""
+        if is_admin or invitation.inviter_id == quien:
+            return True
+        competition = await self._uow.competitions.find_by_id(invitation.competition_id)
+        return competition is not None and competition.is_creator(quien)
+
     async def execute(self, invitation_id: UUID, user_id: UUID, is_admin: bool = False) -> None:
         """
         Raises:
-            InvitationNotFoundError: Si la invitacion no existe
-            NotCompetitionCreatorError: Si quien la retira no es el organizador,
+            InvitationNotFoundError: Si no existe o quien la retira no es el organizador,
                 quien la envio ni un admin
             InvalidInvitationStatusViolation: Si ya no esta pendiente
         """
@@ -50,7 +56,10 @@ class CancelInvitationUseCase:
         async with self._uow:
             id_ = InvitationId(invitation_id)
             invitation = await self._uow.invitations.find_by_id(id_)
-            if not invitation:
+            quien = UserId(user_id)
+            # Quien no puede retirarla no sabe que existe (el mismo 404) y no bloquea la
+            # competición de otro: se mira antes de bloquear (gemelo de B-16, /code-review)
+            if not invitation or not await self._puede_retirarla(invitation, quien, is_admin):
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id}")
 
             # Bloqueadas, y en este orden: la competicion y despues la invitacion,
@@ -64,12 +73,10 @@ class CancelInvitationUseCase:
             if not invitation:
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id}")
 
-            quien = UserId(user_id)
+            # Y otra vez con lo leído bloqueado
             es_el_organizador = competition is not None and competition.is_creator(quien)
             if not is_admin and invitation.inviter_id != quien and not es_el_organizador:
-                raise NotCompetitionCreatorError(
-                    "Only the competition creator or whoever sent it can cancel an invitation."
-                )
+                raise InvitationNotFoundError(f"Invitation not found: {invitation_id}")
 
             # Una que caduco sin que nadie la pasara a EXPIRED no se retira: se
             # quedo sin respuesta, y asi debe constar

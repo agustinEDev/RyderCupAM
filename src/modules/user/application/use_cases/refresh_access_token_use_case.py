@@ -410,11 +410,14 @@ class RefreshAccessTokenUseCase:
             # Refrescar es usar ESTE dispositivo, el del token (ver el método)
             device_id = await self._usa_el_dispositivo(request, dispositivo)
 
-        # 6. Generar nuevo access token (15 minutos)
-        # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737)
-        new_access_token = self._token_service.create_access_token(
-            data=datos_del_acceso(str(user.id.value), device_id)
-        )
+            # 6. Generar nuevo access token (15 minutos)
+            # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737). Se
+            # firma DENTRO de la transacción, con los bloqueos de F-02 aún cogidos: su
+            # `iat` queda siempre antes de un cierre de sesión o cambio de contraseña
+            # que espere a este refresco, y ese cierre lo mata (revisor de B-05)
+            new_access_token = self._token_service.create_access_token(
+                data=datos_del_acceso(str(user.id.value), device_id)
+            )
 
         # 7. Generar nuevo token CSRF (256 bits; vale lo que el refresh token más 1 h, y su
         # cookie dura 15 minutos)

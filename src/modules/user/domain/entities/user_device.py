@@ -311,6 +311,33 @@ class UserDevice:
         """
         self._installed_app = installed_app
 
+    def cierra_las_sesiones(self, cuando: datetime) -> None:
+        """
+        Cierra las sesiones abiertas en este dispositivo hasta `cuando` (en UTC): los
+        tokens de acceso emitidos antes dejan de valer al momento, no al caducar. El
+        dispositivo sigue activo y de fiar (auditoría de la fase 6, B-05).
+        """
+        self._session_closed_at = cuando
+
+    @property
+    def sesiones_cerradas_en(self) -> datetime | None:
+        """Cuándo se cerraron sus sesiones por última vez, o None si nunca."""
+        return getattr(self, "_session_closed_at", None)
+
+    def admite_el_acceso(self, emitido_en: float | None) -> bool:
+        """
+        Si un token de acceso emitido en `emitido_en` (segundos desde 1970, su `iat`)
+        vale aquí. Sin cierre, cualquiera; con cierre, solo los emitidos después. Uno
+        sin `iat` (de antes de desplegar esto) no se sabe cuándo nació: tras un cierre,
+        no vale.
+        """
+        cerradas = self.sesiones_cerradas_en
+        if cerradas is None:
+            return True
+        if emitido_en is None:
+            return False
+        return emitido_en > cerradas.timestamp()
+
     def apunta_el_aviso(self, cuando: datetime) -> None:
         """Apunta que este dispositivo avisó de un nuevo inicio de sesión (BE #737)."""
         self._new_login_notice_at = cuando

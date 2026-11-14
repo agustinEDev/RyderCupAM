@@ -54,7 +54,8 @@ class SendFriendRequestUseCase:
 
         async with self._user_uow:
             addressee_user = await self._user_uow.users.find_by_id(addressee_id)
-            if not addressee_user:
+            # Una cuenta desactivada, como una que no existe (auditoría de la fase 6, B-13)
+            if not addressee_user or not addressee_user.is_active:
                 raise AddresseeNotFoundError(f"User not found: {request.addressee_id}")
 
         async with self._uow:

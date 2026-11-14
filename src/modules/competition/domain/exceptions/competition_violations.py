@@ -202,6 +202,18 @@ class AlreadyEnrolledInvitationViolation(BusinessRuleViolation):
     pass
 
 
+class InvitationUserRateLimitViolation(BusinessRuleViolation):
+    """Lanzada cuando un organizador pasa de su tope de invitaciones por hora, sumando
+    todas sus competiciones (auditoría de la fase 6, B-03). Con su límite, para que la
+    pantalla lo diga en su idioma."""
+
+    error_code = "INVITATION_USER_RATE_LIMIT"
+
+    def __init__(self, message: str, limit: int) -> None:
+        super().__init__(message)
+        self.limit = limit
+
+
 class InvitationRateLimitViolation(BusinessRuleViolation):
     """Lanzada cuando se excede el limite de invitaciones por hora para una competicion.
 

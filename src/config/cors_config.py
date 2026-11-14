@@ -19,15 +19,19 @@ Features implementadas:
 import os
 from urllib.parse import urlparse
 
+from src.config.arranque_seguro import en_desarrollo_declarado
+
 
 def _is_production() -> bool:
     """
     Determina si la aplicación está corriendo en producción.
 
     Returns:
-        bool: True si ENVIRONMENT=production, False en caso contrario
+        bool: False solo con ENVIRONMENT=development; True en cualquier otro caso
+            (el mismo criterio que el arranque, auditoría de la fase 6, B-09: un
+            valor ausente o mal escrito no abre CORS a localhost)
     """
-    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+    return not en_desarrollo_declarado()
 
 
 def _parse_frontend_origins() -> list[str]:

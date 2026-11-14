@@ -26,6 +26,9 @@ from src.modules.competition.application.services.equipos_formados import (
     exigir_sin_equipos_formados,
 )
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
+from src.modules.competition.application.services.lo_que_ve_el_organizador import (
+    lo_que_ve_el_organizador,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -161,6 +164,13 @@ class SendInvitationByUserIdUseCase:
                 recent_invitations, competition.max_players, competition_id
             )
 
+            # Y el de quien invita, sumando todas sus competiciones (auditoría de la
+            # fase 6, B-03)
+            del_organizador = await self._uow.invitations.count_by_inviter(
+                inviter_id, since=one_hour_ago
+            )
+            CompetitionPolicy.validate_user_invitation_rate(del_organizador)
+
             # 7. Verificar no invitation PENDING duplicada
             # Una pendiente que ya caducó sin que nadie la abriera no impide
             # invitar otra vez (release social 2)
@@ -169,8 +179,8 @@ class SendInvitationByUserIdUseCase:
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
-                    f"A pending invitation already exists for {invitee_email} "
-                    f"in competition {request.competition_id}."
+                    # Sin el correo del elegido: el mensaje sale en el 409 (revisor de B-01)
+                    f"A pending invitation already exists in competition {request.competition_id}."
                 )
 
             # 8. Crear invitation
@@ -225,17 +235,17 @@ class SendInvitationByUserIdUseCase:
                     str(e),
                 )
 
+        # Al organizador, el nombre de quien eligió, nunca su correo (B-01)
+        quien = lo_que_ve_el_organizador(invitation, invitee_name)
         return InvitationResponseDTO(
             id=invitation.id.value,
             competition_id=invitation.competition_id.value,
             competition_name=str(competition.name),
             inviter_id=invitation.inviter_id.value,
             inviter_name=inviter_name,
-            invitee_email=invitation.invitee_email,
-            invitee_user_id=invitation.invitee_user_id.value
-            if invitation.invitee_user_id
-            else None,
-            invitee_name=invitee_name,
+            invitee_email=quien.email,
+            invitee_user_id=quien.user_id.value if quien.user_id else None,
+            invitee_name=quien.nombre,
             status=invitation.status.value,
             personal_message=invitation.personal_message,
             expires_at=invitation.expires_at,

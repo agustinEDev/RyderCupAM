@@ -145,6 +145,13 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
                 return inv
         return None
 
+    async def count_by_inviter(self, inviter_id: UserId, since: datetime) -> int:
+        return sum(
+            1
+            for inv in self._invitations.values()
+            if inv.inviter_id == inviter_id and inv.created_at >= since
+        )
+
     async def count_by_competition(
         self,
         competition_id: CompetitionId,

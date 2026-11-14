@@ -34,6 +34,7 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
 
 from src.config import version
+from src.config.arranque_seguro import en_desarrollo_declarado
 from src.config.settings import settings
 from src.shared.infrastructure.logging.security_logger import ETIQUETA_DE_EVENTO_DE_SEGURIDAD
 
@@ -236,7 +237,8 @@ def init_sentry() -> None:
         include_local_variables=False,
         max_breadcrumbs=50,  # Máximo de breadcrumbs por evento
         # Debug mode (solo para desarrollo)
-        debug=(settings.SENTRY_ENVIRONMENT == "development"),
+        # Solo en un desarrollo declarado, con la regla del arranque (fase 6, B-09)
+        debug=en_desarrollo_declarado(),
     )
 
     logger.info(

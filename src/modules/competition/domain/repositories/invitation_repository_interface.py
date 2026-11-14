@@ -131,6 +131,11 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def count_by_inviter(self, inviter_id: UserId, since: datetime) -> int:
+        """Las invitaciones que ha mandado alguien desde `since`, en cualquier competición."""
+        pass
+
+    @abstractmethod
     async def count_by_competition(
         self,
         competition_id: CompetitionId,

@@ -188,6 +188,15 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.scalars().first()
 
+    async def count_by_inviter(self, inviter_id: UserId, since: datetime) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Invitation)
+            .where(and_(Invitation._inviter_id == inviter_id, Invitation._created_at >= since))
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
+
     async def count_by_competition(
         self,
         competition_id: CompetitionId,

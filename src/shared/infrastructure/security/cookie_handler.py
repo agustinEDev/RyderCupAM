@@ -17,6 +17,8 @@ import os
 
 from fastapi import Request, Response
 
+from src.config.arranque_seguro import en_desarrollo_declarado
+
 # Nombres de las cookies
 COOKIE_NAME = "access_token"  # Access token (15 min)
 REFRESH_COOKIE_NAME = "refresh_token"  # Refresh token (7 días)
@@ -32,10 +34,14 @@ def is_production() -> bool:
     """
     Detecta si la aplicación está corriendo en producción.
 
+    El mismo criterio que el arranque (auditoría de la fase 6, B-09): solo es
+    desarrollo lo que ENVIRONMENT declara expresamente como `development`; un valor
+    ausente o mal escrito cuenta como producción y las cookies salen `Secure`.
+
     Returns:
-        True si ENVIRONMENT=production, False en caso contrario
+        False solo con ENVIRONMENT=development; True en cualquier otro caso
     """
-    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+    return not en_desarrollo_declarado()
 
 
 def get_cookie_domain() -> str | None:

@@ -81,10 +81,11 @@ class TestRetirar:
         await _invita(client, creador, comp, invitado)
         suya = await _la_suya(client, invitado)
 
-        # Ni el propio invitado: para decir que no, está «rechazar»
+        # Ni el propio invitado: para decir que no, está «rechazar». El mismo 404 que si no
+        # existiera (auditoría de la fase 6, gemelo de B-16)
         respuesta = await client.post(f"/api/v1/invitations/{suya['id']}/cancel")
 
-        assert respuesta.status_code == 403, respuesta.text
+        assert respuesta.status_code == 404, respuesta.text
         assert (await _la_suya(client, invitado))["status"] == "PENDING"
 
     async def test_una_ya_respondida_da_409(self, client: AsyncClient):

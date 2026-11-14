@@ -496,6 +496,9 @@ class LogoutRequestDTO(BaseModel):
     # cookie httpOnly y descarta lo que llegue en el cuerpo: solo se cierra la
     # sesión desde la que se sale
     refresh_token: str | None = Field(None, exclude=True, description="Uso interno.")
+    # El dispositivo de la petición (el de su token de acceso, ya comprobado). Lo pone
+    # la API: sus sesiones se cierran al momento (auditoría de la fase 6, B-05)
+    device_id: str | None = Field(None, exclude=True, description="Uso interno.")
 
 
 class LogoutResponseDTO(BaseModel):
@@ -672,6 +675,9 @@ class UpdateSecurityRequestDTO(BaseModel):
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+    # El dispositivo de la petición (el del token de acceso, ya comprobado). Lo pone la
+    # API: al cambiar la contraseña sigue dentro con una sesión nueva (B-05)
+    dispositivo_actual: str | None = Field(None, exclude=True, description="Uso interno.")
 
     def model_post_init(self, __context: Any) -> None:
         """Valida que se proporcione al menos un campo y confirma password si aplica."""
@@ -682,6 +688,14 @@ class UpdateSecurityRequestDTO(BaseModel):
             raise ValueError("El nuevo password y su confirmación no coinciden.")
 
 
+class SesionNuevaDTO(BaseModel):
+    """La sesión nueva del dispositivo que cambió la contraseña: va en cookies, nunca en el cuerpo."""
+
+    access_token: str
+    refresh_token: str
+    csrf_token: str
+
+
 class UpdateSecurityResponseDTO(BaseModel):
     """DTO de salida para actualización de seguridad."""
 
@@ -690,6 +704,9 @@ class UpdateSecurityResponseDTO(BaseModel):
         default="Datos de seguridad actualizados",
         description=CONFIRMATION_MESSAGE_DESCRIPTION,
     )
+    # Con la contraseña cambiada, la sesión nueva de este dispositivo: la ruta la pone
+    # en cookies y no sale en el JSON (B-05)
+    sesion_nueva: SesionNuevaDTO | None = Field(None, exclude=True)
 
 
 # ======================================================================================

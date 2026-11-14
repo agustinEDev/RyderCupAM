@@ -273,7 +273,8 @@ class TestSendInvitationByUserIdUseCase:
         result = await uc.execute(request)
 
         assert result.status == "PENDING"
-        assert result.invitee_email == "invitee@test.com"
+        # Por id, el organizador no ve el correo de quien eligió (B-01, C1)
+        assert result.invitee_email is None
         assert result.invitee_user_id == invitee.id.value
         assert result.personal_message == "Join my tournament!"
         assert result.competition_name == "Test Cup"
@@ -587,4 +588,4 @@ class TestSendInvitationByUserIdUseCase:
 
         # Invitacion creada exitosamente a pesar del error de email
         assert result.status == "PENDING"
-        assert result.invitee_email == "invitee@test.com"
+        assert result.invitee_email is None  # por id, sin el correo (B-01)

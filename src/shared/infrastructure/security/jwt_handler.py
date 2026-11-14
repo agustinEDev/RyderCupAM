@@ -5,6 +5,7 @@ Utilidades para crear y verificar tokens JWT (JSON Web Tokens).
 Implementa autenticación basada en tokens con algoritmo HS256.
 """
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -48,7 +49,9 @@ class JWTTokenService:
         else:
             expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-        to_encode.update({"exp": expire, "type": "access"})
+        # Cuándo se emitió, con fracciones de segundo: el dispositivo rechaza lo emitido
+        # antes de cerrar sus sesiones (auditoría de la fase 6, B-05)
+        to_encode.update({"exp": expire, "type": "access", "iat": time.time()})
 
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
