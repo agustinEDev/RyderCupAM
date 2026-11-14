@@ -31,6 +31,19 @@ if not DATABASE_URL:
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# Tiempos límite de cada conexión (auditoría de la fase 6, DB-04): sin ellos, una consulta
+# lenta o una petición que muere a mitad de una transacción retenía una conexión del pool y
+# sus bloqueos sin límite. En milisegundos; un valor que no sirva (0 sería «sin límite» en
+# Postgres) vuelve al de por defecto
+AJUSTES_DE_LA_CONEXION = {
+    "server_settings": {
+        "statement_timeout": str(env_int("DB_STATEMENT_TIMEOUT_MS", default=15_000)),
+        "idle_in_transaction_session_timeout": str(
+            env_int("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", default=30_000)
+        ),
+    }
+}
+
 # 2. Crear un motor (engine) asíncrono
 async_engine = create_async_engine(
     DATABASE_URL,
@@ -44,6 +57,7 @@ async_engine = create_async_engine(
     # mientras haya un solo proceso nada cambia.
     pool_size=env_int("DB_POOL_SIZE", default=5),
     max_overflow=env_int("DB_MAX_OVERFLOW", default=10),
+    connect_args=AJUSTES_DE_LA_CONEXION,
 )
 
 
