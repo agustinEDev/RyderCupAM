@@ -1097,6 +1097,9 @@ jobs:
         id: verify
         env:
           PR_BASE: ${{ github.base_ref }}  # Empty on push events
+          # Merge and GitHub web-flow commits are checked against GitHub's verification
+          # (audit phase 6, INF-06); reading commits only needs the default read token
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "🔍 Verifying GPG signatures on commits..."
           chmod +x scripts/verify-gpg-signatures.sh
@@ -1104,7 +1107,9 @@ jobs:
           # For PRs and pushes: verify ONLY commits in THIS specific push event
           # NOT the entire PR history, NOT the entire branch history
           BASE_REF="${{ github.event.before }}"
-          HEAD_REF="${{ github.event.after || github.sha }}"
+          # In a PR, the head of the branch and never github.sha: on opened/reopened that
+          # is GitHub's temporary merge commit, which nobody signs (audit phase 6, INF-06)
+          HEAD_REF="${{ github.event.pull_request.head.sha || github.event.after || github.sha }}"
 
           echo "📋 Signature Verification Scope: CURRENT PUSH ONLY"
           echo "   Commits included: Those added in this specific push event"
@@ -1124,6 +1129,14 @@ jobs:
             else
               BASE_REF=""  # Falls through to the initial-push handling below
             fi
+          fi
+
+          # A PR just opened or reopened has no "before": every commit it adds over
+          # its base branch, from their merge-base
+          if [ -n "$PR_BASE" ] && { [ -z "$BASE_REF" ] || [ "$BASE_REF" == "0000000000000000000000000000000000000000" ]; } \
+             && MERGE_BASE=$(git merge-base "origin/$PR_BASE" "$HEAD_REF" 2>/dev/null); then
+            echo "   PR opened or reopened: every commit since the merge-base with $PR_BASE: $MERGE_BASE"
+            BASE_REF="$MERGE_BASE"
           fi
 
           # Handle initial push or forced push (no previous commit)
@@ -1149,14 +1162,14 @@ jobs:
         run: |
           OUT="$RUNNER_TEMP/gpg.txt"
           dato() { sed -n -E "s/^ *$1: ([0-9]+).*/\1/p" "$OUT" 2>/dev/null | head -n 1; }
-          TOTAL=$(dato 'Total commits'); VALID=$(dato 'Valid signatures'); MERGES=$(dato 'Merge commits \(signature not required\)')
+          TOTAL=$(dato 'Total commits'); VALID=$(dato 'Valid signatures'); MERGES=$(dato 'Merge commits \(verified by GitHub\)')
           UNSIGNED=$(dato 'Unsigned commits'); INVALID=$(dato 'Invalid signatures')
           # Anclado al mensaje del script, no a un asunto de commit que lo contenga
           # (sin los códigos de color que imprime el script)
           if sed 's/\x1b\[[0-9;]*m//g' "$OUT" 2>/dev/null | grep -qE '^[^[:alnum:]]*No new commits to verify$'; then
             RESULT="No new commits to verify in this push or PR"
           elif [ -n "$TOTAL" ] && [ -n "$VALID" ]; then
-            RESULT="$VALID of $TOTAL commit(s) verified (${MERGES:-0} merge commit(s), signature not required)"
+            RESULT="$VALID of $TOTAL commit(s) verified (${MERGES:-0} merge commit(s), verified by GitHub)"
             if [ "${UNSIGNED:-0}" != 0 ] || [ "${INVALID:-0}" != 0 ]; then
               RESULT="$RESULT · ${UNSIGNED:-0} unsigned, ${INVALID:-0} with an invalid signature"
             fi
