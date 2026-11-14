@@ -49,13 +49,23 @@ def test_the_timeouts_can_be_changed_from_the_environment(monkeypatch):
     assert ajustes["idle_in_transaction_session_timeout"] == "60000"
 
 
-@pytest.mark.parametrize("valor", ["0", "-1", "abc"])
+@pytest.mark.parametrize("valor", ["0", "-1", "abc", "2147483648", "99999999999"])
 def test_a_wrong_value_does_not_remove_the_timeout(monkeypatch, valor):
     """Un 0 en Postgres es «sin límite»: un valor que no sea un número positivo vuelve al
     de por defecto, no quita el límite."""
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", valor)
+    monkeypatch.setenv("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", valor)
 
-    assert ajustes_de_la_conexion()["server_settings"]["statement_timeout"] == "15000"
+    ajustes = ajustes_de_la_conexion()["server_settings"]
+
+    assert ajustes["statement_timeout"] == "15000"
+    assert ajustes["idle_in_transaction_session_timeout"] == "120000"
+
+
+def test_the_postgres_maximum_itself_is_accepted(monkeypatch):
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "2147483647")
+
+    assert ajustes_de_la_conexion()["server_settings"]["statement_timeout"] == "2147483647"
 
 
 def test_the_api_engine_is_created_with_those_settings():

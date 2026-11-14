@@ -31,6 +31,7 @@ _ALINEA = """
 DO $$
 DECLARE
     fk record;
+    columna text;
 BEGIN
     FOR fk IN
         SELECT c.conname
@@ -48,18 +49,21 @@ BEGIN
         );
     END LOOP;
 
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'hole_scores'
-          AND column_name IN ('created_at', 'updated_at')
-          AND data_type = 'timestamp with time zone'
-    ) THEN
-        ALTER TABLE public.hole_scores
-            ALTER COLUMN created_at TYPE timestamp without time zone
-                USING created_at AT TIME ZONE 'UTC',
-            ALTER COLUMN updated_at TYPE timestamp without time zone
-                USING updated_at AT TIME ZONE 'UTC';
-    END IF;
+    -- Cada columna por su tipo: una que ya esté sin zona no se toca (CodeRabbit)
+    FOREACH columna IN ARRAY ARRAY['created_at', 'updated_at'] LOOP
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'hole_scores'
+              AND column_name = columna
+              AND data_type = 'timestamp with time zone'
+        ) THEN
+            EXECUTE format(
+                'ALTER TABLE public.hole_scores ALTER COLUMN %1$I '
+                'TYPE timestamp without time zone USING %1$I AT TIME ZONE ''UTC''',
+                columna
+            );
+        END IF;
+    END LOOP;
 END
 $$;
 """

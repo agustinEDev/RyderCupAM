@@ -11,7 +11,11 @@ Venga de donde venga la base, tiene que quedar igual.
     H1 una base como producción                  | no cambia nada
     H2 una base creada desde las migraciones     | sin cascada; las fechas, sin zona
     H3 la relación con otro nombre               | se encuentra y se cambia igual
+    H4 una fecha ya sin zona y la otra con zona  | solo cambia la que tiene zona; los
+                                                 | valores no se mueven
 """
+
+import uuid
 
 from sqlalchemy import create_engine, text
 
@@ -114,3 +118,41 @@ def test_h3_the_relation_is_found_by_its_column_not_its_name(base_desechable):  
         )
     engine.dispose()
     assert borrados == ["a"]
+
+
+def test_h4_only_the_column_with_time_zone_changes(base_desechable):  # noqa: F811
+    """
+    Una fecha ya sin zona y la otra con zona, con la base en hora de Madrid: si se
+    convirtiera también la que no tiene zona, su valor se movería una hora (CodeRabbit).
+    """
+    _alembic(base_desechable, "upgrade", ANTERIOR)
+    engine = create_engine(base_desechable)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "ALTER TABLE hole_scores ALTER COLUMN created_at "
+                "TYPE timestamp without time zone USING created_at AT TIME ZONE 'UTC'"
+            )
+        )
+        conn.execute(text("ALTER DATABASE CURRENT SET TimeZone = 'Europe/Madrid'"))
+        # Sin partido ni jugador de verdad: las claves foráneas, apagadas en esta sesión
+        conn.execute(text("SET session_replication_role = replica"))
+        conn.execute(
+            text(
+                "INSERT INTO hole_scores (id, match_id, hole_number, player_user_id, team, "
+                "created_at, updated_at) VALUES (:id, :m, 1, :u, 'A', "
+                "'2026-01-01 10:00:00', '2026-01-01 10:00:00+00')"
+            ),
+            {"id": str(uuid.uuid4()), "m": str(uuid.uuid4()), "u": str(uuid.uuid4())},
+        )
+    engine.dispose()
+
+    _alembic(base_desechable, "upgrade", ALINEA)
+
+    engine = create_engine(base_desechable)
+    with engine.connect() as conn:
+        fila = conn.execute(
+            text("SELECT created_at::text, updated_at::text FROM hole_scores")
+        ).one()
+    engine.dispose()
+    assert tuple(fila) == ("2026-01-01 10:00:00", "2026-01-01 10:00:00")

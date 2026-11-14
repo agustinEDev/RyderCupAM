@@ -45,12 +45,23 @@ def ajustes_de_la_conexion() -> dict[str, dict[str, str]]:
     """
     return {
         "server_settings": {
-            "statement_timeout": str(env_int("DB_STATEMENT_TIMEOUT_MS", default=15_000)),
+            "statement_timeout": str(_milisegundos("DB_STATEMENT_TIMEOUT_MS", 15_000)),
             "idle_in_transaction_session_timeout": str(
-                env_int("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", default=120_000)
+                _milisegundos("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 120_000)
             ),
         }
     }
+
+
+# El máximo que acepta Postgres en estos ajustes: por encima rechaza la conexión y la API
+# no arrancaría (CodeRabbit)
+MAXIMO_DE_POSTGRES_MS = 2_147_483_647
+
+
+def _milisegundos(nombre: str, defecto: int) -> int:
+    """El valor de la variable si es un entero de 1 al máximo de Postgres; si no, `defecto`."""
+    valor = env_int(nombre, default=defecto)
+    return valor if valor <= MAXIMO_DE_POSTGRES_MS else defecto
 
 
 AJUSTES_DE_LA_CONEXION = ajustes_de_la_conexion()
