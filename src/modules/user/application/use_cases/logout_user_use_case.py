@@ -149,10 +149,11 @@ class LogoutUserUseCase:
             id_del_dispositivo = UserDeviceId.from_string(device_id)
         except (ValueError, TypeError):
             return
-        dispositivo = await self._uow.user_devices.find_by_id_and_user(
-            device_id=id_del_dispositivo, user_id=user_id
-        )
-        if dispositivo is None:
+        # Con su fila bloqueada, como los refrescos (F-02): uno en curso termina antes
+        # (y su acceso, firmado dentro, queda antes de esta hora) o espera a este cierre.
+        # La hora, después del bloqueo (revisor de B-05)
+        dispositivo = await self._uow.user_devices.find_by_id_for_update(id_del_dispositivo)
+        if dispositivo is None or dispositivo.user_id != user_id or not dispositivo.is_active:
             return
         dispositivo.cierra_las_sesiones(datetime.now(UTC))
         await self._uow.user_devices.save(dispositivo)

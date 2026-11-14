@@ -26,6 +26,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # El ADD COLUMN pide un bloqueo exclusivo de `user_devices`: si un refresco la
+    # tuviera bloqueada, mejor fallar a los 5 s que dejar los logins y refrescos en
+    # cola detrás (el contenedor no arranca y Render sigue con la versión anterior).
+    # SET LOCAL: solo vale dentro de esta transacción (revisor de B-05)
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.add_column(
         "user_devices",
         sa.Column("session_closed_at", sa.DateTime(timezone=True), nullable=True),

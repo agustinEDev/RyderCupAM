@@ -319,6 +319,7 @@ class TestLaRutaDelCambio:
         galletas = respuesta.headers.getlist("set-cookie")
         assert any("acceso-nuevo" in g for g in galletas)
         assert any("refresco-nuevo" in g for g in galletas)
+        assert any(g.startswith("csrf_token=csrf") for g in galletas)
         assert "acceso-nuevo" not in cuerpo.model_dump_json()
 
     def test_the_dependency_gives_the_use_case_its_token_service(self):
@@ -327,3 +328,65 @@ class TestLaRutaDelCambio:
         caso = get_update_security_use_case(InMemoryUnitOfWork(), None, SecurityAuditLogger())
 
         assert caso._token_service is not None
+
+
+class TestLaRutaDelCierre:
+    """La ruta de salir cierra el dispositivo del token, nunca el que mande el cliente."""
+
+    async def test_b1_the_logout_route_closes_the_token_device_not_the_clients(self):
+        from unittest.mock import AsyncMock
+
+        from fastapi import Response
+
+        from src.modules.user.application.dto.user_dto import UserResponseDTO
+        from src.modules.user.infrastructure.api.v1 import auth_routes
+
+        uow = InMemoryUnitOfWork()
+        ana = await _persona(uow)
+        caso = AsyncMock()
+        peticion = _peticion("x")
+        peticion.state.dispositivo_actual = "dispositivo-del-token"
+
+        await auth_routes.logout_user(
+            peticion,
+            LogoutRequestDTO(device_id="otro-que-manda-el-cliente"),
+            Response(),
+            UserResponseDTO.model_validate(ana),
+            None,
+            caso,
+        )
+
+        assert caso.execute.call_args.args[0].device_id == "dispositivo-del-token"
+
+
+async def test_signing_out_with_someone_elses_device_closes_nothing():
+    uow = InMemoryUnitOfWork()
+    ana = await _persona(uow)
+    bea = User.create(
+        first_name="Bea", last_name="Golf", email_str="bea@example.com", plain_password=CONTRASENA
+    )
+    async with uow:
+        await uow.users.save(bea)
+    de_bea = await _dispositivo(uow, bea, "Movil/1.0")
+    token_de_bea = _acceso(bea, de_bea)
+
+    await _sale(uow, ana, de_bea)
+
+    assert (await _entra(uow, token_de_bea)).email == "bea@example.com"
+
+
+async def test_b5_no_new_session_for_a_device_that_is_not_mine():
+    uow = InMemoryUnitOfWork()
+    ana = await _persona(uow)
+    bea = User.create(
+        first_name="Bea", last_name="Golf", email_str="bea@example.com", plain_password=CONTRASENA
+    )
+    async with uow:
+        await uow.users.save(bea)
+    de_bea = await _dispositivo(uow, bea, "Movil/1.0")
+
+    respuesta = await _caso_del_cambio(uow).execute(
+        str(ana.id.value), _cambio(de_bea, new_password=NUEVA, confirm_password=NUEVA)
+    )
+
+    assert respuesta.sesion_nueva is None
