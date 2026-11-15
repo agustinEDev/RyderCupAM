@@ -16,7 +16,8 @@ Aquí solo está la decisión, sin red ni base de datos.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -51,6 +52,9 @@ class Intento:
 
     resultado: ResultadoRefresco
     intentos: int
+    # Cuándo se apuntó por última vez: lo actualizado después ya no cuenta como
+    # sin actualizar (15 nov 2026). No entra al comparar: es el mismo resultado
+    momento: datetime | None = field(default=None, compare=False)
 
 
 class RefrescoDeHandicapsService:

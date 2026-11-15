@@ -43,7 +43,9 @@ class InMemoryHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
 
     async def resultados(self, update_id: uuid.UUID) -> dict[UserId, Intento]:
         return {
-            user_id: intento
+            user_id: Intento(
+                intento.resultado, intento.intentos, momento=self._cuando[(actualizacion, user_id)]
+            )
             for (actualizacion, user_id), intento in self._resultados.items()
             if actualizacion == update_id
         }

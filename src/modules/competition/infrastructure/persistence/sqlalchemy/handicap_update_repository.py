@@ -74,12 +74,15 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
     async def resultados(self, update_id: uuid.UUID) -> dict[UserId, Intento]:
         tabla = handicap_refreshes_table
         result = await self._session.execute(
-            select(tabla.c.user_id, tabla.c.result, tabla.c.attempts).where(
+            select(tabla.c.user_id, tabla.c.result, tabla.c.attempts, tabla.c.refreshed_at).where(
                 tabla.c.update_id == str(update_id)
             )
         )
         return {
-            fila.user_id: Intento(ResultadoRefresco(fila.result), fila.attempts) for fila in result
+            fila.user_id: Intento(
+                ResultadoRefresco(fila.result), fila.attempts, momento=fila.refreshed_at
+            )
+            for fila in result
         }
 
     async def apuntar(
