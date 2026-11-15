@@ -1635,3 +1635,53 @@ class TestAlLlenarseApuntandose:
         assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
         [(cerradas,)] = actividad.de("invitations_closed")
         assert [i.id for i in cerradas] == [invitacion.id]
+
+
+class TestO2UnCorreoQueFallaNoParaLosDemas:
+    async def test_falla_el_segundo_y_salen_el_primero_y_el_tercero(self):
+        """O2. Given tres invitadas sin cuenta en espera / When se reabre y el 2.º correo
+        falla / Then el 1.º y el 3.º salen igual"""
+
+        class _FallaElSegundo:
+            def __init__(self):
+                self.intentos: list[str] = []
+                self.enviados: list[str] = []
+
+            async def send_invitation_email(self, **datos) -> bool:
+                self.intentos.append(datos["to_email"])
+                if len(self.intentos) == 2:
+                    raise RuntimeError("caido")
+                self.enviados.append(datos["to_email"])
+                return True
+
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        for _ in range(3):
+            await _en_espera(uow, comp_id)
+        correos = _FallaElSegundo()
+
+        await ReopenEnrollmentsUseCase(uow, correos=correos, user_uow=UsuariosEnMemoria()).execute(
+            ReopenEnrollmentsRequestDTO(competition_id=comp_id.value), organizador
+        )
+
+        assert len(correos.intentos) == 3
+        assert correos.enviados == [correos.intentos[0], correos.intentos[2]]
+
+    async def test_si_falla_leer_los_nombres_no_sale_ninguno_y_se_reabre(self, caplog):
+        """O2. Given leer quién invita falla / When se reabre / Then ningún correo, y
+        reabierta igual"""
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        sin_cuenta = await _en_espera(uow, comp_id)
+        usuarios = UsuariosEnMemoria()
+        usuarios.users.find_by_ids = AsyncMock(side_effect=RuntimeError("caida"))
+        correos = _Correos()
+
+        with caplog.at_level(logging.WARNING):
+            await ReopenEnrollmentsUseCase(uow, correos=correos, user_uow=usuarios).execute(
+                ReopenEnrollmentsRequestDTO(competition_id=comp_id.value), organizador
+            )
+
+        assert correos.enviados == []
+        # Ni se intenta ninguno: un solo aviso, el de la lectura
+        assert "Could not read who invited" in caplog.text
+        assert "Could not resend the invitation email to" not in caplog.text
+        assert await _estado(uow, sin_cuenta) is InvitationStatus.PENDING

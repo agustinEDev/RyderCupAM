@@ -54,6 +54,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.email_masking import mask_email
 
 logger = logging.getLogger(__name__)
 
@@ -169,13 +170,22 @@ class Reapertura:
         await self._reenviar(competition, [i for i in vuelven if i.invitee_user_id is None])
 
     async def _reenviar(self, competition: Competition, sin_cuenta: list[Invitation]) -> None:
-        """El correo de invitación de siempre, con la caducidad nueva (O2). Lo que falle
-        —leer quién invita o mandarlo— se apunta y se sigue: la reapertura ya está hecha."""
+        """El correo de invitación de siempre, con la caducidad nueva (O2). Si falla leer
+        quién invita, no sale ninguno; si falla uno, los demás salen. Se apunta y se
+        sigue: la reapertura ya está hecha."""
         if self._correos is None or not sin_cuenta:
             return
         try:
             nombres = await self._nombres_de_quien_invita(competition, sin_cuenta)
-            for invitacion in sin_cuenta:
+        except Exception:
+            logger.warning(
+                "Could not read who invited, to resend the invitation emails of competition %s",
+                competition.id.value,
+                exc_info=True,
+            )
+            return
+        for invitacion in sin_cuenta:
+            try:
                 await self._correos.send_invitation_email(
                     to_email=invitacion.invitee_email,
                     invitee_name=None,
@@ -184,12 +194,12 @@ class Reapertura:
                     personal_message=invitacion.personal_message,
                     expires_at=invitacion.expires_at,
                 )
-        except Exception:
-            logger.warning(
-                "Could not resend the invitation emails of competition %s",
-                competition.id.value,
-                exc_info=True,
-            )
+            except Exception:
+                logger.warning(
+                    "Could not resend the invitation email to %s",
+                    mask_email(invitacion.invitee_email),
+                    exc_info=True,
+                )
 
     async def _nombres_de_quien_invita(
         self, competition: Competition, sin_cuenta: list[Invitation]
