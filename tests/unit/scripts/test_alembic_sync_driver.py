@@ -33,8 +33,8 @@ _DESTINO = "u:p@127.0.0.1:1/nada"
 
 @pytest.mark.parametrize(
     "esquema",
-    ["postgresql", "postgresql+asyncpg", "postgresql+psycopg2"],
-    ids=["D1-sin-driver", "D2-asyncpg", "D3-psycopg2"],
+    ["postgresql", "postgresql+asyncpg", "postgresql+psycopg2", "postgres"],
+    ids=["D1-sin-driver", "D2-asyncpg", "D3-psycopg2", "D4-postgres"],
 )
 def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
     """
@@ -42,7 +42,8 @@ def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
     WHEN: Se ejecuta `alembic upgrade head` como en el arranque del contenedor
     THEN: Falla al CONECTAR con psycopg2, no por un driver que no está instalado
     """
-    entorno = {**os.environ, "DATABASE_URL": f"{esquema}://{_DESTINO}"}
+    url = f"{esquema}://{_DESTINO}"
+    entorno = {**os.environ, "DATABASE_URL": url, "MIGRATIONS_DATABASE_URL": url}
 
     proceso = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
@@ -57,3 +58,33 @@ def test_alembic_uses_psycopg2_whatever_the_url_says(esquema):
 
     assert "No module named 'psycopg'" not in salida, salida[-1500:]
     assert "psycopg2.OperationalError" in salida, salida[-1500:]
+
+
+def test_d5_an_encoded_password_in_the_owner_url_does_not_break_alembic():
+    """
+    GIVEN: MIGRATIONS_DATABASE_URL con un carácter codificado (`%40`) y una DATABASE_URL
+           distinta, cada una a un puerto cerrado distinto
+    WHEN: Se ejecuta `alembic upgrade head`
+    THEN: Intenta conectar con la del dueño (puerto 1), sin que el `%` rompa la
+          configuración de Alembic (CodeRabbit)
+    """
+    entorno = {
+        **os.environ,
+        "DATABASE_URL": "postgresql://api:p@127.0.0.1:2/nada",
+        "MIGRATIONS_DATABASE_URL": "postgresql://dueno:cl%40ve@127.0.0.1:1/nada",
+    }
+
+    proceso = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=_RAIZ,
+        env=entorno,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    salida = proceso.stdout + proceso.stderr
+
+    assert "interpolation" not in salida, salida[-1500:]
+    assert "psycopg2.OperationalError" in salida, salida[-1500:]
+    assert "port 1 failed" in salida, salida[-1500:]

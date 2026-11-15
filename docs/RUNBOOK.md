@@ -247,3 +247,37 @@ kubectl exec -it -n rydercup deployment/api-deployment -- bash
 - Docker Docs: http://localhost:8000/docs
 - Docker PostgreSQL: localhost:5432
 - K8s (port-forward): kubectl port-forward -n rydercup svc/api-service 8000:8000
+
+## Usuario de la API sin permisos de estructura (DB-01)
+
+La API puede entrar con `rydercup_app`, que solo lee y escribe filas; las migraciones del
+arranque entran con el dueño de la base. Sin `MIGRATIONS_DATABASE_URL` todo funciona como
+antes (las migraciones usan `DATABASE_URL`).
+
+Ninguna contraseña va en la línea de órdenes (quedaría en el historial y en `ps`): psql la
+pide en su aviso.
+
+1. **Entrar como el dueño.** Con los datos de la URL actual de la API, SIN la contraseña:
+   `psql "host=<host> port=5432 dbname=<base> user=<usuario> sslmode=require"`. Sin psql
+   instalado: `docker run --rm -it -v "$PWD/scripts/db:/s:ro" postgres:15 psql "<lo mismo>"`.
+2. **Comprobar quién es el dueño.** `SELECT current_user;` tiene que dar el dueño de las
+   tablas (`SELECT tableowner FROM pg_tables WHERE tablename = 'users';`). Si no
+   coinciden, parar: los permisos por defecto serían de otro usuario.
+3. **Crear el usuario.** `\set ON_ERROR_STOP on` y luego `\i scripts/db/rol_de_la_api.sql`
+   (o `\i /s/rol_de_la_api.sql` con Docker). Va en una transacción: si algo falla no
+   cambia nada. Se puede repetir y se niega si la base no está migrada. Después,
+   `\password rydercup_app`. El script también quita a `n8n_lectura` la lectura automática
+   de las tablas futuras (DB-03); sus permisos de hoy no cambian.
+4. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
+   ACTUAL de `DATABASE_URL` y desplegar. Todo sigue igual.
+5. **Render, el cambio:** `DATABASE_URL` pasa a
+   `postgresql://rydercup_app:<contraseña>@<mismo host>:5432/<misma base>`, con la
+   contraseña codificada para URL si lleva `@ : / # ? %` (mejor elegir una sin ellos), y
+   desplegar. Mirar `/health` y entrar en la app. Antes, todo esto en el Kind.
+6. **Volver atrás:** `DATABASE_URL` con el valor de `MIGRATIONS_DATABASE_URL` y desplegar.
+
+Las tablas que creen las migraciones futuras ya le dan permiso a `rydercup_app` solas (paso
+4 del script). `backup_ro` las lee por un permiso por defecto que ya tiene en producción y
+que el script no toca: comprobarlo antes del cambio con `\ddp` (tiene que salir
+`backup_ro=r` en las tablas del dueño); si no sale, las copias no llevarían las tablas
+nuevas.

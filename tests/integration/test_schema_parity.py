@@ -62,7 +62,7 @@ def migrated_schema():
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=PROJECT_ROOT,
-            env={**os.environ, "DATABASE_URL": target_url},
+            env={**os.environ, "DATABASE_URL": target_url, "MIGRATIONS_DATABASE_URL": target_url},
             capture_output=True,
             text=True,
             timeout=300,
@@ -261,7 +261,7 @@ class TestSchemaParity:
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=PROJECT_ROOT,
-            env={**os.environ, "DATABASE_URL": url},
+            env={**os.environ, "DATABASE_URL": url, "MIGRATIONS_DATABASE_URL": url},
             capture_output=True,
             text=True,
             timeout=120,
