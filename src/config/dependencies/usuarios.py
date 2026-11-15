@@ -3,6 +3,8 @@ Proveedores del módulo de usuarios: registro, sesión, contraseña, perfil, dis
 Google, avatar.
 """
 
+from datetime import timedelta
+
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -26,6 +28,7 @@ from src.config.dependencies.comun import (
     get_social_uow,
     get_uow,
 )
+from src.config.env import env_int
 from src.config.freno_del_login import freno_del_login
 from src.config.settings import settings
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -183,6 +186,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.services.rotacion_del_refresco import VENTANA_DE_LA_REANUDACION
 from src.modules.user.infrastructure.external.filesystem_avatar_preset_provider import (
     FileSystemAvatarPresetProvider,
 )
@@ -419,7 +423,25 @@ def get_refresh_access_token_use_case(
     token y, si detecta un robo, avisa al usuario en segundo plano (F-02).
     """
     return RefreshAccessTokenUseCase(
-        uow, token_service, security_audit=security_audit, aviso_de_cierre=aviso_de_cierre
+        uow,
+        token_service,
+        security_audit=security_audit,
+        aviso_de_cierre=aviso_de_cierre,
+        ventana_de_la_reanudacion=ventana_de_la_reanudacion(),
+    )
+
+
+def ventana_de_la_reanudacion() -> timedelta:
+    """
+    Cuánto se puede reanudar una respuesta de refresco perdida (B-19 de la auditoría de la
+    fase 6): `REFRESH_RESUME_WINDOW_SECONDS`, 5 minutos por defecto. Un valor que no sea
+    un número positivo vuelve a los 5 minutos, nunca a «sin límite».
+    """
+    return timedelta(
+        seconds=env_int(
+            "REFRESH_RESUME_WINDOW_SECONDS",
+            default=int(VENTANA_DE_LA_REANUDACION.total_seconds()),
+        )
     )
 
 
