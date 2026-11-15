@@ -11,6 +11,8 @@ GET /api/v1/competitions/me/handicaps-not-updated, contra Postgres.
 | H5   | La RFEG lo encuentra desde su perfil               | Nada                               |
 | —    | Otro usuario                                       | Vacío                              |
 | —    | Sin sesión                                         | 401                                |
+| N1   | La ficha de esa competición (completa)             | La misma lista en                  |
+|      |                                                    | `handicap_update.not_updated_players` |
 """
 
 import uuid
@@ -225,3 +227,26 @@ async def test_sin_sesion_es_un_401(client: AsyncClient):
     respuesta = await client.get(URL)
 
     assert respuesta.status_code == 401, respuesta.text
+
+
+async def test_la_ficha_nombra_a_los_mismos_que_el_aviso(client: AsyncClient):
+    """
+    Given una competición cerrada con la actualización COMPLETA y un español no encontrado
+    When su organizador abre la ficha (adonde lleva el aviso)
+    Then la ficha nombra a los mismos que el aviso, y `pending_players` sigue
+        vacío (nada que reintentar), como lo lee el front de producción
+    """
+    organizador, competicion = await _cerrada_con_un_no_encontrado(client)
+    set_auth_cookies(client, organizador["cookies"])
+
+    aviso = (await client.get(URL)).json()["as_organizer"][0]["players"]
+    respuesta = await client.get(f"/api/v1/competitions/{competicion['id']}")
+
+    assert respuesta.status_code == 200, respuesta.text
+    estado = respuesta.json()["handicap_update"]
+    assert estado["status"] == "COMPLETED"
+    assert estado["not_updated_players"] == aviso
+    assert estado["not_updated_players"] == [
+        {"user_id": organizador["user"]["id"], "name": "Luis Pérez"}
+    ]
+    assert estado["pending_players"] == []

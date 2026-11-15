@@ -5,6 +5,12 @@ Si una actualización con la RFEG deja a alguien sin actualizar, se avisa al
 organizador por correo y también en la competición (decidido el 7 oct 2026):
 la ficha le dice cómo va la última y quién falta. Solo al organizador o a un
 administrador. No escribe nada: es una pregunta.
+
+Desde el 15 nov 2026 también lleva la lista del aviso «{N} jugadores sin
+actualizar con la RFEG», con la misma regla (`SinActualizarDeLaCompeticion`):
+el aviso lleva a esta ficha y tiene que nombrar a los mismos. Va aparte de
+`pending_players`, que sigue siendo quién falta por preguntar (lo que el botón
+termina) y lo que lee el front que ya está en producción.
 """
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -15,6 +21,9 @@ from src.modules.competition.application.services.pendientes_de_actualizar impor
     PendientesDeActualizar,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.sin_actualizar_de_la_competicion import (
+    SinActualizarDeLaCompeticion,
+)
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     EstadoActualizacion,
 )
@@ -57,8 +66,17 @@ class GetHandicapUpdateStatusUseCase:
             pendientes = []
             if actualizacion.estado in CON_PENDIENTES:
                 pendientes = await PendientesDeActualizar.de(self._uow, actualizacion)
+            sin_actualizar = []
+            if SinActualizarDeLaCompeticion.terminada(actualizacion):
+                hecho = await SinActualizarDeLaCompeticion.de(
+                    self._uow, self._users, competicion, actualizacion
+                )
+                sin_actualizar = hecho.para_el_organizador
             nombres = await PlayerNames.de_la_competicion(
-                pendientes, competition_id, self._users, self._uow
+                list(dict.fromkeys([*pendientes, *sin_actualizar])),
+                competition_id,
+                self._users,
+                self._uow,
             )
         return HandicapUpdateStatusDTO(
             status=actualizacion.estado.value,
@@ -68,5 +86,9 @@ class GetHandicapUpdateStatusUseCase:
             pending_players=[
                 PendingHandicapPlayerDTO(user_id=u.value, name=nombres.get(u, ""))
                 for u in pendientes
+            ],
+            not_updated_players=[
+                PendingHandicapPlayerDTO(user_id=u.value, name=nombres.get(u, ""))
+                for u in sin_actualizar
             ],
         )
