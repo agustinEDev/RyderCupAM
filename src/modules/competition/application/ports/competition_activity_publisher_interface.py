@@ -158,7 +158,34 @@ class CompetitionActivityPublisherInterface(ABC):
     async def invitations_closed(self, invitations: Sequence[Invitation]) -> None:
         """
         Invitaciones que dejaron de estar pendientes solas, sin que respondan el
-        invitado ni el organizador: sin plaza (NO_ROOM) o caducadas (EXPIRED).
+        invitado ni el organizador: sin plaza (NO_ROOM), caducadas (EXPIRED) o en
+        espera de que se reabra la inscripción (ON_HOLD, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """
+        Se reabrió la inscripción y las que esperaban vuelven a estar pendientes:
+        a cada invitado, «ya puedes aceptar» (P2, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """
+        Empezó o se canceló con invitaciones en espera: a cada invitado, «no hubo
+        plaza» (P3, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        """
+        Alguien entró aceptando una invitación y los equipos formados se deshicieron:
+        al organizador, «{X} ha entrado en {Y}: los equipos se han deshecho y hay
+        que volver a formarlos» (B3, 15 nov 2026).
         """
 
     @abstractmethod

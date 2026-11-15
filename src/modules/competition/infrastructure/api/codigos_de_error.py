@@ -40,6 +40,9 @@ from src.modules.competition.application.exceptions import (
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+)
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
@@ -68,10 +71,6 @@ from src.modules.competition.application.use_cases.create_round_use_case import 
 from src.modules.competition.application.use_cases.declare_walkover_use_case import (
     CompetitionNotInProgressError as DeclareWalkoverCompetitionNotInProgressError,
     InvalidWalkoverError,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    AlreadyEnrolledError as DirectEnrollPlayerAlreadyEnrolledError,
-    CompetitionNotActiveError as DirectEnrollPlayerCompetitionNotActiveError,
 )
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     RoundNotPendingMatchesError,
@@ -132,6 +131,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationCompetitionStatusViolation,
     InvitationExpiredViolation,
+    InvitationOnHoldViolation,
     SelfInvitationViolation,
 )
 from src.modules.competition.domain.services.location_builder import InvalidCountryError
@@ -155,7 +155,6 @@ CODIGOS: dict[type[Exception], int] = {
     CreateRoundGolfCourseNotInCompetitionError: status.HTTP_400_BAD_REQUEST,
     DateOutOfRangeError: status.HTTP_400_BAD_REQUEST,
     DeclareWalkoverCompetitionNotInProgressError: status.HTTP_400_BAD_REQUEST,
-    DirectEnrollPlayerCompetitionNotActiveError: status.HTTP_400_BAD_REQUEST,
     EnrollmentClosedError: status.HTTP_400_BAD_REQUEST,
     # Pasado el plazo de inscripción (15 nov 2026, C2): ver CON_SU_CODIGO
     EnrollmentDeadlinePassedError: status.HTTP_400_BAD_REQUEST,
@@ -219,11 +218,15 @@ CODIGOS: dict[type[Exception], int] = {
     # 409: choca con lo que ya hay
     AlreadyEnrolledInvitationViolation: status.HTTP_409_CONFLICT,
     CompetitionAlreadyExistsError: status.HTTP_409_CONFLICT,
-    DirectEnrollPlayerAlreadyEnrolledError: status.HTTP_409_CONFLICT,
     DuplicateInvitationViolation: status.HTTP_409_CONFLICT,
     EarlyRevealNeedsBothCaptainsError: status.HTTP_409_CONFLICT,
     InvalidInvitationStatusViolation: status.HTTP_409_CONFLICT,
     InvitationExpiredViolation: status.HTTP_409_CONFLICT,
+    # La invitación espera a que se reabra la inscripción (P1, 15 nov 2026): ver CON_SU_CODIGO
+    InvitationOnHoldViolation: status.HTTP_409_CONFLICT,
+    # Con la sala de draft abierta no se invita ni se acepta (B3, 15 nov 2026). Las rutas
+    # de baja y de aprobar lo siguen traduciendo con su texto propio
+    DraftInProgressError: status.HTTP_409_CONFLICT,
     MatchNotScoringError: status.HTTP_409_CONFLICT,
     NotYourTurnError: status.HTTP_409_CONFLICT,
     RequestEnrollmentAlreadyEnrolledError: status.HTTP_409_CONFLICT,
@@ -233,5 +236,8 @@ CODIGOS: dict[type[Exception], int] = {
 }
 
 # Las que llevan además su `error_code` en la raíz: ENROLLMENT_DEADLINE_PASSED, con su
-# texto fijo «La inscripción está cerrada.» (15 nov 2026, C2)
-CON_SU_CODIGO: frozenset[type[Exception]] = frozenset({EnrollmentDeadlinePassedError})
+# texto fijo «La inscripción está cerrada.» (15 nov 2026, C2); INVITATION_ON_HOLD, con
+# el texto aprobado de la lista de espera (P1), y DRAFT_IN_PROGRESS (B3)
+CON_SU_CODIGO: frozenset[type[Exception]] = frozenset(
+    {EnrollmentDeadlinePassedError, InvitationOnHoldViolation, DraftInProgressError}
+)

@@ -709,7 +709,10 @@ class TestInvitacionesCerradasSolas:
         assert len(await _guardados(social_uow, ana)) == 1
 
     async def test_todas_en_un_solo_borrado(self, avisos, social_uow, user_uow, monkeypatch):
-        """Revision: un DELETE por lote, no uno por invitacion."""
+        """Revision: un DELETE por lote y tipo de aviso de invitacion, no uno por invitacion.
+
+        Dos tipos desde el 15 nov 2026: «te han invitado» y «ya puedes aceptar» (P2).
+        """
         ana = await _user(user_uow)
         await avisos.invited(ana.id, _torneo(), "inv-a")
         await avisos.invited(ana.id, _torneo(), "inv-b")
@@ -729,5 +732,6 @@ class TestInvitacionesCerradasSolas:
 
         await avisos.invitations_closed([(ana.id, "inv-a"), (ana.id, "inv-b")])
 
-        assert len(llamadas) == 1
+        assert len(llamadas) == 2
+        assert all(len(parejas) == 2 for parejas in llamadas)
         assert await _guardados(social_uow, ana) == []

@@ -6,13 +6,15 @@ franjas (D8); el revisor vio que los demás caminos sí, y que al llegar a ese
 número cerraban las invitaciones pendientes «sin plaza» con las franjas aún con
 sitio. Decidido: con franjas ninguno lo mira; sin franjas, como siempre.
 
+C1 (el organizador inscribe a mano) se fue con la inscripción directa del
+organizador (B-02, 15 nov 2026).
+
     #    camino                                    | con franjas y max lleno
     -----|-----------------------------------------|----------------------------
-    C1   el organizador inscribe a mano            | entra
     C2   el organizador aprueba una solicitud      | entra
     C3   el invitado acepta                        | entra; las demás pendientes siguen
     C4   el organizador invita                     | sale la invitación
-    C5   sin franjas                               | llena, como siempre
+    C5   sin franjas (aprobar una solicitud)       | llena, como siempre
 """
 
 from datetime import date, time, timedelta
@@ -22,7 +24,6 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import (
-    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
 )
 from src.modules.competition.application.dto.invitation_dto import (
@@ -30,9 +31,6 @@ from src.modules.competition.application.dto.invitation_dto import (
     SendInvitationByUserIdRequestDTO,
 )
 from src.modules.competition.application.exceptions import CompetitionFullError
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
-)
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
 )
@@ -154,35 +152,6 @@ class _E:
             return (await self.uow.invitations.find_by_id(invitacion.id)).status
 
 
-async def test_c1_el_organizador_inscribe_a_mano_aunque_el_maximo_este_lleno():
-    e = await _E().montar(con_franjas=True)
-    jugador = await e.usuario()
-
-    respuesta = await DirectEnrollPlayerUseCase(e.uow, e.usuarios.users).execute(
-        DirectEnrollPlayerRequestDTO(
-            competition_id=e.competicion.id.value, user_id=jugador.id.value
-        ),
-        e.creador.id,
-    )
-
-    assert respuesta.status == "APPROVED"
-
-
-async def test_c1_y_no_cierra_las_invitaciones_pendientes():
-    e = await _E().montar(con_franjas=True)
-    pendiente = await e.invitacion(await e.usuario())
-    jugador = await e.usuario()
-
-    await DirectEnrollPlayerUseCase(e.uow, e.usuarios.users).execute(
-        DirectEnrollPlayerRequestDTO(
-            competition_id=e.competicion.id.value, user_id=jugador.id.value
-        ),
-        e.creador.id,
-    )
-
-    assert await e.estado(pendiente) == InvitationStatus.PENDING
-
-
 async def test_c2_el_organizador_aprueba_una_solicitud():
     e = await _E().montar(con_franjas=True)
     pendiente = await e.invitacion(await e.usuario())
@@ -230,12 +199,10 @@ async def test_c4_el_organizador_invita():
 
 async def test_c5_sin_franjas_el_maximo_manda_como_siempre():
     e = await _E().montar(con_franjas=False)
-    jugador = await e.usuario()
+    solicitud = await e.inscripcion((await e.usuario()).id, EnrollmentStatus.REQUESTED)
 
     with pytest.raises(CompetitionFullError):
-        await DirectEnrollPlayerUseCase(e.uow, e.usuarios.users).execute(
-            DirectEnrollPlayerRequestDTO(
-                competition_id=e.competicion.id.value, user_id=jugador.id.value
-            ),
+        await HandleEnrollmentUseCase(e.uow, e.usuarios.users).execute(
+            HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
             e.creador.id,
         )

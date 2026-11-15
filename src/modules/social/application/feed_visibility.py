@@ -21,7 +21,10 @@ from src.modules.social.domain.value_objects.activity_event_type import Activity
 from src.modules.user.domain.value_objects.user_id import UserId
 
 _APUNTADO = ActivityEventType.ENROLLED_IN_TOURNAMENT
-_INVITADO = ActivityEventType.INVITED_TO_TOURNAMENT
+# «Te han invitado» y «ya puedes aceptar» (P2, 15 nov 2026): los dos piden aceptarla
+_DE_INVITACION = frozenset(
+    {ActivityEventType.INVITED_TO_TOURNAMENT, ActivityEventType.INVITATION_ACCEPTABLE_AGAIN}
+)
 
 
 async def sin_apuntados_a_privados(
@@ -60,8 +63,8 @@ async def sin_invitaciones_cerradas(
     eventos: Sequence[ActivityEvent], invitations: InvitationAvailabilityInterface | None
 ) -> list[ActivityEvent]:
     """
-    La pagina sin los «Te han invitado» de invitaciones que ya no se pueden
-    aceptar (revision final, 22 oct 2026).
+    La pagina sin los «Te han invitado» (ni los «ya puedes aceptar») de
+    invitaciones que ya no se pueden aceptar (revision final, 22 oct 2026).
 
     Una invitacion caduca sola sin que nadie la guarde como EXPIRED ni retire
     su aviso. El origen del aviso es el id de la invitacion, asi que se pregunta
@@ -70,14 +73,14 @@ async def sin_invitaciones_cerradas(
     """
     if invitations is None:
         return list(eventos)
-    ids = {evento.source_match_id for evento in eventos if evento.type == _INVITADO}
+    ids = {evento.source_match_id for evento in eventos if evento.type in _DE_INVITACION}
     if not ids:
         return list(eventos)
     cerradas = await invitations.closed_ids(sorted(ids))
     return [
         evento
         for evento in eventos
-        if not (evento.type == _INVITADO and evento.source_match_id in cerradas)
+        if not (evento.type in _DE_INVITACION and evento.source_match_id in cerradas)
     ]
 
 

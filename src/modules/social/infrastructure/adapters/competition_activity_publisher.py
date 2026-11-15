@@ -197,6 +197,42 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             ]
         )
 
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """A cada invitado con cuenta, «ya puedes aceptar», por su invitación (P2)."""
+        await self._notices.invitations_acceptable_again(
+            _ref(competition),
+            [
+                (i.invitee_user_id, str(i.id.value))
+                for i in invitations
+                if i.invitee_user_id is not None
+            ],
+        )
+
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """A cada invitado con cuenta que esperaba, su «no hubo plaza», por su invitación (P3)."""
+        await self._notices.no_place(
+            _ref(competition),
+            [
+                (i.invitee_user_id, str(i.id.value))
+                for i in invitations
+                if i.invitee_user_id is not None
+            ],
+        )
+
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        """Al organizador: entró alguien y los equipos se deshicieron (B3)."""
+        await self._notices.teams_undone_by_entry(
+            competition.creator_id,
+            enrollment.user_id,
+            _ref(competition),
+            str(enrollment.id.value),
+            use_real_name=enrollment.use_real_name,
+        )
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

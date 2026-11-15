@@ -71,6 +71,29 @@ class TeamAssignmentWriter:
         return assignment
 
     @staticmethod
+    async def se_pueden_deshacer(
+        uow: CompetitionUnitOfWorkInterface, competition: Competition
+    ) -> bool:
+        """
+        Si hay equipos formados y aún se pueden deshacer: sin empezar y sin partidos.
+        Sin tocar nada: para invitar con los equipos formados (B3, 15 nov 2026).
+        """
+        # Solo antes de empezar: en juego, o con partidos, el reparto ya es lo jugado
+        if competition.status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
+            return False
+        # Un reparto es de una Ryder: sin su pieza, nada que deshacer (revisor)
+        if competition.ryder_cup is None:
+            return False
+        if await uow.team_assignments.find_by_competition(competition.id) is None:
+            return False
+        for sesion in await uow.rounds.find_by_competition(competition.id):
+            if sesion.status not in (RoundStatus.PENDING_TEAMS, RoundStatus.PENDING_MATCHES):
+                return False
+            if await uow.matches.find_by_round(sesion.id):
+                return False
+        return True
+
+    @staticmethod
     async def deshacer(uow: CompetitionUnitOfWorkInterface, competition: Competition) -> bool:
         """
         Deshace los equipos: vuelve a como estaba antes de formarlos (release
@@ -90,21 +113,12 @@ class TeamAssignmentWriter:
         Returns:
             Si se deshicieron (False: no habia reparto, o ya hay partidos)
         """
-        # Solo antes de empezar: en juego, o con partidos, el reparto ya es lo jugado
-        if competition.status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
-            return False
-        # Un reparto es de una Ryder: sin su pieza, nada que deshacer (revisor)
-        if competition.ryder_cup is None:
+        if not await TeamAssignmentWriter.se_pueden_deshacer(uow, competition):
             return False
         reparto = await uow.team_assignments.find_by_competition(competition.id)
-        if reparto is None:
+        if reparto is None:  # Ya lo ha mirado `se_pueden_deshacer`; para el tipo
             return False
         sesiones = await uow.rounds.find_by_competition(competition.id)
-        for sesion in sesiones:
-            if sesion.status not in (RoundStatus.PENDING_TEAMS, RoundStatus.PENDING_MATCHES):
-                return False
-            if await uow.matches.find_by_round(sesion.id):
-                return False
 
         await uow.team_assignments.delete(reparto.id)
         # Los subcapitanes se eligen dentro de cada equipo (BE #320)

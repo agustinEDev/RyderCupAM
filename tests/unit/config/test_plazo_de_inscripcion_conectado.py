@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.config.dependencies import (
-    get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
     get_plazo_de_inscripcion,
     get_request_enrollment_use_case,
@@ -56,9 +55,6 @@ def test_el_proveedor_usa_la_zona_del_primer_campo():
         lambda: get_respond_to_invitation_use_case(
             uow=UOW, user_uow=USER_UOW, actividad=object(), plazo=PLAZO
         ),
-        lambda: get_direct_enroll_player_use_case(
-            uow=UOW, user_uow=USER_UOW, actividad=object(), plazo=PLAZO
-        ),
         lambda: get_update_competition_use_case(
             uow=UOW,
             location_builder=object(),
@@ -73,7 +69,6 @@ def test_el_proveedor_usa_la_zona_del_primer_campo():
         "invitar-por-id",
         "invitar-por-correo",
         "aceptar",
-        "inscribir-a-mano",
         "mover-una-cerrada",
     ],
 )

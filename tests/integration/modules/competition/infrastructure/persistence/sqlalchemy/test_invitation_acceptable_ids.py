@@ -187,3 +187,76 @@ async def test_la_pendiente_de_quien_mira_en_una_competicion(
     assert await repo.pendiente_de(creator_id, "yo@test.com", otra.id, AHORA) is None
     # Con dos vivas, la más reciente; sin su correo, solo la de su usuario
     assert (await repo.pendiente_de(creator_id, None, competicion.id, AHORA)).id == antigua.id
+
+
+# P1 (15 nov 2026): en espera de que se reabra, la privada se sigue viendo; la ficha
+# no la ofrece para aceptar, y el feed la da por cerrada
+async def test_la_que_espera_cuenta_para_ver_pero_no_para_aceptar(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    competicion = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    caducada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyInvitationRepository(db_session)
+    en_espera = None
+    for comp, caduca in ((competicion, AHORA + timedelta(days=1)), (caducada, AHORA)):
+        invitacion = Invitation.reconstruct(
+            id=InvitationId.generate(),
+            competition_id=comp.id,
+            inviter_id=creator_id,
+            invitee_email="yo@test.com",
+            invitee_user_id=creator_id,
+            status=InvitationStatus.ON_HOLD,
+            expires_at=caduca,
+            created_at=AHORA - timedelta(days=2),
+        )
+        await repo.add(invitacion)
+        en_espera = en_espera or invitacion
+    await db_session.commit()
+
+    assert await repo.competiciones_con_invitacion_pendiente(creator_id, None, AHORA) == {
+        competicion.id
+    }
+    assert await repo.pendiente_de(creator_id, None, competicion.id, AHORA) is None
+    assert await repo.find_acceptable_ids([en_espera.id], AHORA) == set()
+
+
+async def test_las_de_una_competicion_en_un_estado(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    """Todas las de esa competición y ese estado, con sus filas bloqueadas (15 nov 2026)."""
+    competicion = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    otra = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyInvitationRepository(db_session)
+    ids = {}
+    for nombre, comp, status in (
+        ("espera1", competicion, InvitationStatus.ON_HOLD),
+        ("espera2", competicion, InvitationStatus.ON_HOLD),
+        ("pendiente", competicion, InvitationStatus.PENDING),
+        ("de_otra", otra, InvitationStatus.ON_HOLD),
+    ):
+        invitacion = Invitation.reconstruct(
+            id=InvitationId.generate(),
+            competition_id=comp.id,
+            inviter_id=creator_id,
+            invitee_email=f"{nombre}@test.com",
+            status=status,
+            expires_at=AHORA + timedelta(days=1),
+            created_at=AHORA,
+        )
+        await repo.add(invitacion)
+        ids[nombre] = invitacion.id
+    await db_session.commit()
+
+    en_espera = await repo.find_by_competition_and_status_for_update(
+        competicion.id, InvitationStatus.ON_HOLD
+    )
+    pendientes = await repo.find_by_competition_and_status_for_update(
+        competicion.id, InvitationStatus.PENDING
+    )
+
+    assert {i.id for i in en_espera} == {ids["espera1"], ids["espera2"]}
+    assert [i.id for i in pendientes] == [ids["pendiente"]]

@@ -85,9 +85,8 @@ Teams & Generation (3 endpoints) ⭐ Sprint 2
 ├── POST   /api/v1/competitions/rounds/{id}/matches/generate # Generate matches for round
 └── POST   /api/v1/competitions/{id}/schedule/configure # Configure schedule (auto/manual)
 
-Enrollment Management (9 endpoints)
+Enrollment Management (8 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
-├── POST /api/v1/competitions/{id}/enrollments/direct # Direct enroll (creator only)
 ├── GET  /api/v1/competitions/{id}/enrollments      # List enrollments
 ├── POST /api/v1/enrollments/{id}/approve           # Approve enrollment
 ├── POST /api/v1/enrollments/{id}/reject            # Reject enrollment
@@ -664,7 +663,6 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/competitions/{id}/enrollments` | POST | Yes | Request enrollment (REQUESTED) |
-| `/competitions/{id}/enrollments/direct` | POST | Yes | Direct enrollment by creator (APPROVED) |
 | `/competitions/{id}/enrollments` | GET | Yes | List enrollments with filters |
 | `/enrollments/{id}/approve` | POST | Yes | Approve request (creator only) |
 | `/enrollments/{id}/reject` | POST | Yes | Reject request (creator only) |
@@ -680,10 +678,22 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 - Creates enrollment with REQUESTED status
 - User can cancel before approval
 
-**Direct Enroll:**
-- `user_id` (string, required) - ID of user to enroll
-- Only creator can execute
-- Creates enrollment with APPROVED status directly
+**No direct enrollment by the organizer** (removed 15 Nov 2026, audit B-02):
+- The organizer only invites; the player accepts the invitation or signs up to a public
+  competition
+- With enrollment closed nobody enters: no invitations, no acceptances. Pending
+  invitations are not lost: on close (by hand, by the deadline or by naming captains)
+  they move to `ON_HOLD` and accepting one answers 409 `INVITATION_ON_HOLD`; declining
+  it, or the organizer withdrawing it, still works. When the organizer reopens (or moving
+  the dates reopens it), they go back to `PENDING` and each invitee gets the Activity
+  notice `INVITATION_ACCEPTABLE_AGAIN`. If the competition starts or is cancelled first,
+  they become `NO_ROOM` and each invitee gets `ENROLLMENT_NO_PLACE` (source: the
+  invitation)
+- Ryder Cup with teams formed and no matches: the organizer may invite; when the invitee
+  accepts, the teams are reset and the organizer gets `TEAMS_UNDONE_BY_ENTRY` (payload:
+  tournament, `player_id`, `player_name`). With matches: 409 `TEAMS_FORMED`. While the
+  draft room is open: 409 `DRAFT_IN_PROGRESS`
+- Nobody is enrolled, or brought back after withdrawing, without their consent
 
 **Set Custom Handicap:**
 - `custom_handicap` (float, required, -10.0 to 54.0)
@@ -731,7 +741,7 @@ REJECTED    CANCELLED
 
 - Competition must be in ACTIVE status for enrollments
 - No duplicate enrollments allowed
-- Only creator can approve/reject/enroll directly
+- Only creator can approve/reject; the creator invites, never enrolls a player directly
 - Only owner can cancel/withdraw
 - custom_handicap is optional, if not set uses official handicap
 

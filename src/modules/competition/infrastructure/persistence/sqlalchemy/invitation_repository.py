@@ -22,16 +22,36 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-def _suya_y_aceptable(user_id: UserId, email: str | None, now: datetime) -> ColumnElement[bool]:
-    """
-    Las que aún puede aceptar: PENDING y sin caducar en `now`, a su usuario o al
-    correo al que se mandó antes de su alta (sin mayúsculas ni espacios).
-    """
+def _para_quien(user_id: UserId, email: str | None) -> ColumnElement[bool]:
+    """A su usuario o al correo al que se mandó antes de su alta (sin mayúsculas ni espacios)."""
     tabla = invitations_table.c
     para_quien = tabla.invitee_user_id == user_id
     if email and email.strip():
         para_quien = or_(para_quien, tabla.invitee_email == email.strip().lower())
-    return and_(para_quien, tabla.status == InvitationStatus.PENDING, tabla.expires_at > now)
+    return para_quien
+
+
+def _suya_y_aceptable(user_id: UserId, email: str | None, now: datetime) -> ColumnElement[bool]:
+    """Las que aún puede aceptar: PENDING y sin caducar en `now`."""
+    tabla = invitations_table.c
+    return and_(
+        _para_quien(user_id, email),
+        tabla.status == InvitationStatus.PENDING,
+        tabla.expires_at > now,
+    )
+
+
+def _suya_y_viva(user_id: UserId, email: str | None, now: datetime) -> ColumnElement[bool]:
+    """
+    Las vivas y sin caducar en `now`: PENDING, o en espera (ON_HOLD) de que se
+    reabra la inscripción (15 nov 2026).
+    """
+    tabla = invitations_table.c
+    return and_(
+        _para_quien(user_id, email),
+        tabla.status.in_([InvitationStatus.PENDING, InvitationStatus.ON_HOLD]),
+        tabla.expires_at > now,
+    )
 
 
 class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
@@ -144,9 +164,7 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         self, user_id: UserId, email: str | None, now: datetime
     ) -> set[CompetitionId]:
         """Solo el id de la competición: sin cargar las invitaciones."""
-        stmt = select(invitations_table.c.competition_id).where(
-            _suya_y_aceptable(user_id, email, now)
-        )
+        stmt = select(invitations_table.c.competition_id).where(_suya_y_viva(user_id, email, now))
         result = await self._session.execute(stmt)
         return set(result.scalars().all())
 
@@ -171,6 +189,22 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
                 Invitation._competition_id == competition_id,
                 Invitation._status == InvitationStatus.PENDING,
             )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_by_competition_and_status_for_update(
+        self, competition_id: CompetitionId, status: InvitationStatus
+    ) -> list[Invitation]:
+        stmt = (
+            select(Invitation)
+            .where(
+                and_(
+                    Invitation._competition_id == competition_id,
+                    Invitation._status == status,
+                )
+            )
+            .with_for_update()
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

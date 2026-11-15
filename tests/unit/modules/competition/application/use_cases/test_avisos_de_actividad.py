@@ -22,7 +22,6 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
-    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
     WithdrawEnrollmentRequestDTO,
 )
@@ -60,9 +59,6 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -231,6 +227,17 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def enrollments_closed(self, competition):
         self.avisos.append(("enrollments_closed", competition.id))
 
+    async def invitations_acceptable_again(self, competition, invitations):
+        self.avisos.append(
+            ("invitations_acceptable_again", competition.id, [i.id for i in invitations])
+        )
+
+    async def invitations_no_place(self, competition, invitations):
+        self.avisos.append(("invitations_no_place", competition.id, [i.id for i in invitations]))
+
+    async def teams_undone_by_entry(self, competition, enrollment):
+        self.avisos.append(("teams_undone_by_entry", competition.id, enrollment.id))
+
     async def close_blocked(self, competition, reason, players):
         self.avisos.append(("close_blocked", competition.id, reason, players))
 
@@ -266,6 +273,8 @@ class _Roto(CompetitionActivityPublisherInterface):
     handicaps_not_updated_withdrawn = handicap_not_found_withdrawn = _falla  # type: ignore[assignment]
     enrollments_closed = close_blocked = close_block_withdrawn = _falla  # type: ignore[assignment]
     enrollments_closed_withdrawn = _falla  # type: ignore[assignment]
+    invitations_acceptable_again = invitations_no_place = _falla  # type: ignore[assignment]
+    teams_undone_by_entry = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture
@@ -391,19 +400,6 @@ class TestInscripciones:
         )
 
         assert registro.avisos == []
-
-    async def test_a2_la_inscripcion_directa_avisa_sin_aceptacion(self, uow, registro):
-        competition_id, creator = await _abierta(uow)
-        jugador = UserId(uuid4())
-
-        await DirectEnrollPlayerUseCase(uow, USUARIOS_CON_GENERO, actividad=registro).execute(
-            DirectEnrollPlayerRequestDTO(
-                competition_id=competition_id.value, user_id=jugador.value
-            ),
-            creator,
-        )
-
-        assert registro.avisos == [("enrolled", competition_id, jugador, False)]
 
     async def test_b11_retirarse_avisa(self, uow, registro):
         competition_id, _ = await _abierta(uow)

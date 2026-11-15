@@ -28,7 +28,7 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    sin_plaza_para_las_pendientes,
+    en_espera_las_pendientes,
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
@@ -201,13 +201,14 @@ class CloseEnrollmentsUseCase:
         if desde_abierta:
             await self._uow.esperas.vaciar(competition.id)
 
-        # 6. Las invitaciones pendientes se quedan sin plaza (#710)
-        sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition.id)
+        # 6. Las invitaciones pendientes esperan a que se reabra (P1, 15 nov
+        #    2026; hasta entonces se quedaban sin plaza, #710)
+        en_espera = await en_espera_las_pendientes(self._uow, competition.id)
         return _Cierre(
             competition,
             total_enrollments,
             sin_sitio,
-            sin_plaza,
+            en_espera,
             actualizacion,
             por_el_plazo,
             estaba_avisada,
@@ -218,8 +219,9 @@ class CloseEnrollmentsUseCase:
         competition = cierre.competition
         # 7. Ya guardada, se lanza: la respuesta no espera a la RFEG
         self._actualizaciones.lanzar(cierre.actualizacion)
-        # Y las invitaciones cerradas retiran su aviso de invitado (22 oct 2026)
-        await self._actividad.invitations_closed(cierre.sin_plaza)
+        # Y las invitaciones en espera ya no se pueden aceptar: retiran su aviso de
+        # invitado (22 oct 2026); al reabrir llega el «ya puedes aceptar» (P2)
+        await self._actividad.invitations_closed(cierre.en_espera)
         # Quien se quedó en espera: «no hubo plaza» (A4)
         for inscripcion in cierre.sin_sitio:
             await self._actividad.left(competition.id, inscripcion.user_id)
@@ -255,7 +257,7 @@ class _Cierre:
     competition: Competition
     total_enrollments: int
     sin_sitio: list[Enrollment]
-    sin_plaza: list[Invitation]
+    en_espera: list[Invitation]
     actualizacion: ActualizacionDeHandicaps | None
     por_el_plazo: bool
     estaba_avisada: bool

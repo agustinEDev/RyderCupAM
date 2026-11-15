@@ -20,9 +20,38 @@ class TestInvitationStatusValues:
     def test_expired_value(self):
         assert InvitationStatus.EXPIRED == "EXPIRED"
 
-    def test_has_six_states(self):
-        # CANCELLED se añadió con la BE #359: la retira quien invita
-        assert len(InvitationStatus) == 6
+    def test_has_seven_states(self):
+        # CANCELLED se añadió con la BE #359: la retira quien invita; ON_HOLD, el
+        # 15 nov 2026: espera a que se reabra la inscripción (P1)
+        assert len(InvitationStatus) == 7
+
+    def test_on_hold_value(self):
+        assert InvitationStatus.ON_HOLD == "ON_HOLD"
+
+    def test_on_hold_is_open_not_pending_nor_final(self):
+        assert InvitationStatus.ON_HOLD.is_open()
+        assert InvitationStatus.ON_HOLD.is_on_hold()
+        assert not InvitationStatus.ON_HOLD.is_pending()
+        assert not InvitationStatus.ON_HOLD.is_final()
+        assert InvitationStatus.PENDING.is_open()
+        assert not InvitationStatus.PENDING.is_on_hold()
+        assert not any(s.is_open() for s in InvitationStatus if s not in {"PENDING", "ON_HOLD"})
+
+    def test_on_hold_transitions(self):
+        """P1-P3: se llega desde PENDING; vuelve, se rechaza, se retira, caduca o sin plaza."""
+        assert InvitationStatus.PENDING.can_transition_to(InvitationStatus.ON_HOLD)
+        assert {s for s in InvitationStatus if InvitationStatus.ON_HOLD.can_transition_to(s)} == {
+            InvitationStatus.PENDING,
+            InvitationStatus.DECLINED,
+            InvitationStatus.EXPIRED,
+            InvitationStatus.NO_ROOM,
+            InvitationStatus.CANCELLED,
+        }
+        assert not any(
+            s.can_transition_to(InvitationStatus.ON_HOLD)
+            for s in InvitationStatus
+            if s != InvitationStatus.PENDING
+        )
 
     def test_cancelled_value(self):
         assert InvitationStatus.CANCELLED == "CANCELLED"
@@ -111,10 +140,10 @@ class TestInvitationStatusQueries:
 class TestInvitationStatusSemantics:
     """Tests para verificar la semantica de los estados."""
 
-    def test_only_pending_allows_transitions(self):
-        """Solo PENDING permite transiciones a otros estados."""
+    def test_only_pending_and_on_hold_allow_transitions(self):
+        """Solo PENDING y ON_HOLD permiten transiciones a otros estados."""
         for status in InvitationStatus:
-            if status == InvitationStatus.PENDING:
+            if status in (InvitationStatus.PENDING, InvitationStatus.ON_HOLD):
                 assert not status.is_final()
             else:
                 assert status.is_final()

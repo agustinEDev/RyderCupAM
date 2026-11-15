@@ -67,9 +67,6 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
 )
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
-)
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
 )
@@ -622,21 +619,6 @@ def get_request_enrollment_use_case(
         uow,
         user_uow.users,
         zonas=plazo.zonas,
-        actividad=actividad,
-        plazo=plazo,
-    )
-
-
-def get_direct_enroll_player_use_case(
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
-    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
-) -> DirectEnrollPlayerUseCase:
-    """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(
-        uow,
-        user_uow.users,
         actividad=actividad,
         plazo=plazo,
     )

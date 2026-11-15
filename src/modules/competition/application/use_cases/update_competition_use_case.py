@@ -393,6 +393,8 @@ class UpdateCompetitionUseCase:
             await self._actividad.enrollments_closed_withdrawn(competition)
             # Como al reabrir a mano: sus avisos de hándicaps con la RFEG (#864)
             await reapertura.avisar_handicaps(competition)
+            # Y las invitaciones que esperaban vuelven: «ya puedes aceptar» (P2)
+            await reapertura.avisar_a_los_invitados(competition)
         return UpdateCompetitionResponseDTO(
             id=competition.id.value,
             name=str(competition.name),

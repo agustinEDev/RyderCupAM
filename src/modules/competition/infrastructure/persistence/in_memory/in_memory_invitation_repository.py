@@ -107,10 +107,14 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         self, user_id: UserId, email: str | None, now: datetime
     ) -> set[CompetitionId]:
         """Las competiciones con una invitación suya aún aceptable, por su usuario o su correo."""
+        correo = email.strip().lower() if email and email.strip() else None
         return {
             inv.competition_id
             for inv in self._invitations.values()
-            if _suya_y_aceptable(inv, user_id, email, now)
+            # Viva: pendiente o en espera de que se reabra (15 nov 2026)
+            if inv.status.is_open()
+            and now < inv.expires_at
+            and (inv.invitee_user_id == user_id or bool(correo and inv.invitee_email == correo))
         }
 
     async def pendiente_de(
@@ -130,6 +134,15 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
             inv
             for inv in self._invitations.values()
             if inv.competition_id == competition_id and inv.status == InvitationStatus.PENDING
+        ]
+
+    async def find_by_competition_and_status_for_update(
+        self, competition_id: CompetitionId, status: InvitationStatus
+    ) -> list[Invitation]:
+        return [
+            inv
+            for inv in self._invitations.values()
+            if inv.competition_id == competition_id and inv.status == status
         ]
 
     async def find_pending_by_email_and_competition(

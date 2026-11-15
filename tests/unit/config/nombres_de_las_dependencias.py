@@ -85,7 +85,6 @@ NOMBRES_DE_ANTES = (
     "get_delete_hole_sample_use_case",
     "get_delete_profile_photo_use_case",
     "get_delete_round_use_case",
-    "get_direct_enroll_player_use_case",
     "get_discard_hole_report_use_case",
     "get_draft_use_case",
     "get_email_service",

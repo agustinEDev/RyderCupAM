@@ -184,6 +184,23 @@ class InvitationNoRoomViolation(InvalidInvitationStatusViolation):
         super().__init__(self.MENSAJE)
 
 
+class InvitationOnHoldViolation(InvalidInvitationStatusViolation):
+    """La invitacion espera a que se reabra la inscripcion: no se acepta (P1, 15 nov 2026).
+
+    Hija de la de estado, como la de sin plaza: quien ya la capture no nota nada.
+    El texto es el aprobado por Agustín para el invitado.
+    """
+
+    error_code = "INVITATION_ON_HOLD"
+    MENSAJE = (
+        "En lista de espera: la inscripción está cerrada. "
+        "Si el organizador la reabre, podrás aceptarla."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(self.MENSAJE)
+
+
 class InvitationCompetitionStatusViolation(BusinessRuleViolation):
     """Lanzada cuando el estado de la competicion no permite invitaciones."""
 

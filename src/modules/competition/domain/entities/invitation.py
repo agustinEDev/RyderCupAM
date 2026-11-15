@@ -15,6 +15,7 @@ from ..events.invitation_declined_event import InvitationDeclinedEvent
 from ..exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationExpiredViolation,
+    InvitationOnHoldViolation,
 )
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.invitation_id import InvitationId
@@ -216,6 +217,14 @@ class Invitation:
         """Verifica si la invitacion esta pendiente."""
         return self._status.is_pending()
 
+    def is_on_hold(self) -> bool:
+        """Si espera a que se reabra la inscripcion (P1, 15 nov 2026)."""
+        return self._status.is_on_hold()
+
+    def is_open(self) -> bool:
+        """Si sigue viva: pendiente o en espera."""
+        return self._status.is_open()
+
     def is_for_user(self, user_id: UserId) -> bool:
         """Verifica si la invitacion es para el usuario dado (por user_id)."""
         return self._invitee_user_id is not None and self._invitee_user_id == user_id
@@ -240,6 +249,10 @@ class Invitation:
         if self.is_expired():
             self._transition_to_expired()
             raise InvitationExpiredViolation("Cannot accept an expired invitation.")
+
+        # En espera no se acepta: hay que esperar a que se reabra (P1)
+        if self.is_on_hold():
+            raise InvitationOnHoldViolation()
 
         if not self._status.can_transition_to(InvitationStatus.ACCEPTED):
             raise InvalidInvitationStatusViolation(
@@ -289,10 +302,10 @@ class Invitation:
         self.add_domain_event(event)
 
     def reject_for_no_room(self) -> None:
-        """Rechaza la invitacion por falta de plazas (PENDING -> NO_ROOM, #710).
+        """Rechaza la invitacion por falta de plazas (PENDING u ON_HOLD -> NO_ROOM, #710).
 
-        La rechaza la aplicacion, no el invitado: al cerrarse la inscripcion o al
-        ocuparse la ultima plaza (BE #359).
+        La rechaza la aplicacion, no el invitado: al ocuparse la ultima plaza (BE
+        #359) o, si esperaba, al empezar o cancelarse la competicion (P3).
         """
         if not self._status.can_transition_to(InvitationStatus.NO_ROOM):
             raise InvalidInvitationStatusViolation(
@@ -303,8 +316,33 @@ class Invitation:
         self._responded_at = now
         self._updated_at = now
 
+    def put_on_hold(self) -> None:
+        """Se cierra la inscripcion: espera a que se reabra (PENDING -> ON_HOLD, P1).
+
+        No se pierde, como pasaba con NO_ROOM hasta el 15 nov 2026: si el
+        organizador reabre, vuelve a PENDING (`resume`).
+        """
+        if not self._status.can_transition_to(InvitationStatus.ON_HOLD):
+            raise InvalidInvitationStatusViolation(
+                f"Cannot put on hold an invitation in status {self._status.value}."
+            )
+        self._status = InvitationStatus.ON_HOLD
+        self._updated_at = datetime.now()
+
+    def resume(self) -> None:
+        """Se reabre la inscripcion: se puede aceptar otra vez (ON_HOLD -> PENDING, P2).
+
+        La caducidad es la de siempre: quien llama mira luego `check_expiration`.
+        """
+        if not self.is_on_hold():
+            raise InvalidInvitationStatusViolation(
+                f"Cannot resume an invitation in status {self._status.value}."
+            )
+        self._status = InvitationStatus.PENDING
+        self._updated_at = datetime.now()
+
     def cancel(self) -> None:
-        """La retira quien invita (PENDING -> CANCELLED, BE #359).
+        """La retira quien invita (PENDING u ON_HOLD -> CANCELLED, BE #359).
 
         Sin aviso al invitado: en sus invitaciones pasa a cancelada y ya no se
         puede aceptar.
@@ -319,13 +357,13 @@ class Invitation:
         self._updated_at = now
 
     def check_expiration(self) -> None:
-        """Verifica y actualiza el estado si la invitacion ha expirado."""
-        if self._status == InvitationStatus.PENDING and self.is_expired():
+        """Verifica y actualiza el estado si la invitacion ha expirado (también en espera)."""
+        if self.is_open() and self.is_expired():
             self._transition_to_expired()
 
     def _transition_to_expired(self) -> None:
         """Transiciona internamente a EXPIRED."""
-        if self._status == InvitationStatus.PENDING:
+        if self.is_open():
             self._status = InvitationStatus.EXPIRED
             self._updated_at = datetime.now()
 

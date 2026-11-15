@@ -188,6 +188,8 @@ class _Salidas(CompetitionActivityPublisherInterface):
     # Del cierre por el plazo (15 nov 2026)
     enrollments_closed = close_blocked = close_block_withdrawn = _nada  # type: ignore[assignment]
     enrollments_closed_withdrawn = _nada  # type: ignore[assignment]
+    invitations_acceptable_again = invitations_no_place = _nada  # type: ignore[assignment]
+    teams_undone_by_entry = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

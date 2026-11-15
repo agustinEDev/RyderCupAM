@@ -4,8 +4,9 @@ Reabrir las inscripciones, en un solo sitio (15 nov 2026).
 Lo hace el organizador con su botón, y también mover el torneo cuando lo había
 cerrado el plazo y el plazo nuevo está en el futuro (R3). Los dos tienen que
 hacer lo mismo: la entidad vuelve a ACTIVE (y olvida el reparto de categorías),
-la actualización de hándicaps a medias se corta y las partidas que no han
-salido se borran, con sus avisos de salida retirados.
+la actualización de hándicaps a medias se corta, las partidas que no han
+salido se borran, con sus avisos de salida retirados, y las invitaciones que
+esperaban vuelven a pendientes, con su «ya puedes aceptar» (P2).
 """
 
 from collections.abc import Callable
@@ -16,6 +17,9 @@ from src.modules.competition.application.services.actualizaciones_de_handicaps i
     ActualizacionesDeHandicaps,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    vuelven_las_que_esperan,
+)
 from src.modules.competition.application.services.partidas_del_jugador import (
     salidas_por_hora,
 )
@@ -24,6 +28,7 @@ from src.modules.competition.application.services.salidas_de_la_ronda import (
     de_las_partidas,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -58,6 +63,8 @@ class Reapertura:
         self._actividad = actividad
         # Los aprobados al reabrir: sus avisos de hándicaps con la RFEG se retiran
         self._inscritos: list[UserId] = []
+        # Las invitaciones que esperaban y vuelven, para avisar ya guardado (P2)
+        self._vuelven: list[Invitation] = []
 
     async def reabrir(self, competition: Competition) -> dict[RoundId, Salidas]:
         """
@@ -75,6 +82,9 @@ class Reapertura:
         # La actualización de hándicaps que esté a medias se corta: al volver
         # a cerrar empieza otra (#251)
         await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
+
+        # Las invitaciones que esperaban vuelven a pendientes (P2, 15 nov 2026)
+        self._vuelven = await vuelven_las_que_esperan(self._uow, competition.id)
 
         # Las partidas que no han salido se borran: pueden entrar y salir
         # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
@@ -94,16 +104,22 @@ class Reapertura:
     async def avisar(self, competition: Competition, borradas: dict[RoundId, Salidas]) -> None:
         """
         Ya guardada: sin partida no hay salida, y se retiran sus avisos (G4); y
-        los de hándicaps con la RFEG, que dejan de ser ciertos (#864).
+        los de hándicaps con la RFEG, que dejan de ser ciertos (#864); y a cada
+        invitado que esperaba, «ya puedes aceptar» (P2).
         """
         for round_id, salidas in borradas.items():
             await self._actividad.salidas_cambiadas(competition, round_id, salidas, {})
         await self.avisar_handicaps(competition)
+        await self.avisar_a_los_invitados(competition)
 
     async def avisar_handicaps(self, competition: Competition) -> None:
         """Los avisos de hándicaps con la RFEG de la competición reabierta se retiran (#864)."""
         await self._actividad.handicaps_not_updated_withdrawn(competition)
         await self._actividad.handicap_not_found_withdrawn(competition, self._inscritos)
+
+    async def avisar_a_los_invitados(self, competition: Competition) -> None:
+        """Ya guardada: a cada invitado que esperaba, «ya puedes aceptar» (P2)."""
+        await self._actividad.invitations_acceptable_again(competition, self._vuelven)
 
     async def _borrar_las_que_no_salieron(
         self, competition_id: CompetitionId

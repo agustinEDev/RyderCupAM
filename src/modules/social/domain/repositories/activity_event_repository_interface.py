@@ -113,9 +113,10 @@ class ActivityEventRepositoryInterface(ABC):
         torneos que ahora son privados: el feed no los enseña (regla E, 22 oct
         2026), y el numero tiene que decir lo mismo que la pantalla.
 
-        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
-        invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
-        caducadas o borradas), que el feed tampoco enseña.
+        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT (ni los
+        INVITATION_ACCEPTABLE_AGAIN) de invitaciones que en ese instante ya no se
+        pueden aceptar (no pendientes, caducadas o borradas), que el feed tampoco
+        enseña.
 
         Con `hide_trashed_quick_matches_from` (quien mira) tampoco cuenta lo
         que salio de una partida rapida que su autor tiene en la papelera

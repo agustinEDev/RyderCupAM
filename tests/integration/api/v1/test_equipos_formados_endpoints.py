@@ -4,23 +4,24 @@ Con los equipos formados, quedan así: los 409 por HTTP (decidido el 29 oct 2026
 La regla está en unitarios (test_equipos_formados_congelados); aquí, que cada
 ruta da su 409 con `error_code` en la raíz, para que la pantalla lo diga en su
 idioma, y que el organizador sigue pudiendo quitar a alguien y reiniciarlo.
+
+Desde el 15 nov 2026 (B3), sin partidos el organizador invita, y al aceptar se
+deshacen los equipos; con partidos, no (test_invitaciones_en_espera_endpoints).
 """
 
 from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import (
-    _URL_DE_LA_BD_DE_TEST,
     activate_competition,
     approve_golf_course,
     create_admin_user,
     create_authenticated_user,
     create_competition,
     create_golf_course,
+    inscrito_por_invitacion,
     set_auth_cookies,
     solicitud_pendiente,
 )
@@ -42,12 +43,8 @@ async def _con_equipos(client: AsyncClient, invitar: dict | None = None) -> dict
     comp = await create_competition(client, creador["cookies"])
     set_auth_cookies(client, creador["cookies"])
     for jugador in jugadores:
-        inscrito = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-        )
-        assert inscrito.status_code == 201, inscrito.text
-        jugador["enrollment_id"] = inscrito.json()["id"]
+        inscrito = await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
+        jugador["enrollment_id"] = inscrito["enrollment_id"]
     invitacion = None
     if invitar is not None:
         enviada = await client.post(
@@ -68,19 +65,6 @@ async def _con_equipos(client: AsyncClient, invitar: dict | None = None) -> dict
     repartidos = await _formar(client, comp)
     assert repartidos.status_code == 201, repartidos.text
     return {"comp": comp, "creador": creador, "jugadores": jugadores, "invitacion": invitacion}
-
-
-async def _pendiente_otra_vez(invitation_id: str) -> None:
-    """Como si fuera de antes: sin pasar por el cierre, que la rechaza."""
-    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(
-                text("UPDATE invitations SET status = 'PENDING' WHERE id = :id"),
-                {"id": invitation_id},
-            )
-    finally:
-        await engine.dispose()
 
 
 async def _formar(client: AsyncClient, comp: dict):
@@ -126,25 +110,31 @@ async def test_j2_nadie_se_inscribe_en_la_publica_reabierta(client: AsyncClient)
     _es_teams_formed(pedida)
 
 
-async def test_j4_la_invitacion_no_se_acepta(client: AsyncClient):
+async def test_j4_aceptar_sin_partidos_entra_y_se_reinician(client: AsyncClient):
     """
-    Con los equipos formados ya no se invita (I1), y al cerrar las pendientes
-    se rechazan: solo una de antes del 30 oct puede seguir pendiente. Se monta
-    así: enviada antes de cerrar y devuelta a pendiente en la base de datos.
+    B3 (15 nov 2026). Given una invitación enviada antes de nombrar capitanes (al
+    cerrar espera, P1), los equipos formados sin partidos y la inscripción reabierta
+    (vuelve a pendiente, P2) / When la acepta / Then entra y los equipos se
+    reinician; los capitanes se quedan, como al quitar a alguien.
     """
     invitado = await create_authenticated_user(
         client, "congelados-invitado@test.com", "P@ssw0rd123!", "Invitado", "Congelados"
     )
     montaje = await _con_equipos(client, invitar=invitado)
     await _reabrir(client, montaje)
-    await _pendiente_otra_vez(montaje["invitacion"])
     set_auth_cookies(client, invitado["cookies"])
 
     aceptada = await client.post(
         f"/api/v1/invitations/{montaje['invitacion']}/respond", json={"action": "ACCEPT"}
     )
 
-    _es_teams_formed(aceptada)
+    assert aceptada.status_code == 200, aceptada.text
+    assert aceptada.json()["status"] == "ACCEPTED"
+    set_auth_cookies(client, montaje["creador"]["cookies"])
+    ficha = (await client.get(f"/api/v1/competitions/{montaje['comp']['id']}")).json()
+    assert ficha["status"] == "ACTIVE"
+    assert ficha["teams_assigned"] is False
+    assert ficha["team_b_captain_id"] == montaje["jugadores"][0]["user"]["id"]
 
 
 async def test_o4_no_se_vuelven_a_formar(client: AsyncClient):
@@ -171,7 +161,8 @@ async def test_o1_el_organizador_le_quita_y_se_reinicia(client: AsyncClient):
     assert ficha.json()["team_b_captain_id"] == montaje["jugadores"][0]["user"]["id"]
 
 
-async def test_i1_con_equipos_no_se_invita_por_id(client: AsyncClient):
+async def test_i1_con_equipos_sin_partidos_se_invita_por_id(client: AsyncClient):
+    """B3. Given equipos formados sin partidos, reabierta / When invita / Then 201."""
     montaje = await _con_equipos(client)
     await _reabrir(client, montaje)
     invitado = await create_authenticated_user(
@@ -184,10 +175,12 @@ async def test_i1_con_equipos_no_se_invita_por_id(client: AsyncClient):
         json={"invitee_user_id": invitado["user"]["id"]},
     )
 
-    _es_teams_formed(invitacion)
+    assert invitacion.status_code == 201, invitacion.text
+    assert invitacion.json()["status"] == "PENDING"
 
 
-async def test_i2_con_equipos_no_se_invita_por_email(client: AsyncClient):
+async def test_i2_con_equipos_sin_partidos_se_invita_por_email(client: AsyncClient):
+    """B3. Given equipos formados sin partidos, reabierta / When invita por correo / Then 201."""
     montaje = await _con_equipos(client)
     await _reabrir(client, montaje)
 
@@ -196,19 +189,20 @@ async def test_i2_con_equipos_no_se_invita_por_email(client: AsyncClient):
         json={"invitee_email": "congelados-nadie@example.com"},
     )
 
-    _es_teams_formed(invitacion)
+    assert invitacion.status_code == 201, invitacion.text
 
 
 async def _con_partidos(client: AsyncClient) -> dict:
-    """Dos contra dos con los individuales generados, una solicitud sin aprobar y reabierta."""
+    """Dos contra dos con los individuales generados, una solicitud sin aprobar, una
+    invitación pendiente y reabierta."""
     creador = await create_authenticated_user(
         client, "cp-org@test.com", "P@ssw0rd123!", "Org", "Partidos"
     )
     jugadores = [
         await create_authenticated_user(
-            client, f"cp-{i}@test.com", "P@ssw0rd123!", "Jugador" + "ABCD"[i], "Partidos"
+            client, f"cp-{i}@test.com", "P@ssw0rd123!", "Jugador" + "ABCDE"[i], "Partidos"
         )
-        for i in range(4)
+        for i in range(5)
     ]
     admin = await create_admin_user(
         client, "cp-admin@test.com", "P@ssw0rd123!", "Admin", "Partidos"
@@ -237,13 +231,16 @@ async def _con_partidos(client: AsyncClient) -> dict:
     )
     assert respuesta.status_code == 201, respuesta.text
     await activate_competition(client, creador["cookies"], comp_id)
-    # Tres entran a mano; el cuarto tiene una solicitud sin aprobar
+    # Tres entran invitados; el cuarto tiene una solicitud sin aprobar, y el
+    # quinto una invitación pendiente (al cerrar espera y al reabrir vuelve, P1-P2)
     for jugador in jugadores[:3]:
-        respuesta = await client.post(
-            f"/api/v1/competitions/{comp_id}/enrollments/direct",
-            json={"competition_id": comp_id, "user_id": jugador["user"]["id"]},
-        )
-        assert respuesta.status_code == 201, respuesta.text
+        await inscrito_por_invitacion(client, creador["cookies"], comp_id, jugador)
+    respuesta = await client.post(
+        f"/api/v1/competitions/{comp_id}/invitations",
+        json={"invitee_user_id": jugadores[4]["user"]["id"]},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    invitacion = respuesta.json()["id"]
     # Desde el 28 oct las públicas no crean solicitudes: una de antes
     set_auth_cookies(client, jugadores[3]["cookies"])
     pedida = await solicitud_pendiente(client, comp_id)
@@ -276,22 +273,48 @@ async def _con_partidos(client: AsyncClient) -> dict:
     assert respuesta.status_code in (200, 201), respuesta.text
     respuesta = await client.post(f"/api/v1/competitions/{comp_id}/reopen-enrollments")
     assert respuesta.status_code == 200, respuesta.text
-    return {"comp_id": comp_id, "pedida": pedida["id"], "creador": creador}
+    return {
+        "comp_id": comp_id,
+        "pedida": pedida["id"],
+        "creador": creador,
+        "invitado": jugadores[4],
+        "invitacion": invitacion,
+    }
 
 
-async def test_e1_con_partidos_no_se_inscribe_a_mano(client: AsyncClient):
+async def test_e1_con_partidos_no_se_acepta_y_sigue_pendiente(client: AsyncClient):
+    """B3: con partidos, aceptar es 409 TEAMS_FORMED y la invitación sigue pendiente."""
+    montaje = await _con_partidos(client)
+    set_auth_cookies(client, montaje["invitado"]["cookies"])
+
+    aceptada = await client.post(
+        f"/api/v1/invitations/{montaje['invitacion']}/respond", json={"action": "ACCEPT"}
+    )
+
+    _es_teams_formed(aceptada)
+    mias = (await client.get("/api/v1/invitations/me")).json()["invitations"]
+    assert [i["status"] for i in mias] == ["PENDING"]
+
+
+async def test_e2_con_partidos_no_se_invita(client: AsyncClient):
+    """B3: con partidos, invitar es 409 TEAMS_FORMED (por id y por correo)."""
     montaje = await _con_partidos(client)
     nuevo = await create_authenticated_user(
         client, "cp-nuevo@test.com", "P@ssw0rd123!", "Nuevo", "Partidos"
     )
     set_auth_cookies(client, montaje["creador"]["cookies"])
 
-    inscrito = await client.post(
-        f"/api/v1/competitions/{montaje['comp_id']}/enrollments/direct",
-        json={"competition_id": montaje["comp_id"], "user_id": nuevo["user"]["id"]},
+    por_id = await client.post(
+        f"/api/v1/competitions/{montaje['comp_id']}/invitations",
+        json={"invitee_user_id": nuevo["user"]["id"]},
+    )
+    por_correo = await client.post(
+        f"/api/v1/competitions/{montaje['comp_id']}/invitations/by-email",
+        json={"invitee_email": "cp-nadie@example.com"},
     )
 
-    _es_teams_formed(inscrito)
+    _es_teams_formed(por_id)
+    _es_teams_formed(por_correo)
 
 
 async def test_e3_con_partidos_no_se_aprueba(client: AsyncClient):

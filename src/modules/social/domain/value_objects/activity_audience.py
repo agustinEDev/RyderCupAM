@@ -71,6 +71,10 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     # Del cierre por el plazo (15 nov 2026): del organizador, que es quien los recibe
     ActivityEventType.ENROLLMENTS_CLOSED: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_CLOSE_BLOCKED: ActivityAudience.SELF,
+    # Invitaciones con la inscripción cerrada (15 nov 2026): del invitado y del
+    # organizador, que son quienes los reciben
+    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN: ActivityAudience.SELF,
+    ActivityEventType.TEAMS_UNDONE_BY_ENTRY: ActivityAudience.SELF,
 }
 
 
