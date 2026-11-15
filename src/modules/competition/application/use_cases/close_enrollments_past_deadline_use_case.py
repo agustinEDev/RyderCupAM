@@ -93,15 +93,25 @@ class CloseEnrollmentsPastDeadlineUseCase:
         self._fallos = fallos_conocidos if fallos_conocidos is not None else set()
 
     async def execute(self) -> ClosedByDeadline:
-        hoy = en_utc(self._plazo.ahora()).date()
+        ahora = self._plazo.ahora()
+        hoy = en_utc(ahora).date()
         desde = hoy - timedelta(days=DIAS_HACIA_ATRAS)
         hasta = hoy + timedelta(days=DIAS_QUE_SE_MIRAN)
+        async with self._uow:
+            # Antes que nada, las que abrió la release anterior sin apuntar cuándo:
+            # se les apunta ahora, y así ninguna se cierra de golpe (D3)
+            for sin_fecha in await self._uow.competitions.find_active_without_opening_time():
+                if sin_fecha.record_unknown_opening(ahora):
+                    await self._uow.competitions.update(sin_fecha)
         async with self._uow:
             # Los ids y no las entidades: el rollback de una que falla caduca
             # todo lo cargado en la sesión
             candidatas = [
                 c.id for c in await self._uow.competitions.find_active_starting_by(desde, hasta)
             ]
+        # Lo que ya no es candidata (cerrada, cancelada, fuera de la ventana) no
+        # vuelve a fallar: se olvida, y así el conjunto no crece (D6)
+        self._fallos.intersection_update(candidatas)
 
         closed = blocked = notified = failed = 0
         for competition_id in candidatas:
@@ -130,51 +140,46 @@ class CloseEnrollmentsPastDeadlineUseCase:
 
     def _fallo(self, competition_id: CompetitionId) -> None:
         """
-        La traza, la primera vez que falla en este proceso; después, sin ruido:
-        se vuelve a intentar cada hora y el WARNING de cada hora no dice nada
-        nuevo (F4, 16 nov 2026). Tras un reinicio se ve otra vez, una.
+        La traza, la primera vez que falla en este proceso, como ERROR para que
+        llegue a Sentry (D2); después, en DEBUG: se reintenta cada hora y repetir
+        el error cada hora no dice nada nuevo (F4). Tras un reinicio, otra vez una.
         """
         if competition_id in self._fallos:
             logger.debug("Still cannot close the enrollments of %s", competition_id, exc_info=True)
             return
         self._fallos.add(competition_id)
-        logger.warning(
-            "Could not close the enrollments of %s; will retry every hour",
-            competition_id,
-            exc_info=True,
+        logger.exception(
+            "Could not close the enrollments of %s; will retry every hour", competition_id
         )
 
     async def _avisar_bloqueada(
         self, competition_id: CompetitionId, motivo: CloseBlockedReason, jugadores: int
     ) -> int:
         """
-        Una vez por competición, y solo apuntado si se pudo avisar: si publicar
-        falla, la vuelta siguiente lo intenta otra vez (C4; F3, 16 nov 2026).
-        Devuelve 1 si avisó.
+        Una vez por competición, decidido, publicado y apuntado con la fila
+        bloqueada (D4): un cierre a mano a la vez espera, y al cerrar ve el apunte
+        y retira el aviso. Si publicar falla no se apunta, y la vuelta siguiente
+        lo intenta otra vez (C4, F3). Devuelve 1 si avisó.
         """
         if self._publicador is None:
             return 0
         async with self._uow:
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if (
                 competition is None
                 or competition.status is not CompetitionStatus.ACTIVE
                 or competition.close_blocked_notified
             ):
                 return 0
-        try:
-            await self._publicador.close_blocked(competition, motivo, jugadores)
-        except Exception:
-            logger.warning(
-                "Could not tell the organizer that %s cannot be closed",
-                competition_id,
-                exc_info=True,
-            )
-            return 0
-        async with self._uow:
-            bloqueada = await self._uow.competitions.find_by_id_for_update(competition_id)
-            if bloqueada is None:
-                return 1
-            bloqueada.mark_close_blocked_notified()
-            await self._uow.competitions.update(bloqueada)
+            try:
+                await self._publicador.close_blocked(competition, motivo, jugadores)
+            except Exception:
+                logger.warning(
+                    "Could not tell the organizer that %s cannot be closed",
+                    competition_id,
+                    exc_info=True,
+                )
+                return 0
+            competition.mark_close_blocked_notified()
+            await self._uow.competitions.update(competition)
         return 1

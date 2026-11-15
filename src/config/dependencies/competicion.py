@@ -345,7 +345,6 @@ def get_delete_competition_use_case(
 
 def get_activate_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> ActivateCompetitionUseCase:
     """
     Proveedor del caso de uso ActivateCompetitionUseCase.
@@ -355,8 +354,7 @@ def get_activate_competition_use_case(
     2. Crea una instancia de `ActivateCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    # Una programada a la que ya le tocaba se abre a su hora (F7, 16 nov 2026)
-    return ActivateCompetitionUseCase(uow, zonas=plazo.zonas)
+    return ActivateCompetitionUseCase(uow)
 
 
 def get_close_enrollments_use_case(

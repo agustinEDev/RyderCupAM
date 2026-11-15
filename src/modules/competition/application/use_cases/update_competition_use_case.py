@@ -22,6 +22,10 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.mover_el_torneo import (
+    alguna_sesion_empezada,
+    mover_la_actualizacion_programada,
+)
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
 )
@@ -242,9 +246,6 @@ class UpdateCompetitionUseCase:
         iguales: dict[str, Callable[[Any], bool]] = {
             "name": lambda v: " ".join(v.split()) == competition.name.value,
             "main_country": lambda v: v == codigo(location.main_country),
-            "adjacent_country_1": lambda v: v == (adyacentes[0] if adyacentes else None),
-            "adjacent_country_2": lambda v: v == (adyacentes[1] if len(adyacentes) > 1 else None),
-            "countries": lambda v: sorted(v) == sorted(adyacentes),
             "play_mode": lambda v: v == competition.play_mode.value,
             "visibility": lambda v: valor(v) == valor(competition.visibility),
             "max_players": lambda v: v == competition.max_players,
@@ -255,7 +256,11 @@ class UpdateCompetitionUseCase:
             "setup_mode": lambda v: ryder is not None and valor(v) == valor(ryder.setup_mode),
             "team_assignment": lambda v: ryder is not None and v == valor(ryder.team_assignment),
         }
-        for campo in request.model_fields_set - {"start_date", "end_date"}:
+        # Los acompañantes, como conjunto: en otro orden son los mismos (D5)
+        paises = {"countries", "adjacent_country_1", "adjacent_country_2"}
+        if set(adyacentes) != UpdateCompetitionUseCase._acompanantes_pedidos(request, adyacentes):
+            return True
+        for campo in request.model_fields_set - {"start_date", "end_date"} - paises:
             nuevo = getattr(request, campo)
             # `None` es «no lo toques», salvo en la apertura, donde es «quítala»
             if nuevo is None and campo != "enrollment_opens_days_before":
@@ -264,6 +269,23 @@ class UpdateCompetitionUseCase:
             if igual is None or not igual(nuevo):
                 return True
         return False
+
+    @staticmethod
+    def _acompanantes_pedidos(
+        request: UpdateCompetitionRequestDTO, actuales: list[str]
+    ) -> set[str]:
+        """
+        Los acompañantes con los que quedaría, con las reglas de siempre: la lista
+        `countries` manda entera; un hueco suelto cambia solo ese; `None`, nada.
+        """
+        if request.countries is not None and "countries" in request.model_fields_set:
+            return {str(c) for c in request.countries}
+        huecos = [*actuales, None, None][:2]
+        for i, campo in enumerate(("adjacent_country_1", "adjacent_country_2")):
+            pedido = getattr(request, campo)
+            if campo in request.model_fields_set and pedido is not None:
+                huecos[i] = pedido
+        return {str(h) for h in huecos if h}
 
     @staticmethod
     def _comprobar_que_caben_movidas(
@@ -333,6 +355,11 @@ class UpdateCompetitionUseCase:
             dias = (request.start_date - competition.dates.start_date).days
             rondas = await self._uow.rounds.find_by_competition(competition_id)
             self._comprobar_que_caben_movidas(rondas, dias, request)
+            # Lo que ya empezó, por el reloj, no se mueve: ni la sesión ni el resto
+            if await alguna_sesion_empezada(self._uow, rondas, plazo.zonas, plazo.ahora()):
+                raise CompetitionNotEditableError(
+                    "No se pueden mover las fechas: alguna sesión ya ha empezado."
+                )
             antes = {r.id: await salidas_vigentes(self._uow, r.id) for r in rondas}
             # Una a una y en el orden que no deja dos sesiones el mismo día a la
             # vez (la base de datos no lo admite): hacia delante, la última primero
@@ -343,6 +370,10 @@ class UpdateCompetitionUseCase:
             competition.move_dates_closed_by_deadline(
                 DateRange(request.start_date, request.end_date)
             )
+            # Y la actualización de hándicaps programada, con el torneo (O4)
+            await mover_la_actualizacion_programada(
+                self._uow, competition, dias, plazo.zonas, plazo.ahora()
+            )
             reabierta = await plazo.queda_plazo(competition)
             reapertura = Reapertura(self._uow, plazo.zonas, plazo.ahora, self._actividad)
             if reabierta:
@@ -351,13 +382,13 @@ class UpdateCompetitionUseCase:
             await self._uow.flush()
             despues = {r.id: await salidas_vigentes(self._uow, r.id) for r in rondas}
 
-        # Ya guardado: las salidas cambian de día (o se van con la reapertura), el
-        # «no se puede cerrar» ya no vale, y reabierta, tampoco el «se han cerrado»
+        # Ya guardado: las salidas cambian de día (o se van con la reapertura) y,
+        # reabierta, el «se han cerrado» ya no vale. El «no se puede cerrar» se
+        # retiró al cerrarla (D7)
         for round_id, salidas in antes.items():
             await self._actividad.salidas_cambiadas(
                 competition, round_id, salidas, despues[round_id]
             )
-        await self._actividad.close_block_withdrawn(competition)
         if reabierta:
             await self._actividad.enrollments_closed_withdrawn(competition)
             # Como al reabrir a mano: sus avisos de hándicaps con la RFEG (#864)
@@ -369,16 +400,21 @@ class UpdateCompetitionUseCase:
         )
 
     async def _avisar_tras_editar(
-        self, competition: Competition, era_publica: bool, inicio_de_antes: date
+        self,
+        competition: Competition,
+        era_publica: bool,
+        inicio_de_antes: date,
+        estaba_avisada: bool,
     ) -> None:
         """
         Ya guardada: si deja de ser publica, sus amigos dejan de ver quien se
         apunto; al hacerse publica no se publica nada hacia atras (BE-2). Y con
-        otra fecha hay otro plazo: el «no se puede cerrar» ya no vale (F2).
+        otra fecha hay otro plazo: el «no se puede cerrar», si se le dio, ya no
+        vale (F2, D7).
         """
         if era_publica and competition.visibility != Visibility.PUBLIC:
             await self._actividad.made_private(competition.id)
-        if competition.dates.start_date != inicio_de_antes:
+        if estaba_avisada and competition.dates.start_date != inicio_de_antes:
             await self._actividad.close_block_withdrawn(competition)
 
     async def execute(
@@ -509,6 +545,8 @@ class UpdateCompetitionUseCase:
 
             era_publica = competition.visibility == Visibility.PUBLIC
             inicio_de_antes = competition.dates.start_date
+            # Mover las fechas olvida el apunte: se mira antes (D7)
+            estaba_avisada = competition.close_blocked_notified
             competition.update_info(
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
@@ -529,7 +567,7 @@ class UpdateCompetitionUseCase:
 
         # 6b. Ya guardada: si deja de ser publica, sus amigos dejan de ver quien
         #     se apunto. Al hacerse publica no se publica nada hacia atras (BE-2)
-        await self._avisar_tras_editar(competition, era_publica, inicio_de_antes)
+        await self._avisar_tras_editar(competition, era_publica, inicio_de_antes, estaba_avisada)
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(

@@ -17,10 +17,10 @@ Las revisiones del plazo de inscripción y dos decisiones más de Agustín (16 n
 | F2   | ... o se cambia otra cosa                                         | no se retira nada                              |
 | F3   | publicar el «no se puede cerrar» falla                            | no queda apuntado: la vuelta siguiente avisa   |
 | F4   | cerrar una revienta por otra cosa, vuelta tras vuelta             | un WARNING con traza la primera vez; luego no  |
-| F5   | ACTIVE sin fecha de apertura (la abrió la release anterior)       | cuenta su última modificación como apertura    |
+| F5   | ACTIVE sin fecha de apertura: ver D3 en test_plazo_code_review    | la vuelta la apunta                            |
 | F6   | ACTIVE de hace más de 30 días, o abierta seguro tras el plazo     | ni se lee                                      |
 | F7   | invitar a una programada a la que ya le tocaba abrirse            | se abre a su hora programada: no exenta        |
-| F7   | activar con el botón una a la que ya le tocaba                    | igual, y sin error de «ya abierta»             |
+| F7   | activar con el botón una a la que ya le tocaba (O3: ahora)        | se abre ahora: exenta si el plazo pasó         |
 | F7   | invitar a una programada a la que todavía no le toca              | se abre ahora, como siempre                    |
 """
 
@@ -265,9 +265,7 @@ class TestO1LasSesionesSeMuevenConElTorneo:
 
         uow.rounds.update = apunta
 
-        await _mover(uow, ahora=DESPUES + timedelta(days=30)).execute(
-            competition.id, _fechas(dias), competition.creator_id
-        )
+        await _mover(uow).execute(competition.id, _fechas(dias), competition.creator_id)
 
         assert await _fecha_de(uow, primera) == TORNEO + timedelta(days=dias)
         assert await _fecha_de(uow, segunda) == TORNEO + timedelta(days=1 + dias)
@@ -435,9 +433,10 @@ class TestF1ElFormularioEntero:
 class TestF2ElAvisoDeBloqueoSeRetira:
     @pytest.mark.parametrize("por_el_plazo", [True, False])
     async def test_al_cerrar_siempre(self, por_el_plazo):
-        """F2. Given sin aviso apuntado / When se cierra (por el plazo o a mano) / Then se retira."""
+        """F2/D7. Given con aviso apuntado / When se cierra (por el plazo o a mano) / Then se retira."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow)
+        competition.mark_close_blocked_notified()
         avisos = _Avisos()
         caso = CloseEnrollmentsUseCase(
             uow, USUARIOS_CON_GENERO, actividad=avisos, plazo=_plazo(DESPUES)
@@ -454,19 +453,10 @@ class TestF2ElAvisoDeBloqueoSeRetira:
         assert ("close_block_withdrawn", competition.id) in avisos.avisos
 
     async def test_al_mover_las_fechas_de_una_abierta(self):
-        """F2. Given ACTIVE / When se mueven sus fechas / Then se retira."""
+        """F2/D7. Given ACTIVE con aviso apuntado / When se mueven sus fechas / Then se retira."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow)
-        avisos = _Avisos()
-
-        await _mover(uow, avisos=avisos).execute(competition.id, _fechas(7), competition.creator_id)
-
-        assert ("close_block_withdrawn", competition.id) in avisos.avisos
-
-    async def test_al_mover_una_cerrada_por_el_plazo(self):
-        """F2. Given cerrada por el plazo / When se mueve / Then se retira."""
-        uow = InMemoryUnitOfWork()
-        competition = await _cerrada_por_el_plazo(uow)
+        competition.mark_close_blocked_notified()
         avisos = _Avisos()
 
         await _mover(uow, avisos=avisos).execute(competition.id, _fechas(7), competition.creator_id)
@@ -474,9 +464,10 @@ class TestF2ElAvisoDeBloqueoSeRetira:
         assert ("close_block_withdrawn", competition.id) in avisos.avisos
 
     async def test_cambiar_otra_cosa_no(self):
-        """F2. Given ACTIVE / When cambia el nombre (y llegan las mismas fechas) / Then no."""
+        """F2. Given ACTIVE avisada / When cambia el nombre (y las mismas fechas) / Then no."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow)
+        competition.mark_close_blocked_notified()
         avisos = _Avisos()
 
         await _mover(uow, avisos=avisos).execute(
@@ -554,7 +545,7 @@ class TestF4OtrosFallosSinRepetirLaTraza:
         """
         F4. Given cerrar una revienta siempre por otra cosa
         When pasan tres vueltas con la misma memoria de fallos
-        Then un WARNING con traza la primera; las demás, nada a WARNING; y sigue con las demás
+        Then un ERROR con traza la primera (D2: llega a Sentry); las demás, nada a WARNING
         """
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow)
@@ -568,7 +559,7 @@ class TestF4OtrosFallosSinRepetirLaTraza:
                 ).execute()
 
         avisos = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert len(avisos) == 1
+        assert [a.levelno for a in avisos] == [logging.ERROR]
         assert avisos[0].exc_info is not None
         assert str(competition.id) in avisos[0].getMessage()
         assert cerrar.veces == 3
@@ -589,27 +580,6 @@ class TestF4OtrosFallosSinRepetirLaTraza:
         ).execute()
 
         assert conocidos == set()
-
-
-class TestF5SinFechaDeApertura:
-    async def test_cuenta_su_ultima_modificacion(self):
-        """
-        F5. Given una ACTIVE sin `enrollment_opened_at` (la abrió la release anterior)
-        When su última modificación es pasado el plazo
-        Then cuenta como abierta entonces: exenta; y si fue antes, se cierra
-        """
-        uow = InMemoryUnitOfWork()
-        tarde = await _competicion(uow)
-        tarde._enrollment_opened_at = None
-        tarde._updated_at = DESPUES.replace(tzinfo=None)
-        pronto = await _competicion(uow)
-        pronto._enrollment_opened_at = None
-        pronto._updated_at = ANTES.replace(tzinfo=None)
-
-        plazo = _plazo(DESPUES + timedelta(hours=1))
-
-        assert await plazo.le_toca_cerrarse(tarde) is False
-        assert await plazo.le_toca_cerrarse(pronto) is True
 
 
 class TestF6LasQueNiSeLeen:
@@ -721,19 +691,19 @@ class TestF7LaProgramadaSeAbreASuHora:
         assert competition.status is CompetitionStatus.ACTIVE
         assert competition.enrollment_opened_at >= antes
 
-    async def test_activar_una_que_ya_tocaba_la_abre_a_su_hora(self):
-        """F7. Given programada que ya debía estar abierta / When se activa / Then a su hora."""
+    async def test_activar_una_que_ya_tocaba_la_abre_ahora(self):
+        """O3 (16 nov). Given programada que ya debía estar abierta / When se activa / Then ahora."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow, abierta=None, dias=5)
-        programada = competition.scheduled_opening_at("Europe/Madrid")
+        antes = datetime.now(UTC).replace(tzinfo=None)
 
-        respuesta = await ActivateCompetitionUseCase(uow, zonas=_Zonas()).execute(
+        respuesta = await ActivateCompetitionUseCase(uow).execute(
             ActivateCompetitionRequestDTO(competition_id=competition.id.value),
             competition.creator_id,
         )
 
         assert respuesta.status == "ACTIVE"
-        assert competition.enrollment_opened_at == programada.astimezone(UTC).replace(tzinfo=None)
+        assert competition.enrollment_opened_at >= antes
 
     async def test_activar_una_que_no_tocaba_la_abre_ahora(self):
         """F7. Given programada para dentro de mucho / When se activa / Then ahora."""
@@ -743,7 +713,7 @@ class TestF7LaProgramadaSeAbreASuHora:
         )
         antes = datetime.now(UTC).replace(tzinfo=None)
 
-        await ActivateCompetitionUseCase(uow, zonas=_Zonas()).execute(
+        await ActivateCompetitionUseCase(uow).execute(
             ActivateCompetitionRequestDTO(competition_id=competition.id.value),
             competition.creator_id,
         )

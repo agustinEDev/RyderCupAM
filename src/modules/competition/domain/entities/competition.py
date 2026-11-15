@@ -680,9 +680,10 @@ class Competition:
         entra (R2). Abierta, se entra solo si se abrio —o reabrio— a partir del
         plazo (R1, R2), con la misma frontera que el cierre: las 12:00 en punto.
 
-        Sin fecha de apertura —la abrio la release anterior entre la migracion y
-        el despliegue (F5, 16 nov 2026)— cuenta su ultima modificacion, que es
-        la que dejo al abrirla o reabrirla.
+        Sin fecha de apertura cuenta como abierta a tiempo. Solo pasa con una
+        que abrio la release anterior entre la migracion y el despliegue, y el
+        cierre automatico se la apunta antes de mirar nada
+        (`record_unknown_opening`, 16 nov 2026).
         """
         if self._status == CompetitionStatus.DRAFT:
             return False
@@ -691,14 +692,30 @@ class Competition:
             return False
         if self._status != CompetitionStatus.ACTIVE:
             return True
-        abierta = self._enrollment_opened_at or self._updated_at
-        return not has_passed(inicio, timezone, abierta)
+        abierta = self._enrollment_opened_at
+        return abierta is None or not has_passed(inicio, timezone, abierta)
 
     def due_to_close(self, timezone: str | None, now: datetime) -> bool:
         """Si le toca cerrarse sola (C3): abierta y con el plazo pasado (salvo R1/R2)."""
         return self._status == CompetitionStatus.ACTIVE and self.entries_closed_by_deadline(
             timezone, now
         )
+
+    def record_unknown_opening(self, now: datetime) -> bool:
+        """
+        Una ACTIVE sin fecha de apertura —la abrio la release anterior— se la
+        apunta ahora (D3, 16 nov 2026). Es la misma regla que la migracion: con
+        el plazo en el futuro, ahora es antes del plazo y se cerrara a su hora,
+        como hoy; con el plazo ya pasado, ahora es despues y queda exenta, como
+        hoy: nadie la cierra de golpe.
+
+        Returns:
+            Si la apunto
+        """
+        if self._status != CompetitionStatus.ACTIVE or self._enrollment_opened_at is not None:
+            return False
+        self._abiertas_ahora(now)
+        return True
 
     def mark_close_blocked_notified(self) -> None:
         """Apunta que ya se le dijo que no se pueden cerrar solas: una vez (C4)."""

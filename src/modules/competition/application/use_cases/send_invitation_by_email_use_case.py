@@ -145,8 +145,8 @@ class SendInvitationByEmailUseCase:
             )
             # Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
-            # Pasado el plazo, aunque siga abierta, no (C2). Un borrador sí: esta
-            # invitación lo abre, y abierto tarde se entra (R2)
+            # Pasado el plazo, aunque siga abierta, no (C2). Una programada se abrió
+            # justo antes a su hora, así que tampoco: invitar no la exime (O3)
             await exigir_el_plazo(self._plazo, competition)
             # Con los equipos formados no podría aceptarse (30 oct 2026)
             await exigir_sin_equipos_formados(self._uow, competition.id)
@@ -225,9 +225,10 @@ class SendInvitationByEmailUseCase:
             # 8. Persistir
             await self._uow.invitations.add(invitation)
 
-            # 10. Y con la primera invitacion se abren las inscripciones (BE #319).
-            # Aqui y no antes: abrir y fallar luego dejaria el torneo abierto sin
-            # nadie invitado, que es medio arranque
+            # 10. Y con la primera invitacion se abren las inscripciones (BE #319),
+            # si todavía no le tocaba abrirse (una a la que ya le tocaba se abrió
+            # arriba a su hora: invitar no la exime del plazo, O3). Aqui y no antes:
+            # abrir y fallar luego dejaria el torneo abierto sin nadie invitado
             if CompetitionPolicy.invitation_opens_enrollment(competition.status):
                 competition.activate()
                 await self._uow.competitions.update(competition)

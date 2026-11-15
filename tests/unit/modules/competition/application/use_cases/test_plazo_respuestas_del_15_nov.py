@@ -15,7 +15,7 @@ Lo que decidió Agustín el 15 nov sobre el plazo de inscripción, tras la prime
 | C2   | ... antes del plazo                                             | entra                                         |
 | R2   | apertura programada antes del plazo, abierta tarde al mirarla   | cuenta desde la hora programada: no exenta    |
 | C4   | se cierra por fin (por el plazo o a mano) tras avisar           | se retira el aviso de «no se puede cerrar»    |
-| C4   | se cierra sin haber avisado (F2, 16 nov)                        | se retira igual                               |
+| C4   | se cierra sin haber avisado (D7, 16 nov)                        | no se retira nada                             |
 """
 
 from datetime import UTC, datetime, timedelta
@@ -418,12 +418,12 @@ class TestRetirarElAvisoDeBloqueo:
 
         assert avisos.avisos == [("withdrawn", competition.id)]
 
-    async def test_sin_aviso_previo_tambien_se_retira(self):
-        """C4/F2 (16 nov). Given nunca apuntada / When se cierra / Then se retira igual."""
+    async def test_sin_aviso_previo_no_se_retira_nada(self):
+        """C4/D7 (16 nov). Given nunca apuntada / When se cierra / Then no se retira nada."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow)
         avisos = _Avisos()
 
         await self._cerrar(uow, competition, avisos)
 
-        assert ("withdrawn", competition.id) in avisos.avisos
+        assert ("withdrawn", competition.id) not in avisos.avisos

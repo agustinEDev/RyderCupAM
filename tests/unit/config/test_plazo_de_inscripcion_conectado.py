@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.config.dependencies import (
-    get_activate_competition_use_case,
     get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
     get_plazo_de_inscripcion,
@@ -88,12 +87,5 @@ def test_apuntarse_reutiliza_la_zona_del_plazo():
     caso = get_request_enrollment_use_case(
         uow=UOW, user_uow=USER_UOW, actividad=object(), plazo=PLAZO
     )
-
-    assert caso._zonas is PLAZO.zonas
-
-
-def test_activar_abre_a_su_hora_con_la_zona_del_plazo():
-    """F7. Given el plazo / Then activar usa su zona para abrir a su hora una programada."""
-    caso = get_activate_competition_use_case(uow=UOW, plazo=PLAZO)
 
     assert caso._zonas is PLAZO.zonas

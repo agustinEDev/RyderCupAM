@@ -317,6 +317,15 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        """Las ACTIVE sin fecha de apertura (de la release anterior), para apuntarla."""
+        statement = select(Competition).where(
+            Competition._status_value == CompetitionStatus.ACTIVE.value,
+            competitions_table.c.enrollment_opened_at.is_(None),
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def exists_with_name(
         self,
         name: CompetitionName,

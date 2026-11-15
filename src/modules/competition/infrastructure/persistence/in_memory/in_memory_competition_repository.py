@@ -92,6 +92,13 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
             )
         ]
 
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        return [
+            c
+            for c in self._competitions.values()
+            if c.status == CompetitionStatus.ACTIVE and c.enrollment_opened_at is None
+        ]
+
     async def exists_with_name(
         self,
         name: CompetitionName,

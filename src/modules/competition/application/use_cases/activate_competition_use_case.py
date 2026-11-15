@@ -13,8 +13,6 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
-from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
-from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -42,19 +40,14 @@ class ActivateCompetitionUseCase:
     5. Commit de la transacción
     """
 
-    def __init__(
-        self, uow: CompetitionUnitOfWorkInterface, zonas: ICompetitionTimezone | None = None
-    ):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
-            zonas: Para abrir a su hora una programada a la que ya le tocaba
-                (F7, 16 nov 2026); sin ellas, se abre ahora
         """
         self._uow = uow
-        self._zonas = zonas
 
     async def execute(
         self, request: ActivateCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -88,15 +81,10 @@ class ActivateCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede activar la competición")
 
-            # 3. Activar la competición (la entidad valida la transición). Una
-            #    programada a la que ya le tocaba se abre a su hora: abrirla tarde
-            #    no la exime del plazo de inscripción (F7, 16 nov 2026)
-            abierta_a_su_hora = False
-            if competition.is_draft():
-                await EnrollmentOpener.abrir_las_que_toquen([competition], self._uow, self._zonas)
-                abierta_a_su_hora = competition.is_active()
-            if not abierta_a_su_hora:
-                competition.activate()
+            # 3. Activar la competición (la entidad valida la transición). Es el
+            #    organizador quien la abre, ahora: pasado el plazo, como reabrirla,
+            #    queda abierta hasta que la cierre él (O3, 16 nov 2026)
+            competition.activate()
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)

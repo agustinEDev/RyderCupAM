@@ -153,6 +153,14 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        """
+        Las ACTIVE sin `enrollment_opened_at`: las abrio la release anterior entre
+        la migracion y el despliegue (16 nov 2026). Normalmente ninguna.
+        """
+        pass
+
+    @abstractmethod
     async def exists_with_name(
         self,
         name: CompetitionName,
