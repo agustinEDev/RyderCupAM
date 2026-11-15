@@ -2,11 +2,13 @@
 
 import pytest
 
+from src.modules.user.domain.value_objects.password import InvalidPasswordError, Password
 from src.modules.user.domain.value_objects.password_blacklist import (
     _ENTRIES,
     COMMON_PASSWORDS,
     is_common_password,
 )
+from src.modules.user.domain.value_objects.password_blacklist_filtradas import FILTRADAS
 
 
 @pytest.mark.parametrize("entrada", sorted(_ENTRIES))
@@ -22,7 +24,7 @@ def test_toda_entrada_de_la_lista_se_rechaza(entrada):
 def test_la_lista_publica_es_la_normalizada():
     """Una sola fuente: lo que se expone es lo que se aplica, sin duplicados por mayúsculas."""
     assert all(entrada == entrada.casefold() for entrada in COMMON_PASSWORDS)
-    assert len(COMMON_PASSWORDS) == len({entrada.casefold() for entrada in _ENTRIES})
+    assert len(COMMON_PASSWORDS) == len({entrada.casefold() for entrada in _ENTRIES} | FILTRADAS)
 
 
 @pytest.mark.parametrize(
@@ -36,3 +38,25 @@ def test_da_igual_como_se_escriba(variante):
 def test_una_que_solo_contiene_una_palabra_comun_vale():
     """Given una que solo CONTIENE una común When se comprueba Then vale: se compara entera."""
     assert not is_common_password("MiPassword123!Larga")
+
+
+# --- C5: la lista de filtradas (B-14 de la auditoría de la fase 6) ----------------------
+
+
+def test_c5_the_leaked_list_holds_only_passwords_our_rules_would_let_through():
+    """Las 100.000 de NCSC filtradas por nuestras reglas: las que de verdad se probarían."""
+    assert len(FILTRADAS) > 100
+    assert all(12 <= len(p) <= 64 and p == p.casefold() for p in FILTRADAS)
+
+
+@pytest.mark.parametrize("filtrada", ["g00dPa$$w0rD", "G00DPA$$W0RD", "Doomsayer.2.7mords.V"])
+def test_c5_a_leaked_password_that_meets_the_rules_is_rejected(filtrada):
+    """Given una filtrada que cumple las reglas (con otras mayúsculas) Then se rechaza."""
+    assert is_common_password(filtrada)
+    with pytest.raises(InvalidPasswordError):
+        Password.from_plain_text(filtrada)
+
+
+def test_c6_the_list_is_in_memory():
+    """Sin llamadas a nadie: un conjunto fijo dentro de la app."""
+    assert isinstance(COMMON_PASSWORDS, frozenset)

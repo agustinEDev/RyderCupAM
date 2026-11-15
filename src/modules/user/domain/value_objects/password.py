@@ -5,7 +5,7 @@ Este Value Object representa un password hasheado y validado.
 
 Password Policy (OWASP ASVS compliant):
 - Mínimo 12 caracteres (antes 8, actualizado según OWASP 2024)
-- Máximo 128 caracteres
+- Máximo 64 caracteres para las nuevas (B-14); el login acepta las de antes
 - Al menos 1 mayúscula
 - Al menos 1 minúscula
 - Al menos 1 número
@@ -77,14 +77,17 @@ class Password:
     Almacena el hash, no el password original.
 
     Password Policy Enforcement (OWASP ASVS V2.1):
-    - Longitud: 12-128 caracteres
+    - Longitud: 12-64 caracteres (las nuevas)
     - Complejidad: mayúscula + minúscula + número + símbolo
     - Blacklist: Rechaza top 100 contraseñas comunes
     - Sin espacios leading/trailing
     """
 
     MIN_LENGTH = 12  # OWASP recomienda 12+ desde 2024 (antes era 8)
-    MAX_LENGTH = 128  # Límite técnico razonable
+    # Solo para las nuevas (registro, cambio, restablecimiento): bcrypt usa los 72 primeros
+    # bytes, y 64 caracteres dejan margen. Quien ya tenía una más larga sigue entrando: el
+    # login no pasa por aquí (B-14 de la auditoría de la fase 6, Agustín, 15 nov 2026)
+    MAX_LENGTH = 64
     hashed_value: str
     # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
     # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. Fuera del
@@ -159,7 +162,7 @@ class Password:
 
         OWASP ASVS V2.1 Requirements:
         - V2.1.1: Longitud mínima 12 caracteres (antes 8)
-        - V2.1.2: Máximo 128 caracteres
+        - V2.1.2: Máximo 64 caracteres (bcrypt usa 72 bytes)
         - V2.1.6: Complejidad (mayús + minús + número + símbolo)
         - V2.1.7: Blacklist de contraseñas comunes
         """

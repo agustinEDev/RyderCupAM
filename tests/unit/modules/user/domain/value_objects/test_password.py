@@ -269,6 +269,9 @@ class TestPasswordLongerThanBcryptLimit:
     recortaba en silencio; bcrypt 5 lanza ValueError si llegan más. La política
     admite hasta 128 CARACTERES, y una eñe ocupa dos bytes: una contraseña válida
     puede superar los 72 bytes con bastante menos de 128 caracteres.
+
+    B-14 de la auditoría de la fase 6 (Agustín, 15 nov 2026): las contraseñas NUEVAS,
+    de 12 a 64 caracteres; quien ya tenía una más larga sigue entrando con ella.
     """
 
     LARGA = "Aa1!" + "x" * 96  # 100 caracteres ASCII = 100 bytes
@@ -280,14 +283,22 @@ class TestPasswordLongerThanBcryptLimit:
         hashed = bcrypt.hashpw(plain.encode("utf-8")[:72], bcrypt.gensalt(rounds=4))
         return Password(hashed.decode("utf-8"))
 
-    def test_create_and_verify_password_over_72_bytes(self):
+    def test_c1_a_new_password_over_64_characters_is_rejected(self):
         """
-        Given: una contraseña válida de 100 caracteres (100 bytes)
-        When: se crea el hash y se verifica
-        Then: funciona, sin ValueError de bcrypt 5
+        Given: una contraseña nueva de 65 caracteres (o de 100)
+        When: se crea (registro, cambio o restablecimiento)
+        Then: se rechaza diciendo el máximo, 64
         """
-        password = Password.from_plain_text(self.LARGA)
-        assert password.verify(self.LARGA) is True
+        for larga in ("Aa1!" + "x" * 61, self.LARGA):
+            with pytest.raises(InvalidPasswordError, match="64"):
+                Password.from_plain_text(larga)
+
+    def test_c2_a_new_password_of_64_characters_is_accepted(self):
+        """Given: 64 caracteres When: se crea Then: vale y se verifica."""
+        justa = "Aa1!" + "x" * 60
+        assert Password.MAX_LENGTH == 64
+        password = Password.from_plain_text(justa)
+        assert password.verify(justa) is True
 
     def test_create_and_verify_multibyte_password_over_72_bytes(self):
         """
@@ -300,7 +311,7 @@ class TestPasswordLongerThanBcryptLimit:
         password = Password.from_plain_text(self.CON_ENES)
         assert password.verify(self.CON_ENES) is True
 
-    def test_existing_user_with_long_password_can_still_log_in(self):
+    def test_c3_existing_user_with_long_password_can_still_log_in(self):
         """
         Given: el hash que guardó bcrypt 4 para una contraseña de más de 72 bytes
         When: el usuario entra con esa contraseña completa
@@ -315,21 +326,22 @@ class TestPasswordLongerThanBcryptLimit:
         When: se verifica otra que difiere dentro de los 72 primeros bytes
         Then: se rechaza
         """
-        password = Password.from_plain_text(self.LARGA)
+        password = self._hash_de_bcrypt_4(self.LARGA)
         otra = "Aa2!" + "x" * 96
         assert password.verify(otra) is False
 
     def test_password_of_exactly_72_bytes(self):
         """
-        Given: una contraseña de exactamente 72 bytes
+        Given: una contraseña de exactamente 72 bytes (38 caracteres: las eñes ocupan dos;
+               72 ASCII pasarían del máximo de 64 caracteres para una nueva)
         When: se crea y se verifica
         Then: funciona (el límite no recorta nada)
         """
-        exacta = "Aa1!" + "x" * 68
+        exacta = "Aa1!" + "ñ" * 34
         assert len(exacta.encode("utf-8")) == 72
         password = Password.from_plain_text(exacta)
         assert password.verify(exacta) is True
-        assert password.verify(exacta[:-1] + "y") is False
+        assert password.verify(exacta[:-1] + "n") is False
 
     def test_cut_inside_a_multibyte_character_matches_bcrypt_4(self):
         """

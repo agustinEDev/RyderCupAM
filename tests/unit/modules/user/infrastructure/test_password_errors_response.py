@@ -33,7 +33,7 @@ _ESPERADO = {
     "PASSWORD_EMPTY": "La contraseña no puede estar vacía",
     "PASSWORD_EDGE_SPACES": "La contraseña no puede tener espacios al inicio o final",
     "PASSWORD_TOO_SHORT": "La contraseña debe tener al menos 12 caracteres",
-    "PASSWORD_TOO_LONG": "La contraseña no puede exceder 128 caracteres",
+    "PASSWORD_TOO_LONG": "La contraseña no puede exceder 64 caracteres",
     "PASSWORD_NO_UPPERCASE": "La contraseña debe contener al menos una letra mayúscula (A-Z)",
     "PASSWORD_NO_LOWERCASE": "La contraseña debe contener al menos una letra minúscula (a-z)",
     "PASSWORD_NO_DIGIT": "La contraseña debe contener al menos un número (0-9)",
