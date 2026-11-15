@@ -639,6 +639,19 @@ class HandicapUpdateStatusDTO(BaseModel):
             "Vacío si está completa o cortada."
         ),
     )
+    not_updated_players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "Exactamente la lista del aviso al organizador «{N} jugadores sin actualizar "
+            "con la RFEG» (15 nov 2026): no encontrados, fallidos o sin preguntar, "
+            "españoles (y todos si la competición es en España). Se rellena con la "
+            "competición cerrada y la última actualización terminada (completa o "
+            "incompleta); mientras se vuelve a pasar una incompleta, lo que dejó esa "
+            "pasada, del que sale quien la RFEG ya haya encontrado (como en el aviso). "
+            "Vacía en la primera pasada en curso, cortada, o con la competición ya "
+            "empezada."
+        ),
+    )
 
 
 class HandicapsNotUpdatedAsOrganizerDTO(BaseModel):
