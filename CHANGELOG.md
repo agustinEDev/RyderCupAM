@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.68.0] - 2026-11-15
+
+**Cierre automático de inscripciones, invitaciones en espera y avisos de la RFEG** (#864,
+#865, #867, #868; merge-back de la 2.67.0 en #863). **Cambio de contrato (`api-breaking`): el
+frontend sale ANTES.** Dos migraciones, en este orden: `f9b1d3e5a7c9` (tabla nueva
+`handicap_update_emails`) y `c8e1a3f5b7d9` (tres columnas en `competitions`, con tope de
+bloqueo de 5 s; pasa los `enrollment_opens_days_before = 1` a 2 y marca como abiertas ahora
+las competiciones ACTIVE, para que el primer despliegue no cierre ninguna de golpe).
+
+### Added
+
+- **Las inscripciones se cierran solas a las 12:00 del día anterior** (C1-C5), en la hora del
+  primer campo (Europe/Madrid si no hay campo). Una tarea cada hora usa el mismo cierre que el
+  botón. Si un torneo stroke play no puede cerrarse (jugadores sin franja o sin hándicap),
+  sigue abierto y el organizador recibe un único aviso `ENROLLMENT_CLOSE_BLOCKED`; al cerrar
+  recibe `ENROLLMENTS_CLOSED`. Lo que el organizador reabre o activa a mano pasado el plazo
+  sigue abierto hasta que lo cierre él (R1, R2).
+- **Mover las fechas de un torneo cerrado por el plazo** (R3): sesiones, franjas y
+  actualización de la RFEG se mueven los mismos días; si el plazo nuevo queda por delante, se
+  reabre. Si algo ya ha empezado, no se mueve nada.
+- **Invitaciones en espera** (P1-P3): al cerrarse las inscripciones, las pendientes pasan a
+  `ON_HOLD` (no caducan, se pueden rechazar o retirar, no aceptar). Al reabrir con plaza
+  vuelven a PENDING con 7 días nuevos y el aviso `INVITATION_ACCEPTABLE_AGAIN` (a quien no
+  tiene cuenta se le reenvía el correo); sin plaza, al empezar o al cancelar, pasan a NO_ROOM.
+- **Avisos de hándicaps sin actualizar con la RFEG** (H1-H6): el organizador ve en el panel y
+  en Actividad (`HANDICAPS_NOT_UPDATED`) y por correo quién se quedó sin actualizar
+  (`GET /api/v1/competitions/me/handicaps-not-updated`); el jugador español que la RFEG no
+  encuentra recibe aviso (`RFEG_HANDICAP_NOT_FOUND`) y un correo para revisar su perfil. Un
+  correo por jugador y competición; el del organizador, solo si cambia la lista. Si después
+  el perfil encuentra el hándicap, se actualiza en sus competiciones cerradas y se retiran
+  los avisos.
+- Respuesta de la competición: `enrollment_deadline`, `enrollment_deadline_applies` y
+  `enrollment_closed_by_deadline`; en el detalle, para organizador o admin,
+  `handicap_update.not_updated_players` (los mismos jugadores que el aviso, #868).
+
+### Changed
+
+- **`api-breaking`**: `enrollment_opens_days_before` admite de 2 a 14 días (antes de 1 a 14).
+- **`api-breaking`: el organizador solo invita** (B-02): nadie queda APPROVED sin aceptar él.
+- Aceptar una invitación en una Ryder con equipos hechos y sin partidos deshace los equipos y
+  avisa al organizador (`TEAMS_UNDONE_BY_ENTRY`); con partidos responde 409 `TEAMS_FORMED`.
+  Con la sala del draft abierta nadie entra, y al volver a cerrar se lanza otra actualización
+  de la RFEG para los que llegaron tarde.
+- Nuevo estado de invitación `ON_HOLD` y códigos de error nuevos: 400
+  `ENROLLMENT_DEADLINE_PASSED` (unirse, invitar, aceptar o aprobar pasado el plazo), 409
+  `INVITATION_ON_HOLD`, 409 `INVITATION_ON_HOLD_EXISTS` (volver a invitar a quien espera) y
+  409 `DRAFT_IN_PROGRESS`.
+
+### Removed
+
+- **`api-breaking`**: `POST /api/v1/competitions/{id}/enrollments/direct` (inscripción
+  directa por el organizador) y sus esquemas.
+
+### Fixed
+
+- Un reenvío de invitación fallido al reabrir ya no corta los demás correos.
+- Rechazar una invitación relee la fila bloqueada: un EXPIRED viejo no pisa un `ON_HOLD`
+  guardado a la vez por un cierre.
+- La tarea del plazo sigue con las demás competiciones si falla una, y vuelve a comprobar
+  bajo bloqueo antes de avisar.
+- Una actualización de la RFEG en marcha no pisa un hándicap ya actualizado desde el perfil.
+- La tarjeta de hándicaps de la competición no nombraba a nadie con un jugador no encontrado
+  (#868).
+
 ## [2.67.0] - 2026-11-15
 
 **Decisiones del 15 nov de la auditoría de la fase 6** (#856, #858). Va con el frontend
