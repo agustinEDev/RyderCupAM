@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import pytest
 
-from src.config.dependencies.usuarios import ventana_de_la_reanudacion
+from src.config.reanudacion_del_refresco import ventana_de_la_reanudacion
 
 
 def test_by_default_five_minutes(monkeypatch):
