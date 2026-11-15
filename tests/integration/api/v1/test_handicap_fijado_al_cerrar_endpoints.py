@@ -17,10 +17,8 @@ from tests.conftest import (
     add_one_session,
     create_authenticated_user,
     create_competition,
-    inscrito_por_invitacion,
     plaza_para_todos,
     set_auth_cookies,
-    sql_en_la_bd_de_test,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -139,29 +137,28 @@ async def test_en_una_ryder_nada_de_esto(client: AsyncClient):
 
 
 async def test_no_se_deja_a_nadie_sin_handicap(client: AsyncClient):
-    """Quitarle el personalizado a quien ya no tiene en su perfil: 400, no 500.
-
-    Desde el 15 nov 2026 (B-02) solo se entra con hándicap propio: entra invitado
-    con el suyo, el organizador le pone uno y luego su perfil se queda sin él.
-    """
-    jugador = await _usuario(client, handicap=20.0)
+    """Quitarle el personalizado a quien no tiene en su perfil: 400, no 500."""
+    jugador = await _usuario(client)  # sin hándicap
     organizador = await _usuario(client, handicap=14.2)
     competicion = await create_competition(client, organizador["cookies"], _datos())
-    dentro = await inscrito_por_invitacion(
-        client, organizador["cookies"], competicion["id"], jugador
-    )
-    inscripcion = dentro["enrollment_id"]
-    puesto = await client.put(
-        f"/api/v1/enrollments/{inscripcion}/handicap",
-        json={"enrollment_id": inscripcion, "custom_handicap": 18.0},
-    )
-    assert puesto.status_code == 200, puesto.text
-    await sql_en_la_bd_de_test(
-        "UPDATE users SET handicap = NULL WHERE id = :id", id=jugador["user"]["id"]
-    )
+    set_auth_cookies(client, organizador["cookies"])
 
-    quitar = await client.delete(f"/api/v1/enrollments/{inscripcion}/handicap")
+    sin_personalizado = await client.post(
+        f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+        json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+    )
+    con_personalizado = await client.post(
+        f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+        json={
+            "competition_id": competicion["id"],
+            "user_id": jugador["user"]["id"],
+            "custom_handicap": 18.0,
+        },
+    )
+    quitar = await client.delete(f"/api/v1/enrollments/{con_personalizado.json()['id']}/handicap")
 
+    assert sin_personalizado.status_code == 400, sin_personalizado.text
+    assert con_personalizado.status_code in (200, 201), con_personalizado.text
     assert quitar.status_code == 400, quitar.text
     assert "sin hándicap" in quitar.json()["detail"]
 
@@ -187,7 +184,11 @@ async def test_al_cerrar_la_ficha_ensena_al_organizador_quien_falta(client: Asyn
         jugador = await _usuario(client, handicap=20.0)
         organizador = await _usuario(client, handicap=14.2)
         competicion = await create_competition(client, organizador["cookies"], _datos())
-        await inscrito_por_invitacion(client, organizador["cookies"], competicion["id"], jugador)
+        set_auth_cookies(client, organizador["cookies"])
+        await client.post(
+            f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+            json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+        )
         await plaza_para_todos(client, _cookies(client), competicion)
         cerrar = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
 

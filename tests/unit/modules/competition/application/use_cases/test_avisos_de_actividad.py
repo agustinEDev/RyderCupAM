@@ -22,6 +22,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
+    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
     WithdrawEnrollmentRequestDTO,
 )
@@ -59,6 +60,9 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -359,6 +363,19 @@ class TestInscripciones:
         )
 
         assert registro.avisos == []
+
+    async def test_a2_la_inscripcion_directa_avisa_sin_aceptacion(self, uow, registro):
+        competition_id, creator = await _abierta(uow)
+        jugador = UserId(uuid4())
+
+        await DirectEnrollPlayerUseCase(uow, USUARIOS_CON_GENERO, actividad=registro).execute(
+            DirectEnrollPlayerRequestDTO(
+                competition_id=competition_id.value, user_id=jugador.value
+            ),
+            creator,
+        )
+
+        assert registro.avisos == [("enrolled", competition_id, jugador, False)]
 
     async def test_b11_retirarse_avisa(self, uow, registro):
         competition_id, _ = await _abierta(uow)

@@ -66,6 +66,8 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.competition.application.use_cases.create_round_use_case.GolfCourseNotInCompetitionError": 400,
     "src.modules.competition.application.use_cases.declare_walkover_use_case.CompetitionNotInProgressError": 400,
     "src.modules.competition.application.use_cases.declare_walkover_use_case.InvalidWalkoverError": 400,
+    "src.modules.competition.application.use_cases.direct_enroll_player_use_case.AlreadyEnrolledError": 409,
+    "src.modules.competition.application.use_cases.direct_enroll_player_use_case.CompetitionNotActiveError": 400,
     "src.modules.competition.application.use_cases.generate_matches_use_case.RoundNotPendingMatchesError": 400,
     "src.modules.competition.application.use_cases.name_vice_captain_use_case.NotCaptainOrCreatorError": 403,
     "src.modules.competition.application.use_cases.reassign_match_players_use_case.MatchNotScheduledError": 400,

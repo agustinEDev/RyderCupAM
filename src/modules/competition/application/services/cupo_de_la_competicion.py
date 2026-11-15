@@ -3,7 +3,7 @@ Qué marca el cupo de una competición (release social 3, 28 oct 2026).
 
 Sin franjas, el máximo de jugadores. En un stroke play con franjas, las plazas
 de sus franjas: quien solo espera no ocupa sitio, y el máximo deja de mirarse
-en TODOS los caminos de entrar —apuntarse, invitar, aceptar, aprobar—,
+en TODOS los caminos de entrar —apuntarse, invitar, aceptar, aprobar, a mano—,
 también para cerrar las invitaciones pendientes «sin plaza» (decidido con
 Agustín tras el revisor de la BE PR A).
 """

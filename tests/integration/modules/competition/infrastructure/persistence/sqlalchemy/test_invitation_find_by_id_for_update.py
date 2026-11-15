@@ -90,38 +90,3 @@ async def test_trae_el_estado_de_la_base_de_datos_no_el_que_ya_tenia(
     releida = await repo.find_by_id_for_update(creada.id)
 
     assert releida.status.value == "CANCELLED"
-
-
-async def test_las_pendientes_de_la_competicion_con_sus_filas_bloqueadas(
-    db_session,
-    creator_id,  # noqa: F811
-):
-    """Revisión de B-02 (R1): al empezar o cancelar, las pendientes se leen bloqueadas."""
-    creada = await _invitacion(db_session, creator_id)
-
-    leidas = await SQLAlchemyInvitationRepository(
-        db_session
-    ).find_pending_by_competition_for_update(creada.competition_id)
-
-    assert [i.id for i in leidas] == [creada.id]
-    assert await _esta_bloqueada(db_session, "invitations", creada.id.value) is True
-
-
-async def test_una_rechazada_entre_medias_ya_no_sale_como_pendiente(
-    db_session,
-    creator_id,  # noqa: F811
-):
-    """R1: la sesión ya la tenía PENDING; otra conexión la rechaza y confirma. La
-    lectura bloqueada la relee y no la devuelve: no se pisa con NO_ROOM."""
-    creada = await _invitacion(db_session, creator_id)
-    repo = SQLAlchemyInvitationRepository(db_session)
-    assert (await repo.find_by_id(creada.id)).status.value == "PENDING"
-    async with db_session.bind.begin() as conn:
-        await conn.execute(
-            text("UPDATE invitations SET status = 'DECLINED' WHERE id = :id"),
-            {"id": str(creada.id.value)},
-        )
-
-    leidas = await repo.find_pending_by_competition_for_update(creada.competition_id)
-
-    assert leidas == []

@@ -29,7 +29,6 @@ from tests.conftest import (
     create_authenticated_user,
     create_competition,
     create_golf_course,
-    inscrito_por_invitacion,
     plaza_para_todos,
     set_auth_cookies,
 )
@@ -150,7 +149,11 @@ async def _stableford(
     for i in range(jugadores):
         jugador = await _usuario(client, gender=(generos[i] if i < len(generos) else "MALE"))
         set_auth_cookies(client, organizador["cookies"])
-        await inscrito_por_invitacion(client, organizador["cookies"], competicion["id"], jugador)
+        directa = await client.post(
+            f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+            json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+        )
+        assert directa.status_code in (200, 201), directa.text
         otros.append(jugador)
     await plaza_para_todos(client, organizador["cookies"], competicion)
     if cerrar:

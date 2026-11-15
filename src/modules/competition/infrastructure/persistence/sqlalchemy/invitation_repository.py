@@ -165,21 +165,12 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         # El decorador de la columna ya da un InvitationId
         return InvitacionPendiente(fila.id, fila.expires_at) if fila else None
 
-    async def find_pending_by_competition_for_update(
-        self, competition_id: CompetitionId
-    ) -> list[Invitation]:
-        # Bloqueadas y releidas (`populate_existing`, como `find_by_id_for_update`):
-        # una rechazada a la vez espera y, al soltarse, ya no cumple el PENDING
-        stmt = (
-            select(Invitation)
-            .where(
-                and_(
-                    Invitation._competition_id == competition_id,
-                    Invitation._status == InvitationStatus.PENDING,
-                )
+    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
+        stmt = select(Invitation).where(
+            and_(
+                Invitation._competition_id == competition_id,
+                Invitation._status == InvitationStatus.PENDING,
             )
-            .with_for_update()
-            .execution_options(populate_existing=True)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

@@ -3,10 +3,9 @@ Entrar con los equipos formados también los deshace (release social 2, decidido
 el 27 oct 2026).
 
 Los equipos se forman con las inscripciones cerradas; al reabrirlas siguen ahí.
-Quien entra entonces (aprobado) se quedaba fuera de los dos equipos. Sin
-partidos, se deshacen, como al salir. Desde el 15 nov 2026 el organizador ya no
-inscribe a mano, y el invitado que acepta entra igual que un aprobado (B-02, P2;
-test_equipos_formados_congelados y test_solo_invita_el_organizador).
+Quien entra entonces (aprobado o inscrito a mano) se quedaba fuera de los dos
+equipos. Sin partidos, se deshacen, como al salir. El invitado ya no acepta por
+su cuenta con los equipos formados (29 oct 2026, test_equipos_formados_congelados).
 """
 
 from types import SimpleNamespace
@@ -15,7 +14,11 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import (
+    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -48,6 +51,16 @@ async def _reabierta():
 async def _sin_equipos(uow, comp_id) -> bool:
     async with uow:
         return await uow.team_assignments.find_by_competition(comp_id) is None
+
+
+async def test_inscrito_a_mano():
+    uow, comp_id, organizador = await _reabierta()
+
+    await DirectEnrollPlayerUseCase(uow, _Usuarios()).execute(
+        DirectEnrollPlayerRequestDTO(competition_id=comp_id.value, user_id=uuid4()), organizador
+    )
+
+    assert await _sin_equipos(uow, comp_id)
 
 
 async def test_solicitud_aprobada():

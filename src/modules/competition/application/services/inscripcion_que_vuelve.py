@@ -1,12 +1,14 @@
 """
 Entrar en una competición con una inscripción vieja (release social 2, 27 oct 2026).
 
-Las vías de entrar —aceptar una invitación, pedir plaza y, hasta el 15 nov
-2026, la inscripción a mano del organizador (B-02)— miraban si había CUALQUIER
-fila suya, y la restricción única (competición, usuario) no mira el estado. Quien tenía una rechazada,
-cancelada o retirada no podía volver. Aquí, la misma regla para todas: una
+Las tres vías de entrar —aceptar una invitación, pedir plaza y la inscripción a
+mano del organizador— miraban si había CUALQUIER fila suya, y la restricción
+única (competición, usuario) no mira el estado. Quien tenía una rechazada,
+cancelada o retirada no podía volver. Aquí, la misma regla para las tres: una
 viva (aprobada o pendiente) sigue impidiéndolo; una cerrada se reutiliza.
 """
+
+from decimal import Decimal
 
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -41,6 +43,7 @@ async def guardar_la_inscripcion(
     competition_id: CompetitionId,
     user_id: UserId,
     tee_color: TeeColor | None = None,
+    custom_handicap: Decimal | None = None,
 ) -> Enrollment:
     """
     Le inscribe: con su fila cerrada si la tiene, o con una nueva.
@@ -54,12 +57,15 @@ async def guardar_la_inscripcion(
         competition_id: Dónde entra
         user_id: Quién entra
         tee_color: Su barra, si la elige
+        custom_handicap: El hándicap que le pone el organizador, si lo hay
 
     Returns:
         La inscripción guardada
     """
     if vieja is not None:
-        vieja.volver_a_entrar(aprobada=aprobada, tee_color=tee_color)
+        vieja.volver_a_entrar(
+            aprobada=aprobada, tee_color=tee_color, custom_handicap=custom_handicap
+        )
         await uow.enrollments.update(vieja)
         return vieja
 
@@ -68,6 +74,7 @@ async def guardar_la_inscripcion(
             id=EnrollmentId.generate(),
             competition_id=competition_id,
             user_id=user_id,
+            custom_handicap=custom_handicap,
             tee_color=tee_color,
         )
     else:

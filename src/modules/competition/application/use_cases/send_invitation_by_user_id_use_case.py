@@ -119,9 +119,7 @@ class SendInvitationByUserIdUseCase:
                 )
 
             # 3. Validar estado de competicion
-            CompetitionPolicy.can_send_invitation(
-                competition.status, stroke_play=competition.stroke_play is not None
-            )
+            CompetitionPolicy.can_send_invitation(competition.status)
             # Con los equipos formados no podría aceptarse (30 oct 2026)
             await exigir_sin_equipos_formados(self._uow, competition.id)
 

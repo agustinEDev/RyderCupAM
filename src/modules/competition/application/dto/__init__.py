@@ -40,6 +40,8 @@ from .enrollment_dto import (
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
     # Direct Enroll
+    DirectEnrollPlayerRequestDTO,
+    DirectEnrollPlayerResponseDTO,
     # Generic
     EnrollmentResponseDTO,
     # Handle Enrollment
@@ -140,6 +142,8 @@ __all__ = [
     "DeleteCompetitionResponseDTO",
     "DeleteRoundRequestDTO",
     "DeleteRoundResponseDTO",
+    "DirectEnrollPlayerRequestDTO",
+    "DirectEnrollPlayerResponseDTO",
     "EnrollmentResponseDTO",
     "GenerateMatchesBodyDTO",
     "GenerateMatchesRequestDTO",

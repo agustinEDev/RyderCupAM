@@ -252,10 +252,9 @@ async def test_bloquea_la_fila_de_la_competicion():
     assert llamadas == [CompetitionId(comp_id)]
 
 
-async def test_nombrarlos_deja_vivas_las_invitaciones_pendientes():
-    """Nombrar capitanes también cierra la inscripción, y desde el 15 nov 2026 (B-02,
-    P3) las pendientes siguen vivas igual que al cerrarla a mano: se aceptan hasta
-    que empieza (antes se quedaban sin plaza, #710)."""
+async def test_nombrarlos_deja_sin_plaza_las_invitaciones_pendientes():
+    """Nombrar capitanes también cierra la inscripción (#710, revisión local): las
+    pendientes se quedan sin plaza igual que al cerrarla a mano."""
     uow, comp_id, creator_id, (ana, bea, *_) = await _montar()
     pendiente = Invitation.create(
         id=InvitationId.generate(),
@@ -270,4 +269,4 @@ async def test_nombrarlos_deja_vivas_las_invitaciones_pendientes():
 
     async with uow:
         guardada = await uow.invitations.find_by_id(pendiente.id)
-    assert guardada.status == InvitationStatus.PENDING
+    assert guardada.status == InvitationStatus.NO_ROOM

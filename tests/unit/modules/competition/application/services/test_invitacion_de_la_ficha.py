@@ -5,10 +5,8 @@ La invitación que la ficha ofrece aceptar (tabla del 27 oct 2026, filas 13-16; 
   ---------------------------------------------|---------------------------------
   organiza                                     | ninguna (ni se pregunta)
   invitado, sin inscripción, competición ACTIVE| la ofrece
-  invitado, sin inscripción, Ryder CLOSED      | la ofrece (B-02, 15 nov 2026)
-  invitado, sin inscripción, stroke play CLOSED| no: hay que reabrirla (B-02, P1)
   invitado con inscripción (cualquier estado)  | no: aceptar daría 400
-  invitado, el resto de estados                | no: la política no deja aceptar
+  invitado, competición no ACTIVE              | no: la política no deja aceptar
   sin invitación                               | ninguna
 """
 
@@ -37,12 +35,9 @@ AHORA = datetime(2026, 10, 27, 12, 0)
 PENDIENTE = InvitacionPendiente(InvitationId.generate(), AHORA + timedelta(days=3))
 
 
-def _competicion(estado=CompetitionStatus.ACTIVE, stroke_play=None):
+def _competicion(estado=CompetitionStatus.ACTIVE):
     return SimpleNamespace(
-        id=CompetitionId(uuid4()),
-        status=estado,
-        stroke_play=stroke_play,
-        is_creator=lambda quien: quien == CREADOR,
+        id=CompetitionId(uuid4()), status=estado, is_creator=lambda quien: quien == CREADOR
     )
 
 
@@ -70,18 +65,6 @@ def test_sin_inscripcion_y_activa_se_ofrece():
     assert se_le_ofrece_aceptar(_competicion(), PENDIENTE, inscrito=False) is True
 
 
-def test_sin_inscripcion_y_una_ryder_cerrada_se_ofrece():
-    competicion = _competicion(CompetitionStatus.CLOSED)
-
-    assert se_le_ofrece_aceptar(competicion, PENDIENTE, inscrito=False) is True
-
-
-def test_en_un_stroke_play_cerrado_no_se_ofrece():
-    competicion = _competicion(CompetitionStatus.CLOSED, stroke_play=object())
-
-    assert se_le_ofrece_aceptar(competicion, PENDIENTE, inscrito=False) is False
-
-
 def test_con_inscripcion_no_se_ofrece():
     assert se_le_ofrece_aceptar(_competicion(), PENDIENTE, inscrito=True) is False
 
@@ -94,6 +77,7 @@ def test_sin_invitacion_no_se_ofrece():
     "estado",
     [
         CompetitionStatus.DRAFT,
+        CompetitionStatus.CLOSED,
         CompetitionStatus.IN_PROGRESS,
         CompetitionStatus.COMPLETED,
         CompetitionStatus.CANCELLED,

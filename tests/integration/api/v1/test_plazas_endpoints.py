@@ -12,7 +12,6 @@ from tests.conftest import (
     add_one_session,
     create_authenticated_user,
     create_competition,
-    inscrito_por_invitacion,
     set_auth_cookies,
 )
 
@@ -55,7 +54,12 @@ async def _stableford_con_franja(client: AsyncClient, **mas) -> tuple[dict, dict
 
 async def _jugador_aprobado(client: AsyncClient, organizador: dict, competicion: dict) -> dict:
     jugador = await _usuario(client)
-    await inscrito_por_invitacion(client, organizador["cookies"], competicion["id"], jugador)
+    set_auth_cookies(client, organizador["cookies"])
+    respuesta = await client.post(
+        f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+        json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+    )
+    assert respuesta.status_code in (200, 201), respuesta.text
     return jugador
 
 
