@@ -623,8 +623,11 @@ class TestF6LasQueNiSeLeen:
                 self.pedidas.append(competition_id)
 
         cerrar = _Cerrar()
+        # Un reloj fijo en HOY: con el de verdad, pasadas las 00:00 UTC las fechas
+        # de arriba (calculadas al importar) quedarían un día más atrás (CodeRabbit)
+        mediodia = datetime(HOY.year, HOY.month, HOY.day, 12, tzinfo=UTC)
         await CloseEnrollmentsPastDeadlineUseCase(
-            uow, cerrar, PlazoDeInscripcion(_Zonas(), reloj=lambda: datetime.now(UTC))
+            uow, cerrar, PlazoDeInscripcion(_Zonas(), reloj=lambda: mediodia)
         ).execute()
 
         assert hace_30.id in cerrar.pedidas

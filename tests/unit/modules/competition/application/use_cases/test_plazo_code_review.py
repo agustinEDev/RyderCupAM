@@ -22,6 +22,8 @@ El /code-review del plazo de inscripción y dos decisiones más de Agustín (16 
 | D6   | un fallo conocido que ya no es candidata                          | se olvida                                       |
 | D7   | se cierra o se mueve sin aviso apuntado                           | no se retira nada                               |
 | D7   | ... con aviso apuntado                                            | se retira                                       |
+| CR1  | apuntar el aviso de bloqueo falla (base de datos)                 | rollback, cuenta como fallo, sigue la vuelta    |
+| CR2  | movida entre medias, ya no le toca cerrarse                       | ni aviso ni apunte                              |
 """
 
 import logging
@@ -576,3 +578,73 @@ class TestD1LaSesionEnJuegoAntesDeSuHora:
         ronda._status = RoundStatus.IN_PROGRESS
 
         assert await alguna_sesion_empezada(uow, [ronda], _Zonas(), DESPUES) is True
+
+
+class TestCodeRabbitUnaQueFallaNoParaLaVuelta:
+    async def test_si_falla_apuntar_el_bloqueo_sigue_con_las_demas(self):
+        """
+        CR1. Given dos candidatas: la primera no se puede cerrar y al apuntar su aviso
+        falla la base de datos; la segunda se cierra
+        When pasa la vuelta
+        Then la primera cuenta como fallo (con su rollback) y la segunda se cierra
+        """
+        uow = InMemoryUnitOfWork()
+        primera = await _competicion(uow)
+        segunda = await _competicion(uow)
+        bloquea = uow.competitions.find_by_id_for_update
+
+        async def falla_en_la_primera(competition_id):
+            if competition_id == primera.id:
+                raise RuntimeError("se cayó la base")
+            return await bloquea(competition_id)
+
+        uow.competitions.find_by_id_for_update = falla_en_la_primera
+        deshechas = []
+        original_rollback = uow.rollback
+
+        async def rollback():
+            deshechas.append(1)
+            await original_rollback()
+
+        uow.rollback = rollback
+
+        class _Cerrar:
+            async def cerrar_por_el_plazo(self, competition_id):
+                if competition_id == primera.id:
+                    raise PlayersWithoutHandicapError([SimpleNamespace(user_id=None, name="A")])
+                assert competition_id == segunda.id
+                return object()
+
+        resumen = await CloseEnrollmentsPastDeadlineUseCase(
+            uow, _Cerrar(), _plazo(DESPUES), actividad=_Avisos()
+        ).execute()
+
+        assert (resumen.failed, resumen.closed) == (1, 1)
+        assert deshechas
+
+
+class TestCodeRabbitSeMiraOtraVezConLaFilaBloqueada:
+    async def test_movida_entre_medias_no_se_avisa(self):
+        """
+        CR2. Given no se puede cerrar, y el organizador la ha movido a un mes vista
+        mientras tanto
+        When se va a avisar con la fila bloqueada
+        Then ya no le toca cerrarse: ni aviso ni apunte
+        """
+        uow = InMemoryUnitOfWork()
+        competition = await _competicion(uow)
+        avisos = _Avisos()
+
+        class _Cerrar:
+            async def cerrar_por_el_plazo(self, competition_id):
+                lejos = TORNEO + timedelta(days=30)
+                competition.update_info(dates=DateRange(lejos, lejos + timedelta(days=1)))
+                raise PlayersWithoutHandicapError([SimpleNamespace(user_id=None, name="A")])
+
+        resumen = await CloseEnrollmentsPastDeadlineUseCase(
+            uow, _Cerrar(), _plazo(DESPUES), actividad=avisos
+        ).execute()
+
+        assert avisos.avisos == []
+        assert competition.close_blocked_notified is False
+        assert resumen.notified == 0

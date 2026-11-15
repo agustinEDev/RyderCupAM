@@ -115,28 +115,38 @@ class CloseEnrollmentsPastDeadlineUseCase:
 
         closed = blocked = notified = failed = 0
         for competition_id in candidatas:
+            # Todo lo de cada una dentro de su frontera de errores, también apuntar
+            # el aviso de bloqueo: si algo falla, se apunta y se sigue con las
+            # demás (CodeRabbit, #865). Lo deshace cada transacción al salir con el
+            # error (`async with` de la unidad de trabajo): aquí ya no queda nada
             try:
-                cerrada = await self._cerrar.cerrar_por_el_plazo(competition_id)
-            except PlayersWithoutTeeWindowError as error:
-                blocked += 1
-                notified += await self._avisar_bloqueada(
-                    competition_id, CloseBlockedReason.NO_TEE_WINDOW, len(error.players)
-                )
-                continue
-            except PlayersWithoutHandicapError as error:
-                blocked += 1
-                notified += await self._avisar_bloqueada(
-                    competition_id, CloseBlockedReason.NO_HANDICAP, len(error.players)
-                )
-                continue
+                cerrada, bloqueada, avisada = await self._una(competition_id)
             except Exception:
                 self._fallo(competition_id)
                 failed += 1
                 continue
             self._fallos.discard(competition_id)
-            if cerrada is not None:
-                closed += 1
+            closed += cerrada
+            blocked += bloqueada
+            notified += avisada
         return ClosedByDeadline(closed, blocked, notified, failed)
+
+    async def _una(self, competition_id: CompetitionId) -> tuple[int, int, int]:
+        """
+        La cierra, o avisa de que no se puede.
+
+        Returns:
+            (cerrada, bloqueada, avisada), cada uno 0 o 1
+        """
+        try:
+            cerrada = await self._cerrar.cerrar_por_el_plazo(competition_id)
+        except PlayersWithoutTeeWindowError as error:
+            motivo, jugadores = CloseBlockedReason.NO_TEE_WINDOW, len(error.players)
+        except PlayersWithoutHandicapError as error:
+            motivo, jugadores = CloseBlockedReason.NO_HANDICAP, len(error.players)
+        else:
+            return (1 if cerrada is not None else 0), 0, 0
+        return 0, 1, await self._avisar_bloqueada(competition_id, motivo, jugadores)
 
     def _fallo(self, competition_id: CompetitionId) -> None:
         """
@@ -169,6 +179,9 @@ class CloseEnrollmentsPastDeadlineUseCase:
                 competition is None
                 or competition.status is not CompetitionStatus.ACTIVE
                 or competition.close_blocked_notified
+                # Con la fila ya bloqueada, otra vez: el organizador ha podido
+                # moverla entre medias, y entonces ya no le toca (CodeRabbit, #865)
+                or not await self._plazo.le_toca_cerrarse(competition)
             ):
                 return 0
             try:
