@@ -4,8 +4,8 @@ import bcrypt
 
 # bcrypt solo usa los primeros 72 BYTES. bcrypt 4 recortaba el resto en silencio;
 # bcrypt 5 lanza ValueError. Se recorta aquí, igual que hacía bcrypt 4, para que
-# los hashes guardados sigan valiendo. Una contraseña de 128 caracteres, o de
-# menos con eñes o acentos (2 bytes cada uno), pasa de 72 bytes.
+# los hashes guardados sigan valiendo. Las contraseñas nuevas ya no pasan de 72 bytes
+# (B-14, 15 nov 2026), pero las de antes, de hasta 128 caracteres, sí pueden.
 BCRYPT_MAX_BYTES = 72
 
 # El rango que acepta bcrypt
