@@ -6,7 +6,7 @@ Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
 from collections.abc import Collection, Iterable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -35,6 +35,7 @@ from ..events.competition_reverted_to_in_progress_event import (
 )
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
+from ..policies.enrollment_deadline import closes_at, en_utc
 from ..policies.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
@@ -60,9 +61,10 @@ MAX_PLAYERS = 200
 DEFAULT_MAX_PLAYERS = 12
 
 # Cuantos dias antes del torneo pueden abrirse solas las inscripciones (BE #332).
-# Cero no es «antes» de nada, y dos semanas es el tope decidido el 21 sep: con
-# mas antelacion la apertura deja de elegirse en una lista y se teclea.
-MIN_ENROLLMENT_OPENING_DAYS = 1
+# Dos semanas es el tope decidido el 21 sep: con mas antelacion la apertura deja
+# de elegirse en una lista y se teclea. Abajo, dos desde el 15 nov 2026: con uno
+# abria a las 0:00 del dia anterior y cerraba a las 12:00 de ese mismo dia
+MIN_ENROLLMENT_OPENING_DAYS = 2
 MAX_ENROLLMENT_OPENING_DAYS = 14
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
@@ -213,6 +215,12 @@ class Competition:
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
         self._golf_courses: list[CompetitionGolfCourse] = []
+        # El plazo de inscripcion (15 nov 2026): cuando se abrieron por ultima
+        # vez, en UTC sin zona; si las cerro el plazo y no el organizador; y si
+        # ya se le dijo que no se pueden cerrar solas
+        self._enrollment_opened_at: datetime | None = None
+        self._enrollment_closed_by_deadline = False
+        self._close_blocked_notified = False
 
     @classmethod
     def create(
@@ -562,9 +570,11 @@ class Competition:
         return self._enrollment_opens_days_before
 
     def _validate_enrollment_opening(self, dias: int | None) -> None:
-        """Entre 1 y 14 dias antes, o nada.
+        """Entre 2 y 14 dias antes, o nada.
 
-        Abajo, cero dias no es «antes» de nada: para abrir ya, no se programa.
+        Abajo, cero dias no es «antes» de nada: para abrir ya, no se programa; y
+        con uno abria a las 0:00 del dia anterior para cerrar a las 12:00 de ese
+        mismo dia, por el plazo de inscripcion (15 nov 2026).
         Arriba, dos semanas es el tope que se decidio (21 sep): mas antelacion
         deja de elegirse en una lista y se teclea, y un torneo que abre
         inscripciones con meses de antelacion las abre a mano.
@@ -639,6 +649,63 @@ class Competition:
             self._dates.start_date, self._enrollment_opens_days_before, timezone
         )
 
+    # ===========================================
+    # PLAZO DE INSCRIPCION (15 nov 2026)
+    # ===========================================
+
+    @property
+    def enrollment_opened_at(self) -> datetime | None:
+        """Cuando se abrieron (o reabrieron) por ultima vez, en UTC sin zona."""
+        return self._enrollment_opened_at
+
+    @property
+    def enrollment_closed_by_deadline(self) -> bool:
+        """Si las cerro el plazo y no el organizador (R3)."""
+        return self._enrollment_closed_by_deadline
+
+    @property
+    def close_blocked_notified(self) -> bool:
+        """Si ya se le dijo al organizador que no se pueden cerrar solas (C4)."""
+        return self._close_blocked_notified
+
+    def enrollment_deadline(self, timezone: str | None) -> datetime:
+        """Las 12:00 del dia anterior al torneo, en la zona del campo (C1)."""
+        return closes_at(self._dates.start_date, timezone)
+
+    def entries_closed_by_deadline(self, timezone: str | None, now: datetime) -> bool:
+        """
+        Si el plazo ya no deja entrar a nadie (C2): manda la hora, no el estado.
+
+        En borrador no: quien la abra ya la abre pasado el plazo, y entonces se
+        entra (R2). Abierta, se entra solo si se abrio —o reabrio— a partir del
+        plazo (R1, R2). Una sin fecha de apertura es de antes de la regla, y
+        cuenta como abierta a tiempo.
+        """
+        if self._status == CompetitionStatus.DRAFT:
+            return False
+        plazo = self.enrollment_deadline(timezone)
+        if en_utc(now) < plazo:
+            return False
+        if self._status != CompetitionStatus.ACTIVE:
+            return True
+        abierta = self._enrollment_opened_at
+        return abierta is None or en_utc(abierta) < plazo
+
+    def due_to_close(self, timezone: str | None, now: datetime) -> bool:
+        """Si le toca cerrarse sola (C3): abierta y con el plazo pasado (salvo R1/R2)."""
+        return self._status == CompetitionStatus.ACTIVE and self.entries_closed_by_deadline(
+            timezone, now
+        )
+
+    def mark_close_blocked_notified(self) -> None:
+        """Apunta que ya se le dijo que no se pueden cerrar solas: una vez (C4)."""
+        self._close_blocked_notified = True
+
+    def _abiertas_ahora(self, now: datetime | None) -> None:
+        """Apunta cuando se abren; sin reloj, ahora."""
+        instante = en_utc(now) if now is not None else datetime.now(UTC)
+        self._enrollment_opened_at = instante.replace(tzinfo=None)
+
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
         return self._status.allows_modifications()
@@ -666,9 +733,12 @@ class Competition:
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
     # ===========================================
 
-    def activate(self) -> None:
+    def activate(self, now: datetime | None = None) -> None:
         """
         Activa el torneo (DRAFT → ACTIVE).
+
+        Args:
+            now: Cuando; sin el, ahora. Abrirla pasado el plazo deja entrar (R2)
 
         Raises:
             CompetitionStateError: Si la transición no es válida
@@ -680,6 +750,7 @@ class Competition:
 
         self._status = CompetitionStatus.ACTIVE
         self._updated_at = datetime.now()
+        self._abiertas_ahora(now)
 
         # La apertura programada queda cumplida al abrir, venga de su hora, de
         # una invitacion o del boton. Conservarla haria que la ficha siguiera
@@ -693,9 +764,12 @@ class Competition:
         )
         self._add_domain_event(event)
 
-    def close_enrollments(self, total_enrollments: int = 0) -> None:
+    def close_enrollments(self, total_enrollments: int = 0, by_deadline: bool = False) -> None:
         """
         Cierra las inscripciones (ACTIVE → CLOSED).
+
+        Args:
+            by_deadline: Si las cierra el plazo y no el organizador (C3, R3)
 
         Raises:
             CompetitionStateError: Si la transición no es válida
@@ -707,6 +781,9 @@ class Competition:
 
         self._status = CompetitionStatus.CLOSED
         self._updated_at = datetime.now()
+        self._enrollment_closed_by_deadline = by_deadline
+        # Ya cerradas, el aviso de que no se podian cerrar deja de valer (C4)
+        self._close_blocked_notified = False
 
         event = CompetitionEnrollmentsClosedEvent(
             competition_id=str(self._id), total_enrollments=total_enrollments
@@ -993,12 +1070,16 @@ class Competition:
             raise CaptainOnWrongTeamError(f"Tiene que ser un jugador del equipo {team}")
         return ryder_cup
 
-    def reopen_enrollments(self) -> None:
+    def reopen_enrollments(self, now: datetime | None = None) -> None:
         """
         Reabre las inscripciones (CLOSED → ACTIVE).
 
         Permite al creador añadir o modificar jugadores antes de
         volver a cerrar inscripciones y configurar el schedule.
+
+        Args:
+            now: Cuando; sin el, ahora. Reabrirla pasado el plazo la deja
+                abierta hasta que la cierre el organizador (R1)
 
         Raises:
             CompetitionStateError: Si la transición no es válida
@@ -1009,6 +1090,8 @@ class Competition:
             )
 
         self._status = CompetitionStatus.ACTIVE
+        self._abiertas_ahora(now)
+        self._enrollment_closed_by_deadline = False
         # Las categorías iguales se reparten otra vez al volver a cerrar: los
         # límites del cierre anterior ya no dicen nada (10 oct 2026)
         if self._stroke_play is not None:
@@ -1070,10 +1153,7 @@ class Competition:
             self._name = name
 
         if dates is not None:
-            # Mover las fechas ya no puede invalidar la apertura: son dias de
-            # antelacion, asi que la apertura se mueve CON el torneo. Eso es lo
-            # que se buscaba al dejar de guardar el instante (BE #332)
-            self._dates = dates
+            self._mover_fechas(dates)
 
         if location is not None:
             self._comprobar_que_los_campos_siguen_dentro(location, golf_course_countries)
@@ -1114,6 +1194,19 @@ class Competition:
 
         event = CompetitionUpdatedEvent(competition_id=str(self._id), name=str(self._name))
         self._add_domain_event(event)
+
+    def _mover_fechas(self, dates: DateRange) -> None:
+        """
+        Mover las fechas ya no puede invalidar la apertura: son dias de
+        antelacion, asi que la apertura se mueve CON el torneo. Eso es lo que se
+        buscaba al dejar de guardar el instante (BE #332).
+
+        Y el plazo de inscripcion tambien se mueve: con otro plazo, el aviso de
+        que no se podian cerrar ya no dice nada (C4, R3).
+        """
+        if dates.start_date != self._dates.start_date:
+            self._close_blocked_notified = False
+        self._dates = dates
 
     # ===========================================
     # DOMAIN EVENTS
