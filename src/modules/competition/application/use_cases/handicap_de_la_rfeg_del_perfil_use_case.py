@@ -133,6 +133,15 @@ class HandicapDeLaRfegDelPerfilUseCase:
             )
             if inscripcion is None or inscripcion.status != EnrollmentStatus.APPROVED:
                 return None
+            # Un aviso viejo no pisa uno nuevo (C3): solo cuenta si es el hándicap
+            # que tiene ahora guardado su perfil
+            jugador = await h.usuarios.find_by_id(user_id)
+            if (
+                jugador is None
+                or jugador.handicap is None
+                or Decimal(str(jugador.handicap.value)) != handicap
+            ):
+                return None
             ahora = self._reloj()
             era_no_encontrado = estaba_en_la_lista = False
             actualizacion = await uow.handicap_updates.ultima_de(competition_id)

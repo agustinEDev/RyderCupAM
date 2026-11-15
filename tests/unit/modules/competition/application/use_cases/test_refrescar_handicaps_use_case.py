@@ -79,6 +79,8 @@ su hándicap fuera de una actualización.
 | R1   | Empieza entre leerla y bloquearla               | Ya no se toca                            |
 | R1   | Se retira entre leerla y bloquearla             | Ya no se toca                            |
 | R1   | Las cerradas, en orden de id                    | Aunque lleguen en otro orden             |
+| C3   | Dos avisos (13.0 y 14.0) en cualquier orden     | Queda el del perfil (14.0)               |
+| C3   | Su perfil ya no tiene hándicap                  | Se salta, sin error                      |
 
 Lo que dijo el perfil no lo pisa la pasada (R2, revisión del 16 nov 2026):
 
@@ -88,6 +90,14 @@ Lo que dijo el perfil no lo pisa la pasada (R2, revisión del 16 nov 2026):
 | R2   | El perfil lo apunta y la RFEG falla             | Sigue actualizado; no se reintenta       |
 | R2   | El perfil lo apunta antes de llegar a él        | No se le pregunta                        |
 | R2   | Apuntar otra cosa sobre un actualizado          | El repositorio no lo pisa                |
+
+Lo que queda apuntado y la reapertura (CodeRabbit en la #864):
+
+| Caso | Situación                                       | Resultado                                |
+|------|-------------------------------------------------|------------------------------------------|
+| C2   | No encontrado de una pasada que no terminó      | La que termina le avisa (un solo correo) |
+| C1   | Se reabren las inscripciones                    | Se retiran el del organizador y los suyos|
+| C1   | ... con Actividad caída                         | Se reabre igual                          |
 """
 
 from contextlib import asynccontextmanager
@@ -258,6 +268,7 @@ class _Escenario:
         self.al_montar_actividad: Exception | None = None
         self.al_cerrar_actividad: Exception | None = None
         self.actividades_montadas = 0
+        self.intentos_de_montar = 0
         self.lanzador = _Lanzador(self.uow)
         self.esperas: list[float] = []
         self.creadores: dict[CompetitionId, UserId] = {}
@@ -355,6 +366,7 @@ class _Escenario:
     @asynccontextmanager
     async def fabrica_de_actividad(self):
         """Actividad sobre su sesión, que puede fallar al montarla o al cerrarla."""
+        self.intentos_de_montar += 1
         if self.al_montar_actividad is not None:
             raise self.al_montar_actividad
         self.actividades_montadas += 1
@@ -1200,8 +1212,9 @@ class TestSinActualizarConLaRfeg:
             [e.nombre(perdido)],
         ]
         assert [c.args[1] for c in e.actividad.handicaps_not_updated.await_args_list] == [2, 1]
+        # Un solo correo; su aviso de Actividad se renueva en cada pasada (D2)
         assert e.avisos.send_handicap_not_found_email.await_count == 1
-        assert e.actividad.handicap_not_found.await_count == 1
+        assert e.actividad.handicap_not_found.await_count == 2
 
     async def test_si_se_corta_no_avisa_a_nadie(self, e):
         """
@@ -1412,7 +1425,10 @@ class TestSinActualizarConLaRfeg:
 class TestDesdeSuPerfil:
     """La RFEG encuentra su hándicap desde su perfil o al entrar (D1 y D4)."""
 
-    async def _desde_su_perfil(self, e, user_id, handicap="13.0"):
+    async def _desde_su_perfil(self, e, user_id, handicap="13.0", guardado=True):
+        # Como en la API: el hándicap ya está guardado en su perfil
+        if guardado:
+            e.usuarios.por_id[user_id].handicap = MagicMock(value=float(handicap))
         await HandicapDeLaRfegDelPerfilUseCase(
             herramientas=e.herramientas, reloj=lambda: e.ahora, actividad=e.fabrica_de_actividad
         ).execute(user_id, Decimal(handicap))
@@ -1621,14 +1637,25 @@ class TestDesdeSuPerfil:
 
     @pytest.mark.parametrize("donde", ["al_montar_actividad", "al_cerrar_actividad"])
     async def test_si_actividad_falla_el_fijado_se_corrige_igual(self, e, donde):
-        """Given Actividad caída When la RFEG lo da desde su perfil Then el fijado cambia (T1)."""
+        """
+        Given un no encontrado con su aviso, y Actividad caída
+        When la RFEG lo da desde su perfil
+        Then se intenta Actividad, falla, y el fijado cambia igual (T1)
+        """
         torneo = await e.torneo(tipo="STABLEFORD")
         jugador = await e.inscrito(torneo, handicap=8.0)
         await e.cerrar(torneo)
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre == e.nombre(jugador) else 11.2
+        )
+        await e.pasar(torneo)
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.NO_ENCONTRADO
+        e.intentos_de_montar = 0
         setattr(e, donde, RuntimeError("actividad caida"))
 
         await self._desde_su_perfil(e, jugador)
 
+        assert e.intentos_de_montar >= 1
         assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("13.0")
 
     async def test_sin_actividad_tambien(self, e):
@@ -1636,6 +1663,7 @@ class TestDesdeSuPerfil:
         torneo = await e.torneo()
         jugador = await e.inscrito(torneo)
         await e.cerrar(torneo)
+        e.usuarios.por_id[jugador].handicap = MagicMock(value=13.0)
 
         await HandicapDeLaRfegDelPerfilUseCase(
             herramientas=e.herramientas, reloj=lambda: e.ahora
@@ -1915,3 +1943,98 @@ class TestNoPisaLoDelPerfil:
         cerradas = await e.uow.competitions.find_ids_with_status(al_reves, CompetitionStatus.CLOSED)
 
         assert cerradas == list(reversed(al_reves))
+
+    @pytest.mark.parametrize("orden", [("13.0", "14.0"), ("14.0", "13.0")])
+    async def test_un_aviso_viejo_no_pisa_el_fijado_nuevo(self, e, orden):
+        """
+        Given su perfil guardó 13.0 y luego 14.0, y llegan los dos avisos
+        When se atienden en cualquier orden
+        Then el fijado queda en 14.0: el que no es el de su perfil se salta (C3)
+        """
+        torneo = await e.torneo(tipo="STABLEFORD")
+        jugador = await e.inscrito(torneo, handicap=8.0)
+        await e.cerrar(torneo)
+        e.usuarios.por_id[jugador].handicap = MagicMock(value=14.0)
+
+        for valor in orden:
+            await self._desde_su_perfil(e, jugador, valor, guardado=False)
+
+        assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("14.0")
+
+
+class TestLoQueQuedaApuntado:
+    """CodeRabbit en la #864: lo apuntado manda (C2), y reabrir retira los avisos (C1)."""
+
+    async def test_no_encontrado_de_una_pasada_cortada_se_avisa_al_terminar(self, e):
+        """
+        Given un no encontrado apuntado por una pasada que no llegó a terminar
+        When otra pasada de la misma actualización la termina
+        Then se le avisa (un correo y su aviso), aunque esta no le preguntara (C2)
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        ultima = await e.ultima(torneo)
+        await e.uow.handicap_updates.apuntar(
+            ultima.id, perdido, ResultadoRefresco.NO_ENCONTRADO, AHORA
+        )
+
+        await e.pasar(torneo)
+
+        assert e.nombre(perdido) not in e.preguntados()
+        e.avisos.send_handicap_not_found_email.assert_awaited_once()
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        e.actividad.handicap_not_found.assert_awaited_once_with(competicion, [perdido])
+
+    async def _reabrir(self, e, torneo):
+        await ReopenEnrollmentsUseCase(e.uow, actividad=e.actividad).execute(
+            ReopenEnrollmentsRequestDTO(competition_id=torneo.value), e.creadores[torneo]
+        )
+
+    async def test_al_reabrir_se_retiran_los_avisos(self, e):
+        """
+        Given un no encontrado avisado
+        When el organizador reabre las inscripciones
+        Then se retiran el aviso del organizador y el de los jugadores (C1)
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre == e.nombre(perdido) else 11.2
+        )
+        await e.pasar(torneo)
+        e.actividad.reset_mock()
+
+        await self._reabrir(e, torneo)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        e.actividad.handicaps_not_updated_withdrawn.assert_awaited_once_with(competicion)
+        [(_, retirados)] = [
+            c.args for c in e.actividad.handicap_not_found_withdrawn.await_args_list
+        ]
+        assert set(retirados) == {perdido, e.creadores[torneo]}
+
+    async def test_al_reabrir_con_actividad_caida_se_reabre(self, e):
+        """Given Actividad caída When se reabre Then queda abierta igual (C1)."""
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        e.actividad.handicaps_not_updated_withdrawn.side_effect = RuntimeError("caida")
+        e.actividad.handicap_not_found_withdrawn.side_effect = RuntimeError("caida")
+
+        await self._reabrir(e, torneo)
+
+        assert (await e.uow.competitions.find_by_id(torneo)).status is CompetitionStatus.ACTIVE
+
+    async def test_sin_handicap_en_su_perfil_se_salta_sin_error(self, e, caplog):
+        """Given su perfil ya sin hándicap When llega el aviso Then se salta, sin error (C3)."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        e.usuarios.por_id[jugador].handicap = None
+
+        await TestDesdeSuPerfil._desde_su_perfil(self, e, jugador, guardado=False)
+
+        assert jugador not in await e.apuntado(torneo)
+        assert not [r for r in caplog.records if r.levelname == "ERROR"]

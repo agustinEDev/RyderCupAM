@@ -134,18 +134,14 @@ class RefrescarHandicapsUseCase:
         """
         pendientes = await self._pendientes(update_id)
         preguntados = 0
-        # A quién no encontró la RFEG en esta pasada: solo a ellos se les avisa,
-        # y así otra pasada de una incompleta no se lo repite
-        no_encontrados: set[UserId] = set()
         for user_id in pendientes:
             if preguntados:
                 await self._esperar(PAUSA_ENTRE_JUGADORES)
             if not await self._sigue(update_id):
                 return preguntados
-            if await self._refrescar(update_id, user_id) is ResultadoRefresco.NO_ENCONTRADO:
-                no_encontrados.add(user_id)
+            await self._refrescar(update_id, user_id)
             preguntados += 1
-        await self._terminar(update_id, no_encontrados)
+        await self._terminar(update_id)
         return preguntados
 
     async def _pendientes(self, update_id: uuid.UUID) -> list[UserId]:
@@ -185,23 +181,15 @@ class RefrescarHandicapsUseCase:
         await uow.handicap_updates.update(actualizacion)
         return False
 
-    async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> ResultadoRefresco | None:
-        """
-        Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga.
-
-        Returns:
-            Lo último que se apuntó, o None si se cortó antes de preguntar
-        """
-        resultado = None
+    async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> None:
+        """Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga."""
         for intento in range(MAX_INTENTOS):
             if intento:
                 await self._esperar(PAUSA_ENTRE_INTENTOS)
                 if not await self._sigue(update_id):
-                    return resultado
-            resultado = await self._una_vez(update_id, user_id)
-            if resultado is not ResultadoRefresco.FALLIDO:
-                return resultado
-        return resultado
+                    return
+            if await self._una_vez(update_id, user_id) is not ResultadoRefresco.FALLIDO:
+                return
 
     async def _una_vez(self, update_id: uuid.UUID, user_id: UserId) -> ResultadoRefresco:
         """
@@ -300,12 +288,12 @@ class RefrescarHandicapsUseCase:
         except Exception:
             logger.exception("Tampoco se pudo apuntar el fallo de %s", user_id)
 
-    async def _terminar(self, update_id: uuid.UUID, no_encontrados: set[UserId]) -> None:
+    async def _terminar(self, update_id: uuid.UUID) -> None:
         """
         Completa, o incompleta si alguien se quedó sin actualizar; y entonces se
         avisa, ya fuera de la transacción (H1-H6, 15 nov 2026): al organizador,
         si alguien se quedó sin actualizar con la RFEG; y a cada español al que
-        la RFEG no encontró en esta pasada.
+        la RFEG no encontró (lo apuntado, también de una pasada anterior).
 
         Los correos no se repiten (D2, 16 nov 2026): al jugador, uno por
         competición; al organizador, otra vez solo si cambió la lista. Se
@@ -330,8 +318,9 @@ class RefrescarHandicapsUseCase:
             hecho = await SinActualizarDeLaCompeticion.de(
                 uow, h.usuarios, competicion, actualizacion
             )
-            # Los no encontrados en esta pasada: otra pasada no se lo repite
-            avisar = [u for u in hecho.no_encontrados if u in no_encontrados]
+            # Todos los no encontrados apuntados, también los de una pasada que no
+            # llegó a terminar (C2): el correo, uno por competición; Actividad, al día
+            avisar = hecho.no_encontrados
             nombres = await self._lista_si_cambio(uow, h, competicion, hecho.para_el_organizador)
             organizador = (
                 await self._avisos.quien(h.usuarios, competicion) if nombres is not None else None
