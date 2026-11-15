@@ -3,23 +3,17 @@ Contraseñas filtradas que nuestras reglas dejarían pasar (B-14 de la auditorí
 
 Origen: `100k-most-used-passwords-NCSC.txt` de SecLists (licencia MIT), las 100.000
 contraseñas más vistas en filtraciones según el NCSC británico. Descargada el 15 nov 2026
-y filtrada con las reglas de `Password` (12 a 64 caracteres, letra, número y carácter
-especial; las mayúsculas dan igual porque se compara sin distinguirlas): las demás ya las
-rechazan las reglas. Son 117. Dentro de la app, sin llamar a nadie (Agustín, 15 nov 2026).
+y filtrada con las reglas de `Password` (12 a 64 caracteres y 72 bytes, letra, número y
+carácter especial; las mayúsculas dan igual porque se compara sin distinguirlas): las demás
+ya las rechazan las reglas. Sin los restos de la extracción, que nadie teclearía
+(`$hex[…]`, entidades HTML, trozos de ficheros, IP:usuario). Son 107. Dentro de la
+app, sin llamar a nadie (Agustín, 15 nov 2026).
 """
 
 FILTRADAS: frozenset[str] = frozenset(
     {
-        "$hex[687474703a2f2f616473]",
-        "$hex[687474703a2f2f777777]",
         "000webhost.com",
-        "111111prof_root2.sql.txt:,",
-        "111111prof_root3.sql.txt:,",
-        "123456prof_root2.sql.txt:,",
-        "123456prof_root3.sql.txt:,",
         "1580@welcamino",
-        "5.254.105.20:test",
-        "5.254.105.20:test1",
         "79621601378.kirill",
         "abuse_123456_abuse",
         "aleks-270379",
@@ -35,8 +29,6 @@ FILTRADAS: frozenset[str] = frozenset(
         "aqwleeb_6e0pk59",
         "arina-sharapova-80",
         "arsik-di-noxcho95",
-        "asdfghjkl:&#39:",
-        "asdfghjkl;&#39;",
         "asil.dovlatov.1982",
         "azefirov.inno1987.r",
         "aztyvl_ka44ze",

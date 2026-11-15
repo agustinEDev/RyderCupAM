@@ -1,43 +1,46 @@
 """
 La ventana para reanudar una respuesta de refresco perdida se puede ajustar sin desplegar
-(B-19 de la auditoría de la fase 6, R5): `REFRESH_RESUME_WINDOW_SECONDS`, 5 minutos por
-defecto; un valor que no sea un número positivo vuelve a los 5 minutos, nunca a «sin límite».
+(B-19 de la auditoría de la fase 6, R5): `REFRESH_RESUME_WINDOW_SECONDS`, 30 minutos por
+defecto (Agustín, 15 nov 2026). Un valor que no sea un número positivo, o que pase de una
+hora, vuelve a los 30 minutos: nunca «sin límite».
 """
 
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.config.reanudacion_del_refresco import ventana_de_la_reanudacion
+from src.config.dependencies.usuarios import get_refresh_access_token_use_case
+from src.config.reanudacion_del_refresco import VENTANA_CONFIGURADA, ventana_de_la_reanudacion
 
 
-def test_by_default_five_minutes(monkeypatch):
+def test_by_default_thirty_minutes(monkeypatch):
     monkeypatch.delenv("REFRESH_RESUME_WINDOW_SECONDS", raising=False)
 
-    assert ventana_de_la_reanudacion() == timedelta(minutes=5)
+    assert ventana_de_la_reanudacion() == timedelta(minutes=30)
 
 
-def test_from_the_environment(monkeypatch):
-    monkeypatch.setenv("REFRESH_RESUME_WINDOW_SECONDS", "900")
+@pytest.mark.parametrize("segundos", ["300", "3600"])
+def test_from_the_environment_up_to_one_hour(monkeypatch, segundos):
+    monkeypatch.setenv("REFRESH_RESUME_WINDOW_SECONDS", segundos)
 
-    assert ventana_de_la_reanudacion() == timedelta(minutes=15)
+    assert ventana_de_la_reanudacion() == timedelta(seconds=int(segundos))
 
 
-@pytest.mark.parametrize("valor", ["0", "-5", "abc", ""])
-def test_a_wrong_value_falls_back_to_five_minutes(monkeypatch, valor):
+@pytest.mark.parametrize("valor", ["0", "-5", "abc", "", "3601", "31536000", "100000000000000"])
+def test_a_wrong_or_too_large_value_falls_back_to_thirty_minutes(monkeypatch, valor):
     monkeypatch.setenv("REFRESH_RESUME_WINDOW_SECONDS", valor)
 
-    assert ventana_de_la_reanudacion() == timedelta(minutes=5)
+    assert ventana_de_la_reanudacion() == timedelta(minutes=30)
 
 
-def test_the_use_case_gets_it(monkeypatch):
-    monkeypatch.setenv("REFRESH_RESUME_WINDOW_SECONDS", "120")
-    import inspect
+def test_the_use_case_gets_the_configured_window():
+    """El proveedor monta el caso de uso con la ventana leída al arrancar."""
+    caso = get_refresh_access_token_use_case(
+        uow=MagicMock(),
+        token_service=MagicMock(),
+        security_audit=MagicMock(),
+        aviso_de_cierre=MagicMock(),
+    )
 
-    from src.config.dependencies import usuarios
-
-    fuente = inspect.getsource(usuarios)
-    llamada = fuente[fuente.index("return RefreshAccessTokenUseCase(") :]
-    llamada = llamada[: llamada.index("\n    )")]
-
-    assert "ventana_de_la_reanudacion=ventana_de_la_reanudacion()" in llamada
+    assert caso._ventana_de_la_reanudacion == VENTANA_CONFIGURADA

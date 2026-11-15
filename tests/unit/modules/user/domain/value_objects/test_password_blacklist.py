@@ -47,6 +47,7 @@ def test_c5_the_leaked_list_holds_only_passwords_our_rules_would_let_through():
     """Las 100.000 de NCSC filtradas por nuestras reglas: las que de verdad se probarían."""
     assert len(FILTRADAS) > 100
     assert all(12 <= len(p) <= 64 and p == p.casefold() for p in FILTRADAS)
+    assert not any(p.startswith("$hex[") or "&#" in p or ".sql" in p for p in FILTRADAS)
 
 
 @pytest.mark.parametrize("filtrada", ["g00dPa$$w0rD", "G00DPA$$W0RD", "Doomsayer.2.7mords.V"])

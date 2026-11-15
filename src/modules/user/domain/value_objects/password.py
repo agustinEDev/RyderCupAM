@@ -84,10 +84,11 @@ class Password:
     """
 
     MIN_LENGTH = 12  # OWASP recomienda 12+ desde 2024 (antes era 8)
-    # Solo para las nuevas (registro, cambio, restablecimiento): bcrypt usa los 72 primeros
-    # bytes, y 64 caracteres dejan margen. Quien ya tenía una más larga sigue entrando: el
-    # login no pasa por aquí (B-14 de la auditoría de la fase 6, Agustín, 15 nov 2026)
+    # Solo para las nuevas (registro, cambio, restablecimiento): 64 caracteres y, como bcrypt
+    # usa los 72 primeros BYTES, también 72 bytes. Quien ya tenía una más larga sigue
+    # entrando: el login no pasa por aquí (B-14 de la auditoría de la fase 6, 15 nov 2026)
     MAX_LENGTH = 64
+    MAX_BYTES = 72
     hashed_value: str
     # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
     # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. Fuera del
@@ -179,8 +180,12 @@ class Password:
         if len(password) < Password.MIN_LENGTH:
             return _rota(CodigoDeContrasena.TOO_SHORT, f" (actualmente: {len(password)})")
 
-        # 4. Validar longitud máxima (límite técnico)
-        if len(password) > Password.MAX_LENGTH:
+        # 4. Validar longitud máxima: 64 caracteres y 72 bytes, los que usa bcrypt (con eñes
+        #    o tildes, que ocupan 2, 64 caracteres pueden pasar de 72 bytes; B-14)
+        if (
+            len(password) > Password.MAX_LENGTH
+            or len(password.encode("utf-8")) > Password.MAX_BYTES
+        ):
             return _rota(CodigoDeContrasena.TOO_LONG, f" (actualmente: {len(password)})")
 
         # 5. Validar complejidad: al menos 1 mayúscula
@@ -263,7 +268,10 @@ MENSAJES_DE_LA_CONTRASENA: Mapping[str, str] = MappingProxyType(
         CodigoDeContrasena.EMPTY: "La contraseña no puede estar vacía",
         CodigoDeContrasena.EDGE_SPACES: "La contraseña no puede tener espacios al inicio o final",
         CodigoDeContrasena.TOO_SHORT: f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres",
-        CodigoDeContrasena.TOO_LONG: f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres",
+        CodigoDeContrasena.TOO_LONG: (
+            f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres"
+            " (algo menos si lleva eñes o tildes)"
+        ),
         CodigoDeContrasena.NO_UPPERCASE: "La contraseña debe contener al menos una letra mayúscula (A-Z)",
         CodigoDeContrasena.NO_LOWERCASE: "La contraseña debe contener al menos una letra minúscula (a-z)",
         CodigoDeContrasena.NO_DIGIT: "La contraseña debe contener al menos un número (0-9)",

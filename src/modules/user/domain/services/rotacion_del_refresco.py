@@ -11,12 +11,13 @@ from enum import Enum
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 
-# Una respuesta perdida se reintenta enseguida: pasados 5 minutos desde la sustitución,
+# Una respuesta perdida se reintenta enseguida: pasados 30 minutos desde la sustitución,
 # la cookie vieja con el sustituto sin usar ya no se reanuda. Tampoco es un robo: se
 # rechaza sin alarma y el usuario vuelve a entrar (Agustín, 10 nov 2026). Era 1 hora;
-# 5 minutos desde B-19 de la auditoría de la fase 6 (Agustín, 15 nov 2026): en esa
-# ventana también podría reanudar quien hubiera robado la cookie vieja
-VENTANA_DE_LA_REANUDACION = timedelta(minutes=5)
+# 30 minutos desde B-19 de la auditoría de la fase 6 (Agustín, 15 nov 2026): en esa
+# ventana también podría reanudar quien hubiera robado la cookie vieja, pero menos no
+# cubre a quien pierde la cobertura un par de hoyos justo al renovar la sesión
+VENTANA_DE_LA_REANUDACION = timedelta(minutes=30)
 
 
 class PasoDelRefresco(Enum):

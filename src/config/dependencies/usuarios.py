@@ -27,7 +27,7 @@ from src.config.dependencies.comun import (
     get_uow,
 )
 from src.config.freno_del_login import freno_del_login
-from src.config.reanudacion_del_refresco import ventana_de_la_reanudacion
+from src.config.reanudacion_del_refresco import VENTANA_CONFIGURADA
 from src.config.settings import settings
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -424,7 +424,7 @@ def get_refresh_access_token_use_case(
         token_service,
         security_audit=security_audit,
         aviso_de_cierre=aviso_de_cierre,
-        ventana_de_la_reanudacion=ventana_de_la_reanudacion(),
+        ventana_de_la_reanudacion=VENTANA_CONFIGURADA,
     )
 
 

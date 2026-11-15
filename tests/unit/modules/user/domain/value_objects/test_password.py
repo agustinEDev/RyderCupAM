@@ -267,8 +267,8 @@ class TestPasswordLongerThanBcryptLimit:
     """
     bcrypt solo usa los primeros 72 BYTES de la contraseña. Hasta bcrypt 4 los
     recortaba en silencio; bcrypt 5 lanza ValueError si llegan más. La política
-    admite hasta 128 CARACTERES, y una eñe ocupa dos bytes: una contraseña válida
-    puede superar los 72 bytes con bastante menos de 128 caracteres.
+    admitía hasta 128 CARACTERES, y una eñe ocupa dos bytes: una contraseña válida
+    podía superar los 72 bytes con bastante menos de 128 caracteres.
 
     B-14 de la auditoría de la fase 6 (Agustín, 15 nov 2026): las contraseñas NUEVAS,
     de 12 a 64 caracteres; quien ya tenía una más larga sigue entrando con ella.
@@ -300,16 +300,27 @@ class TestPasswordLongerThanBcryptLimit:
         password = Password.from_plain_text(justa)
         assert password.verify(justa) is True
 
-    def test_create_and_verify_multibyte_password_over_72_bytes(self):
+    def test_c1_a_new_password_over_72_bytes_is_rejected_even_under_64_characters(self):
         """
         Given: 44 caracteres con eñes, que son 88 bytes
-        When: se crea el hash y se verifica
-        Then: funciona
+        When: se crea como contraseña nueva
+        Then: se rechaza: bcrypt ignoraría lo que pase de 72 bytes (B-14)
         """
         assert len(self.CON_ENES) < Password.MAX_LENGTH
         assert len(self.CON_ENES.encode("utf-8")) > 72
-        password = Password.from_plain_text(self.CON_ENES)
-        assert password.verify(self.CON_ENES) is True
+        with pytest.raises(InvalidPasswordError, match="eñes o tildes"):
+            Password.from_plain_text(self.CON_ENES)
+
+    def test_c1_seventy_three_bytes_is_one_too_many(self):
+        """Given 73 bytes en 39 caracteres When se crea Then se rechaza (72 es el tope)."""
+        uno_de_mas = "Aa1!" + "ñ" * 34 + "x"
+        assert len(uno_de_mas.encode("utf-8")) == 73
+        with pytest.raises(InvalidPasswordError):
+            Password.from_plain_text(uno_de_mas)
+
+    def test_c3_an_existing_multibyte_password_over_72_bytes_still_logs_in(self):
+        """Given el hash de bcrypt 4 de esa contraseña When entra Then se acepta."""
+        assert self._hash_de_bcrypt_4(self.CON_ENES).verify(self.CON_ENES) is True
 
     def test_c3_existing_user_with_long_password_can_still_log_in(self):
         """
