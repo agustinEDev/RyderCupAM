@@ -577,8 +577,8 @@ Enrolment closes at **12:00 the day before `start_date`**, in the time zone of t
 - From that moment nobody enters, even while the status is still `ACTIVE`: joining a public competition, inviting (by user or by email), accepting an invitation, approving a request and the organiser's direct enrolment answer **400** with `error_code: ENROLLMENT_DEADLINE_PASSED` («La inscripción está cerrada.»). Declining and rejecting still work.
 - A job runs every hour and closes (`ACTIVE → CLOSED`) the competitions past their deadline with the same use case as closing by hand. The organiser gets an `ENROLLMENTS_CLOSED` notice in Activity. A stroke play with approved players lacking a tee window or a handicap stays `ACTIVE` and the organiser gets **one** `ENROLLMENT_CLOSE_BLOCKED` notice (`reason`, `player_count`); the job retries every hour.
 - A competition opened or reopened **after** its deadline stays open until the organiser closes it by hand. A scheduled opening counts from its scheduled time, even if it is opened later on read. Moving `start_date` later gives it a new deadline.
-- When it finally closes (by the job or by hand), the `ENROLLMENT_CLOSE_BLOCKED` notice is withdrawn.
-- Closed **by the deadline**, `PUT /competitions/{id}` accepts only `start_date` + `end_date`; if the new deadline is in the future the competition reopens (as `reopen-enrollments` does) and will close at the new deadline. Closed by hand, the dates stay locked: reopen first.
+- The `ENROLLMENT_CLOSE_BLOCKED` notice is withdrawn when the competition closes (by the job or by hand), is cancelled or deleted, or its dates move.
+- Closed **by the deadline**, `PUT /competitions/{id}` may only move `start_date` + `end_date` (other fields may be sent, but only with their current values). All sessions and tee windows move by the same number of days, with their times and players. If the new deadline is in the future the competition reopens (as `reopen-enrollments` does), the `ENROLLMENTS_CLOSED` notice is withdrawn, and it will close at the new deadline. Closed by hand, the dates stay locked: reopen first.
 
 ### Competition Response (Computed Fields)
 

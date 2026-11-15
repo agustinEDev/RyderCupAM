@@ -9,6 +9,8 @@ Los avisos del cierre por el plazo, al organizador (15 nov 2026).
          uno por competición: si vuelve a pasar, se renueva        |
          borrar la competición se los lleva                        |
     C4   al cerrarse por fin, el de «no se puede cerrar» se va     |
+    O2   reabierta al mover el torneo, el de «se han cerrado» se va |
+    F2   cancelada, el de «no se puede cerrar» se va                |
 """
 
 from datetime import date
@@ -151,6 +153,30 @@ class TestAlCerrarsePorFin:
         [queda] = await _de(social, organizador, T.ENROLLMENT_CLOSE_BLOCKED)
         assert queda.payload["competition_id"] == otro.competition_id
         assert len(await _de(social, organizador, T.ENROLLMENTS_CLOSED)) == 1
+
+
+class TestAlReabrirseSolaYAlCancelar:
+    async def test_reabierta_al_moverla_se_retira_el_de_cerradas(self):
+        """O2. Given «se han cerrado» / When se reabre al mover el torneo / Then se va."""
+        social, avisos, organizador = await _escenario()
+        torneo, otro = _torneo(), _torneo()
+        await avisos.enrollments_closed(organizador.id, torneo)
+        await avisos.enrollments_closed(organizador.id, otro)
+
+        await avisos.enrollments_closed_withdrawn(organizador.id, torneo.competition_id)
+
+        [queda] = await _de(social, organizador, T.ENROLLMENTS_CLOSED)
+        assert queda.payload["competition_id"] == otro.competition_id
+
+    async def test_cancelada_se_va_el_de_no_se_puede_cerrar(self):
+        """F2. Given «no se puede cerrar» / When se cancela la competición / Then se va."""
+        social, avisos, organizador = await _escenario()
+        torneo = _torneo()
+        await avisos.close_blocked(organizador.id, torneo, "NO_HANDICAP", 1)
+
+        await avisos.tournament_cancelled(torneo.competition_id)
+
+        assert await _de(social, organizador, T.ENROLLMENT_CLOSE_BLOCKED) == []
 
 
 class TestAlBorrarLaCompeticion:

@@ -24,7 +24,6 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CloseBlockedReason,
     CompetitionActivityPublisherInterface,
 )
-from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas_al_cerrar import (
     PlayersWithoutTeeWindowError,
 )
@@ -50,6 +49,10 @@ logger = logging.getLogger(__name__)
 # eso son las 22:00 UTC de dos días antes. Lo que empieza más tarde no ha podido
 # pasar su plazo en ninguna zona, y ni se lee
 DIAS_QUE_SE_MIRAN = 2
+# Y hacia atrás, un mes: lo que no se cerró a su hora es una exenta (R1, R2) o
+# un stroke play bloqueado (C4). Pasado un mes del torneo ya no hay nada que
+# cerrar, y así la vuelta no crece con el tiempo (F6, 16 nov 2026)
+DIAS_HACIA_ATRAS = 30
 
 
 @dataclass(frozen=True)
@@ -71,25 +74,34 @@ class CloseEnrollmentsPastDeadlineUseCase:
         cerrar: CloseEnrollmentsUseCase,
         plazo: PlazoDeInscripcion,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        fallos_conocidos: set[CompetitionId] | None = None,
     ):
         """
         Args:
             uow: Para leer las candidatas y apuntar el aviso de C4
             cerrar: El cierre de siempre, con el plazo (C3)
             plazo: La zona del campo y el reloj
-            actividad: Para el aviso de que no se pueden cerrar (C4)
+            actividad: Para el aviso de que no se pueden cerrar (C4). Sin él no
+                se avisa, y por eso tampoco se apunta
+            fallos_conocidos: Las que ya fallaron en otra vuelta de este
+                proceso: su traza ya está en el registro (F4)
         """
         self._uow = uow
         self._cerrar = cerrar
         self._plazo = plazo
-        self._actividad = AvisosDeActividad(actividad)
+        self._publicador = actividad
+        self._fallos = fallos_conocidos if fallos_conocidos is not None else set()
 
     async def execute(self) -> ClosedByDeadline:
-        hasta = en_utc(self._plazo.ahora()).date() + timedelta(days=DIAS_QUE_SE_MIRAN)
+        hoy = en_utc(self._plazo.ahora()).date()
+        desde = hoy - timedelta(days=DIAS_HACIA_ATRAS)
+        hasta = hoy + timedelta(days=DIAS_QUE_SE_MIRAN)
         async with self._uow:
             # Los ids y no las entidades: el rollback de una que falla caduca
             # todo lo cargado en la sesión
-            candidatas = [c.id for c in await self._uow.competitions.find_active_starting_by(hasta)]
+            candidatas = [
+                c.id for c in await self._uow.competitions.find_active_starting_by(desde, hasta)
+            ]
 
         closed = blocked = notified = failed = 0
         for competition_id in candidatas:
@@ -108,29 +120,61 @@ class CloseEnrollmentsPastDeadlineUseCase:
                 )
                 continue
             except Exception:
-                logger.exception("Could not close the enrollments of %s", competition_id)
+                self._fallo(competition_id)
                 failed += 1
                 continue
+            self._fallos.discard(competition_id)
             if cerrada is not None:
                 closed += 1
         return ClosedByDeadline(closed, blocked, notified, failed)
+
+    def _fallo(self, competition_id: CompetitionId) -> None:
+        """
+        La traza, la primera vez que falla en este proceso; después, sin ruido:
+        se vuelve a intentar cada hora y el WARNING de cada hora no dice nada
+        nuevo (F4, 16 nov 2026). Tras un reinicio se ve otra vez, una.
+        """
+        if competition_id in self._fallos:
+            logger.debug("Still cannot close the enrollments of %s", competition_id, exc_info=True)
+            return
+        self._fallos.add(competition_id)
+        logger.warning(
+            "Could not close the enrollments of %s; will retry every hour",
+            competition_id,
+            exc_info=True,
+        )
 
     async def _avisar_bloqueada(
         self, competition_id: CompetitionId, motivo: CloseBlockedReason, jugadores: int
     ) -> int:
         """
-        Una vez por competición: se apunta con la fila bloqueada, y solo si sigue
-        abierta (C4). Devuelve 1 si avisó.
+        Una vez por competición, y solo apuntado si se pudo avisar: si publicar
+        falla, la vuelta siguiente lo intenta otra vez (C4; F3, 16 nov 2026).
+        Devuelve 1 si avisó.
         """
+        if self._publicador is None:
+            return 0
         async with self._uow:
-            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+            competition = await self._uow.competitions.find_by_id(competition_id)
             if (
                 competition is None
                 or competition.status is not CompetitionStatus.ACTIVE
                 or competition.close_blocked_notified
             ):
                 return 0
-            competition.mark_close_blocked_notified()
-            await self._uow.competitions.update(competition)
-        await self._actividad.close_blocked(competition, motivo, jugadores)
+        try:
+            await self._publicador.close_blocked(competition, motivo, jugadores)
+        except Exception:
+            logger.warning(
+                "Could not tell the organizer that %s cannot be closed",
+                competition_id,
+                exc_info=True,
+            )
+            return 0
+        async with self._uow:
+            bloqueada = await self._uow.competitions.find_by_id_for_update(competition_id)
+            if bloqueada is None:
+                return 1
+            bloqueada.mark_close_blocked_notified()
+            await self._uow.competitions.update(bloqueada)
         return 1

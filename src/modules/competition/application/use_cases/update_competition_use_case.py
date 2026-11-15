@@ -4,7 +4,9 @@ Caso de Uso: Actualizar Competition.
 Permite actualizar una competición existente (solo en estado DRAFT).
 """
 
-from datetime import date
+from collections.abc import Callable
+from datetime import date, timedelta
+from typing import Any
 from uuid import UUID
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -24,6 +26,7 @@ from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
 )
 from src.modules.competition.application.services.reapertura import Reapertura
+from src.modules.competition.application.services.salidas_de_la_ronda import salidas_vigentes
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -37,6 +40,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.visibility import Visibility
@@ -213,24 +217,88 @@ class UpdateCompetitionUseCase:
                 "No se puede cambiar el modo de juego: ya hay sesiones con partidos."
             )
 
-    def _es_mover_una_cerrada_por_el_plazo(
-        self, competition: Competition, request: UpdateCompetitionRequestDTO
-    ) -> bool:
+    @staticmethod
+    def _cambia_algo_mas(competition: Competition, request: UpdateCompetitionRequestDTO) -> bool:
         """
-        Cerrada por el plazo y llegando las dos fechas y nada más (R3, 15 nov 2026). Cerrada a mano, o con cualquier otro
-        campo, se sigue rechazando como siempre.
+        Si llega algo, además de las fechas, con un valor distinto del que tiene.
+
+        La app manda el formulario entero en cada edición (nombre, país, cupo,
+        equipos...): lo que llega igual no cuenta como cambio (F1, 16 nov 2026).
+        Un campo que no se sabe comparar cuenta como cambio.
         """
-        if competition.status is not CompetitionStatus.CLOSED:
-            return False
-        if not competition.enrollment_closed_by_deadline:
-            return False
-        fechas = {"start_date", "end_date"}
-        otros = {
-            campo
-            for campo in request.model_fields_set - fechas
-            if getattr(request, campo) is not None or campo == "enrollment_opens_days_before"
+        location = competition.location
+
+        def codigo(pais: object) -> str:
+            return str(getattr(pais, "value", pais))
+
+        adyacentes = [
+            codigo(c) for c in (location.adjacent_country_1, location.adjacent_country_2) if c
+        ]
+        ryder = competition.ryder_cup
+
+        def valor(v: object) -> object:
+            return getattr(v, "value", v)
+
+        iguales: dict[str, Callable[[Any], bool]] = {
+            "name": lambda v: " ".join(v.split()) == competition.name.value,
+            "main_country": lambda v: v == codigo(location.main_country),
+            "adjacent_country_1": lambda v: v == (adyacentes[0] if adyacentes else None),
+            "adjacent_country_2": lambda v: v == (adyacentes[1] if len(adyacentes) > 1 else None),
+            "countries": lambda v: sorted(v) == sorted(adyacentes),
+            "play_mode": lambda v: v == competition.play_mode.value,
+            "visibility": lambda v: valor(v) == valor(competition.visibility),
+            "max_players": lambda v: v == competition.max_players,
+            "max_playing_handicap": lambda v: v == competition.max_playing_handicap,
+            "enrollment_opens_days_before": lambda v: v == competition.enrollment_opens_days_before,
+            "team_1_name": lambda v: ryder is not None and v.strip() == ryder.team_1_name,
+            "team_2_name": lambda v: ryder is not None and v.strip() == ryder.team_2_name,
+            "setup_mode": lambda v: ryder is not None and valor(v) == valor(ryder.setup_mode),
+            "team_assignment": lambda v: ryder is not None and v == valor(ryder.team_assignment),
         }
-        return not otros and request.start_date is not None and request.end_date is not None
+        for campo in request.model_fields_set - {"start_date", "end_date"}:
+            nuevo = getattr(request, campo)
+            # `None` es «no lo toques», salvo en la apertura, donde es «quítala»
+            if nuevo is None and campo != "enrollment_opens_days_before":
+                continue
+            igual = iguales.get(campo)
+            if igual is None or not igual(nuevo):
+                return True
+        return False
+
+    @staticmethod
+    def _comprobar_que_caben_movidas(
+        rondas: list[Round], dias: int, request: UpdateCompetitionRequestDTO
+    ) -> None:
+        """
+        Las sesiones se mueven con el torneo (O1); si con el torneo nuevo alguna
+        queda fuera —es más corto—, no se mueve nada.
+
+        Raises:
+            DatesLeaveSessionsOutError: Con las que quedarían fuera
+            CompetitionNotEditableError: Si alguna ya se está jugando o se jugó
+        """
+        if any(r.status in (RoundStatus.IN_PROGRESS, RoundStatus.COMPLETED) for r in rondas):
+            raise CompetitionNotEditableError(
+                "No se pueden mover las fechas: alguna sesión ya se ha jugado."
+            )
+        inicio, fin = request.start_date, request.end_date
+        fuera = [
+            r
+            for r in rondas
+            if inicio is None
+            or fin is None
+            or not inicio <= r.round_date + timedelta(days=dias) <= fin
+        ]
+        if fuera:
+            ordenadas = sorted(
+                fuera, key=lambda r: (r.round_date, _ORDEN_DE_FRANJA[r.session_type])
+            )
+            raise DatesLeaveSessionsOutError(
+                [
+                    (r.id.value, r.round_date + timedelta(days=dias), r.session_type.value)
+                    for r in ordenadas
+                ]
+            )
 
     async def _mover_si_la_cerro_el_plazo(
         self,
@@ -240,39 +308,78 @@ class UpdateCompetitionUseCase:
         is_admin: bool,
     ) -> UpdateCompetitionResponseDTO | None:
         """
-        Cerrada por el plazo, mueve el torneo y, si el plazo nuevo está en el
-        futuro, la reabre por el camino de siempre: se cerrará en el plazo nuevo
-        (R3). None si no es el caso, y sigue el camino de siempre.
+        Cerrada por el plazo, mueve el torneo con todas sus sesiones y franjas los
+        mismos días (O1) y, si el plazo nuevo está en el futuro, la reabre por el
+        camino de siempre: se cerrará en el plazo nuevo (R3). Cerrada a mano no
+        se mueve (None: sigue el camino de siempre, que en CLOSED no edita).
         """
         plazo = self._plazo
         if plazo is None or request.start_date is None or request.end_date is None:
             return None
         async with self._uow:
             competition = await self._uow.competitions.find_by_id_for_update(competition_id)
-            if competition is None or not self._es_mover_una_cerrada_por_el_plazo(
-                competition, request
+            if (
+                competition is None
+                or competition.status is not CompetitionStatus.CLOSED
+                or not competition.enrollment_closed_by_deadline
             ):
                 return None
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
+            if self._cambia_algo_mas(competition, request):
+                raise CompetitionNotEditableError(
+                    "Con las inscripciones cerradas por el plazo solo se pueden mover las fechas."
+                )
+            dias = (request.start_date - competition.dates.start_date).days
             rondas = await self._uow.rounds.find_by_competition(competition_id)
-            self._comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request)
+            self._comprobar_que_caben_movidas(rondas, dias, request)
+            antes = {r.id: await salidas_vigentes(self._uow, r.id) for r in rondas}
+            # Una a una y en el orden que no deja dos sesiones el mismo día a la
+            # vez (la base de datos no lo admite): hacia delante, la última primero
+            for ronda in sorted(rondas, key=lambda r: r.round_date, reverse=dias > 0):
+                ronda.desplazar(dias)
+                await self._uow.rounds.update(ronda)
+                await self._uow.flush()
             competition.move_dates_closed_by_deadline(
                 DateRange(request.start_date, request.end_date)
             )
+            reabierta = await plazo.queda_plazo(competition)
             reapertura = Reapertura(self._uow, plazo.zonas, plazo.ahora, self._actividad)
-            borradas = None
-            if await plazo.queda_plazo(competition):
-                borradas = await reapertura.reabrir(competition)
+            if reabierta:
+                await reapertura.reabrir(competition)
             await self._uow.competitions.update(competition)
+            await self._uow.flush()
+            despues = {r.id: await salidas_vigentes(self._uow, r.id) for r in rondas}
 
-        if borradas is not None:
-            await reapertura.avisar(competition, borradas)
+        # Ya guardado: las salidas cambian de día (o se van con la reapertura), el
+        # «no se puede cerrar» ya no vale, y reabierta, tampoco el «se han cerrado»
+        for round_id, salidas in antes.items():
+            await self._actividad.salidas_cambiadas(
+                competition, round_id, salidas, despues[round_id]
+            )
+        await self._actividad.close_block_withdrawn(competition)
+        if reabierta:
+            await self._actividad.enrollments_closed_withdrawn(competition)
+            # Como al reabrir a mano: sus avisos de hándicaps con la RFEG (#864)
+            await reapertura.avisar_handicaps(competition)
         return UpdateCompetitionResponseDTO(
             id=competition.id.value,
             name=str(competition.name),
             updated_at=competition.updated_at,
         )
+
+    async def _avisar_tras_editar(
+        self, competition: Competition, era_publica: bool, inicio_de_antes: date
+    ) -> None:
+        """
+        Ya guardada: si deja de ser publica, sus amigos dejan de ver quien se
+        apunto; al hacerse publica no se publica nada hacia atras (BE-2). Y con
+        otra fecha hay otro plazo: el «no se puede cerrar» ya no vale (F2).
+        """
+        if era_publica and competition.visibility != Visibility.PUBLIC:
+            await self._actividad.made_private(competition.id)
+        if competition.dates.start_date != inicio_de_antes:
+            await self._actividad.close_block_withdrawn(competition)
 
     async def execute(
         self,
@@ -401,6 +508,7 @@ class UpdateCompetitionUseCase:
                 competition.schedule_enrollment_opening(request.enrollment_opens_days_before)
 
             era_publica = competition.visibility == Visibility.PUBLIC
+            inicio_de_antes = competition.dates.start_date
             competition.update_info(
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
@@ -421,8 +529,7 @@ class UpdateCompetitionUseCase:
 
         # 6b. Ya guardada: si deja de ser publica, sus amigos dejan de ver quien
         #     se apunto. Al hacerse publica no se publica nada hacia atras (BE-2)
-        if era_publica and competition.visibility != Visibility.PUBLIC:
-            await self._actividad.made_private(competition.id)
+        await self._avisar_tras_editar(competition, era_publica, inicio_de_antes)
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(

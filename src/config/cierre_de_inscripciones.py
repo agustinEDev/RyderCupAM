@@ -42,6 +42,7 @@ from src.modules.competition.application.use_cases.close_enrollments_past_deadli
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
@@ -80,6 +81,8 @@ class CierreDeInscripciones:
         self._fabrica = fabrica
         self._esperar = esperar
         self._reloj = reloj
+        # Las que ya fallaron con otro error en este proceso: su traza, una vez (F4)
+        self._fallos: set[CompetitionId] = set()
 
     async def vigilar(self) -> None:
         """Hasta que la app se apague (se cancela la tarea). Una vuelta que falla no para las siguientes."""
@@ -131,5 +134,5 @@ class CierreDeInscripciones:
                 plazo=plazo,
             )
             return await CloseEnrollmentsPastDeadlineUseCase(
-                uow, cerrar, plazo, actividad=actividad
+                uow, cerrar, plazo, actividad=actividad, fallos_conocidos=self._fallos
             ).execute()

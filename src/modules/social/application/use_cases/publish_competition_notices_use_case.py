@@ -302,8 +302,10 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
+            # Y el «no se puede cerrar» del organizador ya no pide nada (F2, 16 nov)
             await self._social_uow.activity_events.delete_for_competition(
-                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA]
+                competition_id,
+                [_SALIDA, _PLAZA_DE_LA_ESPERA, ActivityEventType.ENROLLMENT_CLOSE_BLOCKED],
             )
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
                 competition_id
@@ -446,6 +448,13 @@ class PublishCompetitionNoticesUseCase:
                 )
             ]
         )
+
+    async def enrollments_closed_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Se reabrio al mover el torneo: el «se han cerrado» ya no es cierto; al
+        volver a cerrarse llega otro (O2, Agustín, 16 nov 2026).
+        """
+        await self._retirar(competition_id, [ActivityEventType.ENROLLMENTS_CLOSED], organizer_id)
 
     async def close_block_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
         """

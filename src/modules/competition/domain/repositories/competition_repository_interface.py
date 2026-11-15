@@ -142,11 +142,13 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_active_starting_by(self, last_day: date) -> list[Competition]:
+    async def find_active_starting_by(self, first_day: date, last_day: date) -> list[Competition]:
         """
-        Las abiertas (ACTIVE) que empiezan como mucho ese dia: las unicas cuyo
-        plazo de inscripcion puede haber pasado (15 nov 2026). Sin limite: son
-        las de los proximos dias, no todas.
+        Las abiertas (ACTIVE) que empiezan entre esos dos dias: las unicas cuyo
+        plazo de inscripcion puede haber pasado y que todavia importa cerrar
+        (15 nov 2026). Sin las que se abrieron el dia del torneo o despues: su
+        plazo (como muy tarde, las 00:00 UTC de ese dia) ya habia pasado al
+        abrirlas, y estan exentas en cualquier zona (16 nov 2026, F6).
         """
         pass
 

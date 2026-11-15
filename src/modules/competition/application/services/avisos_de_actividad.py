@@ -103,6 +103,12 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
     ) -> None:
         await self._avisar("close_blocked", lambda p: p.close_blocked(competition, reason, players))
 
+    async def enrollments_closed_withdrawn(self, competition: Competition) -> None:
+        await self._avisar(
+            "enrollments_closed_withdrawn",
+            lambda p: p.enrollments_closed_withdrawn(competition),
+        )
+
     async def close_block_withdrawn(self, competition: Competition) -> None:
         await self._avisar("close_block_withdrawn", lambda p: p.close_block_withdrawn(competition))
 

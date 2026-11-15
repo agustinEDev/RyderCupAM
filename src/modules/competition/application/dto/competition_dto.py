@@ -267,7 +267,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -436,7 +436,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -533,7 +533,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -829,7 +829,7 @@ class CompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."

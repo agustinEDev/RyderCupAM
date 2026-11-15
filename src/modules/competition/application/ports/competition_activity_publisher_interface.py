@@ -118,6 +118,10 @@ class CompetitionActivityPublisherInterface(ABC):
         """
 
     @abstractmethod
+    async def enrollments_closed_withdrawn(self, competition: Competition) -> None:
+        """Se reabrio al mover el torneo: el «se han cerrado» se retira (O2)."""
+
+    @abstractmethod
     async def close_block_withdrawn(self, competition: Competition) -> None:
         """Se cerro por fin: el aviso de que no se podia cerrar se retira (C4)."""
 

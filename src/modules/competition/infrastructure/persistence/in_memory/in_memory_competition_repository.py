@@ -1,7 +1,7 @@
 """In-Memory Competition Repository para testing."""
 
 from collections.abc import Iterable, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
@@ -80,11 +80,16 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         con_ese = [comp for comp in self._competitions.values() if comp.status == status]
         return _mas_recientes_primero(con_ese)[offset : offset + limit]
 
-    async def find_active_starting_by(self, last_day: date) -> list[Competition]:
+    async def find_active_starting_by(self, first_day: date, last_day: date) -> list[Competition]:
         return [
             c
             for c in self._competitions.values()
-            if c.status == CompetitionStatus.ACTIVE and c.dates.start_date <= last_day
+            if c.status == CompetitionStatus.ACTIVE
+            and first_day <= c.dates.start_date <= last_day
+            and (
+                c.enrollment_opened_at is None
+                or c.enrollment_opened_at < datetime.combine(c.dates.start_date, time(0, 0))
+            )
         ]
 
     async def exists_with_name(

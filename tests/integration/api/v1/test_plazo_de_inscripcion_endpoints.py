@@ -16,6 +16,8 @@ El plazo de inscripción por la API y contra Postgres (15 nov 2026).
 | R3   | cerrada a mano y movida                                    | 400: hay que reabrir antes                  |
 | C2   | el organizador inscribe a mano pasado el plazo             | 400 ENROLLMENT_DEADLINE_PASSED              |
 | C4   | se cierra por fin tras avisar                              | el aviso de bloqueo se retira               |
+| O1   | cerrada por el plazo, con una sesión, movida con el        | la sesión se mueve los mismos días, se      |
+| F1   | formulario entero de la app                                | reabre y se retira «se han cerrado» (O2)    |
 
 «Pasado el plazo» se monta en la base de datos: el torneo, hoy (el plazo fue ayer a
 las 12:00), y abierta hace diez días.
@@ -74,14 +76,14 @@ async def _competicion(client: AsyncClient, stroke_play: bool = False) -> tuple[
     return organizador, await create_competition(client, organizador["cookies"], datos)
 
 
-async def _pasado_el_plazo(competicion: dict) -> None:
+async def _pasado_el_plazo(competicion: dict, dias: int = 1) -> None:
     """El torneo, hoy: el plazo fue ayer a las 12:00. Y abierta hace diez días."""
     hoy = date.today()
     await sql_en_la_bd_de_test(
         "UPDATE competitions SET start_date = :hoy, end_date = :fin, "
         "enrollment_opened_at = :abierta WHERE id = :id",
         hoy=hoy,
-        fin=hoy + timedelta(days=1),
+        fin=hoy + timedelta(days=dias),
         abierta=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         id=competicion["id"],
     )
@@ -339,3 +341,45 @@ async def test_c4_al_cerrarse_por_fin_se_retira_el_aviso_de_bloqueo(client: Asyn
     assert await estado_en_bd(competicion["id"]) == "CLOSED"
     assert await _avisos(client, organizador, "ENROLLMENT_CLOSE_BLOCKED") == []
     assert len(await _avisos(client, organizador, "ENROLLMENTS_CLOSED")) == 1
+
+
+async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: AsyncClient):
+    organizador, competicion = await _competicion(client)
+    sesion = await add_one_session(client, organizador["cookies"], competicion)
+    # El torneo, de hoy a dentro de 30 días: la sesión (dentro de 30) cae dentro
+    await _pasado_el_plazo(competicion, dias=30)
+    await _vuelta()
+    assert await estado_en_bd(competicion["id"]) == "CLOSED"
+    set_auth_cookies(client, organizador["cookies"])
+    ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
+    inicio = date.today() + timedelta(days=10)
+
+    movida = await client.put(
+        f"/api/v1/competitions/{competicion['id']}",
+        json={
+            "name": ficha["name"],
+            "start_date": inicio.isoformat(),
+            "end_date": (inicio + timedelta(days=30)).isoformat(),
+            "main_country": "ES",
+            "countries": [],
+            "play_mode": "HANDICAP",
+            "visibility": "PUBLIC",
+            "number_of_players": ficha["max_players"],
+            "max_playing_handicap": None,
+        },
+    )
+
+    assert movida.status_code == 200, movida.text
+    assert await estado_en_bd(competicion["id"]) == "ACTIVE"
+    motor = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with motor.connect() as conn:
+            fecha = (
+                await conn.execute(
+                    text("SELECT round_date FROM rounds WHERE id = :id"), {"id": sesion["id"]}
+                )
+            ).scalar()
+    finally:
+        await motor.dispose()
+    assert fecha == date.fromisoformat(sesion["round_date"]) + timedelta(days=10)
+    assert await _avisos(client, organizador, "ENROLLMENTS_CLOSED") == []

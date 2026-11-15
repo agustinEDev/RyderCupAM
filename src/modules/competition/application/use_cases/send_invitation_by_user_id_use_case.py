@@ -22,6 +22,7 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     exigir_sitio,
 )
+from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
 from src.modules.competition.application.services.equipos_formados import (
     exigir_sin_equipos_formados,
 )
@@ -125,7 +126,12 @@ class SendInvitationByUserIdUseCase:
                     "Only the competition creator can send invitations."
                 )
 
-            # 3. Validar estado de competicion
+            # 3. Una programada a la que ya le tocaba se abre a su hora, no ahora:
+            #    abrirla tarde no la exime del plazo (F7, 16 nov 2026)
+            await EnrollmentOpener.abrir_las_que_toquen(
+                [competition], self._uow, self._plazo.zonas if self._plazo else None
+            )
+            # Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
             # Pasado el plazo, aunque siga abierta, no (C2). Un borrador sí: esta
             # invitación lo abre, y abierto tarde se entra (R2)

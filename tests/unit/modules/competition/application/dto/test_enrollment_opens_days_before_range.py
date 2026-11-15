@@ -51,3 +51,15 @@ class TestElRangoEnLaEntrada:
         dto = UpdateCompetitionRequestDTO(enrollment_opens_days_before=None)
 
         assert "enrollment_opens_days_before" in dto.model_fields_set
+
+
+class TestLoQueDiceLaDocumentacion:
+    """F8 (16 nov 2026): el contrato publicado dice el rango de verdad."""
+
+    @pytest.mark.parametrize("dto", [CreateCompetitionRequestDTO, UpdateCompetitionRequestDTO])
+    def test_dice_de_2_a_14(self, dto):
+        descripcion = dto.model_json_schema()["properties"]["enrollment_opens_days_before"][
+            "description"
+        ]
+        assert "2 a 14" in descripcion
+        assert "1 a 14" not in descripcion

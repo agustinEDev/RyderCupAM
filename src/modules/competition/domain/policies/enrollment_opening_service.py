@@ -36,7 +36,7 @@ class EnrollmentOpeningService:
 
         Args:
             start_date: El dia en que empieza a jugarse el torneo.
-            days_before: Cuantos dias antes abren las inscripciones, 1 a 14.
+            days_before: Cuantos dias antes abren las inscripciones, 2 a 14.
                 `None` significa que no hay apertura programada.
             timezone: La zona IANA del primer campo que se juega.
 

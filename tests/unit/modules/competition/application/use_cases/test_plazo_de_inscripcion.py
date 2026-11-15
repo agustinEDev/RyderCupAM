@@ -13,7 +13,7 @@ Pasado el plazo de inscripción nadie entra (15 nov 2026).
 | C2   | antes del plazo                           | todo como siempre              | -                     |
 | C2   | sin plazo en el caso de uso               | como siempre (fuera de la API) | -                     |
 | R1   | reabrir pasado el plazo                   | se vuelve a entrar             |                       |
-| R2   | invitar a un borrador pasado el plazo     | lo abre, y entra               |                       |
+| R2   | invitar a un borrador pasado el plazo     | se abre a su hora (F7): no     |                       |
 | R2   | crear una competición con el plazo pasado | se entra                       |                       |
 | C1   | sin campo, la hora de Madrid              | cierra a las 12:00 de Madrid   |                       |
 """
@@ -294,33 +294,31 @@ class TestInvitar:
 
         assert respuesta.status == InvitationStatus.PENDING.value
 
-    async def test_a_un_borrador_pasado_el_plazo_lo_abre_tarde_y_se_puede(self):
+    async def test_a_un_borrador_pasado_el_plazo_lo_abre_a_su_hora_y_no(self):
         """
-        R2. Given un borrador (apertura programada) con el plazo ya pasado
+        R2/F7 (16 nov). Given un borrador programado cuya apertura (y su plazo) ya pasó
         When el organizador invita
-        Then lo abre —tarde— y la invitación sale; y luego se puede aceptar
+        Then se abre a su hora programada —antes del plazo—, no exenta: no se invita
         """
         uow, user_uow = CompetitionInMemoryUoW(), UserInMemoryUoW()
         organizador = await _usuario(user_uow)
         invitado = await _usuario(user_uow)
         competition = await _competicion(uow, organizador.id, abierta=None)
         plazo = PlazoDeInscripcion(_Zonas(), reloj=lambda: datetime.now(UTC))
-        # El torneo de pasado mañana: para que su plazo ya haya pasado de verdad
+        # El torneo, hoy: su plazo ya ha pasado de verdad
         competition._dates = DateRange(HOY, HOY + timedelta(days=1))
 
-        respuesta = await SendInvitationByUserIdUseCase(uow, user_uow, plazo=plazo).execute(
-            SendInvitationByUserIdRequestDTO(
-                competition_id=competition.id.value,
-                inviter_id=organizador.id.value,
-                invitee_user_id=invitado.id.value,
+        with pytest.raises(EnrollmentDeadlinePassedError):
+            await SendInvitationByUserIdUseCase(uow, user_uow, plazo=plazo).execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=competition.id.value,
+                    inviter_id=organizador.id.value,
+                    invitee_user_id=invitado.id.value,
+                )
             )
-        )
 
-        assert respuesta.status == InvitationStatus.PENDING.value
-        async with uow:
-            abierta = await uow.competitions.find_by_id(competition.id)
-        assert abierta.status is CompetitionStatus.ACTIVE
-        assert await plazo.vencido(abierta) is False
+        assert competition.status is CompetitionStatus.ACTIVE
+        assert await plazo.vencido(competition) is True
 
     async def test_por_correo_pasado_el_plazo_no(self):
         """C2. Given ACTIVE abierta antes / When se invita por correo pasado el plazo / Then no."""

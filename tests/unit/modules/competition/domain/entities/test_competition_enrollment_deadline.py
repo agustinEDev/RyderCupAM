@@ -113,6 +113,8 @@ class TestNadieEntraPasadoElPlazo:
         """C2. Given una ACTIVE sin `enrollment_opened_at` (de antes) / Then pasado el plazo, no."""
         competition = _abierta()
         competition._enrollment_opened_at = None
+        # Sin ella cuenta su última modificación (F5, 16 nov): aquí, antes del plazo
+        competition._updated_at = ANTES.replace(tzinfo=None)
 
         assert competition.entries_closed_by_deadline(MADRID, DESPUES) is True
 

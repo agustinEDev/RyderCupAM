@@ -35,7 +35,7 @@ from ..events.competition_reverted_to_in_progress_event import (
 )
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
-from ..policies.enrollment_deadline import closes_at, en_utc
+from ..policies.enrollment_deadline import closes_at, en_utc, has_passed
 from ..policies.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
@@ -678,18 +678,21 @@ class Competition:
 
         En borrador no: quien la abra ya la abre pasado el plazo, y entonces se
         entra (R2). Abierta, se entra solo si se abrio —o reabrio— a partir del
-        plazo (R1, R2). Una sin fecha de apertura es de antes de la regla, y
-        cuenta como abierta a tiempo.
+        plazo (R1, R2), con la misma frontera que el cierre: las 12:00 en punto.
+
+        Sin fecha de apertura —la abrio la release anterior entre la migracion y
+        el despliegue (F5, 16 nov 2026)— cuenta su ultima modificacion, que es
+        la que dejo al abrirla o reabrirla.
         """
         if self._status == CompetitionStatus.DRAFT:
             return False
-        plazo = self.enrollment_deadline(timezone)
-        if en_utc(now) < plazo:
+        inicio = self._dates.start_date
+        if not has_passed(inicio, timezone, now):
             return False
         if self._status != CompetitionStatus.ACTIVE:
             return True
-        abierta = self._enrollment_opened_at
-        return abierta is None or en_utc(abierta) < plazo
+        abierta = self._enrollment_opened_at or self._updated_at
+        return not has_passed(inicio, timezone, abierta)
 
     def due_to_close(self, timezone: str | None, now: datetime) -> bool:
         """Si le toca cerrarse sola (C3): abierta y con el plazo pasado (salvo R1/R2)."""

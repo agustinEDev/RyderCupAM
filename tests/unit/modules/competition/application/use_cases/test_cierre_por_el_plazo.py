@@ -467,12 +467,12 @@ class TestSiFallaElAviso:
         assert (await escenario.estado(competition)).status is CompetitionStatus.CLOSED
         assert resumen.closed == 1
 
-    async def test_bloqueada_queda_apuntada_y_no_se_repite(self):
-        """C4. Given el feed caído / When no se puede cerrar / Then apuntada: una sola vez."""
+    async def test_bloqueada_no_queda_apuntada_si_no_se_pudo_avisar(self):
+        """C4/F3 (16 nov). Given el feed caído / When no se puede cerrar / Then sin apuntar."""
         escenario = _Escenario()
         escenario.avisos = _Roto()
         competition = await escenario.medal(sin_handicap=1)
 
         await escenario.cierre().execute()
 
-        assert (await escenario.estado(competition)).close_blocked_notified is True
+        assert (await escenario.estado(competition)).close_blocked_notified is False
