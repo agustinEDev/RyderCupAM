@@ -132,7 +132,8 @@ class ListMyHandicapsNotUpdatedUseCase:
                     continue
                 jugador = jugador or await self._users.find_by_id(user_id)
                 if jugador is None:
-                    return []
+                    # Sin su usuario no se sabe nada más de él: lo ya visto se queda
+                    continue
                 no_encontrado = await SinActualizarDeLaCompeticion.no_encontrado(
                     self._uow, jugador, inscripciones[competicion.id], competicion, actualizacion
                 )

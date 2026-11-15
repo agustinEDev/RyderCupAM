@@ -29,6 +29,8 @@ NOMBRES_DE_ANTES = (
     "get_admin_set_user_active_use_case",
     "get_admin_update_user_use_case",
     "get_amigos",
+    # El aviso de la RFEG desde el perfil, con el interruptor del refresco (16 nov 2026)
+    "get_aviso_de_la_rfeg",
     "get_anotar_hoyo_de_partida_use_case",
     "get_anular_programacion_use_case",
     "get_approve_golf_course_use_case",

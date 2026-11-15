@@ -14,6 +14,8 @@ hándicap fijado. Eso lo hace quien escucha; aquí, que se le avise y cuándo.
 | —    | Al entrar, la RFEG no lo da                   | No                             |
 | —    | Al entrar, ya actualizado hoy                 | No (no se pregunta)            |
 | —    | Quien escucha falla                           | El hándicap queda igual        |
+| R7   | Varios a la vez: a los que la RFEG da         | Sí, a cada uno, tras guardar   |
+| R7   | Varios: al que no da o falla                  | No                             |
 """
 
 from unittest.mock import AsyncMock
@@ -24,11 +26,17 @@ from src.modules.user.application.dto.user_dto import RefreshOwnHandicapRequestD
 from src.modules.user.application.use_cases.refresh_own_handicap_use_case import (
     RefreshOwnHandicapUseCase,
 )
+from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+    UpdateMultipleHandicapsUseCase,
+)
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
 )
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapNotFoundError,
+    HandicapServiceUnavailableError,
+)
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -155,3 +163,45 @@ class TestAlEntrar:
 
         assert resultado.handicap == pytest.approx(13.0)
         assert resultado.needs_handicap is False
+
+
+class TestVariosALaVez:
+    async def test_se_avisa_a_cada_uno_que_la_rfeg_da(self):
+        """
+        Given tres jugadores: uno que la RFEG da, uno que no, y uno con la RFEG caída
+        When se actualizan a la vez
+        Then se avisa solo del primero, con su valor, y con todo ya guardado (R7)
+        """
+        uow = InMemoryUnitOfWork()
+        luis = await _usuario(uow)
+        ana = User.create("Ana", "Gil", "ana@test.com", "P@ssw0rd123!", country_code_str="ES")
+        eva = User.create("Eva", "Sanz", "eva@test.com", "P@ssw0rd123!", country_code_str="ES")
+        for u in (ana, eva):
+            await uow.users.save(u)
+        await uow.commit()
+        rfeg = MockHandicapService(handicaps={"Luis Pérez": 13.0}, default=None)
+        original = rfeg.search_handicap
+
+        async def buscar(nombre):
+            if nombre == "Eva Sanz":
+                raise HandicapServiceUnavailableError("caida")
+            return await original(nombre)
+
+        rfeg.search_handicap = buscar
+        escucha = _escucha()
+
+        await UpdateMultipleHandicapsUseCase(uow, rfeg, escucha).execute([luis.id, ana.id, eva.id])
+
+        escucha.encontrado.assert_awaited_once_with(luis.id, 13.0)
+
+    async def test_si_quien_escucha_falla_quedan_guardados(self):
+        """Given quien escucha falla When se actualizan Then los hándicaps quedan guardados."""
+        uow = InMemoryUnitOfWork()
+        luis = await _usuario(uow)
+
+        stats = await UpdateMultipleHandicapsUseCase(
+            uow, MockHandicapService(handicaps={"Luis Pérez": 13.0}, default=None), _escucha(True)
+        ).execute([luis.id])
+
+        assert stats["updated"] == 1
+        assert (await uow.users.find_by_id(luis.id)).handicap.value == pytest.approx(13.0)

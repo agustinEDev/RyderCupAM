@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,6 +107,12 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
                     "attempts": tabla.c.attempts + 1,
                     "refreshed_at": fila.excluded.refreshed_at,
                 },
+                # Un actualizado no se pisa con otra cosa (R2): lo apuntó su perfil
+                # mientras la pasada preguntaba. En la misma sentencia, sin carrera
+                where=or_(
+                    tabla.c.result != str(ResultadoRefresco.ACTUALIZADO),
+                    fila.excluded.result == str(ResultadoRefresco.ACTUALIZADO),
+                ),
             )
         )
 

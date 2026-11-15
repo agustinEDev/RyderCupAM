@@ -4,12 +4,11 @@ Update User Handicap Use Case - Application Layer
 Caso de uso para actualizar el hándicap de un usuario individual.
 """
 
-import logging
-
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
     IHandicapEncontradoEnLaRfeg,
 )
+from src.modules.user.application.services.handicap_de_la_rfeg import avisar_de_la_rfeg
 from src.modules.user.domain.errors.handicap_errors import (
     HandicapNotFoundError,
 )
@@ -18,8 +17,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
-
-logger = logging.getLogger(__name__)
 
 
 class UpdateUserHandicapUseCase:
@@ -107,15 +104,3 @@ class UpdateUserHandicapUseCase:
         if de_la_rfeg is not None:
             await avisar_de_la_rfeg(self._al_encontrarlo, user_id, de_la_rfeg)
         return UserResponseDTO.model_validate(user)
-
-
-async def avisar_de_la_rfeg(
-    al_encontrarlo: IHandicapEncontradoEnLaRfeg | None, user_id: UserId, handicap: float
-) -> None:
-    """Avisa de que la RFEG lo dio; si falla, el hándicap ya guardado se queda."""
-    if al_encontrarlo is None:
-        return
-    try:
-        await al_encontrarlo.encontrado(user_id, handicap)
-    except Exception:
-        logger.exception("Could not pass the RFEG handicap of %s to its competitions", user_id)

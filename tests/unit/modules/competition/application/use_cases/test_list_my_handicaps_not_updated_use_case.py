@@ -19,6 +19,7 @@ que borrar cuando deja de ser cierto.
 | T2   | Organiza muchas: solo se leen las cerradas (por la base)   | —                  | —          |
 | T2   | Organiza y juega: cada competición se mira una vez         | —                  | —          |
 | T2   | Como jugador se lee solo su resultado                      | —                  | —          |
+| R10  | Su usuario no se puede leer a mitad                        | —                  | Lo ya visto se queda |
 | H5   | La competición empieza                                     | Nada               | No         |
 | H5   | Nadie queda sin actualizar                                 | Nada               | —          |
 | —    | Solo cuenta la última actualización                        | La última          | La última  |
@@ -129,9 +130,11 @@ class _Escenario:
         actualizacion = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.CIERRE, creada)
         async with self.uow:
             await self.uow.handicap_updates.add(actualizacion)
-            await self.uow.handicap_updates.apuntar(
-                actualizacion.id, self.organizador, ResultadoRefresco.ACTUALIZADO, CONTESTO
-            )
+            # El organizador, actualizado si no se dice otra cosa de él
+            if self.organizador not in resultados:
+                await self.uow.handicap_updates.apuntar(
+                    actualizacion.id, self.organizador, ResultadoRefresco.ACTUALIZADO, CONTESTO
+                )
             for user_id, resultado in resultados.items():
                 await self.uow.handicap_updates.apuntar(
                     actualizacion.id, user_id, resultado, CONTESTO
@@ -338,12 +341,6 @@ class TestOrganizador:
         """
         torneo = await e.torneo()
         await e.actualizacion(torneo, {e.organizador: ResultadoRefresco.NO_ENCONTRADO})
-        async with e.uow:
-            # El organizador ya está inscrito al crearla: se reescribe su resultado
-            ultima = await e.uow.handicap_updates.ultima_de(torneo)
-            await e.uow.handicap_updates.apuntar(
-                ultima.id, e.organizador, ResultadoRefresco.NO_ENCONTRADO, CONTESTO
-            )
         calculos = []
         original = SinActualizarDeLaCompeticion.de
 
@@ -363,6 +360,26 @@ class TestOrganizador:
         assert _ids(visto.as_organizer) == [torneo.value]
         assert _ids(visto.as_player) == [torneo.value]
         assert calculos == [torneo]
+
+    async def test_si_su_usuario_no_se_lee_no_pierde_lo_ya_visto(self, e):
+        """
+        Given un organizador no encontrado en la suya y apuntado en otra
+        When su usuario no se puede leer al mirar la otra
+        Then conserva la suya en su lista de jugador (R10)
+        """
+        suya = await e.torneo()
+        await e.actualizacion(suya, {e.organizador: ResultadoRefresco.NO_ENCONTRADO})
+        otro = _Escenario()
+        otro.uow, otro.usuarios, otro._creadas = e.uow, e.usuarios, 1
+        otro.organizador = e.usuarios.alta(nombre="Otro")
+        ajena = await otro.torneo()
+        await create_approved_enrollment(e.uow, ajena.value, e.organizador)
+        await otro.actualizacion(ajena, {e.organizador: ResultadoRefresco.NO_ENCONTRADO})
+        e.usuarios.find_by_id = AsyncMock(return_value=None)
+
+        visto = await e.ver(e.organizador)
+
+        assert _ids(visto.as_player) == [suya.value]
 
 
 class TestJugador:

@@ -14,9 +14,7 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
     IHandicapEncontradoEnLaRfeg,
 )
-from src.modules.user.application.use_cases.update_user_handicap_use_case import (
-    avisar_de_la_rfeg,
-)
+from src.modules.user.application.services.handicap_de_la_rfeg import avisar_de_la_rfeg
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,

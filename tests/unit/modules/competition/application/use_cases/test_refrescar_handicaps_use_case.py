@@ -70,8 +70,24 @@ su hándicap fuera de una actualización.
 | D4   | Ryder cerrada                                   | Apuntado; no hay fijado                  |
 | D3   | Era el único no encontrado                      | Se retira el suyo y el del organizador   |
 | D3   | Quedan otros sin actualizar                     | Se retira el suyo; el organizador, con N |
-| D3   | La primera pasada aún en curso                  | Se retira el suyo; el organizador, nada  |
+| D3   | La primera pasada aún en curso                  | Apuntado; Actividad, nada (R3)           |
 | T1   | Actividad falla                                 | El fijado se corrige igual               |
+| R1   | Solo competiciones cerradas, en orden de id     | Una transacción y un bloqueo por cada una|
+| R1   | Una falla                                       | Las demás se hacen igual                 |
+| R3   | No estaba en la lista (entra a diario)          | Nada en Actividad                        |
+| R4   | El del organizador se publica                   | Con la competición bloqueada (en orden)  |
+| R1   | Empieza entre leerla y bloquearla               | Ya no se toca                            |
+| R1   | Se retira entre leerla y bloquearla             | Ya no se toca                            |
+| R1   | Las cerradas, en orden de id                    | Aunque lleguen en otro orden             |
+
+Lo que dijo el perfil no lo pisa la pasada (R2, revisión del 16 nov 2026):
+
+| Caso | Mientras la pasada pregunta por él              | Resultado                                |
+|------|-------------------------------------------------|------------------------------------------|
+| R2   | El perfil lo apunta y la RFEG no lo encuentra   | Sigue actualizado, sin aviso             |
+| R2   | El perfil lo apunta y la RFEG falla             | Sigue actualizado; no se reintenta       |
+| R2   | El perfil lo apunta antes de llegar a él        | No se le pregunta                        |
+| R2   | Apuntar otra cosa sobre un actualizado          | El repositorio no lo pisa                |
 """
 
 from contextlib import asynccontextmanager
@@ -126,6 +142,7 @@ from src.modules.competition.domain.services.refresco_de_handicaps_service impor
     ResultadoRefresco,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -185,10 +202,12 @@ class _UnidadQueCuenta(InMemoryUnitOfWork):
     def __init__(self):
         super().__init__()
         self.abiertas = 0
+        self.aperturas = 0
         self.al_abrir = None
 
     async def __aenter__(self):
         self.abiertas += 1
+        self.aperturas += 1
         if self.al_abrir is not None:
             self.al_abrir()
         return await super().__aenter__()
@@ -1586,7 +1605,8 @@ class TestDesdeSuPerfil:
         """
         Given la actualización del cierre todavía en curso
         When la RFEG lo encuentra desde su perfil
-        Then se retira el suyo, pero el del organizador lo dirá la pasada al acabar (H1)
+        Then no se toca Actividad: aún no tiene aviso, y el del organizador lo dirá la
+             pasada al acabar (H1, R3)
         """
         torneo = await e.torneo()
         jugador = await e.inscrito(torneo)
@@ -1594,8 +1614,8 @@ class TestDesdeSuPerfil:
 
         await self._desde_su_perfil(e, jugador)
 
-        competicion = await e.uow.competitions.find_by_id(torneo)
-        e.actividad.handicap_not_found_withdrawn.assert_awaited_once_with(competicion, [jugador])
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+        e.actividad.handicap_not_found_withdrawn.assert_not_awaited()
         e.actividad.handicaps_not_updated.assert_not_awaited()
         e.actividad.handicaps_not_updated_withdrawn.assert_not_awaited()
 
@@ -1631,3 +1651,267 @@ class TestDesdeSuPerfil:
         await self._desde_su_perfil(e, jugador)
 
         assert e.actividades_montadas == 0
+
+    async def _dos_cerradas(self, e):
+        """Un jugador en dos competiciones cerradas (una Ryder y un Stableford)."""
+        ryder, medal = await e.torneo(), await e.torneo(tipo="STABLEFORD")
+        jugador = e.usuarios.alta(handicap=8.0)
+        for torneo in (ryder, medal):
+            await create_approved_enrollment(e.uow, torneo.value, jugador)
+            await e.cerrar(torneo)
+        return jugador, ryder, medal
+
+    async def test_solo_cerradas_una_transaccion_por_cada_una_en_orden(self, e):
+        """
+        Given un jugador en dos competiciones cerradas y una ya en juego
+        When la RFEG lo da desde su perfil
+        Then solo se bloquean las cerradas, en orden de id, cada una en su transacción (R1)
+        """
+        jugador, ryder, medal = await self._dos_cerradas(e)
+        en_juego = await e.torneo()
+        await create_approved_enrollment(e.uow, en_juego.value, jugador)
+        await e.cerrar(en_juego)
+        await e.iniciar(en_juego)
+        bloqueadas = []
+        original = e.uow.competitions.find_by_id_for_update
+
+        async def bloquear(competition_id):
+            bloqueadas.append((competition_id, e.uow.abiertas))
+            return await original(competition_id)
+
+        e.uow.competitions.find_by_id_for_update = bloquear
+        e.uow.aperturas = 0
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert [c for c, _ in bloqueadas] == sorted([ryder, medal], key=lambda c: str(c.value))
+        assert all(abiertas == 1 for _, abiertas in bloqueadas)
+        # Una para leer cuáles, y una por competición
+        assert e.uow.aperturas >= 3
+
+    async def test_si_una_falla_las_demas_se_hacen(self, e, monkeypatch):
+        """
+        Given dos competiciones cerradas, y corregir en la de stroke play falla
+        When la RFEG lo da desde su perfil
+        Then en la otra queda apuntado igual (R1)
+        """
+        from src.modules.competition.application.use_cases import (
+            handicap_de_la_rfeg_del_perfil_use_case as modulo,
+        )
+
+        jugador, ryder, _ = await self._dos_cerradas(e)
+
+        async def falla(*_args):
+            raise RuntimeError("se cae")
+
+        monkeypatch.setattr(modulo, "corregir_el_fijado", falla)
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert (await e.apuntado(ryder))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+
+    async def test_si_no_estaba_en_la_lista_no_toca_actividad(self, e):
+        """
+        Given un jugador ya actualizado en una competición terminada
+        When vuelve a entrar y la RFEG lo da (cada día al entrar)
+        Then no se publica ni se retira nada: el número no cambia (R3)
+        """
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        await e.pasar(torneo)
+        e.actividad.reset_mock()
+
+        await self._desde_su_perfil(e, jugador)
+
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+        e.actividad.handicaps_not_updated_withdrawn.assert_not_awaited()
+        e.actividad.handicap_not_found_withdrawn.assert_not_awaited()
+
+    async def test_el_del_organizador_se_publica_con_la_competicion_bloqueada(self, e):
+        """
+        Given dos no encontrados
+        When la RFEG encuentra a uno desde su perfil
+        Then el número del organizador se lee y se publica con la competición bloqueada (R4)
+        """
+        torneo = await e.torneo()
+        perdido, otro = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        perdidos = {e.nombre(perdido), e.nombre(otro)}
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre in perdidos else 11.2
+        )
+        await e.pasar(torneo)
+        bloqueos = []
+        original = e.uow.competitions.find_by_id_for_update
+
+        async def bloquear(competition_id):
+            bloqueos.append(competition_id)
+            return await original(competition_id)
+
+        e.uow.competitions.find_by_id_for_update = bloquear
+        al_publicar = []
+        e.actividad.handicaps_not_updated.side_effect = lambda *_: al_publicar.append(
+            (e.uow.abiertas, len(bloqueos))
+        )
+
+        await self._desde_su_perfil(e, perdido)
+
+        # Dentro de una transacción, y después de su propio bloqueo
+        assert al_publicar == [(1, 2)]
+
+
+class TestNoPisaLoDelPerfil:
+    """Lo que apuntó el perfil (ACTUALIZADO) no lo pisa una pasada en marcha (R2)."""
+
+    # Los de carrera del perfil (R1) van al final de esta clase y usan lo mismo
+    _desde_su_perfil = TestDesdeSuPerfil._desde_su_perfil
+
+    async def _perfil_mientras(self, e, torneo, quien, devuelve=None, lanza=None):
+        """La RFEG, y mientras contesta por `quien`, su perfil lo apunta como actualizado."""
+        ultima = await e.ultima(torneo)
+
+        async def buscar(nombre):
+            if nombre == e.nombre(quien):
+                await e.uow.handicap_updates.apuntar(
+                    ultima.id, quien, ResultadoRefresco.ACTUALIZADO, e.ahora
+                )
+                if lanza is not None:
+                    raise lanza
+                return devuelve
+            return 11.2
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=buscar)
+
+    async def test_no_encontrado_no_pisa_al_perfil(self, e):
+        """
+        Given una pasada que pregunta por él
+        When su perfil lo apunta mientras y la RFEG contesta que no lo encuentra
+        Then sigue actualizado y no recibe aviso (R2)
+        """
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        await self._perfil_mientras(e, torneo, jugador)
+
+        await e.pasar(torneo)
+
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+        e.actividad.handicap_not_found.assert_not_awaited()
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+
+    async def test_un_fallo_no_pisa_al_perfil_ni_se_reintenta(self, e):
+        """Given lo mismo When la RFEG falla Then sigue actualizado y no se le pregunta más (R2)."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        await self._perfil_mientras(e, torneo, jugador, lanza=TimeoutError())
+
+        await e.pasar(torneo)
+
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+        assert e.preguntados().count(e.nombre(jugador)) == 1
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.COMPLETA
+
+    async def test_apuntado_antes_de_llegar_a_el_no_se_le_pregunta(self, e):
+        """
+        Given una pasada con dos jugadores
+        When el perfil del segundo lo apunta mientras se pregunta por el primero
+        Then al segundo ya no se le pregunta (R2)
+        """
+        torneo = await e.torneo()
+        primero, segundo = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        ultima = await e.ultima(torneo)
+
+        async def buscar(nombre):
+            if nombre == e.nombre(primero):
+                await e.uow.handicap_updates.apuntar(
+                    ultima.id, segundo, ResultadoRefresco.ACTUALIZADO, e.ahora
+                )
+            return 11.2
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=buscar)
+
+        await e.pasar(torneo)
+
+        assert e.nombre(segundo) not in e.preguntados()
+
+    @pytest.mark.parametrize(
+        "otro",
+        [
+            ResultadoRefresco.NO_ENCONTRADO,
+            ResultadoRefresco.FALLIDO,
+            ResultadoRefresco.SIN_LICENCIA_ESPANOLA,
+        ],
+    )
+    async def test_el_repositorio_no_pisa_un_actualizado(self, e, otro):
+        """Given un actualizado When se apunta otra cosa Then sigue actualizado (R2)."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        ultima = await e.ultima(torneo)
+        await e.uow.handicap_updates.apuntar(
+            ultima.id, jugador, ResultadoRefresco.ACTUALIZADO, AHORA
+        )
+
+        await e.uow.handicap_updates.apuntar(ultima.id, jugador, otro, AHORA)
+
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+
+    async def test_un_actualizado_si_pisa_lo_demas(self, e):
+        """Given un no encontrado When se apunta actualizado Then queda actualizado."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        ultima = await e.ultima(torneo)
+        await e.uow.handicap_updates.apuntar(
+            ultima.id, jugador, ResultadoRefresco.NO_ENCONTRADO, AHORA
+        )
+
+        await e.uow.handicap_updates.apuntar(
+            ultima.id, jugador, ResultadoRefresco.ACTUALIZADO, AHORA
+        )
+
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+
+    async def test_si_empieza_entre_leerla_y_bloquearla_no_se_toca(self, e):
+        """Given una que empieza tras leerla When se bloquea Then ya no se apunta nada (R1)."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        await e.pasar(torneo)
+        antes = (await e.apuntado(torneo))[jugador]
+        await e.iniciar(torneo)
+        e.uow.competitions.find_ids_with_status = AsyncMock(return_value=[torneo])
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert (await e.apuntado(torneo))[jugador] == antes
+
+    async def test_si_se_retira_entre_leerla_y_bloquearla_no_se_toca(self, e):
+        """Given una inscripción que se retira tras leerla When se bloquea Then nada (R1)."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        suya = (await e.inscripciones(torneo))[jugador]
+        e.uow.enrollments.find_by_user = AsyncMock(
+            return_value=[MagicMock(competition_id=torneo, status=EnrollmentStatus.APPROVED)]
+        )
+        suya.withdraw()
+        await e.uow.enrollments.update(suya)
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert jugador not in await e.apuntado(torneo)
+
+    async def test_las_cerradas_salen_en_orden_de_id(self, e):
+        """Given cerradas en cualquier orden When se piden Then salen en orden de id (R1)."""
+        torneos = [await e.torneo() for _ in range(4)]
+        for torneo in torneos:
+            await e.cerrar(torneo)
+        al_reves = sorted(torneos, key=lambda c: str(c.value), reverse=True)
+
+        cerradas = await e.uow.competitions.find_ids_with_status(al_reves, CompetitionStatus.CLOSED)
+
+        assert cerradas == list(reversed(al_reves))

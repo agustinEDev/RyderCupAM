@@ -43,6 +43,9 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
+from src.modules.competition.application.services.aviso_del_organizador import (
+    poner_al_dia_el_del_organizador,
+)
 from src.modules.competition.application.services.avisos_al_organizador import (
     AvisosAlOrganizador,
 )
@@ -207,10 +210,16 @@ class RefrescarHandicapsUseCase:
         En tres pasos para no tener la transacción abierta mientras la RFEG
         contesta: leer al jugador, preguntar, y apuntar (que es cuando se
         guarda también su hándicap nuevo y se corrige el fijado).
+
+        Lo que su perfil apuntó como actualizado mientras tanto no se pisa
+        (R2): se mira antes de preguntar, y al apuntar no lo pisa el propio
+        repositorio, en la misma sentencia.
         """
         try:
             async with self._herramientas() as h:
-                async with h.competiciones:
+                async with h.competiciones as uow:
+                    if await self._ya_actualizado(uow, update_id, user_id):
+                        return ResultadoRefresco.ACTUALIZADO
                     jugador = await h.usuarios.find_by_id(user_id)
                 if jugador is None:
                     # Ya no existe: no hay a quién preguntar, ni ahora ni luego
@@ -236,6 +245,14 @@ class RefrescarHandicapsUseCase:
             logger.exception("No se pudo refrescar el hándicap de %s", user_id)
             await self._apuntar_el_fallo(update_id, user_id)
             return ResultadoRefresco.FALLIDO
+
+    @staticmethod
+    async def _ya_actualizado(
+        uow: CompetitionUnitOfWorkInterface, update_id: uuid.UUID, user_id: UserId
+    ) -> bool:
+        """Si ya está apuntado como actualizado (lo apuntó su perfil, R2)."""
+        intento = await uow.handicap_updates.resultado_de(update_id, user_id)
+        return intento is not None and intento.resultado is ResultadoRefresco.ACTUALIZADO
 
     async def _corregir(
         self,
@@ -325,7 +342,7 @@ class RefrescarHandicapsUseCase:
             await self._avisos.pendientes(organizador, competicion, nombres)
         for jugador in jugadores:
             await self._avisos.no_encontrado(jugador, competicion)
-        await self._en_actividad(competicion, len(hecho.para_el_organizador), avisar, hecho)
+        await self._en_actividad(competicion, avisar, hecho)
 
     async def _lista_si_cambio(
         self,
@@ -368,27 +385,24 @@ class RefrescarHandicapsUseCase:
     async def _en_actividad(
         self,
         competicion: Competition,
-        cuantos: int,
         avisar: list[UserId],
         hecho: SinActualizar,
     ) -> None:
         """
         Los avisos de Actividad, que se renuevan en cada pasada; y los que ya no
         son ciertos se retiran (D3). Actividad se monta aquí, con la pasada ya
-        terminada: si montarla o cerrarla falla, la pasada no se entera (T1).
+        terminada: si montarla o cerrarla falla, la pasada no se entera (T1). El
+        del organizador se lee y se publica con la competición bloqueada (R4).
         """
         if self._actividad is None:
             return
         try:
             async with self._actividad() as publicador:
                 actividad = AvisosDeActividad(publicador)
-                if cuantos:
-                    await actividad.handicaps_not_updated(competicion, cuantos)
-                else:
-                    await actividad.handicaps_not_updated_withdrawn(competicion)
                 await actividad.handicap_not_found(competicion, avisar)
                 await actividad.handicap_not_found_withdrawn(competicion, hecho.sin_aviso)
         except Exception:
             logger.warning(
                 "Could not publish the RFEG notices of %s", competicion.id.value, exc_info=True
             )
+        await poner_al_dia_el_del_organizador(self._herramientas, self._actividad, competicion.id)

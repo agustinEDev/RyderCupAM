@@ -17,7 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.database import async_session_maker
-from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
+from src.config.refresco_de_handicaps import (
+    HandicapDeLaRfegEnLasCompeticiones,
+    LanzadorEnSegundoPlano,
+    refresco_activado,
+)
 from src.config.terms_guard import require_current_terms
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
@@ -99,6 +103,9 @@ from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_wor
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
+)
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.get_current_user_use_case import (
@@ -644,6 +651,16 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
             actividad=actividad_en_sesion_propia,
         )
     return _lanzador
+
+
+def get_aviso_de_la_rfeg() -> IHandicapEncontradoEnLaRfeg | None:
+    """
+    Si la RFEG da un hándicap desde el perfil, sus competiciones se enteran en
+    segundo plano (D4, 16 nov 2026). Con el mismo interruptor que las
+    actualizaciones (R5): si no hay lanzador, no hay aviso.
+    """
+    get_lanzador_de_actualizaciones()
+    return None if _lanzador is None else HandicapDeLaRfegEnLasCompeticiones(_lanzador)
 
 
 def get_reloj_del_servidor() -> Callable[[], datetime]:

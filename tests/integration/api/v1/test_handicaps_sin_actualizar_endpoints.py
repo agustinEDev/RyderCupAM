@@ -157,19 +157,43 @@ async def test_si_la_rfeg_lo_encuentra_desde_su_perfil_desaparece(client: AsyncC
     When lo pide a la RFEG desde su perfil y esta vez lo encuentra
     Then ya no sale en ningún sitio (D1, H5)
     """
+    from unittest.mock import MagicMock
+
     from main import app
-    from src.config.dependencies import get_handicap_service
+    from src.config.dependencies import (
+        actividad_en_sesion_propia,
+        get_aviso_de_la_rfeg,
+        get_fabrica_de_sesiones,
+        get_handicap_service,
+    )
+    from src.config.refresco_de_handicaps import (
+        HandicapDeLaRfegEnLasCompeticiones,
+        LanzadorEnSegundoPlano,
+    )
     from tests.fakes.mock_handicap_service import MockHandicapService
 
     organizador, _ = await _cerrada_con_un_no_encontrado(client)
     set_auth_cookies(client, organizador["cookies"])
+    # En los tests el refresco está apagado (R5): aquí, con un lanzador de verdad
+    lanzador = LanzadorEnSegundoPlano(
+        app.dependency_overrides[get_fabrica_de_sesiones](),
+        MockHandicapService(default=None),
+        MagicMock(),
+        actividad=actividad_en_sesion_propia,
+    )
     anterior = app.dependency_overrides.get(get_handicap_service)
     app.dependency_overrides[get_handicap_service] = lambda: MockHandicapService(default=13.0)
+    app.dependency_overrides[get_aviso_de_la_rfeg] = lambda: HandicapDeLaRfegEnLasCompeticiones(
+        lanzador
+    )
     try:
         pedido = await client.post(
             "/api/v1/handicaps/update", json={"user_id": organizador["user"]["id"]}
         )
+        # Va en segundo plano (R6): se espera a que acabe
+        await lanzador.esperar_a_todas()
     finally:
+        app.dependency_overrides.pop(get_aviso_de_la_rfeg, None)
         if anterior is None:
             app.dependency_overrides.pop(get_handicap_service, None)
         else:

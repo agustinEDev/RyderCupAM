@@ -26,10 +26,11 @@ correos de aviso). En los tests (`TESTING=true`) nunca, aunque se encienda.
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -77,7 +78,7 @@ _ENCENDIDO = {"true", "1", "yes", "on"}
 
 # Monta Actividad sobre una sesión: la da la composición de dependencias, que
 # importa este módulo (pasarla evita el ciclo)
-FabricaDeActividad = Callable[[AsyncSession], CompetitionActivityPublisherInterface]
+ConstruirActividad = Callable[[AsyncSession], CompetitionActivityPublisherInterface]
 
 
 def refresco_activado(entorno: Mapping[str, str]) -> bool:
@@ -96,7 +97,7 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         handicap_service: HandicapService,
         avisos: IHandicapUpdateEmailService,
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        actividad: FabricaDeActividad | None = None,
+        actividad: ConstruirActividad | None = None,
     ):
         self.fabrica = fabrica_de_sesiones
         self._handicap_service = handicap_service
@@ -111,9 +112,30 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         return [t for t in self._tareas if not t.done()]
 
     def lanzar(self, update_id: uuid.UUID) -> None:
-        tarea = asyncio.create_task(self.pasada(update_id))
+        self._en_segundo_plano(self.pasada(update_id))
+
+    def del_perfil(self, user_id: UserId, handicap: Decimal) -> None:
+        """
+        La RFEG dio su hándicap desde el perfil: sus competiciones, en segundo
+        plano (R6). Quien lo pidió no espera a los bloqueos de las competiciones.
+        """
+        self._en_segundo_plano(self._del_perfil(user_id, handicap))
+
+    def _en_segundo_plano(self, trabajo: Coroutine[Any, Any, int | None]) -> None:
+        tarea = asyncio.create_task(trabajo)
         self._tareas.add(tarea)
         tarea.add_done_callback(self._tareas.discard)
+
+    async def _del_perfil(self, user_id: UserId, handicap: Decimal) -> None:
+        """Lo del perfil en sus competiciones; un fallo se registra una vez y no sale (R8)."""
+        try:
+            await HandicapDeLaRfegDelPerfilUseCase(
+                herramientas=self.herramientas,
+                reloj=lambda: datetime.now(UTC),
+                actividad=None if self._actividad is None else self._actividad_en_su_sesion,
+            ).execute(user_id, handicap)
+        except Exception:
+            logger.exception("Could not pass the RFEG handicap of %s to its competitions", user_id)
 
     async def pasada(self, update_id: uuid.UUID) -> int | None:
         """Una pasada entera; un fallo se registra y no sale de aquí."""
@@ -167,7 +189,7 @@ async def herramientas_en(
 
 @asynccontextmanager
 async def actividad_en(
-    fabrica: async_sessionmaker[AsyncSession], construir: FabricaDeActividad
+    fabrica: async_sessionmaker[AsyncSession], construir: ConstruirActividad
 ) -> AsyncIterator[CompetitionActivityPublisherInterface]:
     """Actividad sobre una sesión propia de esa fábrica, que se cierra al salir."""
     async with fabrica() as sesion:
@@ -180,37 +202,15 @@ class HandicapDeLaRfegEnLasCompeticiones(IHandicapEncontradoEnLaRfeg):
     competiciones cerradas lo apuntan y, en stroke play, corrigen su fijado (D1
     y D4, 16 nov 2026). Cruza módulos: por eso vive en la raíz de composición.
 
-    Con una sesión propia, después de guardado el perfil: si falla, el perfil
-    no se entera (queda en el log).
+    Lo corre el lanzador del proceso en segundo plano (R6), con el mismo
+    interruptor que las actualizaciones (R5): la respuesta no lo espera.
     """
 
-    def __init__(
-        self,
-        fabrica: async_sessionmaker[AsyncSession],
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
-        actividad: FabricaDeActividad | None = None,
-    ):
-        """`actividad`: para retirar y poner al día los avisos al momento (D3)."""
-        self._fabrica = fabrica
-        self._reloj = reloj
-        self._actividad = actividad
+    def __init__(self, lanzador: LanzadorEnSegundoPlano):
+        self._lanzador = lanzador
 
     async def encontrado(self, user_id: UserId, handicap: float) -> None:
-        try:
-            await HandicapDeLaRfegDelPerfilUseCase(
-                herramientas=lambda: herramientas_en(self._fabrica),
-                reloj=self._reloj,
-                actividad=self._montar_actividad if self._actividad is not None else None,
-            ).execute(user_id, Decimal(str(handicap)))
-        except Exception:
-            logger.exception("Could not pass the RFEG handicap of %s to its competitions", user_id)
-
-    def _montar_actividad(
-        self,
-    ) -> AbstractAsyncContextManager[CompetitionActivityPublisherInterface]:
-        if self._actividad is None:
-            raise RuntimeError("Sin Actividad no hay nada que montar")
-        return actividad_en(self._fabrica, self._actividad)
+        self._lanzador.del_perfil(user_id, Decimal(str(handicap)))
 
 
 # El candado de Postgres del vigilante: un número cualquiera, siempre el mismo

@@ -57,8 +57,15 @@ class InMemoryHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
         resultado: ResultadoRefresco,
         momento: datetime,
     ) -> None:
-        self._cuando[(update_id, user_id)] = momento
         anterior = self._resultados.get((update_id, user_id))
+        # Un actualizado no se pisa con otra cosa (R2): lo apuntó su perfil
+        if (
+            anterior is not None
+            and anterior.resultado is ResultadoRefresco.ACTUALIZADO
+            and resultado is not ResultadoRefresco.ACTUALIZADO
+        ):
+            return
+        self._cuando[(update_id, user_id)] = momento
         self._resultados[(update_id, user_id)] = Intento(
             resultado, 1 if anterior is None else anterior.intentos + 1
         )

@@ -269,3 +269,28 @@ async def test_un_espanol_no_encontrado_avisa_en_actividad_y_por_correo(db_sessi
     assert avisados[(str(organizador.id.value), "HANDICAPS_NOT_UPDATED")]["count"] == 1
     avisos.send_handicap_not_found_email.assert_awaited_once()
     assert avisos.send_handicap_not_found_email.await_args.kwargs["to_email"] == str(perdido.email)
+
+
+@pytest.mark.parametrize("otro", ["NO_ENCONTRADO", "FALLIDO"])
+async def test_el_repositorio_no_pisa_un_actualizado(db_session, otro):
+    """
+    Given un jugador apuntado como actualizado (lo apuntó su perfil)
+    When la pasada apunta otra cosa encima
+    Then sigue actualizado: lo decide la propia sentencia, sin carrera (R2)
+    """
+    from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+        ResultadoRefresco,
+    )
+
+    jugador = await _jugador(db_session, 8.0)
+    torneo = await _medal_cerrado(db_session, [jugador])
+    actualizacion = await _actualizacion(db_session, torneo)
+    repo = SQLAlchemyHandicapUpdateRepository(db_session)
+    ahora = datetime.now(UTC)
+    await repo.apuntar(actualizacion.id, jugador.id, ResultadoRefresco.ACTUALIZADO, ahora)
+    await repo.apuntar(actualizacion.id, jugador.id, ResultadoRefresco(otro), ahora)
+    await db_session.commit()
+
+    intento = await repo.resultado_de(actualizacion.id, jugador.id)
+
+    assert intento.resultado is ResultadoRefresco.ACTUALIZADO
