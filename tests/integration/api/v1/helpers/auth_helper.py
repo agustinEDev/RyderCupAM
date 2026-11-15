@@ -50,6 +50,12 @@ async def create_and_login_user(
 
         assert register_response.status_code == 201
         user_data = register_response.json()
+        # Verificado, como un usuario normal: sin eso no crea competiciones (B-17)
+        from tests.conftest import sql_en_la_bd_de_test
+
+        await sql_en_la_bd_de_test(
+            "update users set email_verified = true where email = :e", e=email
+        )
 
         # If admin flag is requested, we need to update the user in the database
         # This is a limitation: we can't set is_admin via API (security)
@@ -66,6 +72,10 @@ async def create_and_login_user(
     )
 
     assert login_response.status_code == 200
+    # Verificado, su login lanza un aviso en segundo plano: que acabe aquí (B-17)
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    await espera_los_avisos_pendientes()
     cookies = login_response.cookies
 
     if return_cookies_only:

@@ -36,6 +36,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.rotacion_del_refresco import (
+    VENTANA_DE_LA_REANUDACION,
     PasoDelRefresco,
     paso_del_refresco,
 )
@@ -154,6 +155,7 @@ class RefreshAccessTokenUseCase:
         *,
         security_audit: ISecurityAuditLogger,
         aviso_de_cierre: IAvisoDeSesionCerrada,
+        ventana_de_la_reanudacion: timedelta = VENTANA_DE_LA_REANUDACION,
     ):
         """
         Inicializa el caso de uso.
@@ -163,7 +165,9 @@ class RefreshAccessTokenUseCase:
             token_service: Servicio para validación y generación de tokens JWT
             security_audit: El log de auditoría de seguridad
             aviso_de_cierre: El correo al usuario cuando se cierra una sesión por robo
+            ventana_de_la_reanudacion: Cuánto se puede reanudar una respuesta perdida (B-19)
         """
+        self._ventana_de_la_reanudacion = ventana_de_la_reanudacion
         self._security_audit = security_audit
         self._aviso_de_cierre = aviso_de_cierre
         self._uow = uow
@@ -505,7 +509,7 @@ class RefreshAccessTokenUseCase:
         sustituto = None
         if token.is_replaced and token.replaced_by_id is not None:
             sustituto = await self._uow.refresh_tokens.find_by_id(token.replaced_by_id)
-        paso = paso_del_refresco(token, sustituto, ahora)
+        paso = paso_del_refresco(token, sustituto, ahora, self._ventana_de_la_reanudacion)
         if paso is PasoDelRefresco.ROBO:
             await self._cierra_por_robo(dispositivo, user, request)
         if paso is PasoDelRefresco.YA_CERRADA:

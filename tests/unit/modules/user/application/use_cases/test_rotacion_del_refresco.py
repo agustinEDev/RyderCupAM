@@ -617,9 +617,10 @@ async def test_a3_an_annulled_substitute_that_comes_back_is_a_theft():
     e.aviso.avisa.assert_awaited_once()
 
 
-async def test_a3_only_within_one_hour_of_the_replacement():
+async def test_a3_r2_only_within_thirty_minutes_of_the_replacement():
     """
-    Given: El viejo sustituido hace 61 minutos con el sustituto sin usar
+    Given: El viejo sustituido hace 31 minutos con el sustituto sin usar (B-19: la ventana
+           es de 30 minutos desde el 15 nov 2026; antes, 1 hora)
     When: Llega el viejo
     Then: No es A3 ni un robo (Agustín, 10 nov): rechazo SIN alarma, como el final
           normal de una sesión (SESSION_ENDED): ni se revoca el dispositivo, ni log HIGH,
@@ -627,7 +628,7 @@ async def test_a3_only_within_one_hour_of_the_replacement():
     """
     e = await _escena()
     await e.refresca(ORIGINAL)
-    await e.hace(ORIGINAL, timedelta(minutes=61))
+    await e.hace(ORIGINAL, timedelta(minutes=31))
 
     rechazo = await e.rechazo(ORIGINAL)
 
@@ -640,15 +641,15 @@ async def test_a3_only_within_one_hour_of_the_replacement():
     assert not (await e.token("refresco-1")).revoked
 
 
-async def test_a3_after_one_hour_a_newer_login_keeps_the_cookie():
+async def test_a3_after_thirty_minutes_a_newer_login_keeps_the_cookie():
     """
-    Given: El viejo sustituido hace 61 minutos (sustituto sin usar) y un login nuevo
+    Given: El viejo sustituido hace 31 minutos (sustituto sin usar) y un login nuevo
     When: Llega el viejo
     Then: SESSION_REPLACED, como cualquier cookie vieja con una sesión más nueva (A5)
     """
     e = await _escena()
     await e.refresca(ORIGINAL)
-    await e.hace(ORIGINAL, timedelta(minutes=61))
+    await e.hace(ORIGINAL, timedelta(minutes=31))
     await e.otra_sesion_nueva()
 
     rechazo = await e.rechazo(ORIGINAL)
@@ -656,10 +657,10 @@ async def test_a3_after_one_hour_a_newer_login_keeps_the_cookie():
     assert rechazo.conserva_la_cookie is True
 
 
-async def test_a3_at_fifty_nine_minutes_it_still_resumes():
+async def test_a3_r1_at_twenty_nine_minutes_it_still_resumes():
     e = await _escena()
     await e.refresca(ORIGINAL)
-    await e.hace(ORIGINAL, timedelta(minutes=59))
+    await e.hace(ORIGINAL, timedelta(minutes=29))
 
     respuesta = await e.refresca(ORIGINAL)
 
@@ -719,3 +720,25 @@ async def test_a_rejection_releases_its_locks():
     await e.rechazo(ORIGINAL)
 
     e.uow.rollback.assert_awaited()
+
+
+async def test_r5_the_use_case_applies_the_window_it_is_given():
+    """
+    Given: El caso de uso montado con otra ventana (5 min, como haría la configuración)
+    When: Llega el viejo a los 10 minutos con el sustituto sin usar
+    Then: Se rechaza sin alarma: manda la ventana dada, no la de por defecto (B-19, R5)
+    """
+    e = await _escena()
+    e.caso = RefreshAccessTokenUseCase(
+        e.uow,
+        e.tokens,
+        security_audit=e.auditoria,
+        aviso_de_cierre=e.aviso,
+        ventana_de_la_reanudacion=timedelta(minutes=5),
+    )
+    await e.refresca(ORIGINAL)
+    await e.hace(ORIGINAL, timedelta(minutes=10))
+
+    rechazo = await e.rechazo(ORIGINAL)
+
+    assert rechazo.motivo is RefreshRejection.REPLACEMENT_WINDOW_EXPIRED
