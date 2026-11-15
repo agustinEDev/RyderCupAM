@@ -665,8 +665,12 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 - User can cancel before approval
 
 **No direct enrollment by the organizer** (removed 15 Nov 2026, audit B-02):
-- The organizer only invites; the player accepts the invitation (also with enrollment
-  closed, until the competition starts) or signs up to a public competition
+- The organizer only invites; the player accepts the invitation or signs up to a public
+  competition
+- With enrollment closed, a Ryder Cup still takes invitations and acceptances until it
+  starts (room, gender and handicap checked as when open; teams formed without matches
+  are reset; not while the draft room is open). A closed stroke play (Stableford/Medal)
+  takes neither: the organizer reopens enrollment first
 - Nobody is enrolled, or brought back after withdrawing, without their consent
 
 **Set Custom Handicap:**
