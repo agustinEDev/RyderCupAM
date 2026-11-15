@@ -41,7 +41,7 @@ from src.config.clave_de_brevo_viva import (  # noqa: E402
     VigiaDeLaClaveDeBrevo,
     vigia_activado,
 )
-from src.config.codigos_de_error import todos_los_codigos  # noqa: E402
+from src.config.codigos_de_error import los_que_llevan_su_codigo, todos_los_codigos  # noqa: E402
 from src.config.correo_verificado import EmailNotVerifiedError  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
@@ -310,7 +310,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # Cada error de dominio con su código, en un solo sitio (antes, un except en cada ruta)
-registra_los_codigos(app, todos_los_codigos())
+registra_los_codigos(app, todos_los_codigos(), los_que_llevan_su_codigo())
 
 # Términos de uso sin aceptar (B6): 403 con error_code TERMS_NOT_ACCEPTED
 app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)

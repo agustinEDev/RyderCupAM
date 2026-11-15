@@ -30,6 +30,9 @@ from src.modules.competition.application.ports.lanzador_de_actualizaciones impor
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -606,6 +609,9 @@ def get_request_enrollment_use_case(
         user_uow.users,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
     )
 
 
@@ -621,10 +627,18 @@ def get_direct_enroll_player_use_case(
 def get_handle_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> HandleEnrollmentUseCase:
     """Proveedor del caso de uso HandleEnrollmentUseCase."""
-    return HandleEnrollmentUseCase(uow, user_uow.users, actividad=actividad)
+    return HandleEnrollmentUseCase(
+        uow,
+        user_uow.users,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
+    )
 
 
 def get_cancel_enrollment_use_case(
@@ -746,21 +760,39 @@ def get_make_draft_pick_use_case(
 def get_send_invitation_by_user_id_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SendInvitationByUserIdUseCase:
     """Proveedor del caso de uso SendInvitationByUserIdUseCase."""
-    return SendInvitationByUserIdUseCase(uow, user_uow, email_service, actividad=actividad)
+    return SendInvitationByUserIdUseCase(
+        uow,
+        user_uow,
+        email_service,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
+    )
 
 
 def get_send_invitation_by_email_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SendInvitationByEmailUseCase:
     """Proveedor del caso de uso SendInvitationByEmailUseCase."""
-    return SendInvitationByEmailUseCase(uow, user_uow, email_service, actividad=actividad)
+    return SendInvitationByEmailUseCase(
+        uow,
+        user_uow,
+        email_service,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
+    )
 
 
 def get_list_my_invitations_use_case(
@@ -774,10 +806,18 @@ def get_list_my_invitations_use_case(
 def get_respond_to_invitation_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RespondToInvitationUseCase:
     """Proveedor del caso de uso RespondToInvitationUseCase."""
-    return RespondToInvitationUseCase(uow, user_uow, actividad=actividad)
+    return RespondToInvitationUseCase(
+        uow,
+        user_uow,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
+    )
 
 
 def get_cancel_invitation_use_case(

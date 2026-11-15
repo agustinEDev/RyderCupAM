@@ -115,7 +115,8 @@ class ReopenEnrollmentsUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede reabrir inscripciones")
 
             # 3. Reabrir inscripciones (la entidad valida la transición)
-            competition.reopen_enrollments()
+            # Con la hora: reabierta pasado el plazo, ya no se cierra sola (R1)
+            competition.reopen_enrollments(now=self._reloj())
 
             # La actualización de hándicaps que esté a medias se corta: al volver
             # a cerrar empieza otra (#251)

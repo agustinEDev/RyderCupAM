@@ -32,6 +32,10 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -65,8 +69,11 @@ class SendInvitationByEmailUseCase:
         user_uow: UserUnitOfWorkInterface,
         email_service: IInvitationEmailService | None = None,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         self._uow = uow
+        # Pasado el plazo de inscripción no se invita (C2, 15 nov 2026); sin él, no se mira
+        self._plazo = plazo
         self._user_uow = user_uow
         self._email_service = email_service
         # Los avisos de Actividad (BE-2); sin el, no se avisa
@@ -132,6 +139,9 @@ class SendInvitationByEmailUseCase:
 
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
+            # Pasado el plazo, aunque siga abierta, no (C2). Un borrador sí: esta
+            # invitación lo abre, y abierto tarde se entra (R2)
+            await exigir_el_plazo(self._plazo, competition)
             # Con los equipos formados no podría aceptarse (30 oct 2026)
             await exigir_sin_equipos_formados(self._uow, competition.id)
 
