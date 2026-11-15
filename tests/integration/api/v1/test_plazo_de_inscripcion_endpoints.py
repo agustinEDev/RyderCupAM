@@ -343,6 +343,20 @@ async def test_c4_al_cerrarse_por_fin_se_retira_el_aviso_de_bloqueo(client: Asyn
     assert len(await _avisos(client, organizador, "ENROLLMENTS_CLOSED")) == 1
 
 
+async def _fecha_de_la_sesion(round_id: str) -> date:
+    """La fecha de la sesion tal como esta en la BD (la respuesta de crearla no la trae)."""
+    motor = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with motor.connect() as conn:
+            return (
+                await conn.execute(
+                    text("SELECT round_date FROM rounds WHERE id = :id"), {"id": round_id}
+                )
+            ).scalar_one()
+    finally:
+        await motor.dispose()
+
+
 async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: AsyncClient):
     organizador, competicion = await _competicion(client)
     sesion = await add_one_session(client, organizador["cookies"], competicion)
@@ -350,6 +364,7 @@ async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: 
     await _pasado_el_plazo(competicion, dias=30)
     await _vuelta()
     assert await estado_en_bd(competicion["id"]) == "CLOSED"
+    antes = await _fecha_de_la_sesion(sesion["id"])
     set_auth_cookies(client, organizador["cookies"])
     ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
     inicio = date.today() + timedelta(days=10)
@@ -371,15 +386,5 @@ async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: 
 
     assert movida.status_code == 200, movida.text
     assert await estado_en_bd(competicion["id"]) == "ACTIVE"
-    motor = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
-    try:
-        async with motor.connect() as conn:
-            fecha = (
-                await conn.execute(
-                    text("SELECT round_date FROM rounds WHERE id = :id"), {"id": sesion["id"]}
-                )
-            ).scalar()
-    finally:
-        await motor.dispose()
-    assert fecha == date.fromisoformat(sesion["round_date"]) + timedelta(days=10)
+    assert await _fecha_de_la_sesion(sesion["id"]) == antes + timedelta(days=10)
     assert await _avisos(client, organizador, "ENROLLMENTS_CLOSED") == []
