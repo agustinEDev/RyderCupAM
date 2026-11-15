@@ -353,10 +353,9 @@ class PublishCompetitionNoticesUseCase:
         """
         if not invitations:
             return
-        # Un borrado por tipo para todo el lote, no uno por invitacion
+        # Un solo borrado para todo el lote y sus dos tipos, no uno por invitacion
         async with self._social_uow:
-            for tipo in _DE_INVITACION:
-                await self._social_uow.activity_events.delete_pairs(tipo, invitations)
+            await self._social_uow.activity_events.delete_pairs_of(_DE_INVITACION, invitations)
 
     async def invitations_acceptable_again(
         self, tournament: TournamentRef, invitations: Sequence[tuple[UserId, str]]

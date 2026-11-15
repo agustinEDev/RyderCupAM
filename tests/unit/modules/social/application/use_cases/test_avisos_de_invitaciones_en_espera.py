@@ -144,6 +144,19 @@ class TestYaPuedesAceptar:
 
         assert await _de(social, eva, T.INVITATION_ACCEPTABLE_AGAIN) == []
 
+    async def test_cerrarse_no_se_lleva_otros_avisos_de_esa_invitacion(self):
+        """P3. Given «no hubo plaza» de una invitación / When se cierran sus avisos de
+        invitado / Then ese sigue: solo se van «te han invitado» y «ya puedes aceptar»"""
+        social, avisos, _, eva = await _escenario()
+        invitacion = str(uuid4())
+        await avisos.no_place(_torneo(), [(eva.id, invitacion)])
+        await avisos.invitations_acceptable_again(_torneo(), [(eva.id, invitacion)])
+
+        await avisos.invitations_closed([(eva.id, invitacion)])
+
+        assert len(await _de(social, eva, T.ENROLLMENT_NO_PLACE)) == 1
+        assert await _de(social, eva, T.INVITATION_ACCEPTABLE_AGAIN) == []
+
     async def test_sin_ninguna_no_se_publica_nada(self):
         """P2. Given ninguna que vuelva / Then nada."""
         social, avisos, _, eva = await _escenario()

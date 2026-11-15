@@ -21,6 +21,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.mover_el_torneo import (
     alguna_sesion_empezada,
@@ -50,6 +53,9 @@ from src.modules.competition.domain.value_objects.team_assignment import TeamAss
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
+)
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -106,6 +112,8 @@ class UpdateCompetitionUseCase:
         golf_course_repository: IGolfCourseRepository,
         actividad: CompetitionActivityPublisherInterface | None = None,
         plazo: PlazoDeInscripcion | None = None,
+        correos: IInvitationEmailService | None = None,
+        user_uow: UserUnitOfWorkInterface | None = None,
     ):
         """
         Constructor.
@@ -124,6 +132,10 @@ class UpdateCompetitionUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
         self._plazo = plazo
+        # Reabierta al moverla (R3): el correo de invitación otra vez a quien no
+        # tiene cuenta (O2, 15 nov 2026)
+        self._correos = correos
+        self._user_uow = user_uow
 
     async def _paises_de_los_campos(self, competition: Competition) -> list[CountryCode]:
         """El país de cada campo de golf de la competición."""
@@ -375,7 +387,14 @@ class UpdateCompetitionUseCase:
                 self._uow, competition, dias, plazo.zonas, plazo.ahora()
             )
             reabierta = await plazo.queda_plazo(competition)
-            reapertura = Reapertura(self._uow, plazo.zonas, plazo.ahora, self._actividad)
+            reapertura = Reapertura(
+                self._uow,
+                plazo.zonas,
+                plazo.ahora,
+                self._actividad,
+                correos=self._correos,
+                user_uow=self._user_uow,
+            )
             if reabierta:
                 await reapertura.reabrir(competition)
             await self._uow.competitions.update(competition)

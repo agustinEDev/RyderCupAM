@@ -201,6 +201,19 @@ class RespondToInvitationUseCase:
                 # cuenta): el mismo 404, antes de tocarla y sin decir su estado
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
 
+            estado: CompetitionStatus | None = None
+            if action == "ACCEPT":
+                # Se decide con la competición bloqueada y la invitación releída con la
+                # suya, en el orden de cerrar y reabrir: sin esto, reabrir a la vez
+                # dejaba una en espera en una abierta (revisión, 15 nov 2026)
+                competicion = await self._uow.competitions.find_by_id_for_update(
+                    invitation.competition_id
+                )
+                estado = competicion.status if competicion is not None else None
+                invitation = await self._uow.invitations.find_by_id_for_update(invitation_id)
+                if invitation is None:
+                    raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
+
             estaba_viva = invitation.is_open()
             invitation.check_expiration()
 
@@ -214,8 +227,7 @@ class RespondToInvitationUseCase:
                 action == "ACCEPT"
                 and invitation.is_pending()
                 # Ya es el invitado (lo de arriba): con el id de otra no se llega aquí
-                and (estado := await self._estado_de_la_competicion(invitation))
-                in INSCRIPCION_CERRADA
+                and estado in INSCRIPCION_CERRADA
             ):
                 # Una pendiente que se coló en una cerrada: espera, como las que
                 # cerró el cierre (P1), y la fase 2 lo dice; en juego, sin plaza.
@@ -274,11 +286,6 @@ class RespondToInvitationUseCase:
         return invitation.is_for_user(user_id) or (
             email is not None and invitation.is_for_email(email)
         )
-
-    async def _estado_de_la_competicion(self, invitation: Invitation) -> CompetitionStatus | None:
-        """El estado de su competicion, si existe."""
-        competition = await self._uow.competitions.find_by_id(invitation.competition_id)
-        return competition.status if competition is not None else None
 
     async def _handle_accept(
         self, invitation: Invitation, current_user_id: UserId

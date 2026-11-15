@@ -66,7 +66,7 @@ async def exigir_que_se_pueda_invitar(
         TeamsFormedError: Con los equipos formados y partidos
     """
     await exigir_sin_draft_abierto(uow, competition.id)
-    if not await TeamAssignmentWriter.se_pueden_deshacer(uow, competition):
+    if await TeamAssignmentWriter.deshacible(uow, competition) is None:
         await exigir_sin_equipos_formados(uow, competition.id)
 
 

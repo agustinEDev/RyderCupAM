@@ -22,21 +22,20 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 9. **CompleteCompetitionUseCase** - Transition IN_PROGRESS → COMPLETED
 10. **CancelCompetitionUseCase** - Transition to CANCELLED from any status
 
-### Enrollment Management (7 use cases)
-11. **RequestEnrollmentUseCase** - Request enrollment (REQUESTED)
-12. **DirectEnrollPlayerUseCase** - Direct enrollment by creator (APPROVED)
-13. **ListEnrollmentsUseCase** - List enrollments with filters
-14. **HandleEnrollmentUseCase** - Approve/reject requests
-15. **CancelEnrollmentUseCase** - Cancel request/invitation
-16. **WithdrawEnrollmentUseCase** - Withdraw from competition
-17. **SetCustomHandicapUseCase** - Set custom handicap
+### Enrollment Management (6 use cases)
+11. **RequestEnrollmentUseCase** - Sign up (direct entry in public competitions)
+12. **ListEnrollmentsUseCase** - List enrollments with filters
+13. **HandleEnrollmentUseCase** - Approve/reject requests
+14. **CancelEnrollmentUseCase** - Cancel request/invitation
+15. **WithdrawEnrollmentUseCase** - Withdraw from competition
+16. **SetCustomHandicapUseCase** - Set custom handicap
 
 ### Scoring & Leaderboard (5 use cases) ⭐ Sprint 4
-18. **GetScoringViewUseCase** - Unified scoring view (scores, standing, marker assignments)
-19. **SubmitHoleScoreUseCase** - Register own_score + marker_score with auto-validation and granular scorecard locking
-20. **SubmitScorecardUseCase** - Deliver scorecard (all holes must be MATCH), auto-complete match/round
-21. **GetLeaderboardUseCase** - Leaderboard with Ryder Cup points per team
-22. **ConcedeMatchUseCase** - Concede match (player own team / creator any team)
+17. **GetScoringViewUseCase** - Unified scoring view (scores, standing, marker assignments)
+18. **SubmitHoleScoreUseCase** - Register own_score + marker_score with auto-validation and granular scorecard locking
+19. **SubmitScorecardUseCase** - Deliver scorecard (all holes must be MATCH), auto-complete match/round
+20. **GetLeaderboardUseCase** - Leaderboard with Ryder Cup points per team
+21. **ConcedeMatchUseCase** - Concede match (player own team / creator any team)
 
 ---
 

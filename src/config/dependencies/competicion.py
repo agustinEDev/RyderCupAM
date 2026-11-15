@@ -278,6 +278,8 @@ def get_update_competition_use_case(
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
     plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
+    correos: IInvitationEmailService = Depends(get_invitation_email_service),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
@@ -295,6 +297,8 @@ def get_update_competition_use_case(
         golf_course_uow.golf_courses,
         actividad=actividad,
         plazo=plazo,
+        correos=correos,
+        user_uow=user_uow,
     )
 
 
@@ -547,6 +551,8 @@ def get_reopen_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    correos: IInvitationEmailService = Depends(get_invitation_email_service),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> ReopenEnrollmentsUseCase:
     """
     Proveedor del caso de uso ReopenEnrollmentsUseCase.
@@ -561,6 +567,8 @@ def get_reopen_enrollments_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
         actividad=actividad,
+        correos=correos,
+        user_uow=user_uow,
     )
 
 

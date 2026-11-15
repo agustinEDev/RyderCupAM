@@ -709,29 +709,32 @@ class TestInvitacionesCerradasSolas:
         assert len(await _guardados(social_uow, ana)) == 1
 
     async def test_todas_en_un_solo_borrado(self, avisos, social_uow, user_uow, monkeypatch):
-        """Revision: un DELETE por lote y tipo de aviso de invitacion, no uno por invitacion.
-
-        Dos tipos desde el 15 nov 2026: «te han invitado» y «ya puedes aceptar» (P2).
-        """
+        """Revision: un DELETE por lote, no uno por invitacion ni por tipo: «te han invitado»
+        y «ya puedes aceptar» (P2, 15 nov 2026) en la misma sentencia."""
         ana = await _user(user_uow)
         await avisos.invited(ana.id, _torneo(), "inv-a")
         await avisos.invited(ana.id, _torneo(), "inv-b")
         repo = social_uow.activity_events
         llamadas = []
-        original = repo.delete_pairs
+        original = repo.delete_pairs_of
 
-        async def espia(tipo, parejas):
-            llamadas.append(list(parejas))
-            return await original(tipo, parejas)
+        async def espia(tipos, parejas):
+            llamadas.append((set(tipos), list(parejas)))
+            return await original(tipos, parejas)
 
         async def prohibido(*_args, **_kwargs):
-            raise AssertionError("un borrado por invitacion")
+            raise AssertionError("un borrado por invitacion o por tipo")
 
-        monkeypatch.setattr(repo, "delete_pairs", espia)
+        monkeypatch.setattr(repo, "delete_pairs_of", espia)
+        monkeypatch.setattr(repo, "delete_pairs", prohibido)
         monkeypatch.setattr(repo, "delete_from_source", prohibido)
 
         await avisos.invitations_closed([(ana.id, "inv-a"), (ana.id, "inv-b")])
 
-        assert len(llamadas) == 2
-        assert all(len(parejas) == 2 for parejas in llamadas)
+        assert len(llamadas) == 1
+        assert llamadas[0][0] == {
+            ActivityEventType.INVITED_TO_TOURNAMENT,
+            ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+        }
+        assert len(llamadas[0][1]) == 2
         assert await _guardados(social_uow, ana) == []

@@ -21,11 +21,13 @@ class InvitationStatus(StrEnum):
       PENDING -> ACCEPTED (invitado acepta)
               -> DECLINED (invitado rechaza)
               -> EXPIRED  (pasan 7 dias)
-              -> NO_ROOM  (se cerro la inscripcion o se lleno: no quedan plazas, #710, BE #359)
+              -> NO_ROOM  (se lleno, BE #359; o se cancelo, 15 nov 2026. Hasta el 15 nov
+                           tambien al cerrar la inscripcion, #710: ahora espera, ON_HOLD)
               -> CANCELLED (el organizador, quien la envio o un admin la retira, BE #359)
               -> ON_HOLD  (se cerro la inscripcion: espera a que se reabra, 15 nov 2026)
-      ON_HOLD -> PENDING (se reabre), NO_ROOM (empieza o se cancela), DECLINED,
-                 CANCELLED o EXPIRED, como una pendiente; aceptarla, no.
+      ON_HOLD -> PENDING (se reabre, con 7 dias nuevos), NO_ROOM (empieza, se cancela,
+                 se llena o se reabre sin sitio), DECLINED o CANCELLED; esperando no
+                 caduca (nunca EXPIRED) y no se acepta.
       ACCEPTED, DECLINED, EXPIRED, NO_ROOM y CANCELLED son estados terminales.
     """
 
@@ -33,9 +35,9 @@ class InvitationStatus(StrEnum):
     ACCEPTED = "ACCEPTED"
     DECLINED = "DECLINED"
     EXPIRED = "EXPIRED"
-    # Decidido el 24 sep (#710): al cerrar la inscripcion, las pendientes se
-    # rechazan por falta de plazas. Aceptar una despues metia a alguien con el
-    # draft hecho y descuadraba los partidos
+    # Sin plaza: se lleno (BE #359), o empezo o se cancelo sin que la aceptara
+    # (15 nov 2026). Del 24 sep (#710) al 15 nov tambien al cerrar la inscripcion;
+    # desde entonces, al cerrar, espera (ON_HOLD)
     NO_ROOM = "NO_ROOM"
     # La retiro quien invita (BE #359). Distinto de DECLINED: «el invitado dijo
     # que no» y «el organizador la retiro» no son lo mismo al leer la historia
@@ -72,7 +74,7 @@ class InvitationStatus(StrEnum):
         Verifica si es valida la transicion al nuevo estado.
 
         PENDING, a ACCEPTED, DECLINED, EXPIRED, NO_ROOM, CANCELLED u ON_HOLD; ON_HOLD,
-        a todas menos ACCEPTED (y vuelve a PENDING).
+        a PENDING, DECLINED, NO_ROOM o CANCELLED (ni ACCEPTED ni EXPIRED).
         """
         valid_transitions = {
             InvitationStatus.PENDING: {
@@ -86,7 +88,6 @@ class InvitationStatus(StrEnum):
             InvitationStatus.ON_HOLD: {
                 InvitationStatus.PENDING,
                 InvitationStatus.DECLINED,
-                InvitationStatus.EXPIRED,
                 InvitationStatus.NO_ROOM,
                 InvitationStatus.CANCELLED,
             },

@@ -39,7 +39,6 @@ from .enrollment_dto import (
     # Cancel & Withdraw
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
-    # Direct Enroll
     # Generic
     EnrollmentResponseDTO,
     # Handle Enrollment

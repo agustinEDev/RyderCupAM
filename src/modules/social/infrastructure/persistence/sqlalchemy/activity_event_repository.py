@@ -429,6 +429,18 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         return await self._borrar(stmt)
 
+    async def delete_pairs_of(
+        self, types: Collection[ActivityEventType], pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        if not types or not pairs:
+            return 0
+        tabla = activity_events_table.c
+        stmt = delete(activity_events_table).where(
+            tabla.type.in_(sorted(types)),
+            tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
+        )
+        return await self._borrar(stmt)
+
     async def lock_scope(self, scope_id: str) -> None:
         """
         `pg_advisory_xact_lock`: lo suelta el propio Postgres al acabar la

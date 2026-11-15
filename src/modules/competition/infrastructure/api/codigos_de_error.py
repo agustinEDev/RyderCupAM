@@ -224,8 +224,9 @@ CODIGOS: dict[type[Exception], int] = {
     InvitationExpiredViolation: status.HTTP_409_CONFLICT,
     # La invitación espera a que se reabra la inscripción (P1, 15 nov 2026): ver CON_SU_CODIGO
     InvitationOnHoldViolation: status.HTTP_409_CONFLICT,
-    # Con la sala de draft abierta no se invita ni se acepta (B3, 15 nov 2026). Las rutas
-    # de baja y de aprobar lo siguen traduciendo con su texto propio
+    # Con la sala de draft abierta nadie entra (B3, 15 nov 2026): invitar, aceptar,
+    # apuntarse y reabrir llegan aquí; las rutas de baja y de aprobar lo traducen antes,
+    # con su texto propio en inglés
     DraftInProgressError: status.HTTP_409_CONFLICT,
     MatchNotScoringError: status.HTTP_409_CONFLICT,
     NotYourTurnError: status.HTTP_409_CONFLICT,

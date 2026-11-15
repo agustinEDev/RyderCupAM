@@ -373,16 +373,18 @@ async def approve_enrollment(
 
     Solo el creador de la competición puede aprobar. Con los equipos formados
     se reinician; si ya hay partidos, no entra: 409 `TEAMS_FORMED` (30 oct 2026).
+    Con la sala de draft abierta nadie entra: 409 `DRAFT_IN_PROGRESS` (15 nov 2026).
     """
     try:
         request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="APPROVE")
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
-    except TeamsFormedError as e:
+    except (DraftInProgressError, TeamsFormedError) as e:
+        # Un texto fijo por código, el de las rutas de baja; no el de la excepción (CodeQL)
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
         )
 
 

@@ -38,12 +38,12 @@ class TestInvitationStatusValues:
         assert not any(s.is_open() for s in InvitationStatus if s not in {"PENDING", "ON_HOLD"})
 
     def test_on_hold_transitions(self):
-        """P1-P3: se llega desde PENDING; vuelve, se rechaza, se retira, caduca o sin plaza."""
+        """P1-P3: se llega desde PENDING; vuelve, se rechaza, se retira o sin plaza. Esperando
+        no caduca: a EXPIRED no."""
         assert InvitationStatus.PENDING.can_transition_to(InvitationStatus.ON_HOLD)
         assert {s for s in InvitationStatus if InvitationStatus.ON_HOLD.can_transition_to(s)} == {
             InvitationStatus.PENDING,
             InvitationStatus.DECLINED,
-            InvitationStatus.EXPIRED,
             InvitationStatus.NO_ROOM,
             InvitationStatus.CANCELLED,
         }

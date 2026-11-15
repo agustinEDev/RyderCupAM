@@ -11,7 +11,10 @@ las rondas dejaria la agenda atascada sin decir por que, y el olvido no lo ve
 ningun test de la otra ruta.
 """
 
+from dataclasses import dataclass
+
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -20,6 +23,14 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.value_objects.user_id import UserId
+
+
+@dataclass(frozen=True)
+class Deshacible:
+    """Los equipos formados que aún se pueden deshacer, con sus sesiones."""
+
+    reparto: TeamAssignment
+    sesiones: list[Round]
 
 
 class TeamAssignmentWriter:
@@ -71,27 +82,30 @@ class TeamAssignmentWriter:
         return assignment
 
     @staticmethod
-    async def se_pueden_deshacer(
+    async def deshacible(
         uow: CompetitionUnitOfWorkInterface, competition: Competition
-    ) -> bool:
+    ) -> Deshacible | None:
         """
-        Si hay equipos formados y aún se pueden deshacer: sin empezar y sin partidos.
-        Sin tocar nada: para invitar con los equipos formados (B3, 15 nov 2026).
+        Los equipos formados, si aún se pueden deshacer: sin empezar y sin partidos.
+        Sin tocar nada: para invitar con los equipos formados (B3, 15 nov 2026), y lo
+        que lee lo usa `deshacer` sin volver a pedirlo.
         """
         # Solo antes de empezar: en juego, o con partidos, el reparto ya es lo jugado
         if competition.status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
-            return False
+            return None
         # Un reparto es de una Ryder: sin su pieza, nada que deshacer (revisor)
         if competition.ryder_cup is None:
-            return False
-        if await uow.team_assignments.find_by_competition(competition.id) is None:
-            return False
-        for sesion in await uow.rounds.find_by_competition(competition.id):
+            return None
+        reparto = await uow.team_assignments.find_by_competition(competition.id)
+        if reparto is None:
+            return None
+        sesiones = await uow.rounds.find_by_competition(competition.id)
+        for sesion in sesiones:
             if sesion.status not in (RoundStatus.PENDING_TEAMS, RoundStatus.PENDING_MATCHES):
-                return False
+                return None
             if await uow.matches.find_by_round(sesion.id):
-                return False
-        return True
+                return None
+        return Deshacible(reparto, sesiones)
 
     @staticmethod
     async def deshacer(uow: CompetitionUnitOfWorkInterface, competition: Competition) -> bool:
@@ -113,14 +127,12 @@ class TeamAssignmentWriter:
         Returns:
             Si se deshicieron (False: no habia reparto, o ya hay partidos)
         """
-        if not await TeamAssignmentWriter.se_pueden_deshacer(uow, competition):
+        deshacible = await TeamAssignmentWriter.deshacible(uow, competition)
+        if deshacible is None:
             return False
-        reparto = await uow.team_assignments.find_by_competition(competition.id)
-        if reparto is None:  # Ya lo ha mirado `se_pueden_deshacer`; para el tipo
-            return False
-        sesiones = await uow.rounds.find_by_competition(competition.id)
+        sesiones = deshacible.sesiones
 
-        await uow.team_assignments.delete(reparto.id)
+        await uow.team_assignments.delete(deshacible.reparto.id)
         # Los subcapitanes se eligen dentro de cada equipo (BE #320)
         competition.teams_reassigned()
         await uow.competitions.update(competition)

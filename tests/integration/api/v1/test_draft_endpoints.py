@@ -259,3 +259,21 @@ class TestLaSalaPorHttp:
         otra_vez = await client.post(f"/api/v1/competitions/{comp_id}/draft")
 
         assert otra_vez.status_code == 400, otra_vez.text
+
+
+async def test_o1_con_la_sala_abierta_no_se_reabre(client: AsyncClient):
+    """
+    O1 (Agustín, 15 nov 2026). Given la sala de draft abierta / When el organizador
+    reabre la inscripción / Then 409 DRAFT_IN_PROGRESS y sigue cerrada: antes, el draft
+    """
+    montaje = await _cerrada_con_capitanes(client)
+    comp_id = montaje["comp"]["id"]
+    set_auth_cookies(client, montaje["creador"]["cookies"])
+    assert (await client.post(f"/api/v1/competitions/{comp_id}/draft")).status_code == 201
+
+    reabierta = await client.post(f"/api/v1/competitions/{comp_id}/reopen-enrollments")
+
+    assert reabierta.status_code == 409, reabierta.text
+    assert reabierta.json()["error_code"] == "DRAFT_IN_PROGRESS"
+    ficha = (await client.get(f"/api/v1/competitions/{comp_id}")).json()
+    assert ficha["status"] == "CLOSED"

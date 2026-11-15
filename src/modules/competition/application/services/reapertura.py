@@ -9,16 +9,29 @@ salido se borran, con sus avisos de salida retirados, y las invitaciones que
 esperaban vuelven a pendientes, con su «ya puedes aceptar» (P2).
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
+from src.modules.competition.application.services.cupo_de_la_competicion import manda_el_maximo
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    vuelven_las_que_esperan,
+    AlReabrir,
+    al_reabrir,
+)
+from src.modules.competition.application.services.nombre_de_quien_invita import (
+    nombre_de_quien_invita,
+    quieren_su_nombre_legal,
 )
 from src.modules.competition.application.services.partidas_del_jugador import (
     salidas_por_hora,
@@ -37,7 +50,13 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.email_masking import mask_email
+
+logger = logging.getLogger(__name__)
 
 
 class Reapertura:
@@ -49,6 +68,8 @@ class Reapertura:
         zonas: ICompetitionTimezone | None,
         reloj: Callable[[], datetime],
         actividad: AvisosDeActividad,
+        correos: IInvitationEmailService | None = None,
+        user_uow: UserUnitOfWorkInterface | None = None,
     ):
         """
         Args:
@@ -56,15 +77,21 @@ class Reapertura:
                 Sin ellas, solo cuenta el estado de la partida
             actividad: Para retirar los avisos de salida de las partidas que se
                 borran (G4)
+            correos: Para reenviar la invitación a quien no tiene cuenta (O2); sin
+                él, no se reenvía
+            user_uow: Para el nombre de quien invita en ese correo
         """
+        self._correos = correos
+        self._user_uow = user_uow
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
         self._actividad = actividad
         # Los aprobados al reabrir: sus avisos de hándicaps con la RFEG se retiran
         self._inscritos: list[UserId] = []
-        # Las invitaciones que esperaban y vuelven, para avisar ya guardado (P2)
-        self._vuelven: list[Invitation] = []
+        # Las invitaciones que esperaban: las que vuelven y las que se quedan sin
+        # plaza, para avisar ya guardado (P2, O1, C1)
+        self._invitaciones = AlReabrir()
 
     async def reabrir(self, competition: Competition) -> dict[RoundId, Salidas]:
         """
@@ -75,7 +102,11 @@ class Reapertura:
 
         Raises:
             CompetitionStateError: Si no está cerrada
+            DraftInProgressError: Con la sala de draft abierta: se acaba antes (O1)
         """
+        # Con la sala de draft abierta no se reabre: la sala no se enteraría de
+        # quien entrase (Agustín, 15 nov 2026)
+        await exigir_sin_draft_abierto(self._uow, competition.id)
         # Con la hora: reabierta pasado el plazo, ya no se cierra sola (R1)
         competition.reopen_enrollments(now=self._reloj())
 
@@ -83,8 +114,14 @@ class Reapertura:
         # a cerrar empieza otra (#251)
         await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
-        # Las invitaciones que esperaban vuelven a pendientes (P2, 15 nov 2026)
-        self._vuelven = await vuelven_las_que_esperan(self._uow, competition.id)
+        # Las invitaciones que esperaban vuelven a pendientes las que caben; con
+        # partidos ya generados, ninguna (P2, O1, C1, C2: 15 nov 2026)
+        self._invitaciones = await al_reabrir(
+            self._uow,
+            competition.id,
+            libres=await self._plazas_libres(competition),
+            sin_sitio=await self._con_partidos(competition),
+        )
 
         # Las partidas que no han salido se borran: pueden entrar y salir
         # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
@@ -118,8 +155,59 @@ class Reapertura:
         await self._actividad.handicap_not_found_withdrawn(competition, self._inscritos)
 
     async def avisar_a_los_invitados(self, competition: Competition) -> None:
-        """Ya guardada: a cada invitado que esperaba, «ya puedes aceptar» (P2)."""
-        await self._actividad.invitations_acceptable_again(competition, self._vuelven)
+        """
+        Ya guardada: a cada invitado que vuelve, «ya puedes aceptar» (P2), y a quien
+        no tiene cuenta, el correo de invitación otra vez (O2); a quien se quedó sin
+        plaza, «no hubo plaza» (O1, C1).
+        """
+        vuelven = self._invitaciones.vuelven
+        await self._actividad.invitations_acceptable_again(competition, vuelven)
+        await self._actividad.invitations_no_place(competition, self._invitaciones.sin_plaza)
+        await self._reenviar(competition, [i for i in vuelven if i.invitee_user_id is None])
+
+    async def _reenviar(self, competition: Competition, sin_cuenta: list[Invitation]) -> None:
+        """El correo de invitación de siempre, con la caducidad nueva (O2). Si falla, se
+        apunta y se sigue: la reapertura ya está hecha."""
+        if self._correos is None:
+            return
+        for invitacion in sin_cuenta:
+            # El nombre que usa en ESTA competición (#710), como al invitar
+            par = (competition.id, invitacion.inviter_id)
+            async with self._uow:
+                legal = par in await quieren_su_nombre_legal(self._uow, [par])
+            quien_invita = None
+            if self._user_uow is not None:
+                async with self._user_uow:
+                    quien_invita = await self._user_uow.users.find_by_id(invitacion.inviter_id)
+            try:
+                await self._correos.send_invitation_email(
+                    to_email=invitacion.invitee_email,
+                    invitee_name=None,
+                    inviter_name=nombre_de_quien_invita(quien_invita, legal),
+                    competition_name=str(competition.name),
+                    personal_message=invitacion.personal_message,
+                    expires_at=invitacion.expires_at,
+                )
+            except Exception:
+                logger.warning(
+                    "Could not resend the invitation email to %s",
+                    mask_email(invitacion.invitee_email),
+                    exc_info=True,
+                )
+
+    async def _plazas_libres(self, competition: Competition) -> int | None:
+        """Cuántas caben (C1); None si el cupo no es el máximo (franjas)."""
+        if not await manda_el_maximo(self._uow, competition):
+            return None
+        aprobadas = await self._uow.enrollments.count_approved_by_competition(competition.id)
+        return max(0, competition.max_players - aprobadas)
+
+    async def _con_partidos(self, competition: Competition) -> bool:
+        """Si tiene algún partido ya generado (O1): solo los tiene una Ryder."""
+        for sesion in await self._uow.rounds.find_by_competition(competition.id):
+            if await self._uow.matches.find_by_round(sesion.id):
+                return True
+        return False
 
     async def _borrar_las_que_no_salieron(
         self, competition_id: CompetitionId

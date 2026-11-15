@@ -161,6 +161,16 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def delete_pairs_of(
+        self, types: Collection[ActivityEventType], pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        """
+        Como `delete_pairs`, de varios tipos a la vez y en una sola operacion: los
+        avisos de una invitacion son dos (15 nov 2026). Sin tipos o sin parejas no
+        borra nada. Devuelve cuantos borro.
+        """
+
+    @abstractmethod
     async def lock_scope(self, scope_id: str) -> None:
         """
         Bloquea ese ambito (un torneo) hasta el final de la transaccion: dos
