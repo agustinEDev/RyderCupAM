@@ -73,7 +73,7 @@ async def create_and_login_user(
 
     assert login_response.status_code == 200
     # Verificado, su login lanza un aviso en segundo plano: que acabe aquí (B-17)
-    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes  # noqa: PLC0415
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 
     await espera_los_avisos_pendientes()
     cookies = login_response.cookies
