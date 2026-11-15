@@ -43,7 +43,7 @@ async def _verifica(email: str) -> None:
 
 
 async def _vincula(client: AsyncClient, email: str, verificada: bool = True):
-    datos = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    datos = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez", verificar=False)
     if verificada:
         # Vincular Google pide el correo verificado (#749)
         await _verifica(email)
@@ -327,7 +327,7 @@ async def test_g1_the_creator_google_link_does_not_survive_the_claim(client: Asy
     from tests.integration.api.v1.test_terms_acceptance_endpoints import _sql
 
     email = "precaptura.google@example.com"
-    await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez", verificar=False)
     await _sql(
         "insert into user_oauth_accounts (id, user_id, provider, provider_user_id, "
         "provider_email, created_at) select gen_random_uuid()::text, id, 'google', "

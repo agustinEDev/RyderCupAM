@@ -100,8 +100,11 @@ async def test_ninguna_lectura_repite_consulta(client: AsyncClient, privada, qui
 # +1 en todas desde BE #737 (5 nov 2026): la comprobación del dispositivo del token
 # por su id. En producción no es una más: la de antes, por huella, también hacía una
 # consulta en cada petición; en los tests no corría porque no había IP
+# +1 en la ficha del aprobado desde B-17 (15 nov 2026): los usuarios de los tests ya
+# llegan verificados, como en producción, y con el correo verificado la ficha busca
+# además sus invitaciones por correo (`correo_de_quien_mira`, F-07). No es una de más
 TOPES = {
-    "R1 ficha": {"organizador": 23, "aprobado": 20, "fuera": 17},
+    "R1 ficha": {"organizador": 23, "aprobado": 21, "fuera": 17},
     "R2 agenda": {"organizador": 13, "aprobado": 16, "fuera": 18},
     "R3 grupos": {"organizador": 15, "aprobado": 17, "fuera": 19},
     "R4 inscritos": {"organizador": 9, "aprobado": 11, "fuera": 10},

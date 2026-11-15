@@ -62,7 +62,8 @@ async def test_the_teardown_waits_for_a_sign_in_notice_still_using_the_db(
         await puerta.wait()
 
     monkeypatch.setattr(AvisoDeNuevoInicioDeSesion, "avisa", bloqueado)
-    await create_authenticated_user(client, CORREO, CLAVE, "Ana", "Lenta")
+    # Sin verificar al crearla: si no, su propio login ya avisaría (B-17 los verifica)
+    await create_authenticated_user(client, CORREO, CLAVE, "Ana", "Lenta", verificar=False)
     # Con el correo confirmado y sin la cookie del dispositivo, el login avisa
     await sql_en_la_bd_de_test("update users set email_verified = true where email = :e", e=CORREO)
     client.cookies.clear()
