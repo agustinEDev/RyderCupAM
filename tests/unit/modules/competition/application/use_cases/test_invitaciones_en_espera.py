@@ -1685,3 +1685,17 @@ class TestO2UnCorreoQueFallaNoParaLosDemas:
         assert "Could not read who invited" in caplog.text
         assert "Could not resend the invitation email to" not in caplog.text
         assert await _estado(uow, sin_cuenta) is InvitationStatus.PENDING
+
+
+class TestRechazarLeeLaInvitacionBloqueada:
+    async def test_la_primera_fase_relee_con_la_fila_bloqueada(self):
+        """CodeRabbit (#867). Given una invitación / When se rechaza / Then también la primera
+        fase la relee bloqueada: un EXPIRED leído antes no pisa un ON_HOLD de a la vez"""
+        uow, _, _, _, usuarios, invitado, invitacion = await _abierta_con_invitado()
+        bloqueo = AsyncMock(wraps=uow.invitations.find_by_id_for_update)
+        uow.invitations.find_by_id_for_update = bloqueo
+
+        await _responde(usuarios, uow, invitacion, invitado, "DECLINE")
+
+        # Una en la primera fase y otra en la segunda
+        assert bloqueo.await_count == 2

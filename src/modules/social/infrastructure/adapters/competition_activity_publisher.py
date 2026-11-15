@@ -234,7 +234,20 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         )
 
     async def teams_formed(self, competition: Competition) -> None:
-        """Al organizador se le retiran los «equipos deshechos» de esa competición (B3)."""
+        """
+        Al organizador se le retiran los «equipos deshechos» de esa competición (B3).
+
+        Se relee el reparto justo antes, como `enrolled` relee la inscripción: si al
+        llegar este aviso alguien ya los volvió a deshacer, su «se han deshecho» es
+        cierto y se queda (CodeRabbit, #867). Sin comparar horas: el reparto guarda la
+        local y los avisos, UTC.
+        """
+        async with self._competition_uow:
+            formados = await self._competition_uow.team_assignments.find_by_competition(
+                competition.id
+            )
+        if formados is None:
+            return
         await self._notices.teams_undone_withdrawn(str(competition.id.value))
 
     async def requests_closed(

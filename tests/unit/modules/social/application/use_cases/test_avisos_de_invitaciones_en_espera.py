@@ -264,3 +264,50 @@ class TestEquiposFormadosOtraVez:
 
         quedan = await _de(social, organizador, T.TEAMS_UNDONE_BY_ENTRY)
         assert [a.source_match_id for a in quedan] == ["enr-3"]
+
+
+class TestEquiposFormadosQueLleganTarde:
+    """
+    CodeRabbit (#867): el «equipos formados» se publica ya guardado, y puede llegar tarde,
+    cuando alguien ya ha vuelto a deshacerlos. Se relee el reparto justo antes de retirar,
+    como `enrolled` relee la inscripción: si ya no hay equipos, el «se han deshecho»
+    nuevo es cierto y se queda. Sin comparar horas: el reparto guarda la hora local y los
+    avisos, UTC.
+    """
+
+    async def _adaptador(self, con_equipos: bool):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+        from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
+            CompetitionActivityPublisher,
+        )
+
+        competicion = MagicMock()
+        competicion.id.value = uuid4()
+        uow = InMemoryUnitOfWork()
+        uow.team_assignments.find_by_competition = AsyncMock(
+            return_value=object() if con_equipos else None
+        )
+        avisos = MagicMock()
+        avisos.teams_undone_withdrawn = AsyncMock()
+        return CompetitionActivityPublisher(avisos, MagicMock(), uow), avisos, competicion
+
+    async def test_con_los_equipos_formados_se_retiran(self):
+        """B3. Given los equipos siguen formados / When llega el aviso / Then se retiran."""
+        adaptador, avisos, competicion = await self._adaptador(con_equipos=True)
+
+        await adaptador.teams_formed(competicion)
+
+        avisos.teams_undone_withdrawn.assert_awaited_once_with(str(competicion.id.value))
+
+    async def test_si_ya_se_volvieron_a_deshacer_no(self):
+        """B3. Given ya no hay equipos (otro entró y los deshizo) / When llega tarde el
+        aviso de que se formaron / Then el «se han deshecho» nuevo se queda"""
+        adaptador, avisos, competicion = await self._adaptador(con_equipos=False)
+
+        await adaptador.teams_formed(competicion)
+
+        avisos.teams_undone_withdrawn.assert_not_awaited()

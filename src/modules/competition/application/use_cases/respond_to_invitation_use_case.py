@@ -215,9 +215,11 @@ class RespondToInvitationUseCase:
                     invitation.competition_id
                 )
                 estado = competicion.status if competicion is not None else None
-                invitation = await self._uow.invitations.find_by_id_for_update(invitation_id)
-                if invitation is None:
-                    raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
+            # Al rechazar también se decide con su fila bloqueada: leída sin bloqueo, una
+            # EXPIRED de antes pisaba la ON_HOLD que el cierre guardaba a la vez (#867)
+            invitation = await self._uow.invitations.find_by_id_for_update(invitation_id)
+            if invitation is None:
+                raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
 
             estaba_viva = invitation.is_open()
             invitation.check_expiration()
