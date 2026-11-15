@@ -28,7 +28,7 @@ CLAVE = "P@ssw0rd123!"
 
 async def _jugador(client: AsyncClient, email: str) -> dict:
     """Un jugador con sesión, sin verificar."""
-    return await create_authenticated_user(client, email, CLAVE, "Ana", "Correo")
+    return await create_authenticated_user(client, email, CLAVE, "Ana", "Correo", verificar=False)
 
 
 async def _verifica(email: str) -> None:

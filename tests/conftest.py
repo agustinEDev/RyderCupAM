@@ -452,6 +452,10 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code == 201
+    # Verificado, como un usuario normal: sin eso no crea competiciones ni invita (B-17)
+    await sql_en_la_bd_de_test(
+        "update users set email_verified = true where email = :e", e=user_data["email"]
+    )
 
     # Hacer login para obtener el token
     login_data = {"email": user_data["email"], "password": user_data["password"]}
@@ -473,6 +477,8 @@ async def create_authenticated_user(
     first_name: str,
     last_name: str,
     gender: str | None = "MALE",
+    *,
+    verificar: bool = True,
 ) -> dict:
     """
     Helper para crear un usuario y obtener sus cookies de autenticación.
@@ -488,6 +494,9 @@ async def create_authenticated_user(
         last_name: Apellido
         gender: Con género por defecto: sin él no se puede apuntar a ninguna
             competición (#710). None para probar a quien no lo tiene
+        verificar: Con el correo verificado por defecto: sin él no puede crear
+            competiciones, pedir amistad ni invitar (B-17). False para probar a
+            quien no lo ha verificado
 
     Returns:
         Dict con 'cookies', 'token' (legacy), 'user'
@@ -510,6 +519,10 @@ async def create_authenticated_user(
         headers={"X-Test-Client-ID": f"register-{uuid.uuid4()}"},
     )
     assert register_response.status_code == 201
+    if verificar:
+        await sql_en_la_bd_de_test(
+            "update users set email_verified = true where email = :e", e=email
+        )
 
     # Login (con client ID único para evitar rate limit 5/minute)
     login_response = await client.post(

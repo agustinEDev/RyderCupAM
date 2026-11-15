@@ -275,7 +275,7 @@ async def test_g2_google_takes_an_unverified_account_from_whoever_had_it(client:
           contraseña ya no entra; la sesión de Google sí
     """
     email = "precaptura@example.com"
-    otro = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    otro = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez", verificar=False)
     assert otro["user"]["email_verified"] is False
     _google(email)
     google = await client.post(
