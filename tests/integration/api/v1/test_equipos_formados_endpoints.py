@@ -194,7 +194,7 @@ async def test_i2_con_equipos_sin_partidos_se_invita_por_email(client: AsyncClie
 
 async def _con_partidos(client: AsyncClient) -> dict:
     """Dos contra dos con los individuales generados, una solicitud sin aprobar, una
-    invitación pendiente y reabierta."""
+    invitación que esperaba (queda sin plaza al reabrir con partidos, O1) y reabierta."""
     creador = await create_authenticated_user(
         client, "cp-org@test.com", "P@ssw0rd123!", "Org", "Partidos"
     )
@@ -232,7 +232,8 @@ async def _con_partidos(client: AsyncClient) -> dict:
     assert respuesta.status_code == 201, respuesta.text
     await activate_competition(client, creador["cookies"], comp_id)
     # Tres entran invitados; el cuarto tiene una solicitud sin aprobar, y el
-    # quinto una invitación pendiente (al cerrar espera y al reabrir vuelve, P1-P2)
+    # quinto una invitación pendiente (al cerrar espera; al reabrir con partidos queda
+    # sin plaza, O1)
     for jugador in jugadores[:3]:
         await inscrito_por_invitacion(client, creador["cookies"], comp_id, jugador)
     respuesta = await client.post(
@@ -282,8 +283,9 @@ async def _con_partidos(client: AsyncClient) -> dict:
     }
 
 
-async def test_e1_con_partidos_no_se_acepta_y_sigue_pendiente(client: AsyncClient):
-    """B3: con partidos, aceptar es 409 TEAMS_FORMED y la invitación sigue pendiente."""
+async def test_e1_con_partidos_la_que_esperaba_queda_sin_plaza(client: AsyncClient):
+    """O1 (15 nov): reabrir una Ryder con partidos deja sin plaza la invitación que
+    esperaba; aceptarla después es INVITATION_NO_ROOM y no entra nadie."""
     montaje = await _con_partidos(client)
     set_auth_cookies(client, montaje["invitado"]["cookies"])
 
@@ -291,9 +293,10 @@ async def test_e1_con_partidos_no_se_acepta_y_sigue_pendiente(client: AsyncClien
         f"/api/v1/invitations/{montaje['invitacion']}/respond", json={"action": "ACCEPT"}
     )
 
-    _es_teams_formed(aceptada)
+    assert aceptada.status_code == 409, aceptada.text
+    assert aceptada.json()["error_code"] == "INVITATION_NO_ROOM"
     mias = (await client.get("/api/v1/invitations/me")).json()["invitations"]
-    assert [i["status"] for i in mias] == ["PENDING"]
+    assert [i["status"] for i in mias] == ["NO_ROOM"]
 
 
 async def test_e2_con_partidos_no_se_invita(client: AsyncClient):
