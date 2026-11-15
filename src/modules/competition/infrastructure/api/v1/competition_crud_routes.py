@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
+from src.config.correo_verificado import usuario_con_correo_verificado
 from src.config.dependencies import (
     get_competition_summary_use_case,
     get_create_competition_use_case,
@@ -106,7 +107,8 @@ def _sanitize_creator_id(creator_id: str | None) -> str | None:
 async def create_competition(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_data: CreateCompetitionRequestDTO,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    # Con el correo verificado (B-17)
+    current_user: UserResponseDTO = Depends(usuario_con_correo_verificado),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),
     vista: VistaDeCompeticionUseCase = Depends(get_vista_de_competicion_use_case),
 ):

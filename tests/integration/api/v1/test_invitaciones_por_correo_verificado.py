@@ -26,9 +26,14 @@ pytestmark = pytest.mark.asyncio
 CLAVE = "P@ssw0rd123!"
 
 
+async def _organizador(client: AsyncClient, email: str) -> dict:
+    """Quien crea e invita: con el correo verificado, que lo pide (B-17)."""
+    return await create_authenticated_user(client, email, CLAVE, "Olga", "Organiza")
+
+
 async def _jugador(client: AsyncClient, email: str) -> dict:
     """Un jugador con sesión, sin verificar."""
-    return await create_authenticated_user(client, email, CLAVE, "Ana", "Correo")
+    return await create_authenticated_user(client, email, CLAVE, "Ana", "Correo", verificar=False)
 
 
 async def _verifica(email: str) -> None:
@@ -58,7 +63,7 @@ async def _privada(client: AsyncClient, creador: dict) -> dict:
 async def _invitada_por_correo(client: AsyncClient) -> tuple[dict, dict, dict, str]:
     """La invitación sale a un correo sin cuenta; luego esa dirección se da de alta."""
     sufijo = uuid.uuid4().hex[:8]
-    creador = await _jugador(client, f"org-{sufijo}@test.com")
+    creador = await _organizador(client, f"org-{sufijo}@test.com")
     comp = await _privada(client, creador)
     correo = f"invitada-{sufijo}@test.com"
     set_auth_cookies(client, creador["cookies"])
@@ -166,7 +171,7 @@ async def test_d1_dirigida_a_la_cuenta_sin_verificar_sigue_igual(client: AsyncCl
     Then: La ve y la acepta, como siempre
     """
     sufijo = uuid.uuid4().hex[:8]
-    creador = await _jugador(client, f"org1-{sufijo}@test.com")
+    creador = await _organizador(client, f"org1-{sufijo}@test.com")
     invitada = await _jugador(client, f"cuenta-{sufijo}@test.com")
     comp = await _privada(client, creador)
     set_auth_cookies(client, creador["cookies"])
@@ -191,7 +196,7 @@ async def _invitada_ya_registrada(client: AsyncClient) -> tuple[dict, dict, dict
     sufijo = uuid.uuid4().hex[:8]
     correo = f"antes-{sufijo}@test.com"
     invitada = await _jugador(client, correo)
-    creador = await _jugador(client, f"org2-{sufijo}@test.com")
+    creador = await _organizador(client, f"org2-{sufijo}@test.com")
     comp = await _privada(client, creador)
     set_auth_cookies(client, creador["cookies"])
     r = await client.post(

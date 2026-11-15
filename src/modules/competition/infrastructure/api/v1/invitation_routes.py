@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
+from src.config.correo_verificado import usuario_con_correo_verificado
 from src.config.dependencies import (
     get_cancel_invitation_use_case,
     get_current_user,
@@ -156,7 +157,7 @@ class RespondInvitationBody(BaseModel):
 async def send_invitation_by_user_id(
     competition_id: UUID,
     body: SendInvitationByUserIdBody,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(usuario_con_correo_verificado),  # B-17
     use_case: SendInvitationByUserIdUseCase = Depends(get_send_invitation_by_user_id_use_case),
 ):
     try:
@@ -202,7 +203,7 @@ async def send_invitation_by_user_id(
 async def send_invitation_by_email(
     competition_id: UUID,
     body: SendInvitationByEmailBody,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(usuario_con_correo_verificado),  # B-17
     use_case: SendInvitationByEmailUseCase = Depends(get_send_invitation_by_email_use_case),
 ):
     try:

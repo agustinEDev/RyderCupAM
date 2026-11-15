@@ -240,6 +240,13 @@ class TestRateLimitingCompetition:
             "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_payload)
+        # Verificado: sin eso crear competiciones da 403 antes del límite (B-17)
+        from tests.conftest import sql_en_la_bd_de_test
+
+        await sql_en_la_bd_de_test(
+            "update users set email_verified = true where email = :e",
+            e="competition_rate_test@example.com",
+        )
 
         login_payload = {
             "email": "competition_rate_test@example.com",
