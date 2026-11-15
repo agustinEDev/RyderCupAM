@@ -194,3 +194,22 @@ async def test_without_rounds_no_matches(db_session, player_id):
     assert (
         await SQLAlchemyMatchRepository(db_session).find_by_rounds_for_player([], player_id) == []
     )
+
+
+async def test_each_course_brings_its_time_zone(db_session, player_id):
+    """
+    Plazo de inscripción en la respuesta (16 nov 2026).
+    Given una competición con un campo de Canarias y otro sin zona
+    When se leen sus campos de una vez
+    Then cada uno trae la suya: el plazo de un listado no hace otra consulta
+    """
+    canarias = await _campo(db_session, player_id, "Maspalomas")
+    canarias._timezone = "Atlantic/Canary"
+    await GolfCourseRepository(db_session).save(canarias)
+    sin_zona = await _campo(db_session, player_id, "Sin zona")
+    await db_session.commit()
+    competicion = await _competicion_con(db_session, player_id, [canarias, sin_zona])
+
+    campos = await SQLAlchemyCompetitionRepository(db_session).campos_de([competicion.id])
+
+    assert [c.zona for c in campos[competicion.id]] == ["Atlantic/Canary", sin_zona.timezone]

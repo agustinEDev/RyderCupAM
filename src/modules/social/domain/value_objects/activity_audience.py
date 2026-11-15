@@ -68,6 +68,9 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     # organizador y de cada jugador no encontrado
     ActivityEventType.HANDICAPS_NOT_UPDATED: ActivityAudience.SELF,
     ActivityEventType.RFEG_HANDICAP_NOT_FOUND: ActivityAudience.SELF,
+    # Del cierre por el plazo (15 nov 2026): del organizador, que es quien los recibe
+    ActivityEventType.ENROLLMENTS_CLOSED: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED: ActivityAudience.SELF,
 }
 
 

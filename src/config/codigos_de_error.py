@@ -7,6 +7,7 @@ los registra con `registra_los_codigos`. Una misma clase no puede estar en dos m
 
 from src.modules.competition.infrastructure.api.codigos_de_error import (
     CODIGOS as CODIGOS_DE_COMPETICION,
+    CON_SU_CODIGO as CON_SU_CODIGO_DE_COMPETICION,
 )
 from src.modules.quick_match.infrastructure.api.codigos_de_error import (
     CODIGOS as CODIGOS_DE_PARTIDA_RAPIDA,
@@ -33,3 +34,8 @@ def todos_los_codigos() -> dict[type[Exception], int]:
             raise ValueError(f"Errores en dos mapas: {sorted(c.__name__ for c in repetidas)}")
         todos.update(mapa)
     return todos
+
+
+def los_que_llevan_su_codigo() -> frozenset[type[Exception]]:
+    """Las del mapa que responden también con su `error_code` en la raíz."""
+    return CON_SU_CODIGO_DE_COMPETICION

@@ -907,6 +907,11 @@ competitions_table = Table(
     # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
     # las nueve de alli, y la zona se resuelve al leerla (BE #319)
     Column("enrollment_opens_days_before", Integer, nullable=True),
+    # El plazo de inscripcion (15 nov 2026): cuando se abrieron por ultima vez
+    # (UTC), si las cerro el plazo y si ya se aviso de que no se podian cerrar
+    Column("enrollment_opened_at", DateTime, nullable=True),
+    Column("enrollment_closed_by_deadline", Boolean, nullable=False, server_default="false"),
+    Column("enrollment_close_blocked_notified", Boolean, nullable=False, server_default="false"),
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
@@ -1546,6 +1551,11 @@ def start_competition_mappers():
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
+                "_enrollment_opened_at": competitions_table.c.enrollment_opened_at,
+                "_enrollment_closed_by_deadline": (
+                    competitions_table.c.enrollment_closed_by_deadline
+                ),
+                "_close_blocked_notified": competitions_table.c.enrollment_close_blocked_notified,
                 "_visibility": competitions_table.c.visibility,
                 "_tournament_type": competitions_table.c.tournament_type,
                 # Lo que es solo de la Ryder Cup, en su pieza (RyderCupAM#251). Es

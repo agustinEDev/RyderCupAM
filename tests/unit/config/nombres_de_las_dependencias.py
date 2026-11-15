@@ -197,6 +197,8 @@ NOMBRES_DE_ANTES = (
     "get_reopen_hole_use_case",
     "get_reordenar_partidas_use_case",
     "get_reorder_golf_courses_use_case",
+    # El plazo de inscripción, uno para todas las puertas (16 nov 2026, F9)
+    "get_plazo_de_inscripcion",
     "get_request_enrollment_use_case",
     "get_request_golf_course_use_case",
     "get_request_password_reset_use_case",

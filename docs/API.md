@@ -545,7 +545,7 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `team_1_name` (string, optional, max 50)
 - `team_2_name` (string, optional, max 50)
 - `visibility` (enum, optional: "PRIVATE" | "PUBLIC", default "PRIVATE") — a private competition is invisible to anyone not in it, and a place cannot be requested without an invitation
-- `enrollment_opens_days_before` (int, optional, 1-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
+- `enrollment_opens_days_before` (int, optional, 2-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
 
 ### Query Parameters (List)
 
@@ -570,7 +570,21 @@ Three things follow from that, and none of them is obvious:
 
 If the days asked for exceed the days left until the tournament starts, the opening is already in the past and the competition opens on the first read. That is deliberate — a past moment means "open it now" — but the caller gets something sooner than asked for, and the UI should say so.
 
+### Enrolment Deadline
+
+Enrolment closes at **12:00 the day before `start_date`**, in the time zone of the first course (`Europe/Madrid` with no course). It applies to Ryder Cup, Stableford and Medal, public and private.
+
+- From that moment nobody enters, even while the status is still `ACTIVE`: joining a public competition, inviting (by user or by email), accepting an invitation, approving a request and the organiser's direct enrolment answer **400** with `error_code: ENROLLMENT_DEADLINE_PASSED` («La inscripción está cerrada.»). Declining and rejecting still work.
+- A job runs every hour and closes (`ACTIVE → CLOSED`) the competitions past their deadline with the same use case as closing by hand. The organiser gets an `ENROLLMENTS_CLOSED` notice in Activity. A stroke play with approved players lacking a tee window or a handicap stays `ACTIVE` and the organiser gets **one** `ENROLLMENT_CLOSE_BLOCKED` notice (`reason`, `player_count`); the job retries every hour.
+- A competition opened or reopened **after** its deadline stays open until the organiser closes it by hand. A scheduled opening counts from its scheduled time, even if it is opened later on read or by an invitation; pressing **Activate** by hand opens it now (and, past the deadline, exempts it like reopening). Moving `start_date` later gives it a new deadline.
+- The `ENROLLMENT_CLOSE_BLOCKED` notice is withdrawn when the competition closes (by the job or by hand) or its dates move, if it was sent; and when it is cancelled or deleted.
+- Closed **by the deadline**, `PUT /competitions/{id}` may only move `start_date` + `end_date` (other fields may be sent, but only with their current values). All sessions and tee windows move by the same number of days, with their times and players, and so does a scheduled handicap update; if any session has already started (by the clock), nothing moves. If the new deadline is in the future the competition reopens (as `reopen-enrollments` does), the `ENROLLMENTS_CLOSED` notice is withdrawn, and it will close at the new deadline. Closed by hand, the dates stay locked: reopen first.
+
 ### Competition Response (Computed Fields)
+
+- `enrollment_deadline` (datetime with offset, or null) - 12:00 the day before `start_date`, in the first course's time zone (`Europe/Madrid` without a course), e.g. `"2026-11-19T12:00:00+01:00"`
+- `enrollment_deadline_applies` (bool) - false while it is open and exempt (opened or reopened by hand after the deadline)
+- `enrollment_closed_by_deadline` (bool) - whether the deadline, not the organiser, closed enrolment
 
 - `is_creator` (bool) - Whether authenticated user is the creator
 - `enrolled_count` (int) - Number of enrolled players (APPROVED)

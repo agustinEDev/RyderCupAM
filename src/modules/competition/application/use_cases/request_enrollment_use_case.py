@@ -43,6 +43,10 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
     guardar_la_inscripcion,
     viva,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
@@ -144,6 +148,7 @@ class RequestEnrollmentUseCase:
         user_repository: UserRepositoryInterface,
         zonas: ICompetitionTimezone | None = None,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         """
         Args:
@@ -151,7 +156,9 @@ class RequestEnrollmentUseCase:
             user_repository: El genero, el hándicap y el correo de quien entra
             zonas: Para abrir una programada a la que ya le toca (D10)
             actividad: Los avisos al organizador y a los amigos (A1, A2)
+            plazo: El plazo de inscripción (15 nov 2026); sin él, no se mira
         """
+        self._plazo = plazo
         self._uow = uow
         # El género es obligatorio para apuntarse (#710)
         self._user_repo = user_repository
@@ -165,7 +172,7 @@ class RequestEnrollmentUseCase:
             CompetitionNotActiveError, CompetitionFullError, AlreadyEnrolledError,
             EnrollmentClosedError, TooManyEnrollmentsError, InvalidTeeColorError,
             TeeWindowRequiredError, TeeWindowNotFoundError, TeeWindowFullError,
-            TeeWindowHasRoomError, TeamsFormedError
+            TeeWindowHasRoomError, TeamsFormedError, EnrollmentDeadlinePassedError
         """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
@@ -195,6 +202,8 @@ class RequestEnrollmentUseCase:
                 raise CompetitionNotActiveError(
                     "Las inscripciones de esta competición no están abiertas."
                 )
+            # Y pasado su plazo, aunque siga abierta, tampoco (C2, 15 nov 2026)
+            await exigir_el_plazo(self._plazo, competition)
 
             # Antes que la franja: a quien ya está se le dice eso (revisor, 28 oct)
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(

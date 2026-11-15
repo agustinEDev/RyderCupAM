@@ -27,6 +27,10 @@ from src.modules.competition.application.services.equipos_formados import (
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
+)
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -71,6 +75,7 @@ class HandleEnrollmentUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         """
         Constructor.
@@ -78,8 +83,10 @@ class HandleEnrollmentUseCase:
         Args:
             uow: Unit of Work para gestionar transacciones
             actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
+            plazo: El plazo de inscripción (15 nov 2026); sin él, no se mira
         """
         self._uow = uow
+        self._plazo = plazo
         # Aprobar tambien exige el genero: la solicitud pudo ser de antes de la
         # regla, o quien la hizo pudo borrarlo luego (#710)
         self._user_repo = user_repository
@@ -139,6 +146,8 @@ class HandleEnrollmentUseCase:
             era_solicitud = enrollment.status == EnrollmentStatus.REQUESTED
             sin_plaza: list[Invitation] = []
             if request.action == "APPROVE":
+                # Pasado el plazo no entra nadie, tampoco aprobado (C2); rechazar, sí
+                await exigir_el_plazo(self._plazo, competition)
                 # Verificar capacidad antes de aprobar
                 # Con franjas, el cupo es de sus plazas (28 oct 2026)
                 try:

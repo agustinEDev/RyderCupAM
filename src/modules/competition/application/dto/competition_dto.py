@@ -267,7 +267,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -436,7 +436,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -533,7 +533,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -829,11 +829,32 @@ class CompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
         ),
+    )
+    # El plazo de inscripción (15-16 nov 2026)
+    enrollment_deadline: datetime | None = Field(
+        None,
+        description=(
+            "Hasta cuándo se apunta uno: las 12:00 del día anterior al torneo, en la "
+            "zona del primer campo (Europe/Madrid sin campo), con su desfase "
+            "(p. ej. 2026-11-19T12:00:00+01:00). Null sin fecha de inicio."
+        ),
+    )
+    enrollment_deadline_applies: bool = Field(
+        True,
+        description=(
+            "Si el plazo cuenta para ella. False mientras esté abierta y exenta: el "
+            "organizador la abrió o reabrió a mano pasado el plazo, y sigue abierta "
+            "hasta que la cierre él."
+        ),
+    )
+    enrollment_closed_by_deadline: bool = Field(
+        False,
+        description="Si las inscripciones las cerró el plazo y no el organizador.",
     )
     visibility: str = Field(
         ...,

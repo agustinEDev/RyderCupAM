@@ -4,7 +4,7 @@ Round Entity - Sesión de competición.
 Representa una sesión de partidos (mañana/tarde/noche) en un día específico.
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
@@ -410,6 +410,19 @@ class Round:
                 )
             self._allowance_percentage = allowance_percentage
 
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def desplazar(self, dias: int) -> None:
+        """
+        Mueve la sesion esos dias, con su hora, sus partidos y sus plazas: el
+        torneo cerrado por el plazo se movio entero (O1, 16 nov 2026).
+
+        Raises:
+            ValueError: Si ya se esta jugando o se jugo
+        """
+        if self._status in (RoundStatus.IN_PROGRESS, RoundStatus.COMPLETED):
+            raise ValueError("Una sesión ya jugada no se mueve de día")
+        self._round_date = self._round_date + timedelta(days=dias)
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     # ==================== Query Methods ====================

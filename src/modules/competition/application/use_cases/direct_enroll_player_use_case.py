@@ -31,6 +31,10 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
     guardar_la_inscripcion,
     viva,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
+)
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -84,6 +88,7 @@ class DirectEnrollPlayerUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         """
         Constructor.
@@ -91,8 +96,10 @@ class DirectEnrollPlayerUseCase:
         Args:
             uow: Unit of Work para gestionar transacciones
             actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
+            plazo: El plazo de inscripción (15 nov 2026); sin él, no se mira
         """
         self._uow = uow
+        self._plazo = plazo
         # El género es obligatorio para apuntarse (#710)
         self._user_repo = user_repository
         self._actividad = AvisosDeActividad(actividad)
@@ -142,6 +149,8 @@ class DirectEnrollPlayerUseCase:
                     f"La competicion no esta abierta para inscripciones. "
                     f"Estado actual: {competition.status.value}"
                 )
+            # Pasado el plazo no entra nadie, tampoco inscrito a mano (C2, 15 nov 2026)
+            await exigir_el_plazo(self._plazo, competition)
 
             # 4. Verificar que el jugador no esta ya inscrito
             # Una cerrada (rechazada, cancelada, retirada) no lo impide: se

@@ -35,6 +35,10 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
@@ -67,9 +71,12 @@ class RespondToInvitationUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
+        # Pasado el plazo de inscripción no se acepta (C2, 15 nov 2026); sin él, no se mira
+        self._plazo = plazo
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
@@ -268,6 +275,8 @@ class RespondToInvitationUseCase:
             raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 
         CompetitionPolicy.can_accept_invitation(competition.status)
+        # Pasado el plazo, aunque siga abierta, no se entra (C2). Rechazar, sí
+        await exigir_el_plazo(self._plazo, competition)
         # Con los equipos formados no se entra por su cuenta: le inscribe el
         # organizador, y eso los reinicia (29 oct 2026)
         await exigir_sin_equipos_formados(self._uow, competition.id)

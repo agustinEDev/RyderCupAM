@@ -228,6 +228,18 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def handicap_not_found_withdrawn(self, competition, user_ids):
         self.avisos.append(("handicap_not_found_withdrawn", competition.id, list(user_ids)))
 
+    async def enrollments_closed(self, competition):
+        self.avisos.append(("enrollments_closed", competition.id))
+
+    async def close_blocked(self, competition, reason, players):
+        self.avisos.append(("close_blocked", competition.id, reason, players))
+
+    async def close_block_withdrawn(self, competition):
+        self.avisos.append(("close_block_withdrawn", competition.id))
+
+    async def enrollments_closed_withdrawn(self, competition):
+        self.avisos.append(("enrollments_closed_withdrawn", competition.id))
+
     async def tee_times(self, competition, round_id, assigned, withdrawn):
         self.avisos.append(
             (
@@ -252,6 +264,8 @@ class _Roto(CompetitionActivityPublisherInterface):
     joined = placed_from_waiting_list = no_place = window_removed = _falla  # type: ignore[assignment]
     handicaps_not_updated = handicap_not_found = _falla  # type: ignore[assignment]
     handicaps_not_updated_withdrawn = handicap_not_found_withdrawn = _falla  # type: ignore[assignment]
+    enrollments_closed = close_blocked = close_block_withdrawn = _falla  # type: ignore[assignment]
+    enrollments_closed_withdrawn = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture

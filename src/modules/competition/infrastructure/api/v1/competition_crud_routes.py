@@ -331,7 +331,7 @@ async def get_competition(
     response_model=CompetitionResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar competición",
-    description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
+    description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Si las cerró el plazo (12:00 del día anterior), solo se pueden mover las fechas: con el plazo nuevo en el futuro, se reabre. Creador o administrador.",
     tags=["Competitions"],
 )
 # Por minuto, como el resto de modificaciones: quien monta su torneo retoca

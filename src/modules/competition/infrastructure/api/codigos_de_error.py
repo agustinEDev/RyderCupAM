@@ -49,6 +49,9 @@ from src.modules.competition.application.services.jugadores_del_partido import (
     PlayerNotEnrolledError,
 )
 from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    EnrollmentDeadlinePassedError,
+)
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     GolfCourseNotFoundError,
 )
@@ -154,6 +157,8 @@ CODIGOS: dict[type[Exception], int] = {
     DeclareWalkoverCompetitionNotInProgressError: status.HTTP_400_BAD_REQUEST,
     DirectEnrollPlayerCompetitionNotActiveError: status.HTTP_400_BAD_REQUEST,
     EnrollmentClosedError: status.HTTP_400_BAD_REQUEST,
+    # Pasado el plazo de inscripción (15 nov 2026, C2): ver CON_SU_CODIGO
+    EnrollmentDeadlinePassedError: status.HTTP_400_BAD_REQUEST,
     EnrollmentStateError: status.HTTP_400_BAD_REQUEST,
     EnvelopesDecideThePairingsError: status.HTTP_400_BAD_REQUEST,
     EnvelopesNotRevealedError: status.HTTP_400_BAD_REQUEST,
@@ -226,3 +231,7 @@ CODIGOS: dict[type[Exception], int] = {
     CompetitionFullViolation: status.HTTP_422_UNPROCESSABLE_CONTENT,
     InvitationCompetitionStatusViolation: status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
+
+# Las que llevan además su `error_code` en la raíz: ENROLLMENT_DEADLINE_PASSED, con su
+# texto fijo «La inscripción está cerrada.» (15 nov 2026, C2)
+CON_SU_CODIGO: frozenset[type[Exception]] = frozenset({EnrollmentDeadlinePassedError})

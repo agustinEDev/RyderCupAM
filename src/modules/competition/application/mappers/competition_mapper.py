@@ -170,6 +170,8 @@ class CompetitionDTOMapper:
             max_players=competition.max_players,
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
+            # El plazo, con la zona del primer campo, de los campos ya leídos
+            **CompetitionDTOMapper.deadline_fields(competition, campos),
             visibility=str(competition.visibility),
             # Tipo de torneo y lo de la Ryder (vacío si no lo es)
             **del_torneo,
@@ -215,6 +217,24 @@ class CompetitionDTOMapper:
             )
             for c in competitions
         ]
+
+    @staticmethod
+    def deadline_fields(
+        competition: Competition, campos: list[CampoDeLaCompeticion]
+    ) -> dict[str, Any]:
+        """
+        El plazo de inscripción para la app (16 nov 2026): su instante, si cuenta
+        y si fue él quien las cerró. La zona es la del primer campo, que ya viene
+        en `campos` (en su orden): ni una consulta más por competición.
+        """
+        zona = campos[0].zona if campos else None
+        return {
+            "enrollment_deadline": (
+                competition.enrollment_deadline(zona) if competition.dates.start_date else None
+            ),
+            "enrollment_deadline_applies": competition.deadline_applies(zona),
+            "enrollment_closed_by_deadline": competition.enrollment_closed_by_deadline,
+        }
 
     @staticmethod
     def tournament_fields(competition: Competition) -> dict[str, Any]:

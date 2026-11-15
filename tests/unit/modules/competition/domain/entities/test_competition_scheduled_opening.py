@@ -39,20 +39,20 @@ def _crear(days_before: int | None = None, start: date | None = None) -> Competi
 
 
 class TestElCampo:
-    """Cuantos dias antes: 1 a 14, o nada."""
+    """Cuantos dias antes: 2 a 14 (A1, 15 nov 2026), o nada."""
 
-    @pytest.mark.parametrize("dias", [1, 7, 14])
-    def test_acepta_de_uno_a_catorce(self, dias):
+    @pytest.mark.parametrize("dias", [2, 7, 14])
+    def test_acepta_de_dos_a_catorce(self, dias):
         assert _crear(dias).enrollment_opens_days_before == dias
 
     def test_sin_programar_es_lo_normal(self):
         """La mayoria de torneos no programan nada: nacen abiertos."""
         assert _crear().enrollment_opens_days_before is None
 
-    @pytest.mark.parametrize("dias", [0, 15, -1, 100])
+    @pytest.mark.parametrize("dias", [0, 1, 15, -1, 100])
     def test_rechaza_lo_que_esta_fuera_del_rango(self, dias):
         """Dos semanas es el tope, y cero dias no es «antes» de nada."""
-        with pytest.raises(ValueError, match="1 y 14"):
+        with pytest.raises(ValueError, match="2 y 14"):
             _crear(dias)
 
     def test_se_puede_desprogramar(self):

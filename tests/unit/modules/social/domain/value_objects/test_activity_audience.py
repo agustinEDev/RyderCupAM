@@ -72,6 +72,9 @@ SOLO_EL_AUTOR = [
     # Hándicaps sin actualizar con la RFEG (15 nov 2026): el organizador y el jugador
     ActivityEventType.HANDICAPS_NOT_UPDATED,
     ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+    # Cierre por el plazo (15 nov 2026): los dos, para el organizador
+    ActivityEventType.ENROLLMENTS_CLOSED,
+    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
 ]
 
 

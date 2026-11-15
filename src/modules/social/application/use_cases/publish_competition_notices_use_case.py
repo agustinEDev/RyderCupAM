@@ -42,6 +42,8 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.TEE_WINDOW_REMOVED,
         ActivityEventType.HANDICAPS_NOT_UPDATED,
         ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
     }
 )
 
@@ -63,6 +65,10 @@ _SE_RENUEVAN = frozenset(
         # Uno por torneo: otra pasada u otra actualización lo pone al día
         ActivityEventType.HANDICAPS_NOT_UPDATED,
         ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        # Del cierre por el plazo (15 nov 2026), uno por competicion: se puede
+        # cerrar otra vez (reabierta y movida) o bloquear con otro plazo
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
     }
 )
 
@@ -296,8 +302,10 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
+            # Y el «no se puede cerrar» del organizador ya no pide nada (F2, 16 nov)
             await self._social_uow.activity_events.delete_for_competition(
-                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA]
+                competition_id,
+                [_SALIDA, _PLAZA_DE_LA_ESPERA, ActivityEventType.ENROLLMENT_CLOSE_BLOCKED],
             )
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
                 competition_id
@@ -403,6 +411,58 @@ class PublishCompetitionNoticesUseCase:
                 )
             ],
             retirar=(enrollment_id, _DE_NO_ESTAR, player_id),
+        )
+
+    async def enrollments_closed(self, organizer_id: UserId, tournament: TournamentRef) -> None:
+        """
+        «Se han cerrado las inscripciones de X»: las cerro el plazo, a las 12:00
+        del dia anterior (C5, 15 nov 2026). Para el organizador; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENTS_CLOSED,
+                    tournament.competition_id,
+                    tournament,
+                )
+            ]
+        )
+
+    async def close_blocked(
+        self, organizer_id: UserId, tournament: TournamentRef, reason: str, players: int
+    ) -> None:
+        """
+        «N jugadores sin franja en X: colócalos y cierra» (o sin hándicap): el
+        plazo no pudo cerrarlas (C4, 15 nov 2026). Para el organizador, con el
+        motivo y cuántos; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+                    tournament.competition_id,
+                    tournament,
+                    {"reason": reason, "player_count": players},
+                )
+            ]
+        )
+
+    async def enrollments_closed_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Se reabrio al mover el torneo: el «se han cerrado» ya no es cierto; al
+        volver a cerrarse llega otro (O2, Agustín, 16 nov 2026).
+        """
+        await self._retirar(competition_id, [ActivityEventType.ENROLLMENTS_CLOSED], organizer_id)
+
+    async def close_block_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Por fin se cerraron: el «N jugadores sin franja en X» ya no pide nada y
+        se retira (C4, Agustín, 15 nov 2026).
+        """
+        await self._retirar(
+            competition_id, [ActivityEventType.ENROLLMENT_CLOSE_BLOCKED], organizer_id
         )
 
     async def placed_from_waiting_list(
