@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.67.0] - 2026-11-15
+
+**Decisiones del 15 nov de la auditoría de la fase 6** (#856, #858). Va con el frontend
+2.80.0, que **sale antes**: explica el nuevo «verifica tu correo». Sin migraciones. Variable
+nueva y opcional, `REFRESH_RESUME_WINDOW_SECONDS` (por defecto 1800, como mucho 3600). La
+parte de B-02 (#860) se revirtió en develop (#861): vuelve con el cierre automático de las
+inscripciones. Probado en el Kind: B-14 y B-17, 10 de 10; batería de la tanda 1, igual que
+antes (22 de 23; el que falla es #846, de antes).
+
+### Security
+
+- **Correo verificado para lo que llega a otras personas** (B-17): crear competiciones, pedir
+  amistad, invitar e inscribir a mano. Sin verificar responde 403 `EMAIL_NOT_VERIFIED`, con
+  el motivo en español e inglés. Entrar, ver, jugar partidas rápidas y aceptar lo que te
+  manden siguen abiertos; las cuentas de Google llegan verificadas.
+- **Reanudar una respuesta de refresco perdida, solo durante 30 minutos** (B-19; antes, 1
+  hora): quien hubiera robado la cookie vieja tiene menos tiempo, y un jugador que pierde la
+  cobertura un par de hoyos al renovar la sesión no se queda fuera.
+- **Contraseñas nuevas de 12 a 64 caracteres y como mucho 72 bytes** (B-14), los que usa
+  bcrypt; las de antes siguen entrando. La lista de contraseñas comunes suma las 107
+  filtradas del NCSC que las reglas dejarían pasar.
+
 ## [2.66.0] - 2026-11-15
 
 **Tanda 2 de la auditoría de la fase 6** (#849, #851, #852, #853). Solo backend: el frontend
