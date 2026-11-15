@@ -83,8 +83,10 @@ async def test_los_tipos_nuevos_caben_y_no_se_duplican(db_session):
     # ENROLLMENT_REMOVED (release social 2) y los tres de la inscripcion
     # directa (release social 3), los dos de la RFEG (HANDICAPS_NOT_UPDATED
     # y RFEG_HANDICAP_NOT_FOUND) y los dos del cierre por el plazo de inscripción
-    # (ENROLLMENTS_CLOSED y ENROLLMENT_CLOSE_BLOCKED, 15 nov 2026)
-    assert len(await _tipos(repository, user)) == len(nuevos) == 19
+    # (ENROLLMENTS_CLOSED y ENROLLMENT_CLOSE_BLOCKED, 15 nov 2026), y los dos de
+    # las invitaciones con la inscripción cerrada (INVITATION_ACCEPTABLE_AGAIN y
+    # TEAMS_UNDONE_BY_ENTRY, 15 nov 2026)
+    assert len(await _tipos(repository, user)) == len(nuevos) == 21
 
 
 async def test_borrar_desde_un_origen_de_un_jugador(db_session):
