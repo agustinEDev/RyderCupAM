@@ -6,8 +6,10 @@ La RFEG da el hándicap desde el perfil: sus competiciones se enteran (D1 y D4, 
 | La RFEG lo da                | El caso de uso de competición corre con su valor, en Decimal |
 | El caso de uso falla         | No sale de aquí: el perfil ya está guardado                |
 | Los dos caminos del perfil   | Llevan el aviso montado (/update y /refresh-mine)          |
+| Con Actividad (D3)           | El caso de uso recibe cómo montarla, sin montarla todavía  |
 """
 
+from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock
@@ -16,6 +18,7 @@ import pytest
 
 from src.config import refresco_de_handicaps
 from src.config.dependencies import usuarios
+from src.config.dependencies.comun import actividad_en_sesion_propia
 from src.config.refresco_de_handicaps import HandicapDeLaRfegEnLasCompeticiones
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -26,13 +29,13 @@ class _CasoQueApunta:
     ejecutados: ClassVar[list] = []
     falla = False
 
-    def __init__(self, herramientas, reloj):
-        self.herramientas, self.reloj = herramientas, reloj
+    def __init__(self, herramientas, reloj, actividad=None):
+        self.herramientas, self.reloj, self.actividad = herramientas, reloj, actividad
 
     async def execute(self, user_id, handicap):
         if _CasoQueApunta.falla:
             raise RuntimeError("competiciones caidas")
-        _CasoQueApunta.ejecutados.append((user_id, handicap, self.herramientas))
+        _CasoQueApunta.ejecutados.append((user_id, handicap, self.herramientas, self.actividad))
 
 
 @pytest.fixture
@@ -50,7 +53,7 @@ async def test_corre_el_caso_de_uso_con_su_valor(caso):
 
     await HandicapDeLaRfegEnLasCompeticiones(MagicMock()).encontrado(user_id, 13.2)
 
-    [(quien, valor, herramientas)] = caso.ejecutados
+    [(quien, valor, herramientas, _)] = caso.ejecutados
     assert (quien, valor) == (user_id, Decimal("13.2"))
     assert callable(herramientas)
 
@@ -73,3 +76,46 @@ def test_los_dos_caminos_del_perfil_lo_llevan(proveedor):
 
     assert isinstance(caso_de_uso._al_encontrarlo, HandicapDeLaRfegEnLasCompeticiones)
     assert caso_de_uso._al_encontrarlo._fabrica is fabrica
+    assert caso_de_uso._al_encontrarlo._actividad is actividad_en_sesion_propia
+
+
+class _Fabrica:
+    def __init__(self):
+        self.abiertas: list[object] = []
+
+    @asynccontextmanager
+    async def __call__(self):
+        sesion = object()
+        self.abiertas.append(sesion)
+        yield sesion
+
+
+async def test_con_actividad_el_caso_de_uso_recibe_como_montarla(caso):
+    """
+    Given el aviso con Actividad
+    When la RFEG lo da
+    Then el caso de uso recibe cómo montarla sobre su sesión, sin montarla aún (D3, T1)
+    """
+    fabrica = _Fabrica()
+    montadas: list[object] = []
+
+    def construir(sesion):
+        montadas.append(sesion)
+        return "publicador"
+
+    await HandicapDeLaRfegEnLasCompeticiones(fabrica, actividad=construir).encontrado(
+        UserId.generate(), 13.0
+    )
+
+    [(_, _, _, montar)] = caso.ejecutados
+    assert fabrica.abiertas == []
+    async with montar() as publicador:
+        assert publicador == "publicador"
+    assert montadas == fabrica.abiertas
+
+
+async def test_sin_actividad_no_la_recibe(caso):
+    """Given el aviso sin Actividad When la RFEG lo da Then el caso de uso no la recibe."""
+    await HandicapDeLaRfegEnLasCompeticiones(_Fabrica()).encontrado(UserId.generate(), 13.0)
+
+    assert caso.ejecutados[0][3] is None

@@ -15,6 +15,7 @@ from src.config.aviso_en_segundo_plano import (
 )
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.dependencies.comun import (
+    actividad_en_sesion_propia,
     get_competition_uow,
     get_country_repository,
     get_email_service,
@@ -264,7 +265,9 @@ def get_update_handicap_use_case(
     """
     # Si la RFEG lo da, sus competiciones cerradas se enteran (D1 y D4, 16 nov 2026)
     return UpdateUserHandicapUseCase(
-        uow, handicap_service, HandicapDeLaRfegEnLasCompeticiones(fabrica)
+        uow,
+        handicap_service,
+        HandicapDeLaRfegEnLasCompeticiones(fabrica, actividad=actividad_en_sesion_propia),
     )
 
 
@@ -280,7 +283,9 @@ def get_refresh_own_handicap_use_case(
     login no espere a la RFEG.
     """
     return RefreshOwnHandicapUseCase(
-        uow, handicap_service, HandicapDeLaRfegEnLasCompeticiones(fabrica)
+        uow,
+        handicap_service,
+        HandicapDeLaRfegEnLasCompeticiones(fabrica, actividad=actividad_en_sesion_propia),
     )
 
 

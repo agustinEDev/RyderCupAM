@@ -8,6 +8,7 @@ Se deja constancia en el log y se sigue.
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
@@ -24,6 +25,12 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
+
+# Monta Actividad (con su propia sesión) y la cierra al salir: quien avisa fuera
+# de una petición la monta solo al avisar (T1, 16 nov 2026)
+FabricaDeActividad = Callable[
+    [], AbstractAsyncContextManager[CompetitionActivityPublisherInterface]
+]
 
 
 class AvisosDeActividad(CompetitionActivityPublisherInterface):

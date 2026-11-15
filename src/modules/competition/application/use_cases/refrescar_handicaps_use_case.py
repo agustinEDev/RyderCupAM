@@ -34,13 +34,9 @@ import hashlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from decimal import Decimal
 
-from src.modules.competition.application.ports.competition_activity_publisher_interface import (
-    CompetitionActivityPublisherInterface,
-)
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
@@ -50,7 +46,10 @@ from src.modules.competition.application.ports.handicap_update_email_service_int
 from src.modules.competition.application.services.avisos_al_organizador import (
     AvisosAlOrganizador,
 )
-from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.avisos_de_actividad import (
+    AvisosDeActividad,
+    FabricaDeActividad,
+)
 from src.modules.competition.application.services.fijado_de_la_rfeg import (
     FabricaDeHerramientas,
     Herramientas,
@@ -88,12 +87,6 @@ logger = logging.getLogger(__name__)
 # Segundos entre un jugador y el siguiente, y entre un intento fallido y el siguiente
 PAUSA_ENTRE_JUGADORES = 2.0
 PAUSA_ENTRE_INTENTOS = 5.0
-
-
-# Monta Actividad (con su propia sesión) y la cierra al salir
-FabricaDeActividad = Callable[
-    [], AbstractAsyncContextManager[CompetitionActivityPublisherInterface]
-]
 
 
 def _huella(lista: list[UserId]) -> str:

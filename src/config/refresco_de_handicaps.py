@@ -132,13 +132,13 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
             logger.exception("Falló la actualización de hándicaps %s", update_id)
             return None
 
-    @asynccontextmanager
-    async def _actividad_en_su_sesion(self) -> AsyncIterator[CompetitionActivityPublisherInterface]:
+    def _actividad_en_su_sesion(
+        self,
+    ) -> AbstractAsyncContextManager[CompetitionActivityPublisherInterface]:
         """Actividad sobre su propia sesión, que se cierra al acabar de avisar."""
         if self._actividad is None:
             raise RuntimeError("Sin Actividad no hay nada que montar")
-        async with self.fabrica() as sesion:
-            yield self._actividad(sesion)
+        return actividad_en(self.fabrica, self._actividad)
 
     async def esperar_a_todas(self) -> None:
         """Hasta que acaben las que estén en marcha (para los tests)."""
@@ -165,6 +165,15 @@ async def herramientas_en(
         )
 
 
+@asynccontextmanager
+async def actividad_en(
+    fabrica: async_sessionmaker[AsyncSession], construir: FabricaDeActividad
+) -> AsyncIterator[CompetitionActivityPublisherInterface]:
+    """Actividad sobre una sesión propia de esa fábrica, que se cierra al salir."""
+    async with fabrica() as sesion:
+        yield construir(sesion)
+
+
 class HandicapDeLaRfegEnLasCompeticiones(IHandicapEncontradoEnLaRfeg):
     """
     La RFEG dio el hándicap de un jugador desde su perfil o al entrar: sus
@@ -179,17 +188,29 @@ class HandicapDeLaRfegEnLasCompeticiones(IHandicapEncontradoEnLaRfeg):
         self,
         fabrica: async_sessionmaker[AsyncSession],
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: FabricaDeActividad | None = None,
     ):
+        """`actividad`: para retirar y poner al día los avisos al momento (D3)."""
         self._fabrica = fabrica
         self._reloj = reloj
+        self._actividad = actividad
 
     async def encontrado(self, user_id: UserId, handicap: float) -> None:
         try:
             await HandicapDeLaRfegDelPerfilUseCase(
-                herramientas=lambda: herramientas_en(self._fabrica), reloj=self._reloj
+                herramientas=lambda: herramientas_en(self._fabrica),
+                reloj=self._reloj,
+                actividad=self._montar_actividad if self._actividad is not None else None,
             ).execute(user_id, Decimal(str(handicap)))
         except Exception:
             logger.exception("Could not pass the RFEG handicap of %s to its competitions", user_id)
+
+    def _montar_actividad(
+        self,
+    ) -> AbstractAsyncContextManager[CompetitionActivityPublisherInterface]:
+        if self._actividad is None:
+            raise RuntimeError("Sin Actividad no hay nada que montar")
+        return actividad_en(self._fabrica, self._actividad)
 
 
 # El candado de Postgres del vigilante: un número cualquiera, siempre el mismo

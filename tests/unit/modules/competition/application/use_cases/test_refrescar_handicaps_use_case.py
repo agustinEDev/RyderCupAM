@@ -68,6 +68,10 @@ su hándicap fuera de una actualización.
 | D4   | Cerrada, pero con la ventana cerrada            | Apuntado, el fijado no se toca           |
 | D4   | Inscrito sin aprobar                            | Nada                                     |
 | D4   | Ryder cerrada                                   | Apuntado; no hay fijado                  |
+| D3   | Era el único no encontrado                      | Se retira el suyo y el del organizador   |
+| D3   | Quedan otros sin actualizar                     | Se retira el suyo; el organizador, con N |
+| D3   | La primera pasada aún en curso                  | Se retira el suyo; el organizador, nada  |
+| T1   | Actividad falla                                 | El fijado se corrige igual               |
 """
 
 from contextlib import asynccontextmanager
@@ -1391,7 +1395,7 @@ class TestDesdeSuPerfil:
 
     async def _desde_su_perfil(self, e, user_id, handicap="13.0"):
         await HandicapDeLaRfegDelPerfilUseCase(
-            herramientas=e.herramientas, reloj=lambda: e.ahora
+            herramientas=e.herramientas, reloj=lambda: e.ahora, actividad=e.fabrica_de_actividad
         ).execute(user_id, Decimal(handicap))
 
     async def test_queda_apuntado_como_actualizado(self, e):
@@ -1532,3 +1536,98 @@ class TestDesdeSuPerfil:
 
         assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
         assert (await e.inscripciones(torneo))[jugador].fixed_handicap is None
+
+    async def test_era_el_unico_se_retiran_el_suyo_y_el_del_organizador(self, e):
+        """
+        Given el único no encontrado de una competición, ya avisado
+        When la RFEG lo encuentra desde su perfil
+        Then se le retira su aviso y el del organizador, en ese momento (D3)
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre == e.nombre(perdido) else 11.2
+        )
+        await e.pasar(torneo)
+        e.actividad.reset_mock()
+
+        await self._desde_su_perfil(e, perdido)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        e.actividad.handicap_not_found_withdrawn.assert_awaited_once_with(competicion, [perdido])
+        e.actividad.handicaps_not_updated_withdrawn.assert_awaited_once_with(competicion)
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+
+    async def test_si_quedan_otros_el_organizador_ve_el_nuevo_numero(self, e):
+        """
+        Given dos no encontrados
+        When la RFEG encuentra a uno desde su perfil
+        Then se le retira el suyo y el organizador pasa a ver 1 (D3)
+        """
+        torneo = await e.torneo()
+        perdido, otro = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        perdidos = {e.nombre(perdido), e.nombre(otro)}
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre in perdidos else 11.2
+        )
+        await e.pasar(torneo)
+        e.actividad.reset_mock()
+
+        await self._desde_su_perfil(e, perdido)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        e.actividad.handicap_not_found_withdrawn.assert_awaited_once_with(competicion, [perdido])
+        e.actividad.handicaps_not_updated.assert_awaited_once_with(competicion, 1)
+        e.actividad.handicaps_not_updated_withdrawn.assert_not_awaited()
+
+    async def test_con_la_primera_pasada_en_curso_el_organizador_espera(self, e):
+        """
+        Given la actualización del cierre todavía en curso
+        When la RFEG lo encuentra desde su perfil
+        Then se retira el suyo, pero el del organizador lo dirá la pasada al acabar (H1)
+        """
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+
+        await self._desde_su_perfil(e, jugador)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        e.actividad.handicap_not_found_withdrawn.assert_awaited_once_with(competicion, [jugador])
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+        e.actividad.handicaps_not_updated_withdrawn.assert_not_awaited()
+
+    @pytest.mark.parametrize("donde", ["al_montar_actividad", "al_cerrar_actividad"])
+    async def test_si_actividad_falla_el_fijado_se_corrige_igual(self, e, donde):
+        """Given Actividad caída When la RFEG lo da desde su perfil Then el fijado cambia (T1)."""
+        torneo = await e.torneo(tipo="STABLEFORD")
+        jugador = await e.inscrito(torneo, handicap=8.0)
+        await e.cerrar(torneo)
+        setattr(e, donde, RuntimeError("actividad caida"))
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("13.0")
+
+    async def test_sin_actividad_tambien(self, e):
+        """Given sin Actividad (los tests y el Kind) When la RFEG lo da Then se apunta igual."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+
+        await HandicapDeLaRfegDelPerfilUseCase(
+            herramientas=e.herramientas, reloj=lambda: e.ahora
+        ).execute(jugador, Decimal("13.0"))
+
+        assert (await e.apuntado(torneo))[jugador].resultado is ResultadoRefresco.ACTUALIZADO
+
+    async def test_sin_competiciones_no_monta_actividad(self, e):
+        """Given un jugador sin competiciones cerradas When la RFEG lo da Then no se monta nada."""
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+
+        await self._desde_su_perfil(e, jugador)
+
+        assert e.actividades_montadas == 0
