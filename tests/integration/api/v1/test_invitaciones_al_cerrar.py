@@ -13,6 +13,7 @@ lista de espera»: no es la lista de espera de las franjas):
 | P1   | cerrada, el organizador invita a otro              | 422, como siempre (C2: no se invita)      |
 | P2   | el organizador reabre                              | PENDING, «ya puedes aceptar», se acepta   |
 | P3   | empieza o se cancela sin reabrir                   | NO_ROOM                                   |
+| P3   | se cancela con la inscripción abierta              | las PENDING, NO_ROOM y «no hubo plaza»    |
 | B3   | equipos sin partidos: el invitado acepta           | el organizador ve TEAMS_UNDONE_BY_ENTRY   |
 """
 
@@ -200,6 +201,34 @@ class TestP3SinReabrirSinPlaza:
         assert respuesta.status_code == 200, respuesta.text
 
         assert (await _la_suya(client, montaje))["status"] == "NO_ROOM"
+
+
+class TestP3CancelarAbierta:
+    async def test_la_pendiente_se_queda_sin_plaza_y_se_avisa(self, client: AsyncClient):
+        """P3. Given abierta con una pendiente / When se cancela / Then NO_ROOM y «no hubo plaza»."""
+        creador = await create_authenticated_user(
+            client, "ic_ca_org@test.com", "P@ssw0rd123!", "Org", "Cancelada"
+        )
+        invitado = await create_authenticated_user(
+            client, "ic_ca_inv@test.com", "P@ssw0rd123!", "Invitado", "Cancelada"
+        )
+        comp = await create_competition(client, creador["cookies"])
+        set_auth_cookies(client, creador["cookies"])
+        enviada = await client.post(
+            f"/api/v1/competitions/{comp['id']}/invitations",
+            json={"invitee_user_id": invitado["user"]["id"]},
+        )
+        assert enviada.status_code == 201, enviada.text
+
+        cancelada = await client.post(f"/api/v1/competitions/{comp['id']}/cancel")
+
+        assert cancelada.status_code == 200, cancelada.text
+        set_auth_cookies(client, invitado["cookies"])
+        mias = (await client.get("/api/v1/invitations/me")).json()["invitations"]
+        assert [i["status"] for i in mias] == ["NO_ROOM"]
+        feed = (await client.get("/api/v1/users/me/feed")).json()["events"]
+        assert [e["type"] for e in feed] == ["ENROLLMENT_NO_PLACE"]
+        assert feed[0]["source_match_id"] == enviada.json()["id"]
 
 
 class TestB3EquiposDeshechos:

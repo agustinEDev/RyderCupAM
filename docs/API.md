@@ -684,15 +684,17 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 - With enrollment closed nobody enters: no invitations, no acceptances. Pending
   invitations are not lost: on close (by hand, by the deadline or by naming captains)
   they move to `ON_HOLD` and accepting one answers 409 `INVITATION_ON_HOLD`; declining
-  it, or the organizer withdrawing it, still works. When the organizer reopens (or moving
-  the dates reopens it), they go back to `PENDING` and each invitee gets the Activity
-  notice `INVITATION_ACCEPTABLE_AGAIN`. If the competition starts or is cancelled first,
-  they become `NO_ROOM` and each invitee gets `ENROLLMENT_NO_PLACE` (source: the
-  invitation)
+  it, or the organizer withdrawing it, still works. They do not expire while on hold.
+  When the organizer reopens (or moving the dates reopens it), they go back to `PENDING`
+  with a fresh 7-day expiry and each invitee gets the Activity notice
+  `INVITATION_ACCEPTABLE_AGAIN`. If the competition starts or is cancelled first, they
+  become `NO_ROOM` and each invitee gets `ENROLLMENT_NO_PLACE` (source: the invitation);
+  cancelling also does this to `PENDING` invitations when enrollment is still open
 - Ryder Cup with teams formed and no matches: the organizer may invite; when the invitee
   accepts, the teams are reset and the organizer gets `TEAMS_UNDONE_BY_ENTRY` (payload:
-  tournament, `player_id`, `player_name`). With matches: 409 `TEAMS_FORMED`. While the
-  draft room is open: 409 `DRAFT_IN_PROGRESS`
+  tournament, `player_id`, `player_name`), withdrawn when the teams are formed again.
+  With matches: 409 `TEAMS_FORMED`. While the draft room is open nobody enters (invite,
+  accept, approve or sign up): 409 `DRAFT_IN_PROGRESS`
 - Nobody is enrolled, or brought back after withdrawing, without their consent
 
 **Set Custom Handicap:**

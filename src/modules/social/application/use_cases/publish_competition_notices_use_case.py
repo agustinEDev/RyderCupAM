@@ -476,6 +476,17 @@ class PublishCompetitionNoticesUseCase:
             retirar=(enrollment_id, _DE_NO_ESTAR, player_id),
         )
 
+    async def teams_undone_withdrawn(self, competition_id: str) -> None:
+        """
+        Se volvieron a formar los equipos: los «X ha entrado en Y: los equipos se
+        han deshecho» de esa competición ya no piden nada (B3, Agustín, 15 nov 2026).
+        Solo los recibe su organizador.
+        """
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [ActivityEventType.TEAMS_UNDONE_BY_ENTRY]
+            )
+
     async def enrollments_closed(self, organizer_id: UserId, tournament: TournamentRef) -> None:
         """
         «Se han cerrado las inscripciones de X»: las cerro el plazo, a las 12:00

@@ -189,8 +189,8 @@ async def test_la_pendiente_de_quien_mira_en_una_competicion(
     assert (await repo.pendiente_de(creator_id, None, competicion.id, AHORA)).id == antigua.id
 
 
-# P1 (15 nov 2026): en espera de que se reabra, la privada se sigue viendo; la ficha
-# no la ofrece para aceptar, y el feed la da por cerrada
+# P1 (15 nov 2026): en espera de que se reabra, la privada se sigue viendo (esperando
+# no caduca); la ficha no la ofrece para aceptar, y el feed la da por cerrada
 async def test_la_que_espera_cuenta_para_ver_pero_no_para_aceptar(
     db_session,
     creator_id,  # noqa: F811
@@ -216,7 +216,8 @@ async def test_la_que_espera_cuenta_para_ver_pero_no_para_aceptar(
     await db_session.commit()
 
     assert await repo.competiciones_con_invitacion_pendiente(creator_id, None, AHORA) == {
-        competicion.id
+        competicion.id,
+        caducada.id,
     }
     assert await repo.pendiente_de(creator_id, None, competicion.id, AHORA) is None
     assert await repo.find_acceptable_ids([en_espera.id], AHORA) == set()

@@ -100,8 +100,9 @@ class InvitationRepositoryInterface(ABC):
         self, user_id: UserId, email: str | None, now: datetime
     ) -> set[CompetitionId]:
         """
-        Las competiciones en las que tiene una invitación viva y sin caducar en
-        `now` —PENDING, o en espera (ON_HOLD) de que se reabra (15 nov 2026)—, por
+        Las competiciones en las que tiene una invitación viva —PENDING sin
+        caducar en `now`, o en espera (ON_HOLD) de que se reabra, que no caduca
+        (15 nov 2026)—, por
         su usuario o por su correo. Con ella, una privada se le enseña (release
         social 2, 27 oct 2026): en espera la sigue viendo.
         """

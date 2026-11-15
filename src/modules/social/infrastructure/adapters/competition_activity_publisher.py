@@ -233,6 +233,10 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             use_real_name=enrollment.use_real_name,
         )
 
+    async def teams_formed(self, competition: Competition) -> None:
+        """Al organizador se le retiran los «equipos deshechos» de esa competición (B3)."""
+        await self._notices.teams_undone_withdrawn(str(competition.id.value))
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

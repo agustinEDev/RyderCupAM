@@ -10,6 +10,10 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.baja_de_la_competicion import (
     exigir_sin_draft_abierto,
 )
@@ -73,8 +77,11 @@ class AssignTeamsUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         snake_draft_service: SnakeDraftService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
+        # Formarlos retira los avisos de equipos deshechos (B3); sin el, nada
+        self._actividad = AvisosDeActividad(actividad)
         self._user_repo = user_repository
         self._draft_service = snake_draft_service or SnakeDraftService()
 
@@ -139,6 +146,9 @@ class AssignTeamsUseCase:
             assignment = await TeamAssignmentWriter.guardar(
                 self._uow, competition, mode, team_a_ids, team_b_ids
             )
+
+        # Ya guardados: «los equipos se han deshecho» ya no pide nada (B3, 15 nov 2026)
+        await self._actividad.teams_formed(competition)
 
         return AssignTeamsResponseDTO(
             id=assignment.id.value,

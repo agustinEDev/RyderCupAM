@@ -189,7 +189,7 @@ class _Salidas(CompetitionActivityPublisherInterface):
     enrollments_closed = close_blocked = close_block_withdrawn = _nada  # type: ignore[assignment]
     enrollments_closed_withdrawn = _nada  # type: ignore[assignment]
     invitations_acceptable_again = invitations_no_place = _nada  # type: ignore[assignment]
-    teams_undone_by_entry = _nada  # type: ignore[assignment]
+    teams_undone_by_entry = teams_formed = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

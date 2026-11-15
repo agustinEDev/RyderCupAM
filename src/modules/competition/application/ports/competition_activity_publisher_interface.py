@@ -189,6 +189,14 @@ class CompetitionActivityPublisherInterface(ABC):
         """
 
     @abstractmethod
+    async def teams_formed(self, competition: Competition) -> None:
+        """
+        Se formaron los equipos (a mano o al acabar el draft): los avisos de
+        «los equipos se han deshecho» de esa competición ya no piden nada y se
+        retiran (B3, Agustín, 15 nov 2026).
+        """
+
+    @abstractmethod
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

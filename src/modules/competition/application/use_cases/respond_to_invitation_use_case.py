@@ -15,9 +15,6 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.baja_de_la_competicion import (
-    exigir_sin_draft_abierto,
-)
 from src.modules.competition.application.services.correo_del_invitado import (
     correo_del_invitado,
 )
@@ -334,7 +331,6 @@ class RespondToInvitationUseCase:
         # Con los equipos formados y sin partidos entra y se deshacen; con
         # partidos, no (B3, 15 nov 2026). Lo ultimo antes de entrar: si algo
         # anterior lo impide, los equipos siguen como estaban
-        await exigir_sin_draft_abierto(self._uow, competition.id)
         deshechos = await reiniciar_para_que_entre(self._uow, competition)
 
         invitation.accept(respondida_por=current_user_id)

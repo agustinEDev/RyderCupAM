@@ -74,8 +74,8 @@ async def reiniciar_para_que_entre(
     uow: CompetitionUnitOfWorkInterface, competition: Competition
 ) -> bool:
     """
-    Antes de que entre alguien (aceptando una invitación, B3, o aprobado): los
-    equipos se reinician.
+    Antes de que entre alguien (aceptando una invitación, B3, o aprobado): nadie
+    entra durante el draft (Agustín, 15 nov 2026), y los equipos se reinician.
 
     Con partidos el reinicio no se hace, y quien entrara se quedaba fuera de
     los dos equipos sin forma de arreglarlo (decidido el 30 oct 2026).
@@ -88,8 +88,10 @@ async def reiniciar_para_que_entre(
         Si se deshicieron (para avisar al organizador, B3)
 
     Raises:
+        DraftInProgressError: Con la sala de draft abierta
         TeamsFormedError: Si tiene equipos y no se pueden reiniciar
     """
+    await exigir_sin_draft_abierto(uow, competition.id)
     if await TeamAssignmentWriter.deshacer(uow, competition):
         return True
     await exigir_sin_equipos_formados(uow, competition.id)

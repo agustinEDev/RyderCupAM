@@ -111,9 +111,9 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         return {
             inv.competition_id
             for inv in self._invitations.values()
-            # Viva: pendiente o en espera de que se reabra (15 nov 2026)
-            if inv.status.is_open()
-            and now < inv.expires_at
+            # Viva: pendiente sin caducar, o en espera de que se reabra, que
+            # esperando no caduca (15 nov 2026)
+            if (inv.status.is_on_hold() or (inv.status.is_pending() and now < inv.expires_at))
             and (inv.invitee_user_id == user_id or bool(correo and inv.invitee_email == correo))
         }
 

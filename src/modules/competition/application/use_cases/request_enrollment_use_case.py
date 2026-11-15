@@ -23,6 +23,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.correo_del_invitado import (
     correo_del_invitado,
 )
@@ -213,6 +216,8 @@ class RequestEnrollmentUseCase:
             # Con los equipos formados nadie entra solo; el organizador sí (29 oct
             # 2026). Tras lo de ya inscrito: a quien ya está se le dice eso (revisor)
             await exigir_sin_equipos_formados(self._uow, competition_id)
+            # Y nadie entra durante el draft (Agustín, 15 nov 2026)
+            await exigir_sin_draft_abierto(self._uow, competition_id)
 
             franjas = [
                 s

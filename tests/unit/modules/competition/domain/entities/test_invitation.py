@@ -566,23 +566,55 @@ class TestEnEspera:
 
         assert invitacion.status == InvitationStatus.ACCEPTED
 
-    def test_caduca_tambien_esperando(self):
-        """Given ON_HOLD caducada / When se mira la caducidad / Then EXPIRED."""
+    def test_esperando_no_caduca(self):
+        """P1. Given ON_HOLD con el plazo de 7 días pasado / When se mira / Then sigue ON_HOLD."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
         invitacion._expires_at = datetime.now() - timedelta(minutes=1)
 
         invitacion.check_expiration()
 
-        assert invitacion.status == InvitationStatus.EXPIRED
+        assert invitacion.status == InvitationStatus.ON_HOLD
 
-    def test_rechazar_una_en_espera_caducada_la_caduca(self):
-        """Given ON_HOLD caducada / When se rechaza / Then EXPIRED y el error de caducada."""
+    def test_aceptar_esperando_y_pasado_el_plazo_dice_que_espera(self):
+        """P1. Given ON_HOLD con el plazo pasado / When se acepta / Then INVITATION_ON_HOLD."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
         invitacion._expires_at = datetime.now() - timedelta(minutes=1)
 
-        with pytest.raises(InvitationExpiredViolation):
-            invitacion.decline()
+        with pytest.raises(InvitationOnHoldViolation):
+            invitacion.accept()
+
+        assert invitacion.status == InvitationStatus.ON_HOLD
+
+    def test_rechazar_esperando_y_pasado_el_plazo_si(self):
+        """P1. Given ON_HOLD con el plazo pasado / When se rechaza / Then DECLINED."""
+        invitacion = _make_invitation()
+        invitacion.put_on_hold()
+        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+
+        invitacion.decline()
+
+        assert invitacion.status == InvitationStatus.DECLINED
+
+    def test_al_volver_tiene_7_dias_nuevos(self):
+        """P2. Given ON_HOLD con el plazo pasado / When vuelve / Then caduca en 7 días."""
+        invitacion = _make_invitation()
+        invitacion.put_on_hold()
+        invitacion._expires_at = datetime.now() - timedelta(days=3)
+        antes = datetime.now()
+
+        invitacion.resume()
+
+        assert antes + timedelta(days=7) <= invitacion.expires_at
+        assert invitacion.expires_at <= datetime.now() + timedelta(days=7)
+        assert not invitacion.is_expired()
+
+    def test_una_pendiente_sigue_caducando(self):
+        """Given PENDING con el plazo pasado / When se mira / Then EXPIRED, como siempre."""
+        invitacion = _make_invitation()
+        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+
+        invitacion.check_expiration()
 
         assert invitacion.status == InvitationStatus.EXPIRED

@@ -13,7 +13,8 @@ Los avisos de las invitaciones en espera y de los equipos deshechos (15 nov 2026
          invitación como origen                                      |
     B3   «{X} ha entrado en {Y}: los equipos se han deshecho y hay   | el organizador (SELF)
          que volver a formarlos», TEAMS_UNDONE_BY_ENTRY, con el      |
-         jugador y su nombre; uno por inscripción                    |
+         jugador y su nombre; uno por inscripción; se retiran todos  |
+         los del torneo al volver a formar los equipos               |
 """
 
 from datetime import date, datetime, timedelta
@@ -235,3 +236,18 @@ class TestEquiposDeshechos:
 
         [segundo] = await _de(social, organizador, T.TEAMS_UNDONE_BY_ENTRY)
         assert segundo.id != primero.id
+
+
+class TestEquiposFormadosOtraVez:
+    async def test_se_retiran_los_de_ese_torneo(self):
+        """B3. Given dos avisos de equipos deshechos en X y uno en Z / When se forman en X
+        / Then se van los de X; el de Z sigue"""
+        social, avisos, organizador, eva = await _escenario()
+        x, z = _torneo(), _torneo()
+        for torneo, inscripcion in ((x, "enr-1"), (x, "enr-2"), (z, "enr-3")):
+            await avisos.teams_undone_by_entry(organizador.id, eva.id, torneo, inscripcion)
+
+        await avisos.teams_undone_withdrawn(x.competition_id)
+
+        quedan = await _de(social, organizador, T.TEAMS_UNDONE_BY_ENTRY)
+        assert [a.source_match_id for a in quedan] == ["enr-3"]

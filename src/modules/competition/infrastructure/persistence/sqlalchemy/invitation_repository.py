@@ -43,14 +43,16 @@ def _suya_y_aceptable(user_id: UserId, email: str | None, now: datetime) -> Colu
 
 def _suya_y_viva(user_id: UserId, email: str | None, now: datetime) -> ColumnElement[bool]:
     """
-    Las vivas y sin caducar en `now`: PENDING, o en espera (ON_HOLD) de que se
-    reabra la inscripción (15 nov 2026).
+    Las vivas: PENDING sin caducar en `now`, o en espera (ON_HOLD) de que se
+    reabra la inscripción, que esperando no caduca (15 nov 2026).
     """
     tabla = invitations_table.c
     return and_(
         _para_quien(user_id, email),
-        tabla.status.in_([InvitationStatus.PENDING, InvitationStatus.ON_HOLD]),
-        tabla.expires_at > now,
+        or_(
+            and_(tabla.status == InvitationStatus.PENDING, tabla.expires_at > now),
+            tabla.status == InvitationStatus.ON_HOLD,
+        ),
     )
 
 

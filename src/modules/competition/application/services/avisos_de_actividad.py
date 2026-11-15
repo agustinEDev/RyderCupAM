@@ -177,6 +177,9 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             "teams_undone_by_entry", lambda p: p.teams_undone_by_entry(competition, enrollment)
         )
 
+    async def teams_formed(self, competition: Competition) -> None:
+        await self._avisar("teams_formed", lambda p: p.teams_formed(competition))
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

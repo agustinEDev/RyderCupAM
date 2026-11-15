@@ -715,12 +715,14 @@ def get_list_enrollments_use_case(
 def get_assign_teams_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> AssignTeamsUseCase:
     """Proveedor del caso de uso AssignTeamsUseCase (cross-module: Competition + User)."""
     return AssignTeamsUseCase(
         uow=uow,
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
+        actividad=actividad,
     )
 
 
@@ -734,25 +736,28 @@ def get_undo_teams_use_case(
 def get_start_draft_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> StartDraftUseCase:
     """Proveedor del caso de uso StartDraftUseCase (FE #653)."""
-    return StartDraftUseCase(uow=uow, user_repository=user_uow.users)
+    return StartDraftUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_draft_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetDraftUseCase:
     """Proveedor del caso de uso GetDraftUseCase (FE #653)."""
-    return GetDraftUseCase(uow=uow, user_repository=user_uow.users)
+    return GetDraftUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_make_draft_pick_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MakeDraftPickUseCase:
     """Proveedor del caso de uso MakeDraftPickUseCase (FE #653)."""
-    return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
+    return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_send_invitation_by_user_id_use_case(

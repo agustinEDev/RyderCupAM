@@ -238,6 +238,9 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def teams_undone_by_entry(self, competition, enrollment):
         self.avisos.append(("teams_undone_by_entry", competition.id, enrollment.id))
 
+    async def teams_formed(self, competition):
+        self.avisos.append(("teams_formed", competition.id))
+
     async def close_blocked(self, competition, reason, players):
         self.avisos.append(("close_blocked", competition.id, reason, players))
 
@@ -274,7 +277,7 @@ class _Roto(CompetitionActivityPublisherInterface):
     enrollments_closed = close_blocked = close_block_withdrawn = _falla  # type: ignore[assignment]
     enrollments_closed_withdrawn = _falla  # type: ignore[assignment]
     invitations_acceptable_again = invitations_no_place = _falla  # type: ignore[assignment]
-    teams_undone_by_entry = _falla  # type: ignore[assignment]
+    teams_undone_by_entry = teams_formed = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture

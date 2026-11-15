@@ -12,17 +12,21 @@ ver con la lista de espera de las franjas de un stroke play (`esperas`).
 | P1   | el invitado rechaza una ON_HOLD / el organizador la retira  | DECLINED / CANCELLED                           |
 | P1   | una PENDING que se coló en una cerrada y se acepta          | pasa a ON_HOLD e INVITATION_ON_HOLD            |
 | P1   | el invitado de una privada con la suya ON_HOLD              | sigue viéndola; la ficha no le ofrece aceptar  |
-| P2   | el organizador reabre                                       | ON_HOLD → PENDING, aviso «ya puedes aceptar»   |
-|      |                                                             | a cada invitado con cuenta; se acepta          |
-| P2   | caducó mientras esperaba                                    | EXPIRED, sin aviso                             |
+| P1   | pasan los 7 días esperando                                  | no caduca: sigue ON_HOLD, se puede rechazar    |
+| P2   | el organizador reabre                                       | ON_HOLD → PENDING con 7 días nuevos, aviso «ya |
+|      | (también la que llevaba más de 7 días esperando)            | puedes aceptar» a cada invitado con cuenta     |
 | P2   | se reabre sola al mover el torneo (R3)                      | igual que al reabrir                           |
 | P3   | empieza (a mano o por el primer golpe) o se cancela         | ON_HOLD → NO_ROOM, aviso «no hubo plaza»       |
+| P3   | se cancela con la inscripción abierta                       | también las PENDING → NO_ROOM, su aviso de     |
+|      |                                                             | invitado se retira y «no hubo plaza»           |
 | B1   | el organizador inscribe a mano                              | ya no existe: ni ruta, ni caso de uso          |
 | B2   | aprobar una inscripción que el jugador cerró                | no: solo se aprueba lo que él pidió            |
 | B3   | equipos formados, sin partidos: el organizador invita       | puede (por id y por correo)                    |
 | B3   | ... el invitado acepta                                      | entra, equipos deshechos, aviso al organizador |
 | B3   | con partidos: invitar o aceptar                             | TEAMS_FORMED                                   |
-| B3   | con la sala de draft abierta: invitar o aceptar             | DRAFT_IN_PROGRESS                              |
+| B3   | con la sala de draft abierta: invitar, aceptar, aprobar o   | DRAFT_IN_PROGRESS: nadie entra durante el      |
+|      | apuntarse a una pública                                     | draft                                          |
+| B3   | el organizador vuelve a formar los equipos (a mano o draft) | se retira el aviso de equipos deshechos        |
 | B4   | reabierta, entra uno y se vuelve a cerrar                   | otra actualización de la RFEG, para todos      |
 """
 
@@ -40,12 +44,16 @@ from src.modules.competition.application.dto.competition_dto import (
     ReopenEnrollmentsRequestDTO,
     StartCompetitionRequestDTO,
 )
-from src.modules.competition.application.dto.enrollment_dto import HandleEnrollmentRequestDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    HandleEnrollmentRequestDTO,
+    RequestEnrollmentRequestDTO,
+)
 from src.modules.competition.application.dto.invitation_dto import (
     RespondInvitationRequestDTO,
     SendInvitationByEmailRequestDTO,
     SendInvitationByUserIdRequestDTO,
 )
+from src.modules.competition.application.dto.round_match_dto import AssignTeamsRequestDTO
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.baja_de_la_competicion import (
     DraftInProgressError,
@@ -55,6 +63,9 @@ from src.modules.competition.application.services.invitaciones_al_cerrar import 
     en_espera_las_pendientes,
     sin_plaza_para_las_que_esperan,
     vuelven_las_que_esperan,
+)
+from src.modules.competition.application.use_cases.assign_teams_use_case import (
+    AssignTeamsUseCase,
 )
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
@@ -68,11 +79,17 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
+    MakeDraftPickUseCase,
+)
 from src.modules.competition.application.use_cases.name_captains_use_case import (
     NameCaptainsUseCase,
 )
 from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
     ReopenEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.request_enrollment_use_case import (
+    RequestEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
@@ -86,6 +103,9 @@ from src.modules.competition.application.use_cases.send_invitation_by_user_id_us
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.start_draft_use_case import (
+    StartDraftUseCase,
+)
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
 )
@@ -93,7 +113,6 @@ from src.modules.competition.domain.entities.draft import Draft
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
-    InvalidInvitationStatusViolation,
     InvitationOnHoldViolation,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
@@ -382,8 +401,11 @@ class TestP2AlReabrirVuelven:
         assert respuesta.status == "ACCEPTED"
         assert (await _inscripcion(uow, comp_id, invitado.id)).status is (EnrollmentStatus.APPROVED)
 
-    async def test_la_que_caduco_mientras_esperaba_queda_caducada_sin_aviso(self):
-        """P2. Given una ON_HOLD que caducó / When se reabre / Then EXPIRED y sin aviso."""
+    async def test_la_que_llevaba_mas_de_7_dias_vuelve_con_7_dias_nuevos(self):
+        """
+        P2. Given una ON_HOLD cuyo plazo de 7 días ya pasó (esperando no caduca)
+        When se reabre / Then PENDING, caduca dentro de 7 días y se avisa
+        """
         uow, comp_id, organizador, _, _, _, invitacion = await _abierta_con_invitado()
         await _cierra(uow, comp_id, organizador)
         async with uow:
@@ -393,10 +415,16 @@ class TestP2AlReabrirVuelven:
             await uow.commit()
         actividad = _Actividad()
 
+        antes = datetime.now()
         await _reabre(uow, comp_id, organizador, actividad)
 
-        assert await _estado(uow, invitacion) is InvitationStatus.EXPIRED
-        assert not any(vuelven for _, vuelven in actividad.de("invitations_acceptable_again"))
+        async with uow:
+            vuelta = await uow.invitations.find_by_id(invitacion.id)
+        assert vuelta.status is InvitationStatus.PENDING
+        assert antes + timedelta(days=7) <= vuelta.expires_at
+        assert vuelta.expires_at <= datetime.now() + timedelta(days=7)
+        [(_, vuelven)] = actividad.de("invitations_acceptable_again")
+        assert [i.id for i in vuelven] == [invitacion.id]
 
     async def test_al_reabrirse_sola_moviendo_el_torneo_r3_tambien(self):
         """
@@ -800,7 +828,7 @@ class TestSeGuardaCadaUna:
             map(str, [invitacion.id, caducada.id])
         )
 
-    async def test_al_reabrir_tambien_la_que_caduco(self):
+    async def test_al_reabrir_tambien_la_que_paso_de_7_dias(self):
         uow, comp_id, organizador, _, _, _, invitacion = await _abierta_con_invitado()
         await _cierra(uow, comp_id, organizador)
         async with uow:
@@ -812,10 +840,10 @@ class TestSeGuardaCadaUna:
         async with uow:
             vuelven = await vuelven_las_que_esperan(uow, comp_id)
 
-        assert vuelven == []
+        assert [i.id for i in vuelven] == [invitacion.id]
         assert _actualizadas(espia) == [invitacion.id]
 
-    async def test_al_empezar_tambien_la_que_caduco(self):
+    async def test_al_empezar_tambien_la_que_paso_de_7_dias(self):
         uow, comp_id, _, invitacion = await _cerrada_con_equipos_y_en_espera()
         async with uow:
             (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
@@ -826,9 +854,9 @@ class TestSeGuardaCadaUna:
         async with uow:
             sin_plaza = await sin_plaza_para_las_que_esperan(uow, comp_id)
 
-        # Caducada, no sin plaza: se quedó sin respuesta
-        assert sin_plaza == []
-        assert await _estado(uow, invitacion) is InvitationStatus.EXPIRED
+        # Esperando no caduca: sin plaza
+        assert [i.id for i in sin_plaza] == [invitacion.id]
+        assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
         assert _actualizadas(espia) == [invitacion.id]
 
     async def test_al_empezar_la_que_espera(self):
@@ -841,9 +869,9 @@ class TestSeGuardaCadaUna:
         assert _actualizadas(espia) == [invitacion.id]
 
 
-class TestResponderUnaEnEsperaCaducada:
-    async def test_se_caduca_y_se_retira_su_aviso(self):
-        """P1. Given ON_HOLD caducada / When el invitado la rechaza / Then EXPIRED y retirada."""
+class TestEsperandoNoCaduca:
+    async def test_pasados_los_7_dias_se_puede_rechazar(self):
+        """P1. Given ON_HOLD con el plazo de 7 días pasado / When la rechaza / Then DECLINED."""
         uow, comp_id, organizador, _, usuarios, invitado, invitacion = await _abierta_con_invitado()
         await _cierra(uow, comp_id, organizador)
         async with uow:
@@ -852,12 +880,175 @@ class TestResponderUnaEnEsperaCaducada:
             )
         actividad = _Actividad()
 
-        with pytest.raises(InvalidInvitationStatusViolation):
-            await _responde(usuarios, uow, invitacion, invitado, "DECLINE", actividad)
+        respuesta = await _responde(usuarios, uow, invitacion, invitado, "DECLINE", actividad)
 
-        assert await _estado(uow, invitacion) is InvitationStatus.EXPIRED
+        assert respuesta.status == "DECLINED"
+        assert actividad.de("invitations_closed") == []
+
+    async def test_pasados_los_7_dias_sigue_en_espera_y_visible(self):
+        """P1. Given ON_HOLD con el plazo pasado / Then sigue ON_HOLD y el invitado la ve."""
+        uow, comp_id, organizador, _, usuarios, invitado, invitacion = await _abierta_con_invitado()
+        await _cierra(uow, comp_id, organizador)
+        async with uow:
+            (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
+                datetime.now() - timedelta(minutes=1)
+            )
+
+        with pytest.raises(InvitationOnHoldViolation):
+            await _responde(usuarios, uow, invitacion, invitado, "ACCEPT")
+
+        assert await _estado(uow, invitacion) is InvitationStatus.ON_HOLD
+        async with uow:
+            visibles = await uow.invitations.competiciones_con_invitacion_pendiente(
+                invitado.id, None, datetime.now()
+            )
+        assert comp_id in visibles
+
+
+class TestP3CancelarAbierta:
+    async def test_las_pendientes_se_quedan_sin_plaza_y_se_avisa(self):
+        """
+        P3. Given una competición ABIERTA con una invitación pendiente (y otra caducada)
+        When se cancela
+        Then la pendiente pasa a NO_ROOM, su aviso de invitado se retira y le llega
+        «no hubo plaza»; la caducada, EXPIRED
+        """
+        uow, comp_id, organizador, _, _, invitado, invitacion = await _abierta_con_invitado()
+        caducada = await _invita(
+            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+        )
+        actividad = _Actividad()
+
+        await CancelCompetitionUseCase(uow, actividad=actividad).execute(
+            CancelCompetitionRequestDTO(competition_id=comp_id.value), organizador
+        )
+
+        assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
+        assert await _estado(uow, caducada) is InvitationStatus.EXPIRED
+        [(_, sin_plaza)] = actividad.de("invitations_no_place")
+        assert [i.id for i in sin_plaza] == [invitacion.id]
         [(cerradas,)] = actividad.de("invitations_closed")
-        assert [i.id for i in cerradas] == [invitacion.id]
+        assert sorted(str(i.id) for i in cerradas) == sorted([str(invitacion.id), str(caducada.id)])
+
+    async def test_se_guarda_cada_una(self):
+        """P3. Given abierta, una pendiente y una caducada / When se cancela / Then las dos,
+        guardadas."""
+        uow, comp_id, organizador, _, _, invitado, invitacion = await _abierta_con_invitado()
+        caducada = await _invita(
+            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+        )
+        espia = await _con_espia(uow)
+
+        await CancelCompetitionUseCase(uow).execute(
+            CancelCompetitionRequestDTO(competition_id=comp_id.value), organizador
+        )
+
+        assert sorted(map(str, _actualizadas(espia))) == sorted(
+            map(str, [invitacion.id, caducada.id])
+        )
+
+
+class TestNadieEntraDuranteElDraft:
+    async def test_aprobar_una_solicitud_no(self):
+        """B3. Given la sala de draft eligiendo / When se aprueba una solicitud / Then no."""
+        uow, comp_id, *_ = await _reabierta()
+        await _con_la_sala_abierta(uow, comp_id)
+        solicitud = Enrollment.request(EnrollmentId.generate(), comp_id, UserId(uuid4()))
+        async with uow:
+            await uow.enrollments.add(solicitud)
+            await uow.commit()
+
+        with pytest.raises(DraftInProgressError):
+            await HandleEnrollmentUseCase(uow, USUARIOS_CON_GENERO).execute(
+                HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
+                await _organizador_de(uow, comp_id),
+            )
+
+        assert (await _inscripcion(uow, comp_id, solicitud.user_id)).status is (
+            EnrollmentStatus.REQUESTED
+        )
+
+    async def test_apuntarse_a_una_publica_no(self):
+        """B3. Given una pública con la sala de draft eligiendo / When se apunta / Then no."""
+        uow, comp_id, *_ = await _reabierta(publica=True)
+        await _con_la_sala_abierta(uow, comp_id)
+        jugador = UserId(uuid4())
+
+        with pytest.raises(DraftInProgressError):
+            await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO).execute(
+                RequestEnrollmentRequestDTO(competition_id=comp_id.value, user_id=jugador.value)
+            )
+
+        assert await _inscripcion(uow, comp_id, jugador) is None
+
+
+class TestAlVolverAFormarLosEquipos:
+    async def test_a_mano_se_retira_el_aviso_de_equipos_deshechos(self):
+        """B3. Given deshechos al entrar uno / When el organizador los forma / Then se retira."""
+        uow, comp_id, *_ = await _reabierta()
+        usuarios, invitado = await _usuarios()
+        invitacion = await _invita(uow, comp_id, invitado)
+        await _responde(usuarios, uow, invitacion, invitado, "ACCEPT")
+        organizador = await _organizador_de(uow, comp_id)
+        await _cierra(uow, comp_id, organizador)
+        async with uow:
+            aprobados = await uow.enrollments.find_by_competition_and_status(
+                comp_id, EnrollmentStatus.APPROVED
+            )
+        # Impares no se reparten: fuera uno que no es capitán
+        if len(aprobados) % 2:
+            await create_approved_enrollment(uow, comp_id.value, UserId(uuid4()))
+        actividad = _Actividad()
+
+        await AssignTeamsUseCase(uow, USUARIOS_CON_GENERO, actividad=actividad).execute(
+            AssignTeamsRequestDTO(competition_id=comp_id.value, mode="AUTOMATIC"), organizador
+        )
+
+        [(competicion,)] = actividad.de("teams_formed")
+        assert competicion.id == comp_id
+
+    async def test_sin_formarlos_no_se_retira(self):
+        """B3. Given formar los equipos falla / Then no se retira nada."""
+        uow, comp_id, *_ = await _reabierta()
+        actividad = _Actividad()
+
+        with pytest.raises(Exception):
+            await AssignTeamsUseCase(uow, USUARIOS_CON_GENERO, actividad=actividad).execute(
+                AssignTeamsRequestDTO(competition_id=comp_id.value, mode="AUTOMATIC"),
+                await _organizador_de(uow, comp_id),
+            )
+
+        assert actividad.de("teams_formed") == []
+
+    async def test_al_acabar_el_draft_se_retira(self):
+        """B3. Given la sala con un último turno / When el capitán elige / Then se retira."""
+        uow, comp_id, *_ = await _reabierta()
+        organizador = await _organizador_de(uow, comp_id)
+        async with uow:
+            reparto = await uow.team_assignments.find_by_competition(comp_id)
+            await uow.team_assignments.delete(reparto.id)
+            await uow.drafts.delete_by_competition(comp_id)
+            await uow.commit()
+        await _cierra(uow, comp_id, organizador)
+        actividad = _Actividad()
+        sala = await StartDraftUseCase(
+            uow, USUARIOS_CON_GENERO, sorteo=lambda: "A", actividad=actividad
+        ).execute(comp_id.value, organizador)
+        assert actividad.de("teams_formed") == []
+
+        # Eligen por turnos hasta que la sala termina
+        while sala.status != "COMPLETED":
+            async with uow:
+                draft = await uow.drafts.find_by_competition(comp_id)
+            capitan = (
+                draft.team_a_captain_id if draft.current_team == "A" else draft.team_b_captain_id
+            )
+            sala = await MakeDraftPickUseCase(
+                uow, USUARIOS_CON_GENERO, actividad=actividad
+            ).execute(comp_id.value, capitan, sala.available_players[0].user_id)
+
+        [(competicion,)] = actividad.de("teams_formed")
+        assert competicion.id == comp_id
 
 
 class TestLosAvisosSoloAQuienTieneCuenta:

@@ -246,13 +246,14 @@ class Invitation:
     def accept(self, respondida_por: UserId | None = None) -> None:
         """Acepta la invitacion (PENDING -> ACCEPTED). Sin invitado atado, la ata a quien
         la responde."""
+        # En espera no se acepta: hay que esperar a que se reabra (P1). Esperando
+        # no caduca, así que esto va antes que la caducidad
+        if self.is_on_hold():
+            raise InvitationOnHoldViolation()
+
         if self.is_expired():
             self._transition_to_expired()
             raise InvitationExpiredViolation("Cannot accept an expired invitation.")
-
-        # En espera no se acepta: hay que esperar a que se reabra (P1)
-        if self.is_on_hold():
-            raise InvitationOnHoldViolation()
 
         if not self._status.can_transition_to(InvitationStatus.ACCEPTED):
             raise InvalidInvitationStatusViolation(
@@ -276,8 +277,8 @@ class Invitation:
 
     def decline(self, respondida_por: UserId | None = None) -> None:
         """Rechaza la invitacion (PENDING -> DECLINED). Como `accept`, la ata a quien
-        responde si no lo estaba."""
-        if self.is_expired():
+        responde si no lo estaba. Una en espera no caduca: se rechaza siempre."""
+        if not self.is_on_hold() and self.is_expired():
             self._transition_to_expired()
             raise InvitationExpiredViolation("Cannot decline an expired invitation.")
 
@@ -332,14 +333,16 @@ class Invitation:
     def resume(self) -> None:
         """Se reabre la inscripcion: se puede aceptar otra vez (ON_HOLD -> PENDING, P2).
 
-        La caducidad es la de siempre: quien llama mira luego `check_expiration`.
+        Con 7 días nuevos para responder: esperando no caducaba (Agustín, 15 nov 2026).
         """
         if not self.is_on_hold():
             raise InvalidInvitationStatusViolation(
                 f"Cannot resume an invitation in status {self._status.value}."
             )
+        now = datetime.now()
         self._status = InvitationStatus.PENDING
-        self._updated_at = datetime.now()
+        self._expires_at = now + timedelta(days=INVITATION_EXPIRATION_DAYS)
+        self._updated_at = now
 
     def cancel(self) -> None:
         """La retira quien invita (PENDING u ON_HOLD -> CANCELLED, BE #359).
@@ -357,13 +360,13 @@ class Invitation:
         self._updated_at = now
 
     def check_expiration(self) -> None:
-        """Verifica y actualiza el estado si la invitacion ha expirado (también en espera)."""
-        if self.is_open() and self.is_expired():
+        """Verifica y actualiza el estado si la invitacion ha expirado; en espera no caduca."""
+        if self.is_expired():
             self._transition_to_expired()
 
     def _transition_to_expired(self) -> None:
-        """Transiciona internamente a EXPIRED."""
-        if self.is_open():
+        """Transiciona internamente a EXPIRED: solo una pendiente; en espera no caduca."""
+        if self.is_pending():
             self._status = InvitationStatus.EXPIRED
             self._updated_at = datetime.now()
 
