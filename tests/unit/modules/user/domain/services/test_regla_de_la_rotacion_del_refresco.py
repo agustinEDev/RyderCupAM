@@ -54,27 +54,28 @@ def test_d2_within_the_margin_only_access(usado):
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.SOLO_ACCESO
 
 
-@pytest.mark.parametrize("hace", [timedelta(seconds=61), timedelta(minutes=59)])
-def test_d3_a_lost_response_within_the_hour_resumes(hace):
+@pytest.mark.parametrize("hace", [timedelta(seconds=61), timedelta(minutes=29)])
+def test_d3_r1_a_lost_response_within_thirty_minutes_resumes(hace):
     viejo, sustituto = _cadena(hace)
 
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDA
 
 
-def test_d4_after_one_hour_an_unused_substitute_is_rejected_without_alarm():
+def test_d4_r2_after_thirty_minutes_an_unused_substitute_is_rejected_without_alarm():
+    """B-19 de la auditoría de la fase 6 (Agustín, 15 nov 2026): de 1 hora a 30 minutos."""
     viejo, sustituto = _cadena(VENTANA_DE_LA_REANUDACION + timedelta(seconds=1))
 
-    assert timedelta(hours=1) == VENTANA_DE_LA_REANUDACION
+    assert timedelta(minutes=30) == VENTANA_DE_LA_REANUDACION
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDACION_CADUCADA
 
 
-def test_d4_after_one_hour_a_used_substitute_is_still_a_theft():
+def test_d4_r3_after_thirty_minutes_a_used_substitute_is_still_a_theft():
     viejo, sustituto = _cadena(timedelta(hours=2), usado=True)
 
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.ROBO
 
 
-def test_d4_exactly_one_hour_still_resumes():
+def test_d4_exactly_thirty_minutes_still_resumes():
     viejo, sustituto = _cadena(VENTANA_DE_LA_REANUDACION)
 
     assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDA
@@ -114,3 +115,14 @@ def test_d8_a_substitute_is_used_when_it_has_rotated():
     sustituto.sustituye("siguiente", AHORA)
 
     assert sustituto_usado(sustituto)
+
+
+def test_r5_the_window_can_be_given_by_the_caller():
+    """La configuración puede dar otra ventana; la regla la usa en lugar de la suya."""
+    viejo, sustituto = _cadena(timedelta(minutes=40))
+
+    assert (
+        paso_del_refresco(viejo, sustituto, AHORA, ventana=timedelta(minutes=60))
+        is PasoDelRefresco.REANUDA
+    )
+    assert paso_del_refresco(viejo, sustituto, AHORA) is PasoDelRefresco.REANUDACION_CADUCADA
