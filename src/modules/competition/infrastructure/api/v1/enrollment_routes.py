@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from src.config.correo_verificado import usuario_con_correo_verificado
 from src.config.dependencies import (
     get_cancel_enrollment_use_case,
     get_current_user,
@@ -318,7 +319,7 @@ async def request_enrollment(
 async def direct_enroll_player(
     competition_id: UUID,
     request: DirectEnrollPlayerRequestDTO,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(usuario_con_correo_verificado),  # B-17
     use_case: DirectEnrollPlayerUseCase = Depends(get_direct_enroll_player_use_case),
 ):
     """

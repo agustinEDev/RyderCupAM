@@ -42,10 +42,7 @@ from src.config.clave_de_brevo_viva import (  # noqa: E402
     vigia_activado,
 )
 from src.config.codigos_de_error import todos_los_codigos  # noqa: E402
-from src.config.correo_verificado import (  # noqa: E402
-    EmailNotVerifiedError,
-    email_not_verified_handler,
-)
+from src.config.correo_verificado import EmailNotVerifiedError  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
@@ -319,7 +316,7 @@ registra_los_codigos(app, todos_los_codigos())
 app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
 
 # Correo sin verificar en lo que llega a otros (B-17): 403 con error_code EMAIL_NOT_VERIFIED
-app.add_exception_handler(EmailNotVerifiedError, email_not_verified_handler)
+app.add_exception_handler(EmailNotVerifiedError, terms_not_accepted_handler)
 
 # ================================
 # MIDDLEWARE STACK

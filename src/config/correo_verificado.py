@@ -8,17 +8,19 @@ verificado; entrar, ver, jugar partidas rápidas y ACEPTAR lo que te manden, no.
 cuentas de Google llegan verificadas.
 
 Como la guarda de los Términos (`terms_guard.py`): una dependencia que sustituye a
-`get_current_user` en esas rutas, un error con su código y su manejador.
+`get_current_user` en esas rutas y un error con su código, que responde el mismo
+manejador de los Términos (403 con `detail` y `error_code`).
 """
 
-from fastapi import Depends, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import Depends
 
 from src.config.dependencies import get_current_user
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
 EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED"
+# En los dos idiomas, como el de los Términos: una versión vieja de la app lo pinta tal cual
 EMAIL_NOT_VERIFIED_MESSAGE = (
+    "Verifica tu correo para invitar, pedir amistad o crear competiciones. / "
     "Verify your email to invite, send friend requests or create competitions."
 )
 
@@ -39,11 +41,3 @@ async def usuario_con_correo_verificado(
     if not current_user.email_verified:
         raise EmailNotVerifiedError()
     return current_user
-
-
-async def email_not_verified_handler(_request: Request, exc: Exception) -> JSONResponse:
-    """403 con el motivo y su código, como los demás errores con código."""
-    return JSONResponse(
-        status_code=status.HTTP_403_FORBIDDEN,
-        content={"detail": str(exc), "error_code": EMAIL_NOT_VERIFIED},
-    )

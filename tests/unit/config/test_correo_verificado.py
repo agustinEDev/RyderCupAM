@@ -16,12 +16,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.config.correo_verificado import (
-    EmailNotVerifiedError,
-    email_not_verified_handler,
-    usuario_con_correo_verificado,
+from src.config.correo_verificado import EmailNotVerifiedError, usuario_con_correo_verificado
+from src.config.terms_guard import terms_not_accepted_handler
+from src.modules.competition.infrastructure.api.v1 import (
+    competition_crud_routes,
+    enrollment_routes,
+    invitation_routes,
 )
-from src.modules.competition.infrastructure.api.v1 import competition_crud_routes, invitation_routes
 from src.modules.social.infrastructure.api.v1 import friend_routes
 
 pytestmark = pytest.mark.asyncio
@@ -39,10 +40,19 @@ async def test_a_verified_user_goes_through():
 
 
 async def test_the_answer_is_403_with_its_code():
-    respuesta = await email_not_verified_handler(None, EmailNotVerifiedError())
+    respuesta = await terms_not_accepted_handler(None, EmailNotVerifiedError())
 
+    cuerpo = json.loads(respuesta.body)
     assert respuesta.status_code == 403
-    assert json.loads(respuesta.body)["error_code"] == "EMAIL_NOT_VERIFIED"
+    assert cuerpo["error_code"] == "EMAIL_NOT_VERIFIED"
+    # En los dos idiomas, para las versiones viejas de la app que lo pintan tal cual
+    assert "Verifica tu correo" in cuerpo["detail"] and "Verify your email" in cuerpo["detail"]
+
+
+async def test_main_answers_it_with_that_handler():
+    from main import app
+
+    assert app.exception_handlers[EmailNotVerifiedError] is terms_not_accepted_handler
 
 
 def _dependencia_del_usuario(funcion) -> object:
@@ -56,6 +66,7 @@ def _dependencia_del_usuario(funcion) -> object:
         friend_routes.send_friend_request,
         invitation_routes.send_invitation_by_user_id,
         invitation_routes.send_invitation_by_email,
+        enrollment_routes.direct_enroll_player,
     ],
 )
 async def test_v1_v3_the_outreach_routes_require_it(ruta):
