@@ -8,6 +8,7 @@ La respuesta no cambia: mismo código y el mismo `{"detail": str(e)}`.
 
 import ast
 import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -68,8 +69,6 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.competition.application.use_cases.create_round_use_case.GolfCourseNotInCompetitionError": 400,
     "src.modules.competition.application.use_cases.declare_walkover_use_case.CompetitionNotInProgressError": 400,
     "src.modules.competition.application.use_cases.declare_walkover_use_case.InvalidWalkoverError": 400,
-    "src.modules.competition.application.use_cases.direct_enroll_player_use_case.AlreadyEnrolledError": 409,
-    "src.modules.competition.application.use_cases.direct_enroll_player_use_case.CompetitionNotActiveError": 400,
     "src.modules.competition.application.use_cases.generate_matches_use_case.RoundNotPendingMatchesError": 400,
     "src.modules.competition.application.use_cases.name_vice_captain_use_case.NotCaptainOrCreatorError": 403,
     "src.modules.competition.application.use_cases.reassign_match_players_use_case.MatchNotScheduledError": 400,
@@ -101,6 +100,11 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.competition.domain.exceptions.competition_violations.InvalidInvitationStatusViolation": 409,
     "src.modules.competition.domain.exceptions.competition_violations.InvitationCompetitionStatusViolation": 422,
     "src.modules.competition.domain.exceptions.competition_violations.InvitationExpiredViolation": 409,
+    # 15 nov 2026: la invitación en espera (P1) y la sala de draft abierta al invitar o
+    # aceptar (B3), con su código
+    "src.modules.competition.domain.exceptions.competition_violations.InvitationOnHoldViolation": 409,
+    "src.modules.competition.domain.exceptions.competition_violations.InvitationOnHoldExistsViolation": 409,
+    "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError": 409,
     "src.modules.competition.domain.exceptions.competition_violations.SelfInvitationViolation": 400,
     "src.modules.competition.domain.services.location_builder.InvalidCountryError": 400,
     "src.modules.competition.domain.value_objects.location.InvalidLocationError": 400,
@@ -389,11 +393,12 @@ def test_an_error_with_a_code_not_asked_for_answers_as_always(cliente_con_codigo
     assert respuesta.json() == {"detail": "sin pedirlo"}
 
 
-def test_only_the_deadline_error_brings_its_code_through_the_central_map():
+def test_only_the_deadline_on_hold_and_draft_errors_bring_their_code_through_the_central_map():
     """
     Given: El mapa central
     When: Se miran las que llevan su `error_code`
-    Then: Solo la del plazo, y está en el mapa: a las demás no les cambia la respuesta
+    Then: Solo la del plazo, la de la invitación en espera y la de la sala de draft, y
+    están en el mapa: a las demás no les cambia la respuesta
     """
     from src.config.codigos_de_error import los_que_llevan_su_codigo
 
@@ -401,7 +406,12 @@ def test_only_the_deadline_error_brings_its_code_through_the_central_map():
 
     assert con_codigo == {
         "src.modules.competition.application.services.plazo_de_inscripcion."
-        "EnrollmentDeadlinePassedError"
+        "EnrollmentDeadlinePassedError",
+        "src.modules.competition.domain.exceptions.competition_violations."
+        "InvitationOnHoldViolation",
+        "src.modules.competition.domain.exceptions.competition_violations."
+        "InvitationOnHoldExistsViolation",
+        "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError",
     }
     assert los_que_llevan_su_codigo() <= todos_los_codigos().keys()
 
@@ -428,3 +438,67 @@ def test_the_app_answers_the_deadline_with_its_code():
             '{"detail":"La inscripción está cerrada.","error_code":"ENROLLMENT_DEADLINE_PASSED"}'
         ).encode()
     )
+
+
+def test_the_app_answers_an_invitation_on_hold_with_its_code():
+    """
+    P1. Given: La app de verdad
+    When: Se acepta una invitación en espera (INVITATION_ON_HOLD)
+    Then: 409, el texto aprobado y el `error_code`
+    """
+    import asyncio
+
+    from src.modules.competition.domain.exceptions.competition_violations import (
+        InvitationOnHoldViolation,
+    )
+
+    manejador = app.exception_handlers[InvitationOnHoldViolation]
+    respuesta = asyncio.run(manejador(None, InvitationOnHoldViolation()))
+
+    assert respuesta.status_code == 409
+    assert json.loads(respuesta.body) == {
+        "detail": "En lista de espera: la inscripción está cerrada. "
+        "Si el organizador la reabre, podrás aceptarla.",
+        "error_code": "INVITATION_ON_HOLD",
+    }
+
+
+def test_the_app_answers_a_draft_in_progress_with_its_code():
+    """
+    B3. Given: La app de verdad
+    When: Se invita o se acepta con la sala de draft abierta
+    Then: 409 y DRAFT_IN_PROGRESS
+    """
+    import asyncio
+
+    from src.modules.competition.application.services.baja_de_la_competicion import (
+        DraftInProgressError,
+    )
+
+    manejador = app.exception_handlers[DraftInProgressError]
+    respuesta = asyncio.run(manejador(None, DraftInProgressError("Espera a que termine el draft")))
+
+    assert respuesta.status_code == 409
+    assert json.loads(respuesta.body)["error_code"] == "DRAFT_IN_PROGRESS"
+
+
+def test_the_app_answers_an_invitation_on_hold_that_exists_with_its_code():
+    """
+    D1. Given: La app de verdad
+    When: Se vuelve a invitar a quien tiene una invitación en espera
+    Then: 409, el texto y INVITATION_ON_HOLD_EXISTS
+    """
+    import asyncio
+
+    from src.modules.competition.domain.exceptions.competition_violations import (
+        InvitationOnHoldExistsViolation,
+    )
+
+    manejador = app.exception_handlers[InvitationOnHoldExistsViolation]
+    respuesta = asyncio.run(manejador(None, InvitationOnHoldExistsViolation()))
+
+    assert respuesta.status_code == 409
+    assert json.loads(respuesta.body) == {
+        "detail": "Esa persona ya tiene una invitación en lista de espera.",
+        "error_code": "INVITATION_ON_HOLD_EXISTS",
+    }

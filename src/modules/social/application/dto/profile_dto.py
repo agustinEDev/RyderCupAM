@@ -162,7 +162,11 @@ class ActivityEventDTO(BaseModel):
             "En `ENROLLMENTS_CLOSED` (el plazo cerró las inscripciones, para el "
             "organizador): `competition_id`, `competition_name`, `start_date` y `end_date`. "
             "En `ENROLLMENT_CLOSE_BLOCKED` (el plazo no pudo cerrarlas): lo mismo, más "
-            "`reason` (NO_TEE_WINDOW o NO_HANDICAP) y `player_count` (cuántos aprobados)"
+            "`reason` (NO_TEE_WINDOW o NO_HANDICAP) y `player_count` (cuántos aprobados). "
+            "En `INVITATION_ACCEPTABLE_AGAIN` (se reabrió y ya puedes aceptar la "
+            "invitación; su origen es la invitación): los cuatro del torneo. En "
+            "`TEAMS_UNDONE_BY_ENTRY` (entró alguien y los equipos se deshicieron, para el "
+            "organizador): los cuatro del torneo, más `player_id` y `player_name`"
         ),
     )
     source_match_id: str = Field(

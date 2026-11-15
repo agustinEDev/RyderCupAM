@@ -14,7 +14,6 @@ El plazo de inscripción por la API y contra Postgres (15 nov 2026).
 | R3   | movida más tarde                                           | se vuelve a entrar                          |
 | R3   | cerrada por el plazo y movida más tarde                    | se reabre sola                              |
 | R3   | cerrada a mano y movida                                    | 400: hay que reabrir antes                  |
-| C2   | el organizador inscribe a mano pasado el plazo             | 400 ENROLLMENT_DEADLINE_PASSED              |
 | C4   | se cierra por fin tras avisar                              | el aviso de bloqueo se retira               |
 | O1   | cerrada por el plazo, con una sesión, movida con el        | la sesión se mueve los mismos días, se      |
 | F1   | formulario entero de la app                                | reabre y se retira «se han cerrado» (O2)    |
@@ -174,6 +173,35 @@ async def test_c2_pasado_el_plazo_no_se_acepta_una_invitacion(client: AsyncClien
     assert respuesta.json() == CERRADA
 
 
+async def test_p1_la_vuelta_deja_en_espera_las_invitaciones_pendientes(client: AsyncClient):
+    """
+    P1 (15 nov 2026). Given una invitación pendiente y el plazo pasado
+    When la vuelta horaria cierra la inscripción
+    Then la invitación queda ON_HOLD, y aceptarla es 409 INVITATION_ON_HOLD
+    """
+    organizador, competicion = await _competicion(client)
+    invitado = await _usuario(client)
+    set_auth_cookies(client, organizador["cookies"])
+    invitacion = await client.post(
+        f"/api/v1/competitions/{competicion['id']}/invitations",
+        json={"invitee_user_id": invitado["user"]["id"]},
+    )
+    assert invitacion.status_code == 201, invitacion.text
+    await _pasado_el_plazo(competicion)
+
+    await _vuelta()
+
+    assert await estado_en_bd(competicion["id"]) == "CLOSED"
+    set_auth_cookies(client, invitado["cookies"])
+    mias = (await client.get("/api/v1/invitations/me")).json()["invitations"]
+    assert [i["status"] for i in mias] == ["ON_HOLD"]
+    respuesta = await client.post(
+        f"/api/v1/invitations/{invitacion.json()['id']}/respond", json={"action": "ACCEPT"}
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "INVITATION_ON_HOLD"
+
+
 async def test_c3_c5_la_vuelta_la_cierra_y_avisa_al_organizador(client: AsyncClient):
     organizador, competicion = await _competicion(client)
     await _pasado_el_plazo(competicion)
@@ -306,21 +334,6 @@ async def test_r3_cerrada_a_mano_no_se_mueve(client: AsyncClient):
 
     assert movida.status_code == 400, movida.text
     assert await estado_en_bd(competicion["id"]) == "CLOSED"
-
-
-async def test_c2_pasado_el_plazo_no_se_inscribe_a_mano(client: AsyncClient):
-    organizador, competicion = await _competicion(client)
-    jugador = await _usuario(client)
-    await _pasado_el_plazo(competicion)
-
-    set_auth_cookies(client, organizador["cookies"])
-    respuesta = await client.post(
-        f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
-        json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
-    )
-
-    assert respuesta.status_code == 400, respuesta.text
-    assert respuesta.json() == CERRADA
 
 
 async def test_c4_al_cerrarse_por_fin_se_retira_el_aviso_de_bloqueo(client: AsyncClient):

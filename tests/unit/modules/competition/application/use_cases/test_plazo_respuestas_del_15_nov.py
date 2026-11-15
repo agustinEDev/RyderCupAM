@@ -11,8 +11,6 @@ Lo que decidió Agustín el 15 nov sobre el plazo de inscripción, tras la prime
 | R3   | sin plazo en el caso de uso                                     | como siempre: en CLOSED no se edita           |
 | R3   | la mueve otro que no es el organizador (ni administrador)       | no                                            |
 | R3   | ya en juego (IN_PROGRESS)                                       | no se mueve por este camino                   |
-| C2   | el organizador inscribe a mano pasado el plazo                  | ENROLLMENT_DEADLINE_PASSED                    |
-| C2   | ... antes del plazo                                             | entra                                         |
 | R2   | apertura programada antes del plazo, abierta tarde al mirarla   | cuenta desde la hora programada: no exenta    |
 | C4   | se cierra por fin (por el plazo o a mano) tras avisar           | se retira el aviso de «no se puede cerrar»    |
 | C4   | se cierra sin haber avisado (D7, 16 nov)                        | no se retira nada                             |
@@ -28,7 +26,6 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
-    DirectEnrollPlayerRequestDTO,
     RequestEnrollmentRequestDTO,
 )
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
@@ -38,9 +35,6 @@ from src.modules.competition.application.services.plazo_de_inscripcion import (
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
@@ -304,38 +298,6 @@ class TestMoverUnaCerradaPorElPlazo:
             competition.move_dates_closed_by_deadline(
                 DateRange(TORNEO + timedelta(days=7), TORNEO + timedelta(days=8))
             )
-
-
-class TestInscribirAMano:
-    async def _inscribir(self, uow, competition, ahora):
-        return await DirectEnrollPlayerUseCase(
-            uow, USUARIOS_CON_GENERO, plazo=_plazo(ahora)
-        ).execute(
-            DirectEnrollPlayerRequestDTO(
-                competition_id=competition.id.value, user_id=UserId.generate().value
-            ),
-            competition.creator_id,
-        )
-
-    async def test_pasado_el_plazo_tampoco(self):
-        """C2. Given ACTIVE abierta antes / When el organizador inscribe pasado el plazo / Then no."""
-        uow = InMemoryUnitOfWork()
-        competition = await _competicion(uow)
-
-        with pytest.raises(EnrollmentDeadlinePassedError):
-            await self._inscribir(uow, competition, DESPUES)
-
-        async with uow:
-            assert await uow.enrollments.count_approved(competition.id) == 0
-
-    async def test_antes_del_plazo_si(self):
-        """C2. Given la misma / When inscribe antes del plazo / Then entra."""
-        uow = InMemoryUnitOfWork()
-        competition = await _competicion(uow)
-
-        respuesta = await self._inscribir(uow, competition, TODAVIA)
-
-        assert respuesta.status == "APPROVED"
 
 
 class TestAperturaProgramadaTardia:

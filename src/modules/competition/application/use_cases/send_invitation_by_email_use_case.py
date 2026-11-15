@@ -23,7 +23,7 @@ from src.modules.competition.application.services.cupo_de_la_competicion import 
 )
 from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
 from src.modules.competition.application.services.equipos_formados import (
-    exigir_sin_equipos_formados,
+    exigir_que_se_pueda_invitar,
 )
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.lo_que_ve_el_organizador import (
@@ -148,8 +148,9 @@ class SendInvitationByEmailUseCase:
             # Pasado el plazo, aunque siga abierta, no (C2). Una programada se abrió
             # justo antes a su hora, así que tampoco: invitar no la exime (O3)
             await exigir_el_plazo(self._plazo, competition)
-            # Con los equipos formados no podría aceptarse (30 oct 2026)
-            await exigir_sin_equipos_formados(self._uow, competition.id)
+            # Con los equipos formados, solo si al aceptarla se pueden deshacer (sin
+            # partidos), y nunca con la sala de draft abierta (B3, 15 nov 2026)
+            await exigir_que_se_pueda_invitar(self._uow, competition)
 
             # 4 y 5a. Buscar user por email (puede no existir); no a uno mismo
             invitee_user = await self._cuenta_del_correo(request.invitee_email, inviter_id)

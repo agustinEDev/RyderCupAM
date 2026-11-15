@@ -149,6 +149,37 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             return
         await self._avisar("invitations_closed", lambda p: p.invitations_closed(con_aviso))
 
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """«Ya puedes aceptar» (P2): solo a quien tenía cuenta; las demás no tienen Actividad."""
+        con_cuenta = [i for i in invitations if i.invitee_user_id is not None]
+        if not con_cuenta:
+            return
+        await self._avisar(
+            "invitations_acceptable_again",
+            lambda p: p.invitations_acceptable_again(competition, con_cuenta),
+        )
+
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """«No hubo plaza» (P3): solo a quien tenía cuenta."""
+        con_cuenta = [i for i in invitations if i.invitee_user_id is not None]
+        if not con_cuenta:
+            return
+        await self._avisar(
+            "invitations_no_place", lambda p: p.invitations_no_place(competition, con_cuenta)
+        )
+
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        await self._avisar(
+            "teams_undone_by_entry", lambda p: p.teams_undone_by_entry(competition, enrollment)
+        )
+
+    async def teams_formed(self, competition: Competition) -> None:
+        await self._avisar("teams_formed", lambda p: p.teams_formed(competition))
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

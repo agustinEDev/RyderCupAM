@@ -63,6 +63,11 @@ class ActivityEventType(StrEnum):
     # hándicap) en X: colócalos y cierra»
     ENROLLMENTS_CLOSED = "ENROLLMENTS_CLOSED"
     ENROLLMENT_CLOSE_BLOCKED = "ENROLLMENT_CLOSE_BLOCKED"
+    # Invitaciones con la inscripción cerrada (15 nov 2026): para el invitado,
+    # «ya puedes aceptar la invitación» al reabrirse (P2); para el organizador,
+    # que alguien entró y los equipos se deshicieron, hay que volver a formarlos (B3)
+    INVITATION_ACCEPTABLE_AGAIN = "INVITATION_ACCEPTABLE_AGAIN"
+    TEAMS_UNDONE_BY_ENTRY = "TEAMS_UNDONE_BY_ENTRY"
 
     @property
     def is_achievement(self) -> bool:

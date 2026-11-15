@@ -20,12 +20,18 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.reapertura import Reapertura
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -55,6 +61,8 @@ class ReopenEnrollmentsUseCase:
         zonas: ICompetitionTimezone | None = None,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
         actividad: CompetitionActivityPublisherInterface | None = None,
+        correos: IInvitationEmailService | None = None,
+        user_uow: UserUnitOfWorkInterface | None = None,
     ):
         """
         Args:
@@ -67,6 +75,9 @@ class ReopenEnrollmentsUseCase:
         self._zonas = zonas
         self._reloj = reloj
         self._actividad = AvisosDeActividad(actividad)
+        # El correo de invitación otra vez a quien no tiene cuenta (O2, 15 nov 2026)
+        self._correos = correos
+        self._user_uow = user_uow
 
     async def execute(
         self, request: ReopenEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -85,6 +96,7 @@ class ReopenEnrollmentsUseCase:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionStateError: Si la transición de estado no es válida
+            DraftInProgressError: Con la sala de draft abierta (O1)
         """
         async with self._uow:
             # 1. Buscar la competición
@@ -121,4 +133,11 @@ class ReopenEnrollmentsUseCase:
         )
 
     def _reapertura(self) -> Reapertura:
-        return Reapertura(self._uow, self._zonas, self._reloj, self._actividad)
+        return Reapertura(
+            self._uow,
+            self._zonas,
+            self._reloj,
+            self._actividad,
+            correos=self._correos,
+            user_uow=self._user_uow,
+        )

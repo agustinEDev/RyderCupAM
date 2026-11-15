@@ -16,6 +16,7 @@ from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
     create_competition,
+    inscrito_por_invitacion,
     set_auth_cookies,
 )
 
@@ -39,11 +40,7 @@ async def _cerrada_con_capitanes(client: AsyncClient, jugadores: int = 5) -> dic
     comp = await create_competition(client, creador["cookies"])
     set_auth_cookies(client, creador["cookies"])
     for jugador in resto:
-        inscrito = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-        )
-        assert inscrito.status_code == 201, inscrito.text
+        await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
 
     capitan_a, capitan_b = creador, resto[0]
     nombrados = await client.put(
@@ -262,3 +259,21 @@ class TestLaSalaPorHttp:
         otra_vez = await client.post(f"/api/v1/competitions/{comp_id}/draft")
 
         assert otra_vez.status_code == 400, otra_vez.text
+
+
+async def test_o1_con_la_sala_abierta_no_se_reabre(client: AsyncClient):
+    """
+    O1 (Agustín, 15 nov 2026). Given la sala de draft abierta / When el organizador
+    reabre la inscripción / Then 409 DRAFT_IN_PROGRESS y sigue cerrada: antes, el draft
+    """
+    montaje = await _cerrada_con_capitanes(client)
+    comp_id = montaje["comp"]["id"]
+    set_auth_cookies(client, montaje["creador"]["cookies"])
+    assert (await client.post(f"/api/v1/competitions/{comp_id}/draft")).status_code == 201
+
+    reabierta = await client.post(f"/api/v1/competitions/{comp_id}/reopen-enrollments")
+
+    assert reabierta.status_code == 409, reabierta.text
+    assert reabierta.json()["error_code"] == "DRAFT_IN_PROGRESS"
+    ficha = (await client.get(f"/api/v1/competitions/{comp_id}")).json()
+    assert ficha["status"] == "CLOSED"

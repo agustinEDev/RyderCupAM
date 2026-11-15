@@ -23,13 +23,17 @@ from src.modules.competition.application.services.cupo_de_la_competicion import 
     exigir_sitio,
 )
 from src.modules.competition.application.services.equipos_formados import (
-    exigir_sin_equipos_formados,
+    reiniciar_para_que_entre,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
     guardar_la_inscripcion,
     viva,
+)
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    AlLlenarse,
+    avisar_al_llenarse,
 )
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
@@ -45,6 +49,7 @@ from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationNoRoomViolation,
+    InvitationOnHoldViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -54,6 +59,7 @@ from src.modules.competition.domain.services.competition_policy import (
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
@@ -120,11 +126,13 @@ class RespondToInvitationUseCase:
         enrollment_id = None
         competition_name = None
         inscrito: tuple[Competition, Enrollment] | None = None
-        sin_plaza_ya: list[Invitation] = []
+        sin_plaza_ya = AlLlenarse()
+        # Si al entrar se deshicieron los equipos formados (B3)
+        deshechos = False
 
         async with self._uow:
             # Re-fetch para tener la entidad en la sesion actual
-            invitation = await self._releer_pendiente(invitation_id)
+            invitation = await self._releer_pendiente(invitation_id, action)
 
             # Verificar current_user es invitee
             if not self._es_el_invitado(invitation, current_user_id, current_user_email):
@@ -136,7 +144,7 @@ class RespondToInvitationUseCase:
             # invitacion retirada; o rechazar pisaba una retirada (CodeRabbit, #488)
             if action == "ACCEPT":
                 await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
-            invitation = await self._releer_pendiente(invitation_id, bloqueada=True)
+            invitation = await self._releer_pendiente(invitation_id, action, bloqueada=True)
 
             # Si tenía cuenta al invitarle (y por tanto aviso en Actividad), antes de que
             # responder la ate a quien responde
@@ -144,7 +152,7 @@ class RespondToInvitationUseCase:
 
             # Ejecutar accion
             if action == "ACCEPT":
-                competition, enrollment, sin_plaza_ya = await self._handle_accept(
+                competition, enrollment, sin_plaza_ya, deshechos = await self._handle_accept(
                     invitation, current_user_id
                 )
                 inscrito = (competition, enrollment)
@@ -158,7 +166,11 @@ class RespondToInvitationUseCase:
             await self._actividad.invitation_answered(invitation)
         await self._avisar_si_entro(inscrito)
         # Si ocupo la ultima plaza, las demas pendientes se cerraron solas
-        await self._actividad.invitations_closed(sin_plaza_ya)
+        if inscrito is not None:
+            await avisar_al_llenarse(self._actividad, inscrito[0], sin_plaza_ya)
+        # Y si al entrar se deshicieron los equipos, el organizador lo sabe (B3)
+        if deshechos and inscrito is not None:
+            await self._actividad.teams_undone_by_entry(*inscrito)
 
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
@@ -171,9 +183,10 @@ class RespondToInvitationUseCase:
         current_user_email: str | None,
     ) -> tuple[str | None, bool]:
         """
-        La fase 1: si ya no esta pendiente (o caduco) se guarda tal cual, y si
-        se acepta con la inscripcion cerrada se queda sin plaza. Devuelve el
-        estado no pendiente y si se quedo sin plaza ahora.
+        La fase 1: si ya no esta viva (o caduco) se guarda tal cual. Una pendiente
+        que se colo en una cerrada pasa a esperar, y en juego se queda sin plaza.
+        Devuelve el estado no vivo y si se quedo sin plaza ahora. Una en espera
+        sigue a la fase 2: rechazarla se puede; aceptarla, no (P1).
 
         La que se cierra sola aqui se guarda y retira su aviso de invitado
         aunque la respuesta acabe en error (Agustin, 22 oct 2026).
@@ -193,25 +206,45 @@ class RespondToInvitationUseCase:
                 # cuenta): el mismo 404, antes de tocarla y sin decir su estado
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
 
-            estaba_pendiente = invitation.is_pending()
+            estado: CompetitionStatus | None = None
+            if action == "ACCEPT":
+                # Se decide con la competición bloqueada y la invitación releída con la
+                # suya, en el orden de cerrar y reabrir: sin esto, reabrir a la vez
+                # dejaba una en espera en una abierta (revisión, 15 nov 2026)
+                competicion = await self._uow.competitions.find_by_id_for_update(
+                    invitation.competition_id
+                )
+                estado = competicion.status if competicion is not None else None
+            # Al rechazar también se decide con su fila bloqueada: leída sin bloqueo, una
+            # EXPIRED de antes pisaba la ON_HOLD que el cierre guardaba a la vez (#867)
+            invitation = await self._uow.invitations.find_by_id_for_update(invitation_id)
+            if invitation is None:
+                raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
+
+            estaba_viva = invitation.is_open()
             invitation.check_expiration()
 
-            if not invitation.is_pending():
+            if not invitation.is_open():
                 # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
                 await self._uow.invitations.update(invitation)
                 non_pending_status = invitation.status.value
-                if estaba_pendiente:
+                if estaba_viva:
                     cerrada_ahora = invitation
             elif (
                 action == "ACCEPT"
+                and invitation.is_pending()
                 # Ya es el invitado (lo de arriba): con el id de otra no se llega aquí
-                and await self._inscripcion_cerrada(invitation)
+                and estado in INSCRIPCION_CERRADA
             ):
-                # Una pendiente de antes de que el cierre las rechazara (#710):
-                # se queda sin plaza, guardado, y no se entra
-                invitation.reject_for_no_room()
+                # Una pendiente que se coló en una cerrada: espera, como las que
+                # cerró el cierre (P1), y la fase 2 lo dice; en juego, sin plaza.
+                # Guardado, y no se entra
+                if estado is CompetitionStatus.CLOSED:
+                    invitation.put_on_hold()
+                else:
+                    invitation.reject_for_no_room()
+                    sin_plaza = True
                 await self._uow.invitations.update(invitation)
-                sin_plaza = True
                 cerrada_ahora = invitation
 
         # Ya guardada: fuera su aviso de invitado (Agustin, 22 oct 2026)
@@ -228,14 +261,15 @@ class RespondToInvitationUseCase:
             await self._actividad.enrolled(*inscrito, accepted_request=False)
 
     async def _releer_pendiente(
-        self, invitation_id: InvitationId, bloqueada: bool = False
+        self, invitation_id: InvitationId, action: str, bloqueada: bool = False
     ) -> Invitation:
-        """La invitacion de la fase 2, que tiene que seguir pendiente.
+        """La invitacion de la fase 2, que tiene que seguir pendiente (o en espera, para
+        rechazarla).
 
-        El cierre pudo llegar entre las dos fases y dejarla sin plaza: se dice
-        con su codigo, no con el generico (revision local de la BE #385). Con
-        `bloqueada`, releida con su fila bloqueada: es la lectura con la que se
-        decide (BE #359).
+        El cierre pudo llegar entre las dos fases y dejarla en espera o sin plaza:
+        se dice con su codigo, no con el generico (revision local de la BE #385).
+        Con `bloqueada`, releida con su fila bloqueada: es la lectura con la que
+        se decide (BE #359).
         """
         repo = self._uow.invitations
         invitation = await (
@@ -245,6 +279,10 @@ class RespondToInvitationUseCase:
         )
         if invitation and invitation.status == InvitationStatus.NO_ROOM:
             raise InvitationNoRoomViolation()
+        if invitation and invitation.is_on_hold():
+            if action == "ACCEPT":
+                raise InvitationOnHoldViolation()
+            return invitation
         if not invitation or not invitation.is_pending():
             raise InvalidInvitationStatusViolation("Invitation is no longer pending.")
         return invitation
@@ -256,17 +294,13 @@ class RespondToInvitationUseCase:
             email is not None and invitation.is_for_email(email)
         )
 
-    async def _inscripcion_cerrada(self, invitation: Invitation) -> bool:
-        """Si su competicion ya cerro la inscripcion: no quedan plazas."""
-        competition = await self._uow.competitions.find_by_id(invitation.competition_id)
-        return competition is not None and competition.status in INSCRIPCION_CERRADA
-
     async def _handle_accept(
         self, invitation: Invitation, current_user_id: UserId
-    ) -> tuple[Competition, Enrollment, list[Invitation]]:
+    ) -> tuple[Competition, Enrollment, AlLlenarse, bool]:
         """
         Procesa la aceptacion de una invitacion. Retorna la competicion, la
-        inscripcion y las demas pendientes que se quedaron sin plaza.
+        inscripcion, las demas pendientes que se quedaron sin plaza y si se
+        deshicieron los equipos formados (B3).
         """
         # Con la fila bloqueada: si se cierra a la vez, uno espera al otro y aquí
         # se lee el estado de verdad, no un «abierta» de antes del cierre (#710)
@@ -277,9 +311,6 @@ class RespondToInvitationUseCase:
         CompetitionPolicy.can_accept_invitation(competition.status)
         # Pasado el plazo, aunque siga abierta, no se entra (C2). Rechazar, sí
         await exigir_el_plazo(self._plazo, competition)
-        # Con los equipos formados no se entra por su cuenta: le inscribe el
-        # organizador, y eso los reinicia (29 oct 2026)
-        await exigir_sin_equipos_formados(self._uow, competition.id)
 
         # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
         # la invitación se queda pendiente para cuando lo rellene
@@ -310,6 +341,12 @@ class RespondToInvitationUseCase:
         # Con franjas, el cupo es de sus plazas (28 oct 2026)
         approved_count = await exigir_sitio(self._uow, competition)
 
+        # Con la sala de draft abierta no entra: la invitacion sigue pendiente.
+        # Con los equipos formados y sin partidos entra y se deshacen; con
+        # partidos, no (B3, 15 nov 2026). Lo ultimo antes de entrar: si algo
+        # anterior lo impide, los equipos siguen como estaban
+        deshechos = await reiniciar_para_que_entre(self._uow, competition)
+
         invitation.accept(respondida_por=current_user_id)
 
         if solicitud is not None:
@@ -328,7 +365,7 @@ class RespondToInvitationUseCase:
 
         cerradas = await al_entrar_uno(self._uow, competition, approved_count)
 
-        return competition, enrollment, cerradas
+        return competition, enrollment, cerradas, deshechos
 
     async def _handle_decline(self, invitation: Invitation, current_user_id: UserId) -> None:
         """Procesa el rechazo de una invitacion."""

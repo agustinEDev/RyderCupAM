@@ -7,22 +7,30 @@ caducada y deja mandar la nueva, en vez de contestar «ya hay una pendiente».
 """
 
 from src.modules.competition.domain.entities.invitation import Invitation
+from src.modules.competition.domain.exceptions.competition_violations import (
+    InvitationOnHoldExistsViolation,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 
 
 async def pendiente_vigente(
     uow: CompetitionUnitOfWorkInterface, email: str, competition_id: CompetitionId
 ) -> tuple[Invitation | None, Invitation | None]:
     """
-    La invitación pendiente que impide mandar otra a ese correo.
+    La invitación viva que impide mandar otra a ese correo: pendiente, o en espera
+    de que se reabra (revisión, 15 nov 2026: abierta a la vez que se cerraba).
 
     Args:
         uow: La unidad de trabajo de la petición
         email: El correo al que se invita
         competition_id: La competición
+
+    Raises:
+        InvitationOnHoldExistsViolation: Si la que tiene está en espera
 
     Returns:
         (la pendiente aún vigente, la que acaba de quedar EXPIRED): como mucho
@@ -31,6 +39,11 @@ async def pendiente_vigente(
     """
     pendiente = await uow.invitations.find_pending_by_email_and_competition(email, competition_id)
     if pendiente is None:
+        # Sin bloquear sus filas: la de la competición ya pone en fila a quien invita
+        if await uow.invitations.find_by_email_competition_and_status(
+            email, competition_id, InvitationStatus.ON_HOLD
+        ):
+            raise InvitationOnHoldExistsViolation()
         return None, None
     pendiente.check_expiration()
     if pendiente.is_pending():

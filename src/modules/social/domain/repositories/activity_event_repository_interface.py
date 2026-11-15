@@ -113,9 +113,10 @@ class ActivityEventRepositoryInterface(ABC):
         torneos que ahora son privados: el feed no los enseña (regla E, 22 oct
         2026), y el numero tiene que decir lo mismo que la pantalla.
 
-        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
-        invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
-        caducadas o borradas), que el feed tampoco enseña.
+        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT (ni los
+        INVITATION_ACCEPTABLE_AGAIN) de invitaciones que en ese instante ya no se
+        pueden aceptar (no pendientes, caducadas o borradas), que el feed tampoco
+        enseña.
 
         Con `hide_trashed_quick_matches_from` (quien mira) tampoco cuenta lo
         que salio de una partida rapida que su autor tiene en la papelera
@@ -157,6 +158,16 @@ class ActivityEventRepositoryInterface(ABC):
         Borra los eventos de ese tipo de cada pareja (jugador, origen), todos en
         una sola operacion. Para retirar en lote los avisos de las invitaciones
         que se cierran solas. Sin parejas no borra nada. Devuelve cuantos borro.
+        """
+
+    @abstractmethod
+    async def delete_pairs_of(
+        self, types: Collection[ActivityEventType], pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        """
+        Como `delete_pairs`, de varios tipos a la vez y en una sola operacion: los
+        avisos de una invitacion son dos (15 nov 2026). Sin tipos o sin parejas no
+        borra nada. Devuelve cuantos borro.
         """
 
     @abstractmethod

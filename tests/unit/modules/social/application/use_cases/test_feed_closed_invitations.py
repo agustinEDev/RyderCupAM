@@ -200,3 +200,17 @@ class TestContador:
         assert contador.unseen_count == 2
         assert feed.unseen_count == 2
         assert len(feed.events) == 2
+
+    async def test_tampoco_el_ya_puedes_aceptar_de_una_cerrada(
+        self, social_uow, user_uow, invitaciones, yo
+    ):
+        """P2 (15 nov 2026): «ya puedes aceptar» pide aceptarla, como «te han invitado»."""
+        social_uow.activity_events.open_invitation_ids = {ABIERTA}
+        await _evento(social_uow, yo, T.INVITATION_ACCEPTABLE_AGAIN, CERRADA, 1)
+        await _evento(social_uow, yo, T.INVITATION_ACCEPTABLE_AGAIN, ABIERTA, 2)
+
+        contador = await GetFeedUnseenCountUseCase(social_uow, user_uow).execute(str(yo.id.value))
+        feed = await _feed(social_uow, user_uow, invitaciones).execute(str(yo.id.value))
+
+        assert contador.unseen_count == 1
+        assert [e.source_match_id for e in feed.events] == [ABIERTA]

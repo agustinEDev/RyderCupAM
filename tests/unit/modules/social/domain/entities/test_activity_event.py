@@ -240,4 +240,7 @@ class TestTipos:
             # Cierre de inscripciones por el plazo (15 nov 2026)
             "ENROLLMENTS_CLOSED",
             "ENROLLMENT_CLOSE_BLOCKED",
+            # Invitaciones con la inscripción cerrada (15 nov 2026)
+            "INVITATION_ACCEPTABLE_AGAIN",
+            "TEAMS_UNDONE_BY_ENTRY",
         }

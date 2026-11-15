@@ -21,6 +21,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionParticipantError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.draft_roster import DraftRoster
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.team_assignment_writer import (
@@ -50,6 +54,7 @@ class DraftRoom:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         clock: Callable[[], datetime] | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
@@ -58,6 +63,10 @@ class DraftRoom:
             clock: El reloj del SERVIDOR. Se inyecta para poder moverlo en los
                 tests, nunca para que lo ponga el cliente
         """
+        # Los avisos de Actividad: retirar los de equipos deshechos (B3); sin el, nada
+        self._actividad = AvisosDeActividad(actividad)
+        # La competicion cuyos equipos dejo hechos la sala, para avisar ya guardado
+        self._formados: Competition | None = None
         self._uow = uow
         self._user_repo = user_repository
         # UTC, como el resto del modulo (BE #305 y la generacion de partidos), y
@@ -174,6 +183,14 @@ class DraftRoom:
             await TeamAssignmentWriter.guardar(
                 self._uow, competition, TeamAssignmentMode.DRAFT, equipo_a, equipo_b
             )
+            self._formados = competition
+
+    async def avisar(self) -> None:
+        """Ya guardado: si la sala dejó los equipos hechos, fuera los avisos de equipos
+        deshechos (B3, 15 nov 2026)."""
+        if self._formados is not None:
+            await self._actividad.teams_formed(self._formados)
+            self._formados = None
 
     async def estado(
         self, competition: Competition, draft: Draft, elegibles: list[PlayerForDraft]

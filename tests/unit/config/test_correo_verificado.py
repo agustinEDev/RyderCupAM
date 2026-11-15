@@ -18,11 +18,7 @@ import pytest
 
 from src.config.correo_verificado import EmailNotVerifiedError, usuario_con_correo_verificado
 from src.config.terms_guard import terms_not_accepted_handler
-from src.modules.competition.infrastructure.api.v1 import (
-    competition_crud_routes,
-    enrollment_routes,
-    invitation_routes,
-)
+from src.modules.competition.infrastructure.api.v1 import competition_crud_routes, invitation_routes
 from src.modules.social.infrastructure.api.v1 import friend_routes
 
 pytestmark = pytest.mark.asyncio
@@ -66,7 +62,6 @@ def _dependencia_del_usuario(funcion) -> object:
         friend_routes.send_friend_request,
         invitation_routes.send_invitation_by_user_id,
         invitation_routes.send_invitation_by_email,
-        enrollment_routes.direct_enroll_player,
     ],
 )
 async def test_v1_v3_the_outreach_routes_require_it(ruta):

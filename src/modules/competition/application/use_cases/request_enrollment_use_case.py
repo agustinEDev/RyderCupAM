@@ -23,6 +23,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.correo_del_invitado import (
     correo_del_invitado,
 )
@@ -42,6 +45,9 @@ from src.modules.competition.application.services.handicap_obligatorio import ex
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
     guardar_la_inscripcion,
     viva,
+)
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    avisar_al_llenarse,
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
@@ -213,6 +219,8 @@ class RequestEnrollmentUseCase:
             # Con los equipos formados nadie entra solo; el organizador sí (29 oct
             # 2026). Tras lo de ya inscrito: a quien ya está se le dice eso (revisor)
             await exigir_sin_equipos_formados(self._uow, competition_id)
+            # Y nadie entra durante el draft (Agustín, 15 nov 2026)
+            await exigir_sin_draft_abierto(self._uow, competition_id)
 
             franjas = [
                 s
@@ -258,7 +266,7 @@ class RequestEnrollmentUseCase:
         # Ya guardado: lo que se le cuenta a cada uno (A1, A2)
         if aceptada is not None:
             await self._actividad.invitation_answered(aceptada)
-        await self._actividad.invitations_closed(cerradas)
+        await avisar_al_llenarse(self._actividad, competition, cerradas)
         await self._actividad.joined(competition, enrollment, franja, espera)
         # Solo en espera aún no juega: sus amigos se enteran cuando tenga plaza
         if not espera:

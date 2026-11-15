@@ -75,6 +75,9 @@ SOLO_EL_AUTOR = [
     # Cierre por el plazo (15 nov 2026): los dos, para el organizador
     ActivityEventType.ENROLLMENTS_CLOSED,
     ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+    # Invitaciones con la inscripción cerrada (15 nov 2026): del invitado y del organizador
+    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+    ActivityEventType.TEAMS_UNDONE_BY_ENTRY,
 ]
 
 

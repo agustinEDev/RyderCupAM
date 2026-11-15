@@ -14,6 +14,7 @@ from httpx import AsyncClient
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
+    inscrito_por_invitacion,
     set_auth_cookies,
     solicitud_pendiente,
 )
@@ -83,30 +84,52 @@ async def test_rechazada_vuelve_a_pedir_y_luego_acepta_una_invitacion(client: As
     assert aceptada.json()["enrollment_id"] == pedida["id"]
 
 
-async def test_retirado_vuelve_a_mano_del_organizador(client: AsyncClient):
+async def _estado_de(client: AsyncClient, creador: dict, comp: dict, jugador: dict) -> str:
+    set_auth_cookies(client, creador["cookies"])
+    todas = (await client.get(f"/api/v1/competitions/{comp['id']}/enrollments")).json()
+    return next(e["status"] for e in todas if e["user_id"] == jugador["user"]["id"])
+
+
+async def test_o6_el_retirado_solo_vuelve_si_acepta(client: AsyncClient):
+    """
+    B-02 (15 nov 2026), O6: nadie vuelve sin su consentimiento.
+
+    Given un jugador que entró por invitación y se retiró / When el organizador
+    intenta la vieja inscripción directa / Then no existe y sigue WITHDRAWN.
+    When le invita / Then sigue WITHDRAWN hasta que él acepta, y entonces vuelve
+    con la misma fila.
+    """
     creador, jugador = await _jugador(client), await _jugador(client)
     comp = await _publica(client, creador)
-    set_auth_cookies(client, creador["cookies"])
-    dentro = await client.post(
-        f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-        json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-    )
-    assert dentro.status_code == 201, dentro.text
+    dentro = await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
     set_auth_cookies(client, jugador["cookies"])
-    assert (
-        await client.post(f"/api/v1/enrollments/{dentro.json()['id']}/withdraw", json={})
-    ).status_code == 200
+    retirada = await client.post(f"/api/v1/enrollments/{dentro['enrollment_id']}/withdraw", json={})
+    assert retirada.status_code == 200, retirada.text
 
-    # V3
     set_auth_cookies(client, creador["cookies"])
-    otra_vez = await client.post(
+    directa = await client.post(
         f"/api/v1/competitions/{comp['id']}/enrollments/direct",
         json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
     )
+    assert directa.status_code in (404, 405), directa.text
+    assert await _estado_de(client, creador, comp, jugador) == "WITHDRAWN"
 
-    assert otra_vez.status_code == 201, otra_vez.text
-    assert otra_vez.json()["id"] == dentro.json()["id"]
-    assert otra_vez.json()["status"] == "APPROVED"
+    set_auth_cookies(client, creador["cookies"])
+    enviada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": jugador["user"]["id"]},
+    )
+    assert enviada.status_code == 201, enviada.text
+    assert await _estado_de(client, creador, comp, jugador) == "WITHDRAWN"
+
+    set_auth_cookies(client, jugador["cookies"])
+    aceptada = await client.post(
+        f"/api/v1/invitations/{enviada.json()['id']}/respond", json={"action": "ACCEPT"}
+    )
+
+    assert aceptada.status_code == 200, aceptada.text
+    assert aceptada.json()["enrollment_id"] == dentro["enrollment_id"]
+    assert await _estado_de(client, creador, comp, jugador) == "APPROVED"
 
 
 async def test_r4_tras_una_pendiente_ya_caducada_sale_otra(client: AsyncClient):
