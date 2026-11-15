@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.66.0] - 2026-11-15
+
+**Tanda 2 de la auditoría de la fase 6** (#849, #851, #852, #853). Solo backend: el frontend
+sigue en 2.79.0. Sin cambios para los usuarios. Una migración (`e7b9d1f3a5c2`) que en
+producción no cambia nada; en una base creada desde las migraciones deja `hole_scores` como
+producción. Variable nueva y opcional, `MIGRATIONS_DATABASE_URL`: sin ella todo funciona como
+antes. Probado en el Kind sobre la copia de producción.
+
+### Security
+
+- **La API puede funcionar con un usuario que solo maneja filas** (DB-01). Hasta ahora corría
+  como dueña de la base: con un fallo que dejara ejecutar SQL se podían borrar las tablas o
+  crear un usuario oculto. Las migraciones entran con `MIGRATIONS_DATABASE_URL` (el dueño) y la
+  API con `DATABASE_URL`. `scripts/db/rol_de_la_api.sql` crea `rydercup_app` (solo filas, sin
+  tocar la versión de las migraciones, con permiso en las tablas futuras), va en una
+  transacción y se niega en una base sin migrar. Se activa siguiendo el runbook
+  («Usuario de la API sin permisos de estructura»); la guardia de arranque rechaza una
+  `MIGRATIONS_DATABASE_URL` mal formada sin mostrarla.
+- **n8n deja de leer solo cada tabla nueva** (DB-03), al ejecutar ese script. Las cuatro
+  tablas del informe de los lunes siguen como estaban; las copias siguen leyendo las nuevas.
+- **Todas las acciones de GitHub fijadas por la huella de su commit** (INF-03), con un test
+  que lo vigila. GitHub ya lo exige en el repositorio.
+- **El script de firmas ya no da por buenos los merges ni los commits «de GitHub»** sin mirarlos
+  (INF-06): le pregunta a GitHub si están verificados, y sin respuesta no hay aprobado.
+
+### Fixed
+
+- **Tiempos límite en la base de datos** (DB-04). No había ninguno: una consulta lenta o una
+  petición muerta a mitad de una transacción retenía una conexión y sus bloqueos sin límite.
+  Ahora 15 s por consulta y 2 minutos por transacción parada (`DB_STATEMENT_TIMEOUT_MS`,
+  `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`; un valor que no sirva vuelve al de por defecto), y las
+  migraciones esperan como mucho 5 s a un bloqueo: si no lo consiguen, el despliegue falla y
+  Render sigue con la versión anterior.
+- **`hole_scores` igual en todas las bases** (DB-02): sin borrado en cascada de los golpes al
+  borrar un usuario (la base impide borrar a quien tenga golpes) y fechas sin zona, como
+  producción y el código.
+- **Alembic acepta `postgres://` y contraseñas codificadas en la URL** (`%40`).
+
+### Documentation
+
+- `docs/RUNBOOK.md`: pasos para pasar la API al usuario nuevo en producción y volver atrás.
+- `docs/KNOWN_SECURITY_ISSUES.md`: riesgo aceptado de las dependencias del generador del
+  SBOM (INF-04).
+
 ## [2.65.0] - 2026-11-14
 
 **Tanda 1 de la auditoría de la fase 6** (#839, #841, #845). **Va con el frontend 2.79.0, que
