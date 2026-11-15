@@ -15,9 +15,6 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.baja_de_la_competicion import (
-    exigir_sin_draft_abierto,
-)
 from src.modules.competition.application.services.correo_del_invitado import (
     correo_del_invitado,
 )
@@ -276,9 +273,6 @@ class RespondToInvitationUseCase:
         CompetitionPolicy.can_accept_invitation(
             competition.status, stroke_play=competition.stroke_play is not None
         )
-        # Con la sala de draft abierta no se entra: la sala no se enteraria. La
-        # invitacion sigue pendiente para cuando acabe (B-02, P3)
-        await exigir_sin_draft_abierto(self._uow, competition.id)
 
         # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
         # la invitación se queda pendiente para cuando lo rellene
@@ -309,8 +303,9 @@ class RespondToInvitationUseCase:
         # Con franjas, el cupo es de sus plazas (28 oct 2026)
         approved_count = await exigir_sitio(self._uow, competition)
 
-        # Con los equipos formados y sin partidos entra y se reinician, como al
-        # aprobar una solicitud; con partidos, no (B-02, P2). Desde el 15 nov 2026
+        # Con la sala de draft abierta no entra: la invitacion sigue pendiente
+        # (B-02, P3). Con los equipos formados y sin partidos entra y se
+        # reinician, como al aprobar una solicitud; con partidos, no (B-02, P2). Desde el 15 nov 2026
         # el organizador ya no inscribe a nadie: aceptar es la via
         await reiniciar_para_que_entre(self._uow, competition)
 

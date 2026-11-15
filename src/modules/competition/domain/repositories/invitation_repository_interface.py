@@ -119,8 +119,16 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
-        """TODAS las invitaciones PENDING de una competicion, sin paginar (#710)."""
+    async def find_pending_by_competition_for_update(
+        self, competition_id: CompetitionId
+    ) -> list[Invitation]:
+        """TODAS las invitaciones PENDING de una competicion, sin paginar, con sus filas
+        bloqueadas y releidas de la base de datos.
+
+        Para cerrarlas (empezar, cancelar, llenarse) sin pisar un DECLINE que otra
+        transaccion guarde entre medias (revision de B-02). Quien la use bloquea
+        antes la competicion, como `find_by_id_for_update`.
+        """
         pass
 
     @abstractmethod

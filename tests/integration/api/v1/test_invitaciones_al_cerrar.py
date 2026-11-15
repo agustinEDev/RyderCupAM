@@ -15,6 +15,7 @@ pendientes «sin plaza» y cerrada ya no se invitaba. Desde B-02, por la API:
 | O5 | Invitar ya empezada                                 | 422                                    |
 | P1 | Stableford cerrado: invitar                         | 422 («plazas»)                         |
 | P1 | Stableford cerrado: aceptar una pendiente           | 422 («reabrir»); sigue PENDING         |
+| O7 | Cancelar la competición, abierta o cerrada          | La pendiente, NO_ROOM; aceptar es 409  |
 """
 
 import uuid
@@ -238,3 +239,29 @@ class TestP1StrokePlayCerrado:
         assert respuesta.status_code == 422, respuesta.text
         assert "reabrir" in respuesta.json()["detail"]
         assert await _mias(client, m["invitado"]) == ["PENDING"]
+
+
+class TestO7Cancelar:
+    """Revisión de B-02: cancelar cierra las pendientes, como empezar."""
+
+    @pytest.mark.parametrize("cerrada", [False, True])
+    async def test_cancelar_la_deja_sin_plaza(self, client: AsyncClient, cerrada: bool):
+        """
+        Given una pendiente en una Ryder abierta o cerrada / When el organizador la
+        cancela / Then la invitación queda NO_ROOM y aceptarla es 409.
+        """
+        creador = await _usuario(client, "ic-cancel-org")
+        invitado = await _usuario(client, "ic-cancel-inv")
+        comp = await create_competition(client, creador["cookies"])
+        enviada = await _invita(client, creador, comp, invitado)
+        assert enviada.status_code == 201, enviada.text
+        if cerrada:
+            await _cierra(client, creador, comp)
+
+        set_auth_cookies(client, creador["cookies"])
+        cancelada = await client.post(f"/api/v1/competitions/{comp['id']}/cancel")
+        assert cancelada.status_code == 200, cancelada.text
+
+        assert await _mias(client, invitado) == ["NO_ROOM"]
+        respuesta = await _acepta(client, invitado, enviada.json()["id"])
+        assert respuesta.status_code == 409, respuesta.text

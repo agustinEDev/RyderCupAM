@@ -26,7 +26,8 @@ async def sin_plaza_para_las_pendientes(
     invitado en Actividad (Agustín, 22 oct 2026).
     """
     cerradas = []
-    for invitacion in await uow.invitations.find_pending_by_competition(competition_id):
+    # Con sus filas bloqueadas: un DECLINE a la vez no se pisa con NO_ROOM (revisión)
+    for invitacion in await uow.invitations.find_pending_by_competition_for_update(competition_id):
         invitacion.check_expiration()
         if invitacion.is_pending():
             invitacion.reject_for_no_room()

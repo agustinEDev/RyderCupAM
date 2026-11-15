@@ -25,6 +25,11 @@ invita; inscribirse directamente es cosa del jugador en una pública abierta.
 | P2 | Ryder con equipos formados y partidos: aceptar          | TEAMS_FORMED; la invitación sigue PENDING     |
 | P3 | Nombrar capitanes (también cierra la inscripción)       | Las pendientes siguen PENDING                 |
 | P3 | Aceptar con la sala de draft abierta                    | DRAFT_IN_PROGRESS; la invitación sigue PENDING |
+| P3 | Aprobar una solicitud con la sala de draft abierta      | DRAFT_IN_PROGRESS; sigue REQUESTED (revisión) |
+| O7 | Cancelar la competición, abierta o cerrada              | Las pendientes, NO_ROOM (caducadas, EXPIRED), |
+|    |                                                         | y se retira su aviso de invitado (revisión)   |
+| R1 | Cerrar las pendientes (empezar, cancelar, llenarse)     | Las lee con sus filas bloqueadas: un DECLINE  |
+|    |                                                         | a la vez no se pisa con NO_ROOM (revisión)    |
 
 La inscripción del propio jugador en una pública (RequestEnrollmentUseCase, 28 oct)
 no cambia. Quien estaba en espera y sale al cerrar (A4) tampoco: es otra cosa.
@@ -35,12 +40,14 @@ import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
 import src.config.dependencies as dependencias
 from src.modules.competition.application.dto.competition_dto import (
+    CancelCompetitionRequestDTO,
     CloseEnrollmentsRequestDTO,
     CreateCompetitionRequestDTO,
     NameCaptainsRequestDTO,
@@ -62,11 +69,17 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
     DraftInProgressError,
 )
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     AnotarHoyoDePartidaUseCase,
+)
+from src.modules.competition.application.use_cases.cancel_competition_use_case import (
+    CancelCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
@@ -102,7 +115,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
     WithdrawEnrollmentUseCase,
 )
 from src.modules.competition.domain.entities.draft import Draft
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
+from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -116,10 +129,12 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.draft_id import DraftId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.infrastructure.api.v1.enrollment_routes import approve_enrollment
 from src.modules.competition.infrastructure.api.v1.invitation_routes import (
     RespondInvitationBody,
     respond_to_invitation,
@@ -554,21 +569,7 @@ class TestP3NombrarCapitanesYDraft:
         assert await _estado(comp_uow, invitacion) == InvitationStatus.PENDING
 
     async def test_con_la_sala_de_draft_abierta_no_y_sigue_pendiente(self):
-        uow, comp_id, *_ = await _montar()
-        async with uow:
-            competicion = await uow.competitions.find_by_id(comp_id)
-            await TeamAssignmentWriter.deshacer(uow, competicion)
-            ryder = competicion.ryder_cup
-            await uow.drafts.add(
-                Draft(
-                    id=DraftId.generate(),
-                    competition_id=comp_id,
-                    team_a_captain_id=ryder.team_a_captain_id,
-                    team_b_captain_id=ryder.team_b_captain_id,
-                    status=DraftStatus.IN_PROGRESS,
-                )
-            )
-            await uow.commit()
+        uow, comp_id = await _con_la_sala_abierta()
         usuarios, invitado, invitacion = await _invitado_a(uow, comp_id)
 
         with pytest.raises(DraftInProgressError):
@@ -576,6 +577,117 @@ class TestP3NombrarCapitanesYDraft:
 
         assert await _estado(uow, invitacion) == InvitationStatus.PENDING
         assert await _inscripcion(uow, comp_id.value, invitado.id) is None
+
+    async def test_aprobar_una_solicitud_con_la_sala_abierta_tampoco(self):
+        """Revisión de B-02: la misma regla por todos los caminos de entrar.
+
+        Given una Ryder con la sala de draft abierta y una solicitud pendiente /
+        When el organizador la aprueba / Then DRAFT_IN_PROGRESS y sigue REQUESTED.
+        """
+        uow, comp_id = await _con_la_sala_abierta()
+        solicitud = Enrollment.request(EnrollmentId.generate(), comp_id, UserId(uuid4()))
+        async with uow:
+            await uow.enrollments.add(solicitud)
+            organizador = (await uow.competitions.find_by_id(comp_id)).creator_id
+
+        with pytest.raises(DraftInProgressError):
+            await HandleEnrollmentUseCase(uow, USUARIOS_CON_GENERO).execute(
+                HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
+                organizador,
+            )
+
+        assert (await _inscripcion(uow, comp_id.value, solicitud.user_id)).status == (
+            EnrollmentStatus.REQUESTED
+        )
+
+
+async def _con_la_sala_abierta():
+    """Una Ryder cerrada, con capitanes, sin equipos y la sala de draft abierta."""
+    uow, comp_id, *_ = await _montar()
+    async with uow:
+        competicion = await uow.competitions.find_by_id(comp_id)
+        await TeamAssignmentWriter.deshacer(uow, competicion)
+        ryder = competicion.ryder_cup
+        await uow.drafts.add(
+            Draft(
+                id=DraftId.generate(),
+                competition_id=comp_id,
+                team_a_captain_id=ryder.team_a_captain_id,
+                team_b_captain_id=ryder.team_b_captain_id,
+                status=DraftStatus.IN_PROGRESS,
+            )
+        )
+        await uow.commit()
+    return uow, comp_id
+
+
+# ==================== O7: cancelar ====================
+
+
+class TestO7CancelarCierraLasPendientes:
+    @pytest.mark.parametrize("estado", ["ACTIVE", "CLOSED"])
+    async def test_quedan_sin_plaza_y_se_retira_su_aviso(
+        self, comp_uow, user_uow, registro, estado
+    ):
+        """Revisión de B-02: con O4, una cerrada podía cancelarse con pendientes vivas.
+
+        Given una Ryder (abierta o cerrada) con una pendiente y una caducada /
+        When el organizador la cancela / Then la pendiente NO_ROOM, la caducada
+        EXPIRED, y se retiran sus avisos (además del de cancelada).
+        """
+        creador = await _usuario(user_uow, "creador@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=6)
+        comp_id = CompetitionId(comp.id)
+        pendiente = await _pendiente_de(comp_uow, comp_id, creador.id)
+        caducada = await _caducada_de(comp_uow, comp_id, creador.id)
+        if estado == "CLOSED":
+            await set_competition_status(comp_uow, comp.id, "CLOSED")
+
+        await CancelCompetitionUseCase(comp_uow, actividad=registro).execute(
+            CancelCompetitionRequestDTO(competition_id=comp.id), creador.id
+        )
+
+        assert await _estado(comp_uow, pendiente) == InvitationStatus.NO_ROOM
+        assert await _estado(comp_uow, caducada) == InvitationStatus.EXPIRED
+        (aviso,) = _cerradas(registro)
+        assert sorted(aviso[1], key=str) == sorted(
+            [
+                (pendiente.id, pendiente.invitee_user_id),
+                (caducada.id, caducada.invitee_user_id),
+            ],
+            key=str,
+        )
+        assert ("cancelled", comp_id) in registro.avisos
+
+
+# ==================== R1: la carrera con un DECLINE ====================
+
+
+async def test_r1_las_pendientes_se_leen_con_sus_filas_bloqueadas():
+    """Revisión de B-02: empezar leía las pendientes sin bloquearlas y un DECLINE
+    guardado entre medias se pisaba con NO_ROOM. En memoria no hay bloqueos: se
+    comprueba que se pide la lectura bloqueada (la de verdad, contra PostgreSQL, en
+    test_invitation_find_by_id_for_update)."""
+    pendiente = Invitation.create(
+        id=InvitationId.generate(),
+        competition_id=CompetitionId(uuid4()),
+        inviter_id=UserId(uuid4()),
+        invitee_email="p@test.com",
+    )
+    invitaciones = SimpleNamespace(
+        find_pending_by_competition_for_update=AsyncMock(return_value=[pendiente]),
+        update=AsyncMock(),
+    )
+
+    cerradas = await sin_plaza_para_las_pendientes(
+        SimpleNamespace(invitations=invitaciones), pendiente.competition_id
+    )
+
+    invitaciones.find_pending_by_competition_for_update.assert_awaited_once_with(
+        pendiente.competition_id
+    )
+    assert cerradas == [pendiente]
+    assert pendiente.status == InvitationStatus.NO_ROOM
 
 
 # ==================== O4: cerrar ====================
@@ -807,6 +919,26 @@ async def test_p3_la_ruta_responde_409_draft_in_progress_con_su_texto():
         invitation_id=uuid4(),
         body=RespondInvitationBody(action="ACCEPT"),
         current_user=SimpleNamespace(id=uuid4()),
+        use_case=_ConLaSalaAbierta(),
+    )
+
+    assert respuesta.status_code == 409
+    assert json.loads(respuesta.body) == {
+        "detail": "Wait until the draft is over.",
+        "error_code": "DRAFT_IN_PROGRESS",
+    }
+
+
+async def test_p3_la_ruta_de_aprobar_responde_409_draft_in_progress():
+    """Revisión de B-02: aprobar con la sala abierta, con el mismo 409 y texto que aceptar."""
+
+    class _ConLaSalaAbierta:
+        async def execute(self, *_args, **_kwargs):
+            raise DraftInProgressError("CENTINELA-del-draft")
+
+    respuesta = await approve_enrollment(
+        enrollment_id=uuid4(),
+        current_user=SimpleNamespace(id=uuid4(), is_admin=False),
         use_case=_ConLaSalaAbierta(),
     )
 

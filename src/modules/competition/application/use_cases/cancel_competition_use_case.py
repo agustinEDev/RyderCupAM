@@ -18,6 +18,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -105,11 +108,17 @@ class CancelCompetitionUseCase:
             # Sin listas de espera: ya no se juega (#251)
             await self._uow.esperas.vaciar(competition.id)
 
+            # Ni invitaciones pendientes: sin plaza, como al empezar. Desde B-02
+            # cerrar ya no las cierra, y una cancelada las dejaba vivas (revisión)
+            sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition.id)
+
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # 5. Ya guardada: nadie sigue apuntado a ella en Actividad (BE-2)
         await self._actividad.cancelled(competition.id)
+        # Y cada invitación cerrada retira su aviso de invitado (22 oct 2026)
+        await self._actividad.invitations_closed(sin_plaza)
 
         # 6. Retornar DTO de respuesta
         return CancelCompetitionResponseDTO(
