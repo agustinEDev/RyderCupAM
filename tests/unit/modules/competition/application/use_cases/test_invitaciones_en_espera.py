@@ -20,12 +20,15 @@ ver con la lista de espera de las franjas de un stroke play (`esperas`).
 |      |                                                             | con la caducidad nueva                         |
 | O1   | se reabre una Ryder con partidos ya generados               | las ON_HOLD → NO_ROOM, «no hubo plaza»         |
 | O1   | se intenta reabrir con la sala de draft abierta             | DRAFT_IN_PROGRESS: se acaba antes el draft     |
-| C1   | se llena estando cerrada (última plaza)                     | también las ON_HOLD → NO_ROOM                  |
-| C1   | se reabre con menos plazas libres que invitaciones en espera | vuelven las más antiguas que caben; las demás, |
-|      |                                                             | NO_ROOM con «no hubo plaza»                    |
-| C2   | al reabrir, el invitado ya está inscrito por otro camino    | se retira su invitación, sin aviso             |
+| C1   | se llena estando cerrada (última plaza)                     | también las ON_HOLD → NO_ROOM, «no hubo plaza» |
+| C1   | se reabre con al menos una plaza libre                      | vuelven TODAS (aviso y correo); entra quien    |
+|      |                                                             | antes acepte, y al llenarse las demás NO_ROOM  |
+| C1   | se reabre sin ninguna plaza libre                           | todas NO_ROOM con «no hubo plaza»              |
+| C2   | al reabrir, el invitado ya está inscrito (APPROVED)         | se retira su invitación, sin aviso; con una    |
+|      |                                                             | solicitud sin aprobar, no: vuelve              |
+| O1   | se mueven las fechas con la sala de draft abierta (R3)      | DRAFT_IN_PROGRESS antes de mover nada          |
+| D1   | se vuelve a invitar a quien tiene una ON_HOLD               | INVITATION_ON_HOLD_EXISTS                      |
 | D1   | se acepta: el estado de la competición se lee bloqueado     | contra la carrera con reabrir                  |
-| D1   | se invita al correo de una ON_HOLD                          | ya hay una: no se duplica                      |
 | P3   | empieza (a mano o por el primer golpe) o se cancela         | ON_HOLD → NO_ROOM, aviso «no hubo plaza»       |
 | P3   | se cancela con la inscripción abierta                       | también las PENDING → NO_ROOM, su aviso de     |
 |      |                                                             | invitado se retira y «no hubo plaza»           |
@@ -70,6 +73,7 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
     DraftInProgressError,
 )
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
+from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_reabrir,
     en_espera_las_pendientes,
@@ -124,12 +128,13 @@ from src.modules.competition.domain.entities.draft import Draft
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
-    DuplicateInvitationViolation,
+    InvitationOnHoldExistsViolation,
     InvitationOnHoldViolation,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.draft_id import DraftId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
@@ -137,6 +142,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -851,7 +857,8 @@ class TestSeGuardaCadaUna:
         espia = await _con_espia(uow)
 
         async with uow:
-            vuelven = (await al_reabrir(uow, comp_id, libres=None, sin_sitio=False)).vuelven
+            esperan = [await uow.invitations.find_by_id(invitacion.id)]
+            vuelven = (await al_reabrir(uow, comp_id, esperan, sin_sitio=False)).vuelven
 
         assert [i.id for i in vuelven] == [invitacion.id]
         assert _actualizadas(espia) == [invitacion.id]
@@ -1272,33 +1279,57 @@ class TestC1Cupo:
         invitacion = await _en_espera(uow, comp_id, invitado)
 
         async with uow:
-            cerradas = await al_ocupar_una_plaza(uow, comp_id, 23, 24)
+            llena = await al_ocupar_una_plaza(uow, comp_id, 23, 24)
             await uow.commit()
 
-        assert [i.id for i in cerradas] == [invitacion.id]
+        assert [i.id for i in llena.cerradas] == [invitacion.id]
+        assert [i.id for i in llena.esperaban] == [invitacion.id]
         assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
 
-    async def test_al_reabrir_vuelven_solo_las_que_caben(self):
-        """C1. Given una plaza libre y dos ON_HOLD / When se reabre / Then vuelve la más
-        antigua, con su aviso; la otra, NO_ROOM y «no hubo plaza»"""
+    async def test_al_llenarse_cerrada_al_aprobar_se_avisa_de_que_no_hubo_plaza(self):
+        """C1. Given cerrada con una plaza, una solicitud y una ON_HOLD / When se aprueba la
+        solicitud / Then la invitación, NO_ROOM y «no hubo plaza»"""
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        await _con_cupo(uow, comp_id, 5)
+        solicitud = Enrollment.request(EnrollmentId.generate(), comp_id, UserId(uuid4()))
+        async with uow:
+            await uow.enrollments.add(solicitud)
+            await uow.commit()
+        _, invitado = await _usuarios()
+        invitacion = await _en_espera(uow, comp_id, invitado)
+        actividad = _Actividad()
+
+        await HandleEnrollmentUseCase(uow, USUARIOS_CON_GENERO, actividad=actividad).execute(
+            HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
+            organizador,
+        )
+
+        assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
+        [(_, sin_plaza)] = actividad.de("invitations_no_place")
+        assert [i.id for i in sin_plaza] == [invitacion.id]
+
+    async def test_con_una_plaza_libre_vuelven_todas_y_entra_quien_antes_acepte(self):
+        """C1. Given una plaza libre y dos ON_HOLD / When se reabre / Then vuelven las dos,
+        con su aviso; acepta una y la otra se queda sin plaza (BE #359)"""
         uow, comp_id, organizador, _ = await _cerrada_ryder()
         await _con_cupo(uow, comp_id, 5)  # 4 inscritos: queda una
-        _, uno = await _usuarios()
+        usuarios_uno, uno = await _usuarios()
         _, otro = await _usuarios()
-        nueva = await _en_espera(uow, comp_id, otro)
-        antigua = await _en_espera(
-            uow, comp_id, uno, _created_at=datetime.now() - timedelta(days=2)
-        )
+        primera = await _en_espera(uow, comp_id, uno)
+        segunda = await _en_espera(uow, comp_id, otro)
         actividad = _Actividad()
 
         await _reabre(uow, comp_id, organizador, actividad)
 
-        assert await _estado(uow, antigua) is InvitationStatus.PENDING
-        assert await _estado(uow, nueva) is InvitationStatus.NO_ROOM
+        assert await _estado(uow, primera) is InvitationStatus.PENDING
+        assert await _estado(uow, segunda) is InvitationStatus.PENDING
         [(_, vuelven)] = actividad.de("invitations_acceptable_again")
-        assert [i.id for i in vuelven] == [antigua.id]
-        [(_, sin_plaza)] = actividad.de("invitations_no_place")
-        assert [i.id for i in sin_plaza] == [nueva.id]
+        assert sorted(str(i.id) for i in vuelven) == sorted([str(primera.id), str(segunda.id)])
+        assert not any(v for _, v in actividad.de("invitations_no_place"))
+
+        await _responde(usuarios_uno, uow, primera, uno, "ACCEPT")
+
+        assert await _estado(uow, segunda) is InvitationStatus.NO_ROOM
 
     async def test_con_franjas_el_maximo_no_cuenta(self):
         """C1. Given el máximo lleno pero con franjas (el cupo son sus plazas) / When se
@@ -1346,6 +1377,22 @@ class TestC2YaInscrito:
         assert await _estado(uow, invitacion) is InvitationStatus.CANCELLED
         assert not any(v for _, v in actividad.de("invitations_acceptable_again"))
         assert not any(v for _, v in actividad.de("invitations_no_place"))
+
+    async def test_una_solicitud_sin_aprobar_no_cuenta(self):
+        """C2. Given una ON_HOLD de quien tiene una solicitud vieja sin aprobar / When se
+        reabre / Then vuelve: solo cuenta estar inscrito"""
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        _, invitado = await _usuarios()
+        async with uow:
+            await uow.enrollments.add(
+                Enrollment.request(EnrollmentId.generate(), comp_id, invitado.id)
+            )
+            await uow.commit()
+        invitacion = await _en_espera(uow, comp_id, invitado)
+
+        await _reabre(uow, comp_id, organizador)
+
+        assert await _estado(uow, invitacion) is InvitationStatus.PENDING
 
     async def test_una_inscripcion_cerrada_no_cuenta(self):
         """C2. Given una ON_HOLD de quien se retiró / When se reabre / Then vuelve, con aviso."""
@@ -1396,7 +1443,7 @@ class TestD1Carreras:
             (await uow.invitations.find_by_id(invitacion.id)).put_on_hold()
             await uow.commit()
 
-        with pytest.raises(DuplicateInvitationViolation):
+        with pytest.raises(InvitationOnHoldExistsViolation) as error:
             await SendInvitationByEmailUseCase(uow, usuarios).execute(
                 SendInvitationByEmailRequestDTO(
                     competition_id=comp_id.value,
@@ -1404,6 +1451,41 @@ class TestD1Carreras:
                     invitee_email=str(invitado.email),
                 )
             )
+
+        assert error.value.error_code == "INVITATION_ON_HOLD_EXISTS"
+        assert str(error.value) == "Esa persona ya tiene una invitación en lista de espera."
+
+    async def test_por_id_tambien(self):
+        """D1. Given una ON_HOLD / When se le vuelve a invitar por su cuenta / Then el mismo."""
+        uow, comp_id, organizador, _, usuarios, invitado, invitacion = await _abierta_con_invitado()
+        async with uow:
+            (await uow.invitations.find_by_id(invitacion.id)).put_on_hold()
+            await uow.commit()
+
+        with pytest.raises(InvitationOnHoldExistsViolation):
+            await SendInvitationByUserIdUseCase(uow, usuarios).execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=comp_id.value,
+                    inviter_id=organizador.value,
+                    invitee_user_id=invitado.id.value,
+                )
+            )
+
+    async def test_no_se_bloquean_las_que_esperan_para_mirar_un_correo(self):
+        """D1. Given una ON_HOLD / When se mira si impide otra / Then sin bloquear filas: ya
+        está bloqueada la competición"""
+        uow, comp_id, _, _, _, invitado, invitacion = await _abierta_con_invitado()
+        async with uow:
+            (await uow.invitations.find_by_id(invitacion.id)).put_on_hold()
+            await uow.commit()
+        bloqueo = AsyncMock(wraps=uow.invitations.find_by_competition_and_status_for_update)
+        uow.invitations.find_by_competition_and_status_for_update = bloqueo
+
+        async with uow:
+            with pytest.raises(InvitationOnHoldExistsViolation):
+                await pendiente_vigente(uow, str(invitado.email), comp_id)
+
+        assert bloqueo.await_count == 0
 
     async def test_una_en_espera_de_otro_correo_no_impide(self):
         """D1. Given una ON_HOLD a otro correo / When se invita / Then se manda."""
@@ -1446,3 +1528,110 @@ class TestD2AprobarConLaSalaAbierta:
             "detail": "Wait until the draft is over.",
             "error_code": "DRAFT_IN_PROGRESS",
         }
+
+
+class TestO1MoverConLaSalaAbierta:
+    async def test_no_se_mueve_nada(self):
+        """O1. Given cerrada por el plazo con la sala de draft abierta / When se mueven las
+        fechas / Then DRAFT_IN_PROGRESS, con un motivo claro, y las sesiones no se mueven"""
+        uow = InMemoryUnitOfWork()
+        competition = await r3._cerrada(uow, por_el_plazo=True)
+        async with uow:
+            await uow.drafts.add(
+                Draft(
+                    id=DraftId.generate(),
+                    competition_id=competition.id,
+                    team_a_captain_id=competition.creator_id,
+                    team_b_captain_id=UserId(uuid4()),
+                    status=DraftStatus.IN_PROGRESS,
+                )
+            )
+            await uow.commit()
+        rondas = AsyncMock(wraps=uow.rounds.find_by_competition)
+        uow.rounds.find_by_competition = rondas
+
+        with pytest.raises(DraftInProgressError, match="mover las fechas"):
+            await UpdateCompetitionUseCase(
+                uow, LocationBuilder(uow.countries), r3._Campos(), plazo=r3._plazo(r3.DESPUES)
+            ).execute(competition.id, r3._fechas(7), competition.creator_id)
+
+        assert rondas.await_count == 0
+        assert competition.dates.start_date == r3.TORNEO
+
+
+class TestD7LasQueEsperanSeReleen:
+    async def test_bloquear_las_de_un_estado_las_relee(self):
+        """D7. Given el repositorio SQL / Then bloquearlas las relee (populate_existing):
+        si no, la sesión devolvería el objeto de antes del bloqueo (BE #375)"""
+        from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_repository import (
+            SQLAlchemyInvitationRepository,
+        )
+
+        sentencias = []
+
+        class _Sesion:
+            async def execute(self, sentencia):
+                sentencias.append(sentencia)
+                return MagicMock(scalars=lambda: MagicMock(all=lambda: []))
+
+        await SQLAlchemyInvitationRepository(_Sesion()).find_by_competition_and_status_for_update(
+            CompetitionId(uuid4()), InvitationStatus.ON_HOLD
+        )
+
+        [sentencia] = sentencias
+        assert sentencia.get_execution_options().get("populate_existing") is True
+        assert sentencia._for_update_arg is not None
+
+
+class TestSinTrabajoDeMas:
+    async def test_sin_invitaciones_en_espera_no_se_mira_el_sitio(self):
+        """C1. Given ninguna ON_HOLD / When se reabre / Then ni se cuentan las plazas."""
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        cuenta = AsyncMock(wraps=uow.enrollments.count_approved_by_competition)
+        uow.enrollments.count_approved_by_competition = cuenta
+
+        await _reabre(uow, comp_id, organizador)
+
+        assert cuenta.await_count == 0
+
+    async def test_sin_nadie_sin_cuenta_no_se_leen_usuarios(self):
+        """O2. Given solo invitados con cuenta / When se reabre / Then no se buscan nombres."""
+        uow, comp_id, organizador, _ = await _cerrada_ryder()
+        _, invitado = await _usuarios()
+        await _en_espera(uow, comp_id, invitado)
+        usuarios = UsuariosEnMemoria()
+        busca = AsyncMock(wraps=usuarios.users.find_by_ids)
+        usuarios.users.find_by_ids = busca
+
+        await ReopenEnrollmentsUseCase(uow, correos=_Correos(), user_uow=usuarios).execute(
+            ReopenEnrollmentsRequestDTO(competition_id=comp_id.value), organizador
+        )
+
+        assert busca.await_count == 0
+
+
+class TestAlLlenarseApuntandose:
+    async def test_quien_llena_una_publica_cierra_las_pendientes_y_retira_su_aviso(self):
+        """BE #359 con el aviso: Given una pública con una plaza y una invitación pendiente
+        / When alguien se apunta y la llena / Then la invitación, NO_ROOM y fuera su aviso"""
+        uow, comp_id, _, _, _, _, invitacion = await _abierta_con_invitado()
+        async with uow:
+            competicion = await uow.competitions.find_by_id(comp_id)
+            # Pública y por jugar: si no, la fecha la rechaza antes
+            empieza = datetime.now().date() + timedelta(days=30)
+            competicion.update_info(
+                visibility=Visibility.PUBLIC,
+                dates=DateRange(empieza, empieza + timedelta(days=2)),
+            )
+            competicion._max_players = 3  # el organizador y otro: queda una
+            await uow.competitions.update(competicion)
+            await uow.commit()
+        actividad = _Actividad()
+
+        await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, actividad=actividad).execute(
+            RequestEnrollmentRequestDTO(competition_id=comp_id.value, user_id=uuid4())
+        )
+
+        assert await _estado(uow, invitacion) is InvitationStatus.NO_ROOM
+        [(cerradas,)] = actividad.de("invitations_closed")
+        assert [i.id for i in cerradas] == [invitacion.id]

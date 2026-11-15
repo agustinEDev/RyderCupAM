@@ -103,6 +103,7 @@ CODIGOS_DE_DEVELOP = {
     # 15 nov 2026: la invitación en espera (P1) y la sala de draft abierta al invitar o
     # aceptar (B3), con su código
     "src.modules.competition.domain.exceptions.competition_violations.InvitationOnHoldViolation": 409,
+    "src.modules.competition.domain.exceptions.competition_violations.InvitationOnHoldExistsViolation": 409,
     "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError": 409,
     "src.modules.competition.domain.exceptions.competition_violations.SelfInvitationViolation": 400,
     "src.modules.competition.domain.services.location_builder.InvalidCountryError": 400,
@@ -408,6 +409,8 @@ def test_only_the_deadline_on_hold_and_draft_errors_bring_their_code_through_the
         "EnrollmentDeadlinePassedError",
         "src.modules.competition.domain.exceptions.competition_violations."
         "InvitationOnHoldViolation",
+        "src.modules.competition.domain.exceptions.competition_violations."
+        "InvitationOnHoldExistsViolation",
         "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError",
     }
     assert los_que_llevan_su_codigo() <= todos_los_codigos().keys()
@@ -477,3 +480,25 @@ def test_the_app_answers_a_draft_in_progress_with_its_code():
 
     assert respuesta.status_code == 409
     assert json.loads(respuesta.body)["error_code"] == "DRAFT_IN_PROGRESS"
+
+
+def test_the_app_answers_an_invitation_on_hold_that_exists_with_its_code():
+    """
+    D1. Given: La app de verdad
+    When: Se vuelve a invitar a quien tiene una invitación en espera
+    Then: 409, el texto y INVITATION_ON_HOLD_EXISTS
+    """
+    import asyncio
+
+    from src.modules.competition.domain.exceptions.competition_violations import (
+        InvitationOnHoldExistsViolation,
+    )
+
+    manejador = app.exception_handlers[InvitationOnHoldExistsViolation]
+    respuesta = asyncio.run(manejador(None, InvitationOnHoldExistsViolation()))
+
+    assert respuesta.status_code == 409
+    assert json.loads(respuesta.body) == {
+        "detail": "Esa persona ya tiene una invitación en lista de espera.",
+        "error_code": "INVITATION_ON_HOLD_EXISTS",
+    }

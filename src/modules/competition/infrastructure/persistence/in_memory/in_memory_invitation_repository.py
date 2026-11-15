@@ -145,6 +145,21 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
             if inv.competition_id == competition_id and inv.status == status
         ]
 
+    async def find_by_email_competition_and_status(
+        self, email: str, competition_id: CompetitionId, status: InvitationStatus
+    ) -> Invitation | None:
+        correo = email.strip().lower()
+        return next(
+            (
+                inv
+                for inv in self._invitations.values()
+                if inv.invitee_email == correo
+                and inv.competition_id == competition_id
+                and inv.status == status
+            ),
+            None,
+        )
+
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId
     ) -> Invitation | None:

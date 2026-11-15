@@ -207,9 +207,25 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
                 )
             )
             .with_for_update()
+            # Releídas: sin esto la sesión devuelve el objeto de antes del bloqueo
+            # (como `find_by_id_for_update`, BE #375)
+            .execution_options(populate_existing=True)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def find_by_email_competition_and_status(
+        self, email: str, competition_id: CompetitionId, status: InvitationStatus
+    ) -> Invitation | None:
+        stmt = select(Invitation).where(
+            and_(
+                Invitation._invitee_email == email.strip().lower(),
+                Invitation._competition_id == competition_id,
+                Invitation._status == status,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
 
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId

@@ -46,6 +46,9 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
     guardar_la_inscripcion,
     viva,
 )
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    avisar_al_llenarse,
+)
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
     exigir_el_plazo,
@@ -263,7 +266,7 @@ class RequestEnrollmentUseCase:
         # Ya guardado: lo que se le cuenta a cada uno (A1, A2)
         if aceptada is not None:
             await self._actividad.invitation_answered(aceptada)
-        await self._actividad.invitations_closed(cerradas)
+        await avisar_al_llenarse(self._actividad, competition, cerradas)
         await self._actividad.joined(competition, enrollment, franja, espera)
         # Solo en espera aún no juega: sus amigos se enteran cuando tenga plaza
         if not espera:

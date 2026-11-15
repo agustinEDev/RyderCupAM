@@ -31,6 +31,10 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
     guardar_la_inscripcion,
     viva,
 )
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    AlLlenarse,
+    avisar_al_llenarse,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -122,7 +126,7 @@ class RespondToInvitationUseCase:
         enrollment_id = None
         competition_name = None
         inscrito: tuple[Competition, Enrollment] | None = None
-        sin_plaza_ya: list[Invitation] = []
+        sin_plaza_ya = AlLlenarse()
         # Si al entrar se deshicieron los equipos formados (B3)
         deshechos = False
 
@@ -162,7 +166,8 @@ class RespondToInvitationUseCase:
             await self._actividad.invitation_answered(invitation)
         await self._avisar_si_entro(inscrito)
         # Si ocupo la ultima plaza, las demas pendientes se cerraron solas
-        await self._actividad.invitations_closed(sin_plaza_ya)
+        if inscrito is not None:
+            await avisar_al_llenarse(self._actividad, inscrito[0], sin_plaza_ya)
         # Y si al entrar se deshicieron los equipos, el organizador lo sabe (B3)
         if deshechos and inscrito is not None:
             await self._actividad.teams_undone_by_entry(*inscrito)
@@ -289,7 +294,7 @@ class RespondToInvitationUseCase:
 
     async def _handle_accept(
         self, invitation: Invitation, current_user_id: UserId
-    ) -> tuple[Competition, Enrollment, list[Invitation], bool]:
+    ) -> tuple[Competition, Enrollment, AlLlenarse, bool]:
         """
         Procesa la aceptacion de una invitacion. Retorna la competicion, la
         inscripcion, las demas pendientes que se quedaron sin plaza y si se

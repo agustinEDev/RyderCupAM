@@ -690,13 +690,15 @@ SCHEDULED → IN_PROGRESS → COMPLETED
   `INVITATION_ACCEPTABLE_AGAIN`. If the competition starts or is cancelled first, they
   become `NO_ROOM` and each invitee gets `ENROLLMENT_NO_PLACE` (source: the invitation);
   cancelling also does this to `PENDING` invitations when enrollment is still open
-- On reopen, oldest first: an invitee already enrolled by another path has the invitation
-  withdrawn silently; only as many as there are free places go back to `PENDING` (the
-  rest, and all of them in a Ryder Cup with matches already generated, become `NO_ROOM`
-  with `ENROLLMENT_NO_PLACE`). Invitees without an account get the usual invitation
-  email again, with the new expiry. Reopening with the draft room open: 409
-  `DRAFT_IN_PROGRESS`. If the competition fills up while closed, `ON_HOLD` invitations
-  become `NO_ROOM` too
+- On reopen: an invitee already enrolled (approved) by another path has the invitation
+  withdrawn silently. If there is at least one free place, all the others go back to
+  `PENDING` (first to accept enters; when it fills up, the rest become `NO_ROOM` as in
+  any open competition); with no free place, or in a Ryder Cup with matches already
+  generated, they become `NO_ROOM` with `ENROLLMENT_NO_PLACE`. Invitees without an
+  account get the usual invitation email again, with the new expiry. Reopening (or moving
+  the dates) with the draft room open: 409 `DRAFT_IN_PROGRESS`. If the competition fills
+  up while closed, `ON_HOLD` invitations become `NO_ROOM` with `ENROLLMENT_NO_PLACE`
+- Inviting someone whose invitation is `ON_HOLD`: 409 `INVITATION_ON_HOLD_EXISTS`
 - Ryder Cup with teams formed and no matches: the organizer may invite; when the invitee
   accepts, the teams are reset and the organizer gets `TEAMS_UNDONE_BY_ENTRY` (payload:
   tournament, `player_id`, `player_name`), withdrawn when the teams are formed again.

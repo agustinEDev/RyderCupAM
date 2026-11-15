@@ -137,6 +137,14 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_email_competition_and_status(
+        self, email: str, competition_id: CompetitionId, status: InvitationStatus
+    ) -> Invitation | None:
+        """Una invitacion a ese correo (sin mayusculas ni espacios), competicion y estado,
+        sin bloquear: para saber si ya tiene una en espera (15 nov 2026)."""
+        pass
+
+    @abstractmethod
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId
     ) -> Invitation | None:

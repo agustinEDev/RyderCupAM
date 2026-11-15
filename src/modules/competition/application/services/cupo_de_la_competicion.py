@@ -9,10 +9,10 @@ Agustín tras el revisor de la BE PR A).
 """
 
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    AlLlenarse,
     al_ocupar_una_plaza,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -40,9 +40,9 @@ async def exigir_sitio(uow: CompetitionUnitOfWorkInterface, competition: Competi
 
 async def al_entrar_uno(
     uow: CompetitionUnitOfWorkInterface, competition: Competition, aprobadas_antes: int
-) -> list[Invitation]:
+) -> AlLlenarse:
     """Si con él se llena el máximo, las pendientes se quedan sin plaza (BE #359); con
     franjas, nunca por ese número."""
     if not await manda_el_maximo(uow, competition):
-        return []
+        return AlLlenarse()
     return await al_ocupar_una_plaza(uow, competition.id, aprobadas_antes, competition.max_players)

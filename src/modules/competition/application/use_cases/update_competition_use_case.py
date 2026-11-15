@@ -25,6 +25,10 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
     IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.mover_el_torneo import (
     alguna_sesion_empezada,
     mover_la_actualizacion_programada,
@@ -364,6 +368,14 @@ class UpdateCompetitionUseCase:
                 raise CompetitionNotEditableError(
                     "Con las inscripciones cerradas por el plazo solo se pueden mover las fechas."
                 )
+            # Con la sala de draft abierta no se reabre (O1): se dice antes de mover nada
+            try:
+                await exigir_sin_draft_abierto(self._uow, competition_id)
+            except DraftInProgressError as abierta:
+                raise DraftInProgressError(
+                    "No se pueden mover las fechas con la sala de draft abierta: "
+                    "termina antes el draft."
+                ) from abierta
             dias = (request.start_date - competition.dates.start_date).days
             rondas = await self._uow.rounds.find_by_competition(competition_id)
             self._comprobar_que_caben_movidas(rondas, dias, request)

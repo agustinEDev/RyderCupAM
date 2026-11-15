@@ -131,6 +131,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationCompetitionStatusViolation,
     InvitationExpiredViolation,
+    InvitationOnHoldExistsViolation,
     InvitationOnHoldViolation,
     SelfInvitationViolation,
 )
@@ -224,6 +225,8 @@ CODIGOS: dict[type[Exception], int] = {
     InvitationExpiredViolation: status.HTTP_409_CONFLICT,
     # La invitación espera a que se reabra la inscripción (P1, 15 nov 2026): ver CON_SU_CODIGO
     InvitationOnHoldViolation: status.HTTP_409_CONFLICT,
+    # Volver a invitar a quien tiene una en espera (revisión, 15 nov 2026)
+    InvitationOnHoldExistsViolation: status.HTTP_409_CONFLICT,
     # Con la sala de draft abierta nadie entra (B3, 15 nov 2026): invitar, aceptar,
     # apuntarse y reabrir llegan aquí; las rutas de baja y de aprobar lo traducen antes,
     # con su texto propio en inglés
@@ -240,5 +243,10 @@ CODIGOS: dict[type[Exception], int] = {
 # texto fijo «La inscripción está cerrada.» (15 nov 2026, C2); INVITATION_ON_HOLD, con
 # el texto aprobado de la lista de espera (P1), y DRAFT_IN_PROGRESS (B3)
 CON_SU_CODIGO: frozenset[type[Exception]] = frozenset(
-    {EnrollmentDeadlinePassedError, InvitationOnHoldViolation, DraftInProgressError}
+    {
+        EnrollmentDeadlinePassedError,
+        InvitationOnHoldViolation,
+        InvitationOnHoldExistsViolation,
+        DraftInProgressError,
+    }
 )

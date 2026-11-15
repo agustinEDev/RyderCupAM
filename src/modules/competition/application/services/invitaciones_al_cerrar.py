@@ -14,18 +14,37 @@ cada regla vive aquí una vez.
 
 from dataclasses import dataclass
 
-from src.modules.competition.application.services.inscripcion_que_vuelve import viva
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
+from src.modules.user.domain.value_objects.user_id import UserId
+
+
+@dataclass(frozen=True)
+class AlLlenarse:
+    """Las que se cerraron al llenarse: todas (fuera su aviso de invitado) y, de ellas,
+    las que esperaban (a esas, «no hubo plaza», como al empezar o cancelar)."""
+
+    cerradas: tuple[Invitation, ...] = ()
+    esperaban: tuple[Invitation, ...] = ()
+
+
+async def avisar_al_llenarse(
+    actividad: AvisosDeActividad, competition: Competition, llena: AlLlenarse
+) -> None:
+    """Ya guardado: fuera los avisos de invitado y, a quien esperaba, «no hubo plaza»."""
+    await actividad.invitations_closed(llena.cerradas)
+    await actividad.invitations_no_place(competition, llena.esperaban)
 
 
 async def sin_plaza_para_las_pendientes(
     uow: CompetitionUnitOfWorkInterface, competition_id: CompetitionId
-) -> list[Invitation]:
+) -> AlLlenarse:
     """Rechaza por falta de plazas las pendientes y las que esperan (llena estando
     cerrada, 15 nov 2026); las pendientes ya caducadas, caducadas.
 
@@ -33,7 +52,7 @@ async def sin_plaza_para_las_pendientes(
     quedó sin respuesta, y así debe constar.
 
     Devuelve las que ha cerrado: quien llama, ya guardado, retira su aviso de
-    invitado en Actividad (Agustín, 22 oct 2026).
+    invitado en Actividad (Agustín, 22 oct 2026) y avisa a quien esperaba.
     """
     cerradas = []
     for invitacion in await uow.invitations.find_pending_by_competition(competition_id):
@@ -42,7 +61,8 @@ async def sin_plaza_para_las_pendientes(
             invitacion.reject_for_no_room()
         await uow.invitations.update(invitacion)
         cerradas.append(invitacion)
-    return cerradas + await sin_plaza_para_las_que_esperan(uow, competition_id)
+    esperaban = await sin_plaza_para_las_que_esperan(uow, competition_id)
+    return AlLlenarse(cerradas=tuple(cerradas + esperaban), esperaban=tuple(esperaban))
 
 
 async def al_ocupar_una_plaza(
@@ -50,7 +70,7 @@ async def al_ocupar_una_plaza(
     competition_id: CompetitionId,
     aprobadas_antes: int,
     max_players: int,
-) -> list[Invitation]:
+) -> AlLlenarse:
     """Si esa plaza era la última, las pendientes se quedan sin plaza ya (BE #359).
 
     Quien llega tarde se entera en el momento, no al aceptar. Una sola regla para
@@ -61,7 +81,7 @@ async def al_ocupar_una_plaza(
     """
     if aprobadas_antes + 1 >= max_players:
         return await sin_plaza_para_las_pendientes(uow, competition_id)
-    return []
+    return AlLlenarse()
 
 
 async def en_espera_las_pendientes(
@@ -95,32 +115,28 @@ class AlReabrir:
 async def al_reabrir(
     uow: CompetitionUnitOfWorkInterface,
     competition_id: CompetitionId,
+    esperan: list[Invitation],
     *,
-    libres: int | None,
     sin_sitio: bool,
 ) -> AlReabrir:
-    """Al reabrir, las que esperaban, de la más antigua a la más nueva (P2, O1, C1, C2).
+    """Al reabrir, las que esperaban (P2, O1, C1, C2), ya leídas con sus filas bloqueadas.
 
-    - Quien ya está inscrito por otro camino: se retira la suya, sin aviso (C2).
-    - Con partidos ya generados (`sin_sitio`), o sin plazas `libres` para ella: sin
-      plaza (O1, C1). Con `libres` None no hay tope (franjas).
-    - Las demás vuelven a pendientes, con 7 días nuevos (P2).
+    - Quien ya está inscrito (aprobado) por otro camino: se retira la suya, sin aviso
+      (C2). Una solicitud sin aprobar no cuenta.
+    - Sin sitio (partidos ya generados, o ni una plaza libre): sin plaza (O1, C1).
+    - Si no, TODAS vuelven a pendientes, con 7 días nuevos (P2): entra quien antes
+      acepte, y al llenarse las demás se quedan sin plaza, como en una abierta (BE #359).
 
     Dentro de la transacción de quien llama, que avisa ya guardado.
     """
     vuelven: list[Invitation] = []
     sin_plaza: list[Invitation] = []
-    esperan = await uow.invitations.find_by_competition_and_status_for_update(
-        competition_id, InvitationStatus.ON_HOLD
-    )
-    for invitacion in sorted(esperan, key=lambda i: i.created_at):
-        if invitacion.invitee_user_id is not None and viva(
-            await uow.enrollments.find_by_user_and_competition(
-                invitacion.invitee_user_id, competition_id
-            )
+    for invitacion in esperan:
+        if invitacion.invitee_user_id is not None and await _inscrito(
+            uow, invitacion.invitee_user_id, competition_id
         ):
             invitacion.cancel()
-        elif sin_sitio or (libres is not None and len(vuelven) >= libres):
+        elif sin_sitio:
             invitacion.reject_for_no_room()
             sin_plaza.append(invitacion)
         else:
@@ -128,6 +144,13 @@ async def al_reabrir(
             vuelven.append(invitacion)
         await uow.invitations.update(invitacion)
     return AlReabrir(vuelven=tuple(vuelven), sin_plaza=tuple(sin_plaza))
+
+
+async def _inscrito(
+    uow: CompetitionUnitOfWorkInterface, user_id: UserId, competition_id: CompetitionId
+) -> bool:
+    inscripcion = await uow.enrollments.find_by_user_and_competition(user_id, competition_id)
+    return inscripcion is not None and inscripcion.is_approved()
 
 
 async def sin_plaza_para_las_que_esperan(

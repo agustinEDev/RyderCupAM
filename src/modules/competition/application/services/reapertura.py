@@ -24,7 +24,6 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.baja_de_la_competicion import (
     exigir_sin_draft_abierto,
 )
-from src.modules.competition.application.services.cupo_de_la_competicion import manda_el_maximo
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     AlReabrir,
     al_reabrir,
@@ -48,13 +47,13 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.email_masking import mask_email
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +113,18 @@ class Reapertura:
         # a cerrar empieza otra (#251)
         await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
-        # Las invitaciones que esperaban vuelven a pendientes las que caben; con
-        # partidos ya generados, ninguna (P2, O1, C1, C2: 15 nov 2026)
-        self._invitaciones = await al_reabrir(
-            self._uow,
-            competition.id,
-            libres=await self._plazas_libres(competition),
-            sin_sitio=await self._con_partidos(competition),
+        # Las invitaciones que esperaban vuelven a pendientes, todas, si queda sitio; si
+        # no, sin plaza (P2, O1, C1, C2: 15 nov 2026). Sin ninguna, ni se mira el sitio
+        esperan = await self._uow.invitations.find_by_competition_and_status_for_update(
+            competition.id, InvitationStatus.ON_HOLD
         )
+        if esperan:
+            self._invitaciones = await al_reabrir(
+                self._uow,
+                competition.id,
+                esperan,
+                sin_sitio=await self._sin_sitio(competition),
+            )
 
         # Las partidas que no han salido se borran: pueden entrar y salir
         # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
@@ -166,48 +169,61 @@ class Reapertura:
         await self._reenviar(competition, [i for i in vuelven if i.invitee_user_id is None])
 
     async def _reenviar(self, competition: Competition, sin_cuenta: list[Invitation]) -> None:
-        """El correo de invitación de siempre, con la caducidad nueva (O2). Si falla, se
-        apunta y se sigue: la reapertura ya está hecha."""
-        if self._correos is None:
+        """El correo de invitación de siempre, con la caducidad nueva (O2). Lo que falle
+        —leer quién invita o mandarlo— se apunta y se sigue: la reapertura ya está hecha."""
+        if self._correos is None or not sin_cuenta:
             return
-        for invitacion in sin_cuenta:
-            # El nombre que usa en ESTA competición (#710), como al invitar
-            par = (competition.id, invitacion.inviter_id)
-            async with self._uow:
-                legal = par in await quieren_su_nombre_legal(self._uow, [par])
-            quien_invita = None
-            if self._user_uow is not None:
-                async with self._user_uow:
-                    quien_invita = await self._user_uow.users.find_by_id(invitacion.inviter_id)
-            try:
+        try:
+            nombres = await self._nombres_de_quien_invita(competition, sin_cuenta)
+            for invitacion in sin_cuenta:
                 await self._correos.send_invitation_email(
                     to_email=invitacion.invitee_email,
                     invitee_name=None,
-                    inviter_name=nombre_de_quien_invita(quien_invita, legal),
+                    inviter_name=nombres[invitacion.inviter_id],
                     competition_name=str(competition.name),
                     personal_message=invitacion.personal_message,
                     expires_at=invitacion.expires_at,
                 )
-            except Exception:
-                logger.warning(
-                    "Could not resend the invitation email to %s",
-                    mask_email(invitacion.invitee_email),
-                    exc_info=True,
-                )
+        except Exception:
+            logger.warning(
+                "Could not resend the invitation emails of competition %s",
+                competition.id.value,
+                exc_info=True,
+            )
 
-    async def _plazas_libres(self, competition: Competition) -> int | None:
-        """Cuántas caben (C1); None si el cupo no es el máximo (franjas)."""
-        if not await manda_el_maximo(self._uow, competition):
-            return None
-        aprobadas = await self._uow.enrollments.count_approved_by_competition(competition.id)
-        return max(0, competition.max_players - aprobadas)
+    async def _nombres_de_quien_invita(
+        self, competition: Competition, sin_cuenta: list[Invitation]
+    ) -> dict[UserId, str]:
+        """El nombre que usa cada uno en ESTA competición (#710), como al invitar: una
+        lectura de los nombres legales y una de usuarios, para todos."""
+        quienes = list(dict.fromkeys(i.inviter_id for i in sin_cuenta))
+        async with self._uow:
+            legales = await quieren_su_nombre_legal(
+                self._uow, [(competition.id, quien) for quien in quienes]
+            )
+        usuarios = {}
+        if self._user_uow is not None:
+            async with self._user_uow:
+                usuarios = {u.id: u for u in await self._user_uow.users.find_by_ids(quienes)}
+        return {
+            quien: nombre_de_quien_invita(usuarios.get(quien), (competition.id, quien) in legales)
+            for quien in quienes
+        }
 
-    async def _con_partidos(self, competition: Competition) -> bool:
-        """Si tiene algún partido ya generado (O1): solo los tiene una Ryder."""
-        for sesion in await self._uow.rounds.find_by_competition(competition.id):
+    async def _sin_sitio(self, competition: Competition) -> bool:
+        """
+        Si no cabe nadie más (O1, C1): con partidos ya generados (solo los tiene una
+        Ryder), o sin ninguna plaza libre del máximo. Con franjas el cupo son sus
+        plazas, y por ese número no se llena. Las sesiones, leídas una vez.
+        """
+        sesiones = await self._uow.rounds.find_by_competition(competition.id)
+        for sesion in sesiones:
             if await self._uow.matches.find_by_round(sesion.id):
                 return True
-        return False
+        if any(s.hoja_de_salidas is not None for s in sesiones):
+            return False
+        aprobadas = await self._uow.enrollments.count_approved_by_competition(competition.id)
+        return aprobadas >= competition.max_players
 
     async def _borrar_las_que_no_salieron(
         self, competition_id: CompetitionId
