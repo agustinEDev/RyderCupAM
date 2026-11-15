@@ -85,9 +85,8 @@ Teams & Generation (3 endpoints) ⭐ Sprint 2
 ├── POST   /api/v1/competitions/rounds/{id}/matches/generate # Generate matches for round
 └── POST   /api/v1/competitions/{id}/schedule/configure # Configure schedule (auto/manual)
 
-Enrollment Management (9 endpoints)
+Enrollment Management (8 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
-├── POST /api/v1/competitions/{id}/enrollments/direct # Direct enroll (creator only)
 ├── GET  /api/v1/competitions/{id}/enrollments      # List enrollments
 ├── POST /api/v1/enrollments/{id}/approve           # Approve enrollment
 ├── POST /api/v1/enrollments/{id}/reject            # Reject enrollment
@@ -650,7 +649,6 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/competitions/{id}/enrollments` | POST | Yes | Request enrollment (REQUESTED) |
-| `/competitions/{id}/enrollments/direct` | POST | Yes | Direct enrollment by creator (APPROVED) |
 | `/competitions/{id}/enrollments` | GET | Yes | List enrollments with filters |
 | `/enrollments/{id}/approve` | POST | Yes | Approve request (creator only) |
 | `/enrollments/{id}/reject` | POST | Yes | Reject request (creator only) |
@@ -666,10 +664,14 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 - Creates enrollment with REQUESTED status
 - User can cancel before approval
 
-**Direct Enroll:**
-- `user_id` (string, required) - ID of user to enroll
-- Only creator can execute
-- Creates enrollment with APPROVED status directly
+**No direct enrollment by the organizer** (removed 15 Nov 2026, audit B-02):
+- The organizer only invites; the player accepts the invitation or signs up to a public
+  competition
+- With enrollment closed, a Ryder Cup still takes invitations and acceptances until it
+  starts (room, gender and handicap checked as when open; teams formed without matches
+  are reset; not while the draft room is open). A closed stroke play (Stableford/Medal)
+  takes neither: the organizer reopens enrollment first
+- Nobody is enrolled, or brought back after withdrawing, without their consent
 
 **Set Custom Handicap:**
 - `custom_handicap` (float, required, -10.0 to 54.0)
@@ -717,7 +719,7 @@ REJECTED    CANCELLED
 
 - Competition must be in ACTIVE status for enrollments
 - No duplicate enrollments allowed
-- Only creator can approve/reject/enroll directly
+- Only creator can approve/reject; the creator invites, never enrolls a player directly
 - Only owner can cancel/withdraw
 - custom_handicap is optional, if not set uses official handicap
 

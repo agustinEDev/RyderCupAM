@@ -21,6 +21,7 @@ from tests.conftest import (
     create_draft_competition,
     create_golf_course,
     estado_en_bd,
+    inscrito_por_invitacion,
     set_auth_cookies,
     solicitud_pendiente,
 )
@@ -947,11 +948,7 @@ class TestDeleteCompetition:
         # borrado reventaria contra la clave ajena en vez de responder 204
         client.cookies.clear()
         client.cookies.update(user["cookies"])
-        inscrito = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-        )
-        assert inscrito.status_code == 201, inscrito.text
+        await inscrito_por_invitacion(client, user["cookies"], comp["id"], jugador)
 
         response = await client.delete(
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
@@ -2537,12 +2534,10 @@ class TestCaptains:
         comp = await create_competition(client, creador["cookies"])
         set_auth_cookies(client, creador["cookies"])
         for jugador in jugadores:
-            inscrito = await client.post(
-                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+            inscrito = await inscrito_por_invitacion(
+                client, creador["cookies"], comp["id"], jugador
             )
-            assert inscrito.status_code == 201, inscrito.text
-            jugador["enrollment_id"] = inscrito.json()["id"]
+            jugador["enrollment_id"] = inscrito["enrollment_id"]
         return creador, comp, jugadores
 
     async def _nombrar(self, client, comp, a, b):
@@ -2884,11 +2879,7 @@ class TestTeamsAssignedEnLaFicha:
                 client, f"equipos-{letra}@test.com", "P@ssw0rd123!", "Jugador" + letra, "Equipos"
             )
             set_auth_cookies(client, creador["cookies"])
-            inscrito = await client.post(
-                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-            )
-            assert inscrito.status_code == 201, inscrito.text
+            await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
         cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
         assert cerrada.status_code == 200, cerrada.text
 

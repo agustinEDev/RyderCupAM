@@ -23,7 +23,7 @@ from src.modules.competition.application.services.cupo_de_la_competicion import 
     exigir_sitio,
 )
 from src.modules.competition.application.services.equipos_formados import (
-    exigir_sin_equipos_formados,
+    reiniciar_para_que_entre,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
@@ -46,7 +46,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.competition_policy import (
-    INSCRIPCION_CERRADA,
+    EN_JUEGO,
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -165,8 +165,11 @@ class RespondToInvitationUseCase:
     ) -> tuple[str | None, bool]:
         """
         La fase 1: si ya no esta pendiente (o caduco) se guarda tal cual, y si
-        se acepta con la inscripcion cerrada se queda sin plaza. Devuelve el
+        se acepta con la competicion ya en juego se queda sin plaza. Devuelve el
         estado no pendiente y si se quedo sin plaza ahora.
+
+        Con la inscripcion cerrada ya no: desde el 15 nov 2026 se entra hasta
+        que empieza (B-02, deshace #710).
 
         La que se cierra sola aqui se guarda y retira su aviso de invitado
         aunque la respuesta acabe en error (Agustin, 22 oct 2026).
@@ -198,10 +201,10 @@ class RespondToInvitationUseCase:
             elif (
                 action == "ACCEPT"
                 # Ya es el invitado (lo de arriba): con el id de otra no se llega aquí
-                and await self._inscripcion_cerrada(invitation)
+                and await self._en_juego(invitation)
             ):
-                # Una pendiente de antes de que el cierre las rechazara (#710):
-                # se queda sin plaza, guardado, y no se entra
+                # Empezar cierra las pendientes (B-02): una que se colara se queda
+                # sin plaza, guardado, y no se entra
                 invitation.reject_for_no_room()
                 await self._uow.invitations.update(invitation)
                 sin_plaza = True
@@ -249,10 +252,10 @@ class RespondToInvitationUseCase:
             email is not None and invitation.is_for_email(email)
         )
 
-    async def _inscripcion_cerrada(self, invitation: Invitation) -> bool:
-        """Si su competicion ya cerro la inscripcion: no quedan plazas."""
+    async def _en_juego(self, invitation: Invitation) -> bool:
+        """Si su competicion ya esta en juego: no quedan plazas."""
         competition = await self._uow.competitions.find_by_id(invitation.competition_id)
-        return competition is not None and competition.status in INSCRIPCION_CERRADA
+        return competition is not None and competition.status in EN_JUEGO
 
     async def _handle_accept(
         self, invitation: Invitation, current_user_id: UserId
@@ -267,10 +270,9 @@ class RespondToInvitationUseCase:
         if not competition:
             raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 
-        CompetitionPolicy.can_accept_invitation(competition.status)
-        # Con los equipos formados no se entra por su cuenta: le inscribe el
-        # organizador, y eso los reinicia (29 oct 2026)
-        await exigir_sin_equipos_formados(self._uow, competition.id)
+        CompetitionPolicy.can_accept_invitation(
+            competition.status, stroke_play=competition.stroke_play is not None
+        )
 
         # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
         # la invitación se queda pendiente para cuando lo rellene
@@ -300,6 +302,12 @@ class RespondToInvitationUseCase:
 
         # Con franjas, el cupo es de sus plazas (28 oct 2026)
         approved_count = await exigir_sitio(self._uow, competition)
+
+        # Con la sala de draft abierta no entra: la invitacion sigue pendiente
+        # (B-02, P3). Con los equipos formados y sin partidos entra y se
+        # reinician, como al aprobar una solicitud; con partidos, no (B-02, P2). Desde el 15 nov 2026
+        # el organizador ya no inscribe a nadie: aceptar es la via
+        await reiniciar_para_que_entre(self._uow, competition)
 
         invitation.accept(respondida_por=current_user_id)
 

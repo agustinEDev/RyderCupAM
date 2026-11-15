@@ -16,6 +16,7 @@ from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
     create_competition,
+    inscrito_por_invitacion,
     set_auth_cookies,
 )
 
@@ -39,11 +40,7 @@ async def _cerrada_con_capitanes(client: AsyncClient, jugadores: int = 5) -> dic
     comp = await create_competition(client, creador["cookies"])
     set_auth_cookies(client, creador["cookies"])
     for jugador in resto:
-        inscrito = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
-        )
-        assert inscrito.status_code == 201, inscrito.text
+        await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
 
     capitan_a, capitan_b = creador, resto[0]
     nombrados = await client.put(

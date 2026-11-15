@@ -4,8 +4,8 @@ El hándicap es obligatorio para jugar un Stableford o un Medal (#251, 7 oct 202
 Como en los torneos de la RFEG: sin hándicap no se entra, porque de él sale la
 categoría. Vale el del perfil, o uno personalizado que ponga el organizador (lo
 único en lo que nos apartamos del mercado). Se exige por los mismos caminos que
-el género: crear la competición, pedir plaza, aceptar una invitación, la
-inscripción directa y aprobar una solicitud. La Ryder no lo exige.
+el género: crear la competición, pedir plaza, aceptar una invitación y aprobar
+una solicitud. La Ryder no lo exige.
 """
 
 from decimal import Decimal

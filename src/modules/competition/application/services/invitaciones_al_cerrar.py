@@ -1,10 +1,10 @@
 """
-Al cerrar la inscripción, o al llenarse, las invitaciones pendientes se quedan
-sin plaza (#710, BE #359).
+Al empezar la competición, o al llenarse, las invitaciones pendientes se quedan
+sin plaza (B-02, BE #359).
 
-Decidido el 24 sep: aceptar una pendiente con el draft hecho descuadraba los
-partidos. La inscripción se cierra por dos caminos —cerrarla a mano y nombrar a
-los capitanes—, así que la regla vive aquí y la llaman los dos.
+Del 24 sep (#710) al 15 nov 2026 era al cerrar la inscripción. Desde B-02 el
+organizador solo invita, y una pendiente se acepta hasta que la competición
+empieza: la llaman los cuatro caminos de empezar (`solicitudes_al_empezar`).
 """
 
 from src.modules.competition.domain.entities.invitation import Invitation
@@ -26,7 +26,8 @@ async def sin_plaza_para_las_pendientes(
     invitado en Actividad (Agustín, 22 oct 2026).
     """
     cerradas = []
-    for invitacion in await uow.invitations.find_pending_by_competition(competition_id):
+    # Con sus filas bloqueadas: un DECLINE a la vez no se pisa con NO_ROOM (revisión)
+    for invitacion in await uow.invitations.find_pending_by_competition_for_update(competition_id):
         invitacion.check_expiration()
         if invitacion.is_pending():
             invitacion.reject_for_no_room()
@@ -45,7 +46,7 @@ async def al_ocupar_una_plaza(
 
     Quien llega tarde se entera en el momento, no al aceptar. Una sola regla para
     todos los caminos que ocupan una plaza —aceptar una invitación, aprobar una
-    solicitud, inscribir directamente—: con una copia en cada uno, aprobar se
+    solicitud—: con una copia en cada uno, aprobar se
     quedó sin ella. La carrera entre dos que ocupan a la vez la resuelve la fila
     bloqueada de la competición: entra el primero.
     """

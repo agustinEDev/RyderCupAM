@@ -38,13 +38,14 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.solicitudes_al_empezar import (
-    rechazar_las_solicitudes_pendientes,
+    CerradoAlEmpezar,
+    avisar_de_lo_cerrado,
+    cerrar_lo_pendiente,
 )
 from src.modules.competition.application.services.vista_de_la_franja import (
     primera_salida_en_el_campo,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
     ULTIMO_HOYO,
@@ -136,12 +137,12 @@ async def comprobar_que_abrio_la_franja(
 
 async def arrancar_la_competicion(
     uow: CompetitionUnitOfWorkInterface, competicion: Competition
-) -> list[Enrollment]:
+) -> CerradoAlEmpezar:
     """
     La competición en juego con su fila bloqueada (como la Ryder, BE #375).
 
-    Devuelve las solicitudes que se rechazaron al empezar, para que quien llama
-    avise en Actividad cuando haya guardado (BE-2).
+    Devuelve lo que se cerró al empezar (solicitudes e invitaciones pendientes),
+    para que quien llama avise en Actividad cuando haya guardado (BE-2, B-02).
     """
     bloqueada = await uow.competitions.find_by_id_for_update(competicion.id)
     if bloqueada is None or bloqueada.status not in _ANOTABLE:
@@ -149,9 +150,9 @@ async def arrancar_la_competicion(
     if bloqueada.status == CompetitionStatus.CLOSED:
         bloqueada.start()
         await uow.competitions.update(bloqueada)
-        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes
-        return await rechazar_las_solicitudes_pendientes(uow, bloqueada.id)
-    return []
+        # Empezar, como iniciarla a mano, cierra lo pendiente
+        return await cerrar_lo_pendiente(uow, bloqueada.id)
+    return CerradoAlEmpezar()
 
 
 class AnotarHoyoDePartidaUseCase:
@@ -188,7 +189,7 @@ class AnotarHoyoDePartidaUseCase:
         llegada = self._reloj()
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
-        cerradas: list[Enrollment] = []
+        cerrado = CerradoAlEmpezar()
         async with self._uow:
             partida = await self._uow.partidas.find_by_id(PartidaId(group_id))
             if partida is None:
@@ -207,7 +208,7 @@ class AnotarHoyoDePartidaUseCase:
             # Primero la competición, después la partida: el mismo orden que el
             # resto de lo que toca partidas, y solo en el primer golpe
             if competicion.status == CompetitionStatus.CLOSED:
-                cerradas = await arrancar_la_competicion(self._uow, competicion)
+                cerrado = await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await self._uow.partidas.find_by_id_for_update(partida.id)
             if bloqueada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
@@ -220,8 +221,8 @@ class AnotarHoyoDePartidaUseCase:
 
             await self._apuntar(bloqueada, competicion, hoyo, body, quien, marcado, llegada)
 
-        # Si el golpe la arrancó, ya guardado: «tu solicitud se cerró sin plaza»
-        await self._actividad.requests_closed(competicion, cerradas)
+        # Si el golpe la arrancó, ya guardado: «tu solicitud se cerró sin plaza» (y las invitaciones)
+        await avisar_de_lo_cerrado(self._actividad, competicion, cerrado)
 
     @staticmethod
     def _comprobar_quien(

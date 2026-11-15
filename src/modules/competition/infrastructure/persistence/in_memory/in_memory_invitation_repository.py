@@ -125,7 +125,10 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         inv = max(suyas, key=lambda inv: inv.created_at, default=None)
         return InvitacionPendiente(inv.id, inv.expires_at) if inv else None
 
-    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
+    async def find_pending_by_competition_for_update(
+        self, competition_id: CompetitionId
+    ) -> list[Invitation]:
+        # En memoria no hay transacciones que bloquear
         return [
             inv
             for inv in self._invitations.values()

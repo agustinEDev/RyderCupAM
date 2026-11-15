@@ -12,6 +12,7 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    add_one_session,
     create_admin_user,
     create_authenticated_user,
     create_competition,
@@ -36,31 +37,6 @@ async def _tipos_del_feed(client: AsyncClient, user: dict) -> list[str]:
     respuesta = await client.get(FEED)
     assert respuesta.status_code == 200, respuesta.text
     return [e["type"] for e in respuesta.json()["events"]]
-
-
-@pytest.mark.asyncio
-async def test_b8_la_inscripcion_directa_en_un_publico_la_ven_los_amigos(client: AsyncClient):
-    """
-    B8 y A2. Given me inscribe el organizador en un torneo publico / When mi
-    amigo y yo pedimos el feed / Then el ve que me he apuntado; yo, nada.
-    """
-    org = await create_authenticated_user(client, "be2_org@test.com", PASSWORD, "Org", "Uno")
-    yo = await create_authenticated_user(client, "be2_yo@test.com", PASSWORD, "Juan", "Lopez")
-    amigo = await create_authenticated_user(client, "be2_am@test.com", PASSWORD, "Eva", "Ruiz")
-    await hacerse_amigos(client, yo, amigo)
-    comp = await create_competition(client, org["cookies"])
-    await activate_competition(client, org["cookies"], comp["id"])
-
-    respuesta = await client.post(
-        f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-        json={"competition_id": comp["id"], "user_id": yo["user"]["id"]},
-        cookies=org["cookies"],
-    )
-    assert respuesta.status_code == 201, respuesta.text
-
-    assert await _tipos_del_feed(client, amigo) == ["ENROLLED_IN_TOURNAMENT"]
-    # C (22 oct): yo, «ya estas inscrito»
-    assert await _tipos_del_feed(client, yo) == ["ENROLLMENT_CONFIRMED"]
 
 
 async def _invitado(client: AsyncClient, prefijo: str) -> tuple[dict, str]:
@@ -214,10 +190,12 @@ async def test_e_un_torneo_que_ahora_es_privado_no_sale_aunque_quede_su_aviso(
 
 
 @pytest.mark.asyncio
-async def test_cerrar_la_inscripcion_retira_el_aviso_de_invitado(client: AsyncClient):
+async def test_empezar_retira_el_aviso_de_invitado(client: AsyncClient):
     """
-    Agustin, 22 oct. Given una invitacion avisada / When el organizador cierra
-    la inscripcion y la invitacion se queda sin plaza / Then su aviso desaparece.
+    Agustin, 22 oct; desde el 15 nov 2026 (B-02, O4 y O5). Given una invitacion
+    avisada / When el organizador cierra la inscripcion / Then el aviso sigue (se
+    puede aceptar). When empieza la competicion y la invitacion se queda sin plaza /
+    Then su aviso desaparece.
     """
     org = await create_authenticated_user(client, "be2nr_org@test.com", PASSWORD, "Org", "Uno")
     yo = await create_authenticated_user(client, "be2nr_yo@test.com", PASSWORD, "Juan", "Lopez")
@@ -234,6 +212,12 @@ async def test_cerrar_la_inscripcion_retira_el_aviso_de_invitado(client: AsyncCl
     set_auth_cookies(client, org["cookies"])
     cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
     assert cerrada.status_code == 200, cerrada.text
+    assert await _tipos_del_feed(client, yo) == ["INVITED_TO_TOURNAMENT"]
+
+    await add_one_session(client, org["cookies"], comp)
+    set_auth_cookies(client, org["cookies"])
+    empezada = await client.post(f"/api/v1/competitions/{comp['id']}/start")
+    assert empezada.status_code == 200, empezada.text
 
     assert await _tipos_del_feed(client, yo) == []
 
