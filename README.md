@@ -466,10 +466,9 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 </details>
 
 <details>
-<summary><b>Enrollment Management (9 endpoints)</b></summary>
+<summary><b>Enrollment Management (8 endpoints)</b></summary>
 
 - `POST /api/v1/competitions/{id}/enrollments`
-- `POST /api/v1/competitions/{id}/enrollments/direct`
 - `GET /api/v1/competitions/{id}/enrollments`
 - `POST /api/v1/enrollments/{id}/approve`
 - `POST /api/v1/enrollments/{id}/reject`

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, time
+from enum import StrEnum
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -54,6 +55,13 @@ class TeeTimeAssignment:
         )
 
 
+class CloseBlockedReason(StrEnum):
+    """Por que el plazo no pudo cerrar las inscripciones (C4, 15 nov 2026)."""
+
+    NO_TEE_WINDOW = "NO_TEE_WINDOW"
+    NO_HANDICAP = "NO_HANDICAP"
+
+
 class CompetitionActivityPublisherInterface(ABC):
     """
     Lo que `competition` le cuenta al feed, sin depender de el.
@@ -97,6 +105,27 @@ class CompetitionActivityPublisherInterface(ABC):
         """
 
     @abstractmethod
+    async def enrollments_closed(self, competition: Competition) -> None:
+        """El plazo cerro las inscripciones: se le dice al organizador (C5)."""
+
+    @abstractmethod
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        """
+        El plazo no pudo cerrarlas: `players` aprobados sin franja o sin
+        hándicap. Se le dice al organizador una vez (C4).
+        """
+
+    @abstractmethod
+    async def enrollments_closed_withdrawn(self, competition: Competition) -> None:
+        """Se reabrio al mover el torneo: el «se han cerrado» se retira (O2)."""
+
+    @abstractmethod
+    async def close_block_withdrawn(self, competition: Competition) -> None:
+        """Se cerro por fin: el aviso de que no se podia cerrar se retira (C4)."""
+
+    @abstractmethod
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
     ) -> None:
@@ -129,7 +158,42 @@ class CompetitionActivityPublisherInterface(ABC):
     async def invitations_closed(self, invitations: Sequence[Invitation]) -> None:
         """
         Invitaciones que dejaron de estar pendientes solas, sin que respondan el
-        invitado ni el organizador: sin plaza (NO_ROOM) o caducadas (EXPIRED).
+        invitado ni el organizador: sin plaza (NO_ROOM), caducadas (EXPIRED) o en
+        espera de que se reabra la inscripción (ON_HOLD, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """
+        Se reabrió la inscripción y las que esperaban vuelven a estar pendientes:
+        a cada invitado, «ya puedes aceptar» (P2, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """
+        Empezó o se canceló con invitaciones en espera: a cada invitado, «no hubo
+        plaza» (P3, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        """
+        Alguien entró aceptando una invitación y los equipos formados se deshicieron:
+        al organizador, «{X} ha entrado en {Y}: los equipos se han deshecho y hay
+        que volver a formarlos» (B3, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def teams_formed(self, competition: Competition) -> None:
+        """
+        Se formaron los equipos (a mano o al acabar el draft): los avisos de
+        «los equipos se han deshecho» de esa competición ya no piden nada y se
+        retiran (B3, Agustín, 15 nov 2026).
         """
 
     @abstractmethod
@@ -191,3 +255,28 @@ class CompetitionActivityPublisherInterface(ABC):
         llegar la ultima. El adaptador de Actividad relee la ronda con ella
         bloqueada y compara con lo ya publicado (revision del 22 oct 2026).
         """
+
+    @abstractmethod
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        """
+        Al organizador: «{N} jugadores sin actualizar con la RFEG en X» (H2, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """
+        A cada jugador español al que la RFEG no encontró: que revise su nombre
+        y vuelva a pedirlo desde su perfil (H3, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        """Ya no queda nadie sin actualizar: el aviso del organizador se retira (D3)."""
+
+    @abstractmethod
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """Ya no son no encontrados: su aviso se retira, si lo tenían (D3)."""

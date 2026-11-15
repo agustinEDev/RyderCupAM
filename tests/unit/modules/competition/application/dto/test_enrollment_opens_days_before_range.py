@@ -27,16 +27,16 @@ def _crear(dias):
 
 
 class TestElRangoEnLaEntrada:
-    """1 a 14, y nada mas. El DTO lo rechaza antes de llegar al dominio."""
+    """2 a 14 (A1, 15 nov 2026), y nada mas. El DTO lo rechaza antes de llegar al dominio."""
 
-    @pytest.mark.parametrize("dias", [1, 7, 14])
+    @pytest.mark.parametrize("dias", [2, 7, 14])
     def test_acepta_lo_que_esta_dentro(self, dias):
         assert _crear(dias).enrollment_opens_days_before == dias
 
     def test_sin_programar_es_lo_normal(self):
         assert _crear(None).enrollment_opens_days_before is None
 
-    @pytest.mark.parametrize("dias", [0, 15, -1])
+    @pytest.mark.parametrize("dias", [0, 1, 15, -1])
     def test_rechaza_lo_que_esta_fuera(self, dias):
         with pytest.raises(ValueError):
             _crear(dias)
@@ -51,3 +51,15 @@ class TestElRangoEnLaEntrada:
         dto = UpdateCompetitionRequestDTO(enrollment_opens_days_before=None)
 
         assert "enrollment_opens_days_before" in dto.model_fields_set
+
+
+class TestLoQueDiceLaDocumentacion:
+    """F8 (16 nov 2026): el contrato publicado dice el rango de verdad."""
+
+    @pytest.mark.parametrize("dto", [CreateCompetitionRequestDTO, UpdateCompetitionRequestDTO])
+    def test_dice_de_2_a_14(self, dto):
+        descripcion = dto.model_json_schema()["properties"]["enrollment_opens_days_before"][
+            "description"
+        ]
+        assert "2 a 14" in descripcion
+        assert "1 a 14" not in descripcion

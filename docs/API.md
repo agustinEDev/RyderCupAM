@@ -85,9 +85,8 @@ Teams & Generation (3 endpoints) ⭐ Sprint 2
 ├── POST   /api/v1/competitions/rounds/{id}/matches/generate # Generate matches for round
 └── POST   /api/v1/competitions/{id}/schedule/configure # Configure schedule (auto/manual)
 
-Enrollment Management (9 endpoints)
+Enrollment Management (8 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
-├── POST /api/v1/competitions/{id}/enrollments/direct # Direct enroll (creator only)
 ├── GET  /api/v1/competitions/{id}/enrollments      # List enrollments
 ├── POST /api/v1/enrollments/{id}/approve           # Approve enrollment
 ├── POST /api/v1/enrollments/{id}/reject            # Reject enrollment
@@ -545,7 +544,7 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `team_1_name` (string, optional, max 50)
 - `team_2_name` (string, optional, max 50)
 - `visibility` (enum, optional: "PRIVATE" | "PUBLIC", default "PRIVATE") — a private competition is invisible to anyone not in it, and a place cannot be requested without an invitation
-- `enrollment_opens_days_before` (int, optional, 1-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
+- `enrollment_opens_days_before` (int, optional, 2-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
 
 ### Query Parameters (List)
 
@@ -570,7 +569,21 @@ Three things follow from that, and none of them is obvious:
 
 If the days asked for exceed the days left until the tournament starts, the opening is already in the past and the competition opens on the first read. That is deliberate — a past moment means "open it now" — but the caller gets something sooner than asked for, and the UI should say so.
 
+### Enrolment Deadline
+
+Enrolment closes at **12:00 the day before `start_date`**, in the time zone of the first course (`Europe/Madrid` with no course). It applies to Ryder Cup, Stableford and Medal, public and private.
+
+- From that moment nobody enters, even while the status is still `ACTIVE`: joining a public competition, inviting (by user or by email), accepting an invitation, approving a request and the organiser's direct enrolment answer **400** with `error_code: ENROLLMENT_DEADLINE_PASSED` («La inscripción está cerrada.»). Declining and rejecting still work.
+- A job runs every hour and closes (`ACTIVE → CLOSED`) the competitions past their deadline with the same use case as closing by hand. The organiser gets an `ENROLLMENTS_CLOSED` notice in Activity. A stroke play with approved players lacking a tee window or a handicap stays `ACTIVE` and the organiser gets **one** `ENROLLMENT_CLOSE_BLOCKED` notice (`reason`, `player_count`); the job retries every hour.
+- A competition opened or reopened **after** its deadline stays open until the organiser closes it by hand. A scheduled opening counts from its scheduled time, even if it is opened later on read or by an invitation; pressing **Activate** by hand opens it now (and, past the deadline, exempts it like reopening). Moving `start_date` later gives it a new deadline.
+- The `ENROLLMENT_CLOSE_BLOCKED` notice is withdrawn when the competition closes (by the job or by hand) or its dates move, if it was sent; and when it is cancelled or deleted.
+- Closed **by the deadline**, `PUT /competitions/{id}` may only move `start_date` + `end_date` (other fields may be sent, but only with their current values). All sessions and tee windows move by the same number of days, with their times and players, and so does a scheduled handicap update; if any session has already started (by the clock), nothing moves. If the new deadline is in the future the competition reopens (as `reopen-enrollments` does), the `ENROLLMENTS_CLOSED` notice is withdrawn, and it will close at the new deadline. Closed by hand, the dates stay locked: reopen first.
+
 ### Competition Response (Computed Fields)
+
+- `enrollment_deadline` (datetime with offset, or null) - 12:00 the day before `start_date`, in the first course's time zone (`Europe/Madrid` without a course), e.g. `"2026-11-19T12:00:00+01:00"`
+- `enrollment_deadline_applies` (bool) - false while it is open and exempt (opened or reopened by hand after the deadline)
+- `enrollment_closed_by_deadline` (bool) - whether the deadline, not the organiser, closed enrolment
 
 - `is_creator` (bool) - Whether authenticated user is the creator
 - `enrolled_count` (int) - Number of enrolled players (APPROVED)
@@ -650,7 +663,6 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/competitions/{id}/enrollments` | POST | Yes | Request enrollment (REQUESTED) |
-| `/competitions/{id}/enrollments/direct` | POST | Yes | Direct enrollment by creator (APPROVED) |
 | `/competitions/{id}/enrollments` | GET | Yes | List enrollments with filters |
 | `/enrollments/{id}/approve` | POST | Yes | Approve request (creator only) |
 | `/enrollments/{id}/reject` | POST | Yes | Reject request (creator only) |
@@ -666,10 +678,33 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 - Creates enrollment with REQUESTED status
 - User can cancel before approval
 
-**Direct Enroll:**
-- `user_id` (string, required) - ID of user to enroll
-- Only creator can execute
-- Creates enrollment with APPROVED status directly
+**No direct enrollment by the organizer** (removed 15 Nov 2026, audit B-02):
+- The organizer only invites; the player accepts the invitation or signs up to a public
+  competition
+- With enrollment closed nobody enters: no invitations, no acceptances. Pending
+  invitations are not lost: on close (by hand, by the deadline or by naming captains)
+  they move to `ON_HOLD` and accepting one answers 409 `INVITATION_ON_HOLD`; declining
+  it, or the organizer withdrawing it, still works. They do not expire while on hold.
+  When the organizer reopens (or moving the dates reopens it), they go back to `PENDING`
+  with a fresh 7-day expiry and each invitee gets the Activity notice
+  `INVITATION_ACCEPTABLE_AGAIN`. If the competition starts or is cancelled first, they
+  become `NO_ROOM` and each invitee gets `ENROLLMENT_NO_PLACE` (source: the invitation);
+  cancelling also does this to `PENDING` invitations when enrollment is still open
+- On reopen: an invitee already enrolled (approved) by another path has the invitation
+  withdrawn silently. If there is at least one free place, all the others go back to
+  `PENDING` (first to accept enters; when it fills up, the rest become `NO_ROOM` as in
+  any open competition); with no free place, or in a Ryder Cup with matches already
+  generated, they become `NO_ROOM` with `ENROLLMENT_NO_PLACE`. Invitees without an
+  account get the usual invitation email again, with the new expiry. Reopening (or moving
+  the dates) with the draft room open: 409 `DRAFT_IN_PROGRESS`. If the competition fills
+  up while closed, `ON_HOLD` invitations become `NO_ROOM` with `ENROLLMENT_NO_PLACE`
+- Inviting someone whose invitation is `ON_HOLD`: 409 `INVITATION_ON_HOLD_EXISTS`
+- Ryder Cup with teams formed and no matches: the organizer may invite; when the invitee
+  accepts, the teams are reset and the organizer gets `TEAMS_UNDONE_BY_ENTRY` (payload:
+  tournament, `player_id`, `player_name`), withdrawn when the teams are formed again.
+  With matches: 409 `TEAMS_FORMED`. While the draft room is open nobody enters (invite,
+  accept, approve or sign up): 409 `DRAFT_IN_PROGRESS`
+- Nobody is enrolled, or brought back after withdrawing, without their consent
 
 **Set Custom Handicap:**
 - `custom_handicap` (float, required, -10.0 to 54.0)
@@ -717,7 +752,7 @@ REJECTED    CANCELLED
 
 - Competition must be in ACTIVE status for enrollments
 - No duplicate enrollments allowed
-- Only creator can approve/reject/enroll directly
+- Only creator can approve/reject; the creator invites, never enrolls a player directly
 - Only owner can cancel/withdraw
 - custom_handicap is optional, if not set uses official handicap
 

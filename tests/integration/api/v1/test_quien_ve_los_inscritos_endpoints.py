@@ -342,22 +342,6 @@ async def _invita(client: AsyncClient, creador: dict, comp: dict, invitado: dict
     return enviada.json()
 
 
-async def test_13_ya_inscrito_a_mano_no_le_ofrece_aceptar(client: AsyncClient):
-    """Revisor: aceptarla daría 400 («ya tiene inscripción»)."""
-    creador = await _jugador(client, "Organizadory")
-    invitado = await _jugador(client, "Inscritoamano")
-    comp = await _privada(client, creador)
-    await _invita(client, creador, comp, invitado)
-    set_auth_cookies(client, creador["cookies"])
-    directa = await client.post(
-        f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-        json={"competition_id": comp["id"], "user_id": invitado["user"]["id"]},
-    )
-    assert directa.status_code in (200, 201), directa.text
-
-    assert await _pendiente(client, invitado, comp) is None
-
-
 async def test_13_cancelada_no_le_ofrece_aceptar(client: AsyncClient):
     """Revisor: solo se acepta en una competición activa."""
     creador = await _jugador(client, "Organizadorz")

@@ -19,6 +19,9 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.services.draft_room import DraftRoom
 from src.modules.competition.domain.entities.draft import EQUIPOS, Draft
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -50,6 +53,7 @@ class StartDraftUseCase:
         user_repository: UserRepositoryInterface,
         clock: Callable[[], datetime] | None = None,
         sorteo: Callable[[], str] | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
@@ -61,7 +65,8 @@ class StartDraftUseCase:
                 que sale lo que sale el sorteo y no un equipo fijo
         """
         self._uow = uow
-        self._room = DraftRoom(uow, user_repository, clock)
+        # Con un solo elegible la sala nace terminada: equipos hechos (B3)
+        self._room = DraftRoom(uow, user_repository, clock, actividad)
         self._sorteo = sorteo or (lambda: secrets.choice(EQUIPOS))
 
     async def execute(
@@ -136,4 +141,6 @@ class StartDraftUseCase:
             await self._uow.drafts.add(draft)
             await self._room.equipos_si_termino(competition, draft)
 
-            return await self._room.estado(competition, draft, elegibles)
+            estado = await self._room.estado(competition, draft, elegibles)
+        await self._room.avisar()
+        return estado

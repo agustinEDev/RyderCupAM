@@ -25,7 +25,7 @@ from src.modules.competition.application.services.actualizaciones_de_handicaps i
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    sin_plaza_para_las_pendientes,
+    en_espera_las_pendientes,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -115,16 +115,16 @@ class NameCaptainsUseCase:
                 team_a, team_b, approved_player_ids=aprobados, has_teams=reparto is not None
             )
             await self._uow.competitions.update(competition)
-            # Nombrarlos cierra la inscripción: las pendientes, sin plaza (#710), y
-            # la actualización de hándicaps con la RFEG (#251)
+            # Nombrarlos cierra la inscripción: las pendientes esperan a que se
+            # reabra (P1, 15 nov 2026), y la actualización de hándicaps con la RFEG (#251)
             actualizacion = None
-            sin_plaza = []
+            en_espera = []
             if estaba != competition.status:
-                sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition_id)
+                en_espera = await en_espera_las_pendientes(self._uow, competition_id)
                 actualizacion = await self._actualizaciones.al_cerrar(competition_id)
 
         self._actualizaciones.lanzar(actualizacion)
-        await self._actividad.invitations_closed(sin_plaza)
+        await self._actividad.invitations_closed(en_espera)
 
         return NameCaptainsResponseDTO(
             id=competition.id.value,

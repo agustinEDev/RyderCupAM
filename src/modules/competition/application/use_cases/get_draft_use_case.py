@@ -12,6 +12,9 @@ from datetime import datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.draft_dto import DraftStateDTO
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.services.draft_room import DraftRoom
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -31,6 +34,7 @@ class GetDraftUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         clock: Callable[[], datetime] | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
@@ -39,7 +43,8 @@ class GetDraftUseCase:
             clock: El reloj del servidor, inyectable para los tests
         """
         self._uow = uow
-        self._room = DraftRoom(uow, user_repository, clock)
+        # Mirarla puede elegir por un capitán dormido y acabarla: equipos hechos (B3)
+        self._room = DraftRoom(uow, user_repository, clock, actividad)
 
     async def execute(
         self, competition_id: UUID, user_id: UserId, *, is_admin: bool = False
@@ -87,4 +92,6 @@ class GetDraftUseCase:
                 await self._room.al_dia(competition, draft, elegibles)
             else:
                 elegibles = await self._room.elegibles(competition)
-            return await self._room.estado(competition, draft, elegibles)
+            estado = await self._room.estado(competition, draft, elegibles)
+        await self._room.avisar()
+        return estado

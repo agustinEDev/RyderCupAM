@@ -22,7 +22,6 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
-    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
     WithdrawEnrollmentRequestDTO,
 )
@@ -60,9 +59,6 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -216,6 +212,44 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def round_deleted(self, competition_id, round_id):
         self.avisos.append(("round_deleted", competition_id, round_id))
 
+    async def handicaps_not_updated(self, competition, count):
+        self.avisos.append(("handicaps_not_updated", competition.id, count))
+
+    async def handicap_not_found(self, competition, user_ids):
+        self.avisos.append(("handicap_not_found", competition.id, list(user_ids)))
+
+    async def handicaps_not_updated_withdrawn(self, competition):
+        self.avisos.append(("handicaps_not_updated_withdrawn", competition.id))
+
+    async def handicap_not_found_withdrawn(self, competition, user_ids):
+        self.avisos.append(("handicap_not_found_withdrawn", competition.id, list(user_ids)))
+
+    async def enrollments_closed(self, competition):
+        self.avisos.append(("enrollments_closed", competition.id))
+
+    async def invitations_acceptable_again(self, competition, invitations):
+        self.avisos.append(
+            ("invitations_acceptable_again", competition.id, [i.id for i in invitations])
+        )
+
+    async def invitations_no_place(self, competition, invitations):
+        self.avisos.append(("invitations_no_place", competition.id, [i.id for i in invitations]))
+
+    async def teams_undone_by_entry(self, competition, enrollment):
+        self.avisos.append(("teams_undone_by_entry", competition.id, enrollment.id))
+
+    async def teams_formed(self, competition):
+        self.avisos.append(("teams_formed", competition.id))
+
+    async def close_blocked(self, competition, reason, players):
+        self.avisos.append(("close_blocked", competition.id, reason, players))
+
+    async def close_block_withdrawn(self, competition):
+        self.avisos.append(("close_block_withdrawn", competition.id))
+
+    async def enrollments_closed_withdrawn(self, competition):
+        self.avisos.append(("enrollments_closed_withdrawn", competition.id))
+
     async def tee_times(self, competition, round_id, assigned, withdrawn):
         self.avisos.append(
             (
@@ -238,6 +272,12 @@ class _Roto(CompetitionActivityPublisherInterface):
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
     made_private = deleted = tee_times = round_deleted = removed = _falla  # type: ignore[assignment]
     joined = placed_from_waiting_list = no_place = window_removed = _falla  # type: ignore[assignment]
+    handicaps_not_updated = handicap_not_found = _falla  # type: ignore[assignment]
+    handicaps_not_updated_withdrawn = handicap_not_found_withdrawn = _falla  # type: ignore[assignment]
+    enrollments_closed = close_blocked = close_block_withdrawn = _falla  # type: ignore[assignment]
+    enrollments_closed_withdrawn = _falla  # type: ignore[assignment]
+    invitations_acceptable_again = invitations_no_place = _falla  # type: ignore[assignment]
+    teams_undone_by_entry = teams_formed = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture
@@ -363,19 +403,6 @@ class TestInscripciones:
         )
 
         assert registro.avisos == []
-
-    async def test_a2_la_inscripcion_directa_avisa_sin_aceptacion(self, uow, registro):
-        competition_id, creator = await _abierta(uow)
-        jugador = UserId(uuid4())
-
-        await DirectEnrollPlayerUseCase(uow, USUARIOS_CON_GENERO, actividad=registro).execute(
-            DirectEnrollPlayerRequestDTO(
-                competition_id=competition_id.value, user_id=jugador.value
-            ),
-            creator,
-        )
-
-        assert registro.avisos == [("enrolled", competition_id, jugador, False)]
 
     async def test_b11_retirarse_avisa(self, uow, registro):
         competition_id, _ = await _abierta(uow)

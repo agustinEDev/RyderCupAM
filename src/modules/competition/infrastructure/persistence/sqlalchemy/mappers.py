@@ -907,6 +907,11 @@ competitions_table = Table(
     # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
     # las nueve de alli, y la zona se resuelve al leerla (BE #319)
     Column("enrollment_opens_days_before", Integer, nullable=True),
+    # El plazo de inscripcion (15 nov 2026): cuando se abrieron por ultima vez
+    # (UTC), si las cerro el plazo y si ya se aviso de que no se podian cerrar
+    Column("enrollment_opened_at", DateTime, nullable=True),
+    Column("enrollment_closed_by_deadline", Boolean, nullable=False, server_default="false"),
+    Column("enrollment_close_blocked_notified", Boolean, nullable=False, server_default="false"),
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
@@ -1364,6 +1369,29 @@ handicap_refreshes_table = Table(
     Column("refreshed_at", DateTime(timezone=True), nullable=False),
 )
 
+# Los correos de las actualizaciones ya enviados, para no repetirlos (D2, 16 nov
+# 2026): uno por jugador y competición al no encontrarlo en la RFEG; al
+# organizador, la huella de la lista enviada, para no mandarle la misma otra vez
+handicap_update_emails_table = Table(
+    "handicap_update_emails",
+    metadata,
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("kind", String(20), primary_key=True),
+    Column("fingerprint", String(64), nullable=False),
+    Column("sent_at", DateTime(timezone=True), nullable=False),
+)
+
 # Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:
 # sale de la hoja de salidas por el número. Los únicos se comprueban al final de
 # la transacción: un intercambio o un reordenado repite a medias un jugador o un
@@ -1523,6 +1551,11 @@ def start_competition_mappers():
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
+                "_enrollment_opened_at": competitions_table.c.enrollment_opened_at,
+                "_enrollment_closed_by_deadline": (
+                    competitions_table.c.enrollment_closed_by_deadline
+                ),
+                "_close_blocked_notified": competitions_table.c.enrollment_close_blocked_notified,
                 "_visibility": competitions_table.c.visibility,
                 "_tournament_type": competitions_table.c.tournament_type,
                 # Lo que es solo de la Ryder Cup, en su pieza (RyderCupAM#251). Es

@@ -1,7 +1,7 @@
 """In-Memory Competition Repository para testing."""
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime
+from datetime import date, datetime, time
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
@@ -79,6 +79,25 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Busca las competiciones con un estado, paginadas como la de SQL."""
         con_ese = [comp for comp in self._competitions.values() if comp.status == status]
         return _mas_recientes_primero(con_ese)[offset : offset + limit]
+
+    async def find_active_starting_by(self, first_day: date, last_day: date) -> list[Competition]:
+        return [
+            c
+            for c in self._competitions.values()
+            if c.status == CompetitionStatus.ACTIVE
+            and first_day <= c.dates.start_date <= last_day
+            and (
+                c.enrollment_opened_at is None
+                or c.enrollment_opened_at < datetime.combine(c.dates.start_date, time(0, 0))
+            )
+        ]
+
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        return [
+            c
+            for c in self._competitions.values()
+            if c.status == CompetitionStatus.ACTIVE and c.enrollment_opened_at is None
+        ]
 
     async def exists_with_name(
         self,
@@ -164,3 +183,15 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         return [
             self._competitions[i] for i in dict.fromkeys(competition_ids) if i in self._competitions
         ]
+
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        return sorted(
+            (
+                i
+                for i in dict.fromkeys(competition_ids)
+                if i in self._competitions and self._competitions[i].status == status
+            ),
+            key=lambda i: str(i.value),
+        )

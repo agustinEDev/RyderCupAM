@@ -11,6 +11,7 @@ from src.modules.competition.domain.repositories.handicap_update_repository_inte
     HandicapUpdateRepositoryInterface,
 )
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    CorreoDeActualizacion,
     Intento,
     ResultadoRefresco,
 )
@@ -25,6 +26,7 @@ class InMemoryHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
         self._resultados: dict[tuple[uuid.UUID, UserId], Intento] = {}
         self._cuando: dict[tuple[uuid.UUID, UserId], datetime] = {}
         self._programadas: dict[CompetitionId, datetime] = {}
+        self._correos: dict[tuple[CompetitionId, UserId, CorreoDeActualizacion], str] = {}
 
     async def add(self, actualizacion: ActualizacionDeHandicaps) -> None:
         self._actualizaciones[actualizacion.id] = replace(actualizacion)
@@ -55,11 +57,41 @@ class InMemoryHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
         resultado: ResultadoRefresco,
         momento: datetime,
     ) -> None:
-        self._cuando[(update_id, user_id)] = momento
         anterior = self._resultados.get((update_id, user_id))
+        # Un actualizado no se pisa con otra cosa (R2): lo apuntó su perfil
+        if (
+            anterior is not None
+            and anterior.resultado is ResultadoRefresco.ACTUALIZADO
+            and resultado is not ResultadoRefresco.ACTUALIZADO
+        ):
+            return
+        self._cuando[(update_id, user_id)] = momento
         self._resultados[(update_id, user_id)] = Intento(
             resultado, 1 if anterior is None else anterior.intentos + 1
         )
+
+    async def resultado_de(self, update_id: uuid.UUID, user_id: UserId) -> Intento | None:
+        return self._resultados.get((update_id, user_id))
+
+    async def correo_enviado(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> str | None:
+        return self._correos.get((competition_id, user_id, tipo))
+
+    async def apuntar_correo(
+        self,
+        competition_id: CompetitionId,
+        user_id: UserId,
+        tipo: CorreoDeActualizacion,
+        huella: str,
+        momento: datetime,
+    ) -> None:
+        self._correos[(competition_id, user_id, tipo)] = huella
+
+    async def olvidar_correo(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> None:
+        self._correos.pop((competition_id, user_id, tipo), None)
 
     async def programar(
         self, competition_id: CompetitionId, para: datetime, momento: datetime

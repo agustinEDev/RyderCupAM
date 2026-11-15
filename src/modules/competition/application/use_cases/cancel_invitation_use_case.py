@@ -50,7 +50,7 @@ class CancelInvitationUseCase:
         Raises:
             InvitationNotFoundError: Si no existe o quien la retira no es el organizador,
                 quien la envio ni un admin
-            InvalidInvitationStatusViolation: Si ya no esta pendiente
+            InvalidInvitationStatusViolation: Si ya no esta pendiente ni en espera
         """
         caducada_ahora = False
         async with self._uow:
@@ -79,13 +79,14 @@ class CancelInvitationUseCase:
                 raise InvitationNotFoundError(f"Invitation not found: {invitation_id}")
 
             # Una que caduco sin que nadie la pasara a EXPIRED no se retira: se
-            # quedo sin respuesta, y asi debe constar
-            estaba_pendiente = invitation.is_pending()
+            # quedo sin respuesta, y asi debe constar. Una en espera de que se
+            # reabra la inscripcion se retira como una pendiente (15 nov 2026)
+            estaba_viva = invitation.is_open()
             invitation.check_expiration()
-            if not invitation.is_pending():
+            if not invitation.is_open():
                 await self._uow.invitations.update(invitation)
                 no_pendiente = invitation.status.value
-                caducada_ahora = estaba_pendiente
+                caducada_ahora = estaba_viva
             else:
                 invitation.cancel()
                 await self._uow.invitations.update(invitation)
@@ -97,7 +98,7 @@ class CancelInvitationUseCase:
             await self._actividad.invitations_closed([invitation])
         if no_pendiente:
             raise InvalidInvitationStatusViolation(
-                f"Invitation is in status {no_pendiente}. Only PENDING invitations can be cancelled."
+                f"Invitation is in status {no_pendiente}. Only PENDING or ON_HOLD invitations can be cancelled."
             )
 
         # Retirada y guardada: su aviso desaparece de Actividad (BE-2)

@@ -20,24 +20,18 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
-from src.modules.competition.application.services.actualizaciones_de_handicaps import (
-    ActualizacionesDeHandicaps,
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.partidas_del_jugador import (
-    salidas_por_hora,
-)
-from src.modules.competition.application.services.salidas_de_la_ronda import (
-    Salidas,
-    de_las_partidas,
-)
-from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.application.services.reapertura import Reapertura
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.partida_id import PartidaId
-from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -67,6 +61,8 @@ class ReopenEnrollmentsUseCase:
         zonas: ICompetitionTimezone | None = None,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
         actividad: CompetitionActivityPublisherInterface | None = None,
+        correos: IInvitationEmailService | None = None,
+        user_uow: UserUnitOfWorkInterface | None = None,
     ):
         """
         Args:
@@ -79,6 +75,9 @@ class ReopenEnrollmentsUseCase:
         self._zonas = zonas
         self._reloj = reloj
         self._actividad = AvisosDeActividad(actividad)
+        # El correo de invitación otra vez a quien no tiene cuenta (O2, 15 nov 2026)
+        self._correos = correos
+        self._user_uow = user_uow
 
     async def execute(
         self, request: ReopenEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -97,6 +96,7 @@ class ReopenEnrollmentsUseCase:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionStateError: Si la transición de estado no es válida
+            DraftInProgressError: Con la sala de draft abierta (O1)
         """
         async with self._uow:
             # 1. Buscar la competición
@@ -113,25 +113,17 @@ class ReopenEnrollmentsUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede reabrir inscripciones")
 
-            # 3. Reabrir inscripciones (la entidad valida la transición)
-            competition.reopen_enrollments()
-
-            # La actualización de hándicaps que esté a medias se corta: al volver
-            # a cerrar empieza otra (#251)
-            await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
-
-            # Las partidas que no han salido se borran: pueden entrar y salir
-            # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
-            # estado o por su hora: hasta la PR 5 nadie las pasa a IN_PROGRESS) se
-            # quedan: lo jugado no se borra (D1, #251)
-            borradas = await self._borrar_las_que_no_salieron(competition.id)
+            # 3. Reabrir inscripciones (la entidad valida la transición), con lo
+            #    que arrastra: hándicaps a medias y partidas sin salir (#251, D1)
+            reapertura = self._reapertura()
+            borradas = await reapertura.reabrir(competition)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # Sin partida no hay salida: se retiran sus avisos (G4)
-        for round_id, salidas in borradas.items():
-            await self._actividad.salidas_cambiadas(competition, round_id, salidas, {})
+        # y los de hándicaps con la RFEG dejan de ser ciertos (CodeRabbit, #864)
+        await reapertura.avisar(competition, borradas)
 
         # 5. Retornar DTO de respuesta
         return ReopenEnrollmentsResponseDTO(
@@ -140,27 +132,12 @@ class ReopenEnrollmentsUseCase:
             reopened_at=competition.updated_at,
         )
 
-    async def _borrar_las_que_no_salieron(
-        self, competition_id: CompetitionId
-    ) -> dict[RoundId, Salidas]:
-        """
-        Returns:
-            Por franja, las salidas de los jugadores de las partidas borradas
-        """
-        partidas = await self._uow.partidas.de_la_competicion(competition_id)
-        ahora = self._reloj()
-        salidas: set[PartidaId] = set()
-        franjas: dict[RoundId, Round] = {}
-        for round_id in {p.round_id for p in partidas}:
-            franja = await self._uow.rounds.find_by_id(round_id)
-            if franja is not None:
-                franjas[round_id] = franja
-                de_la_franja = [p for p in partidas if p.round_id == round_id]
-                salidas |= await salidas_por_hora(franja, de_la_franja, self._zonas, ahora)
-        borrar = [p for p in partidas if not p.empezada and p.id not in salidas]
-        await self._uow.partidas.borrar(borrar)
-        return {
-            round_id: de_las_partidas(franja, [p for p in borrar if p.round_id == round_id])
-            for round_id, franja in franjas.items()
-            if any(p.round_id == round_id for p in borrar)
-        }
+    def _reapertura(self) -> Reapertura:
+        return Reapertura(
+            self._uow,
+            self._zonas,
+            self._reloj,
+            self._actividad,
+            correos=self._correos,
+            user_uow=self._user_uow,
+        )

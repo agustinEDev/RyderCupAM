@@ -30,6 +30,9 @@ from src.modules.competition.application.ports.lanzador_de_actualizaciones impor
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
 )
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -64,9 +67,6 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
 )
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
-)
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
 )
@@ -91,6 +91,9 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.list_my_handicaps_not_updated_use_case import (
+    ListMyHandicapsNotUpdatedUseCase,
 )
 from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
     ListMyInvitationsUseCase,
@@ -192,6 +195,14 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 
 
+def get_plazo_de_inscripcion(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> PlazoDeInscripcion:
+    """El plazo de inscripción (15 nov 2026): la zona del primer campo y el reloj de ahora."""
+    return PlazoDeInscripcion(CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions))
+
+
 def get_tournament_achievements_publisher(
     publish_use_case: PublishTournamentAchievementsUseCase = Depends(
         get_publish_tournament_achievements_use_case
@@ -266,6 +277,9 @@ def get_update_competition_use_case(
     location_builder: LocationBuilder = Depends(get_location_builder),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
+    correos: IInvitationEmailService = Depends(get_invitation_email_service),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
@@ -276,8 +290,15 @@ def get_update_competition_use_case(
     3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
+    # Con el plazo: una cerrada por el plazo puede moverse de fecha (R3)
     return UpdateCompetitionUseCase(
-        uow, location_builder, golf_course_uow.golf_courses, actividad=actividad
+        uow,
+        location_builder,
+        golf_course_uow.golf_courses,
+        actividad=actividad,
+        plazo=plazo,
+        correos=correos,
+        user_uow=user_uow,
     )
 
 
@@ -413,6 +434,14 @@ def get_handicap_update_status_use_case(
     return GetHandicapUpdateStatusUseCase(uow, user_uow.users)
 
 
+def get_list_my_handicaps_not_updated_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyHandicapsNotUpdatedUseCase:
+    """Los hándicaps sin actualizar con la RFEG, para «Requiere tu Atención» (15 nov 2026)."""
+    return ListMyHandicapsNotUpdatedUseCase(uow, user_uow.users)
+
+
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
@@ -522,6 +551,8 @@ def get_reopen_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    correos: IInvitationEmailService = Depends(get_invitation_email_service),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> ReopenEnrollmentsUseCase:
     """
     Proveedor del caso de uso ReopenEnrollmentsUseCase.
@@ -536,6 +567,8 @@ def get_reopen_enrollments_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
         actividad=actividad,
+        correos=correos,
+        user_uow=user_uow,
     )
 
 
@@ -586,34 +619,32 @@ def get_reorder_golf_courses_use_case(
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> RequestEnrollmentUseCase:
     """Apuntarse a una pública (28 oct 2026): abre la programada si toca y avisa."""
     return RequestEnrollmentUseCase(
         uow,
         user_uow.users,
-        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        zonas=plazo.zonas,
         actividad=actividad,
+        plazo=plazo,
     )
-
-
-def get_direct_enroll_player_use_case(
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
-) -> DirectEnrollPlayerUseCase:
-    """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_handle_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> HandleEnrollmentUseCase:
     """Proveedor del caso de uso HandleEnrollmentUseCase."""
-    return HandleEnrollmentUseCase(uow, user_uow.users, actividad=actividad)
+    return HandleEnrollmentUseCase(
+        uow,
+        user_uow.users,
+        actividad=actividad,
+        plazo=plazo,
+    )
 
 
 def get_cancel_enrollment_use_case(
@@ -692,12 +723,14 @@ def get_list_enrollments_use_case(
 def get_assign_teams_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> AssignTeamsUseCase:
     """Proveedor del caso de uso AssignTeamsUseCase (cross-module: Competition + User)."""
     return AssignTeamsUseCase(
         uow=uow,
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
+        actividad=actividad,
     )
 
 
@@ -711,25 +744,28 @@ def get_undo_teams_use_case(
 def get_start_draft_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> StartDraftUseCase:
     """Proveedor del caso de uso StartDraftUseCase (FE #653)."""
-    return StartDraftUseCase(uow=uow, user_repository=user_uow.users)
+    return StartDraftUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_draft_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetDraftUseCase:
     """Proveedor del caso de uso GetDraftUseCase (FE #653)."""
-    return GetDraftUseCase(uow=uow, user_repository=user_uow.users)
+    return GetDraftUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_make_draft_pick_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MakeDraftPickUseCase:
     """Proveedor del caso de uso MakeDraftPickUseCase (FE #653)."""
-    return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
+    return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users, actividad=actividad)
 
 
 def get_send_invitation_by_user_id_use_case(
@@ -737,9 +773,16 @@ def get_send_invitation_by_user_id_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> SendInvitationByUserIdUseCase:
     """Proveedor del caso de uso SendInvitationByUserIdUseCase."""
-    return SendInvitationByUserIdUseCase(uow, user_uow, email_service, actividad=actividad)
+    return SendInvitationByUserIdUseCase(
+        uow,
+        user_uow,
+        email_service,
+        actividad=actividad,
+        plazo=plazo,
+    )
 
 
 def get_send_invitation_by_email_use_case(
@@ -747,9 +790,16 @@ def get_send_invitation_by_email_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> SendInvitationByEmailUseCase:
     """Proveedor del caso de uso SendInvitationByEmailUseCase."""
-    return SendInvitationByEmailUseCase(uow, user_uow, email_service, actividad=actividad)
+    return SendInvitationByEmailUseCase(
+        uow,
+        user_uow,
+        email_service,
+        actividad=actividad,
+        plazo=plazo,
+    )
 
 
 def get_list_my_invitations_use_case(
@@ -764,9 +814,15 @@ def get_respond_to_invitation_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    plazo: PlazoDeInscripcion = Depends(get_plazo_de_inscripcion),
 ) -> RespondToInvitationUseCase:
     """Proveedor del caso de uso RespondToInvitationUseCase."""
-    return RespondToInvitationUseCase(uow, user_uow, actividad=actividad)
+    return RespondToInvitationUseCase(
+        uow,
+        user_uow,
+        actividad=actividad,
+        plazo=plazo,
+    )
 
 
 def get_cancel_invitation_use_case(

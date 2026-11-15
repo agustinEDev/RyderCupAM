@@ -26,6 +26,7 @@ from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationNoRoomViolation,
+    InvitationOnHoldViolation,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -140,7 +141,7 @@ class TestRespondToInvitationUseCase:
 
     # ==================== Con la inscripción cerrada (#710, 24 sep) ====================
 
-    async def _pendiente_en_una_cerrada(self, comp_uow, user_uow):
+    async def _pendiente_en_una_cerrada(self, comp_uow, user_uow, estado="CLOSED"):
         """Una invitación de antes del cambio, que se quedó pendiente al cerrar."""
         creator = await self._create_user(user_uow, email="c@test.com")
         invitee = await self._create_user(user_uow, email="i@test.com")
@@ -148,11 +149,34 @@ class TestRespondToInvitationUseCase:
         invitation = await self._create_pending_invitation(
             comp_uow, created.id, creator.id, invitee.id, "i@test.com"
         )
-        await set_competition_status(comp_uow, created.id, "CLOSED")
+        await set_competition_status(comp_uow, created.id, estado)
         return invitation, invitee
 
-    async def test_i6_aceptarla_cerrada_la_deja_sin_plaza(self, comp_uow, user_uow):
+    async def test_i6_aceptarla_cerrada_la_deja_en_espera(self, comp_uow, user_uow):
+        """Desde el 15 nov 2026 (P1) espera a que se reabra; antes, sin plaza (#710)."""
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        # Con su propia excepcion, que la API contesta con su codigo
+        with pytest.raises(InvitationOnHoldViolation):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            inscripcion = await comp_uow.enrollments.find_by_user_and_competition(
+                invitee.id, invitation.competition_id
+            )
+        assert guardada.status == InvitationStatus.ON_HOLD
+        assert inscripcion is None
+
+    async def test_i6_aceptarla_en_juego_la_deja_sin_plaza(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(
+            comp_uow, user_uow, estado="IN_PROGRESS"
+        )
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
         # Con su propia excepcion, que la ruta contesta con su codigo (BE #385)
@@ -189,8 +213,22 @@ class TestRespondToInvitationUseCase:
             guardada = await comp_uow.invitations.find_by_id(invitation.id)
         assert guardada.status == InvitationStatus.PENDING
 
-    async def test_i6c_una_ya_sin_plaza_lo_dice_en_su_idioma(self, comp_uow, user_uow):
+    async def test_i6c_una_en_espera_lo_dice_otra_vez_con_su_codigo(self, comp_uow, user_uow):
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+        pedir = RespondInvitationRequestDTO(
+            invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+        )
+        with pytest.raises(InvitationOnHoldViolation):
+            await uc.execute(pedir)
+
+        with pytest.raises(InvitationOnHoldViolation, match="En lista de espera"):
+            await uc.execute(pedir)
+
+    async def test_i6c_una_ya_sin_plaza_lo_dice_en_su_idioma(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(
+            comp_uow, user_uow, estado="IN_PROGRESS"
+        )
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
         pedir = RespondInvitationRequestDTO(
             invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
@@ -234,6 +272,68 @@ class TestRespondToInvitationUseCase:
                 )
             )
         assert lecturas == 2
+
+    async def test_i6e_si_la_ponen_en_espera_entre_medias_lo_dice_con_su_codigo(
+        self, comp_uow, user_uow
+    ):
+        """La misma carrera con el cierre de ahora (P1): entre la primera lectura y la
+        de la fase 2, el cierre la deja en espera."""
+        creator = await self._create_user(user_uow, email="c@test.com")
+        invitee = await self._create_user(user_uow, email="i@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "i@test.com"
+        )
+        leer = comp_uow.invitations.find_by_id
+        lecturas = 0
+
+        async def el_cierre_llega_entre_medias(invitation_id):
+            nonlocal lecturas
+            lecturas += 1
+            leida = await leer(invitation_id)
+            if lecturas == 2:
+                leida.put_on_hold()
+            return leida
+
+        comp_uow.invitations.find_by_id = el_cierre_llega_entre_medias
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(InvitationOnHoldViolation):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+        assert lecturas == 2
+
+    async def test_i6f_rechazar_una_en_espera_entre_medias_si(self, comp_uow, user_uow):
+        """Rechazarla sí se puede aunque el cierre la deje en espera entre medias."""
+        creator = await self._create_user(user_uow, email="c@test.com")
+        invitee = await self._create_user(user_uow, email="i@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "i@test.com"
+        )
+        leer = comp_uow.invitations.find_by_id
+        lecturas = 0
+
+        async def el_cierre_llega_entre_medias(invitation_id):
+            nonlocal lecturas
+            lecturas += 1
+            leida = await leer(invitation_id)
+            if lecturas == 2:
+                leida.put_on_hold()
+            return leida
+
+        comp_uow.invitations.find_by_id = el_cierre_llega_entre_medias
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        respuesta = await uc.execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+        assert respuesta.status == "DECLINED"
 
     async def test_aceptar_bloquea_la_fila_de_la_competicion(self, comp_uow, user_uow):
         """Contra el cierre a la vez (CodeRabbit en la #380): con la fila

@@ -40,6 +40,12 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        ActivityEventType.HANDICAPS_NOT_UPDATED,
+        ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+        ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+        ActivityEventType.TEAMS_UNDONE_BY_ENTRY,
     }
 )
 
@@ -58,7 +64,25 @@ _SE_RENUEVAN = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        # Uno por torneo: otra pasada u otra actualización lo pone al día
+        ActivityEventType.HANDICAPS_NOT_UPDATED,
+        ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        # Del cierre por el plazo (15 nov 2026), uno por competicion: se puede
+        # cerrar otra vez (reabierta y movida) o bloquear con otro plazo
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+        # Se puede reabrir otra vez, o volver a deshacer los equipos (15 nov 2026)
+        ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+        ActivityEventType.TEAMS_UNDONE_BY_ENTRY,
     }
+)
+
+# Los de una invitacion pendiente (su id es el origen): se van al responderla, al
+# retirarla o al cerrarse sola; «ya puedes aceptar» es una invitacion que vuelve a
+# estar pendiente (P2, 15 nov 2026)
+_DE_INVITACION = (
+    ActivityEventType.INVITED_TO_TOURNAMENT,
+    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
 )
 
 # Lo que deja de ser cierto al entrar con esa inscripcion (decidido el 27 oct
@@ -291,8 +315,10 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
+            # Y el «no se puede cerrar» del organizador ya no pide nada (F2, 16 nov)
             await self._social_uow.activity_events.delete_for_competition(
-                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA]
+                competition_id,
+                [_SALIDA, _PLAZA_DE_LA_ESPERA, ActivityEventType.ENROLLMENT_CLOSE_BLOCKED],
             )
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
                 competition_id
@@ -309,29 +335,78 @@ class PublishCompetitionNoticesUseCase:
         )
 
     async def invitation_withdrawn(self, user_id: UserId, invitation_id: str) -> None:
-        """El organizador retira la invitacion: su aviso desaparece (A4)."""
-        await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
+        """El organizador retira la invitacion: sus avisos desaparecen (A4)."""
+        await self._retirar(invitation_id, list(_DE_INVITACION), user_id)
 
     async def invitation_answered(self, user_id: UserId, invitation_id: str) -> None:
         """
-        El invitado la acepta o la rechaza: su aviso de invitado ya no pide nada
-        y desaparece (tabla del 22 oct 2026, C).
+        El invitado la acepta o la rechaza: sus avisos de invitado (y el de «ya
+        puedes aceptar») ya no piden nada y desaparecen (tabla del 22 oct 2026, C).
         """
-        await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
+        await self._retirar(invitation_id, list(_DE_INVITACION), user_id)
 
     async def invitations_closed(self, invitations: Sequence[tuple[UserId, str]]) -> None:
         """
-        Invitaciones que se cerraron solas (sin plaza o caducadas): su aviso de
-        invitado ya no pide nada y desaparece (Agustin, 22 oct 2026). Todas en
-        la misma transaccion.
+        Invitaciones que se cerraron solas (sin plaza, caducadas o en espera de
+        que se reabra): sus avisos de invitado ya no piden nada y desaparecen
+        (Agustin, 22 oct 2026). Todas en la misma transaccion.
         """
         if not invitations:
             return
-        # Un solo borrado para todo el lote, no uno por invitacion
+        # Un solo borrado para todo el lote y sus dos tipos, no uno por invitacion
         async with self._social_uow:
-            await self._social_uow.activity_events.delete_pairs(
-                ActivityEventType.INVITED_TO_TOURNAMENT, invitations
-            )
+            await self._social_uow.activity_events.delete_pairs_of(_DE_INVITACION, invitations)
+
+    async def invitations_acceptable_again(
+        self, tournament: TournamentRef, invitations: Sequence[tuple[UserId, str]]
+    ) -> None:
+        """
+        Se reabrio la inscripcion y su invitacion, que esperaba, vuelve a estar
+        pendiente: «ya puedes aceptar la invitacion a X» (P2, 15 nov 2026). Uno por
+        invitacion; si se reabre otra vez, se renueva.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    user_id,
+                    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+                    invitation_id,
+                    tournament,
+                )
+                for user_id, invitation_id in invitations
+            ]
+        )
+
+    async def teams_undone_by_entry(
+        self,
+        organizer_id: UserId,
+        player_id: UserId,
+        tournament: TournamentRef,
+        enrollment_id: str,
+        use_real_name: bool = True,
+    ) -> None:
+        """
+        «{X} ha entrado en {Y}: los equipos se han deshecho y hay que volver a
+        formarlos», para el organizador (B3, 15 nov 2026). Uno por inscripcion; con
+        el nombre que eligio para esa competicion, como «se ha apuntado».
+        """
+        async with self._user_uow:
+            jugador = await self._user_uow.users.find_by_id(player_id)
+        extra = {
+            "player_id": str(player_id.value),
+            "player_name": jugador.display_name_or_legal(use_real_name) if jugador else None,
+        }
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.TEAMS_UNDONE_BY_ENTRY,
+                    enrollment_id,
+                    tournament,
+                    extra,
+                )
+            ]
+        )
 
     async def requests_closed(
         self, tournament: TournamentRef, requests: Sequence[tuple[UserId, str]]
@@ -400,6 +475,69 @@ class PublishCompetitionNoticesUseCase:
             retirar=(enrollment_id, _DE_NO_ESTAR, player_id),
         )
 
+    async def teams_undone_withdrawn(self, competition_id: str) -> None:
+        """
+        Se volvieron a formar los equipos: los «X ha entrado en Y: los equipos se
+        han deshecho» de esa competición ya no piden nada (B3, Agustín, 15 nov 2026).
+        Solo los recibe su organizador.
+        """
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [ActivityEventType.TEAMS_UNDONE_BY_ENTRY]
+            )
+
+    async def enrollments_closed(self, organizer_id: UserId, tournament: TournamentRef) -> None:
+        """
+        «Se han cerrado las inscripciones de X»: las cerro el plazo, a las 12:00
+        del dia anterior (C5, 15 nov 2026). Para el organizador; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENTS_CLOSED,
+                    tournament.competition_id,
+                    tournament,
+                )
+            ]
+        )
+
+    async def close_blocked(
+        self, organizer_id: UserId, tournament: TournamentRef, reason: str, players: int
+    ) -> None:
+        """
+        «N jugadores sin franja en X: colócalos y cierra» (o sin hándicap): el
+        plazo no pudo cerrarlas (C4, 15 nov 2026). Para el organizador, con el
+        motivo y cuántos; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+                    tournament.competition_id,
+                    tournament,
+                    {"reason": reason, "player_count": players},
+                )
+            ]
+        )
+
+    async def enrollments_closed_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Se reabrio al mover el torneo: el «se han cerrado» ya no es cierto; al
+        volver a cerrarse llega otro (O2, Agustín, 16 nov 2026).
+        """
+        await self._retirar(competition_id, [ActivityEventType.ENROLLMENTS_CLOSED], organizer_id)
+
+    async def close_block_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Por fin se cerraron: el «N jugadores sin franja en X» ya no pide nada y
+        se retira (C4, Agustín, 15 nov 2026).
+        """
+        await self._retirar(
+            competition_id, [ActivityEventType.ENROLLMENT_CLOSE_BLOCKED], organizer_id
+        )
+
     async def placed_from_waiting_list(
         self, user_id: UserId, tournament: TournamentRef, franja: TeeWindowRef
     ) -> None:
@@ -440,7 +578,9 @@ class PublishCompetitionNoticesUseCase:
     ) -> None:
         """
         Se cerraron las inscripciones y seguian solo en espera: «no hubo plaza
-        en X» (A4). Uno por inscripcion; si vuelve a entrar, se va.
+        en X» (A4). Uno por inscripcion; si vuelve a entrar, se va. Tambien a
+        quien tenia su invitacion en espera y empezo o se cancelo (P3, 15 nov
+        2026): entonces el origen es la invitacion.
         """
         await self._publicar(
             [
@@ -469,6 +609,61 @@ class PublishCompetitionNoticesUseCase:
                 )
             ]
         )
+
+    # === Hándicaps con la RFEG ===
+
+    async def handicaps_not_updated(
+        self, organizer_id: UserId, tournament: TournamentRef, count: int
+    ) -> None:
+        """
+        «{N} jugadores sin actualizar con la RFEG en X», para el organizador (H2,
+        15 nov 2026). Uno por torneo: otra pasada lo renueva con su número.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.HANDICAPS_NOT_UPDATED,
+                    tournament.competition_id,
+                    tournament,
+                    {"count": count},
+                )
+            ]
+        )
+
+    async def handicap_not_found(
+        self, tournament: TournamentRef, user_ids: Sequence[UserId]
+    ) -> None:
+        """
+        «No hemos encontrado tu hándicap en la RFEG para X», a cada jugador
+        español al que la RFEG no encontró (H3, 15 nov 2026). Uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    user_id,
+                    ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+                    tournament.competition_id,
+                    tournament,
+                )
+                for user_id in user_ids
+            ]
+        )
+
+    async def handicaps_not_updated_withdrawn(
+        self, organizer_id: UserId, competition_id: str
+    ) -> None:
+        """Ya no queda nadie sin actualizar: el aviso del organizador se va (D3, 16 nov 2026)."""
+        await self._retirar(competition_id, [ActivityEventType.HANDICAPS_NOT_UPDATED], organizer_id)
+
+    async def handicap_not_found_withdrawn(
+        self, competition_id: str, user_ids: Sequence[UserId]
+    ) -> None:
+        """Ya no son no encontrados: su aviso se va (D3, 16 nov 2026)."""
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source_for_users(
+                competition_id, [ActivityEventType.RFEG_HANDICAP_NOT_FOUND], list(user_ids)
+            )
 
     @staticmethod
     def _de_la_franja(franja: TeeWindowRef | None) -> dict[str, Any]:

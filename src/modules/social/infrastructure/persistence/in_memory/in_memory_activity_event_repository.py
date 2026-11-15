@@ -142,7 +142,11 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
 
     def _invitacion_cerrada(self, event: ActivityEvent) -> bool:
         return (
-            event.type == ActivityEventType.INVITED_TO_TOURNAMENT
+            event.type
+            in (
+                ActivityEventType.INVITED_TO_TOURNAMENT,
+                ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+            )
             and self.open_invitation_ids is not None
             and event.source_match_id not in self.open_invitation_ids
         )
@@ -202,6 +206,12 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     ) -> int:
         parejas = set(pairs)
         return self._borrar(lambda e: e.type == type and (e.user_id, e.source_match_id) in parejas)
+
+    async def delete_pairs_of(
+        self, types: Collection[ActivityEventType], pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        parejas = set(pairs)
+        return self._borrar(lambda e: e.type in types and (e.user_id, e.source_match_id) in parejas)
 
     async def delete_from_source(
         self,

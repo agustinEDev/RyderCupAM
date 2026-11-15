@@ -8,8 +8,10 @@ Se deja constancia en el log y se sigue.
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CloseBlockedReason,
     CompetitionActivityPublisherInterface,
     TeeTimeAssignment,
 )
@@ -24,6 +26,12 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
+
+# Monta Actividad (con su propia sesión) y la cierra al salir: quien avisa fuera
+# de una petición la monta solo al avisar (T1, 16 nov 2026)
+FabricaDeActividad = Callable[
+    [], AbstractAsyncContextManager[CompetitionActivityPublisherInterface]
+]
 
 
 class AvisosDeActividad(CompetitionActivityPublisherInterface):
@@ -87,6 +95,23 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             return
         await self._avisar("no_place", lambda p: p.no_place(competition, enrollments))
 
+    async def enrollments_closed(self, competition: Competition) -> None:
+        await self._avisar("enrollments_closed", lambda p: p.enrollments_closed(competition))
+
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        await self._avisar("close_blocked", lambda p: p.close_blocked(competition, reason, players))
+
+    async def enrollments_closed_withdrawn(self, competition: Competition) -> None:
+        await self._avisar(
+            "enrollments_closed_withdrawn",
+            lambda p: p.enrollments_closed_withdrawn(competition),
+        )
+
+    async def close_block_withdrawn(self, competition: Competition) -> None:
+        await self._avisar("close_block_withdrawn", lambda p: p.close_block_withdrawn(competition))
+
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
     ) -> None:
@@ -123,6 +148,37 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
         if not con_aviso:
             return
         await self._avisar("invitations_closed", lambda p: p.invitations_closed(con_aviso))
+
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """«Ya puedes aceptar» (P2): solo a quien tenía cuenta; las demás no tienen Actividad."""
+        con_cuenta = [i for i in invitations if i.invitee_user_id is not None]
+        if not con_cuenta:
+            return
+        await self._avisar(
+            "invitations_acceptable_again",
+            lambda p: p.invitations_acceptable_again(competition, con_cuenta),
+        )
+
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """«No hubo plaza» (P3): solo a quien tenía cuenta."""
+        con_cuenta = [i for i in invitations if i.invitee_user_id is not None]
+        if not con_cuenta:
+            return
+        await self._avisar(
+            "invitations_no_place", lambda p: p.invitations_no_place(competition, con_cuenta)
+        )
+
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        await self._avisar(
+            "teams_undone_by_entry", lambda p: p.teams_undone_by_entry(competition, enrollment)
+        )
+
+    async def teams_formed(self, competition: Competition) -> None:
+        await self._avisar("teams_formed", lambda p: p.teams_formed(competition))
 
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
@@ -170,6 +226,36 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             return
         await self._avisar(
             "tee_times", lambda p: p.tee_times(competition, round_id, assigned, withdrawn)
+        )
+
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        await self._avisar(
+            "handicaps_not_updated", lambda p: p.handicaps_not_updated(competition, count)
+        )
+
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found", lambda p: p.handicap_not_found(competition, user_ids)
+        )
+
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        await self._avisar(
+            "handicaps_not_updated_withdrawn",
+            lambda p: p.handicaps_not_updated_withdrawn(competition),
+        )
+
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found_withdrawn",
+            lambda p: p.handicap_not_found_withdrawn(competition, user_ids),
         )
 
     async def salidas_cambiadas(

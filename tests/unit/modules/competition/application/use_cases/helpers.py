@@ -49,6 +49,8 @@ class UsuariosConGenero:
             handicap=SimpleNamespace(value=10.0),
             display_name_or_legal=lambda _real=False: f"Jugador {user_id}",
             email=None,
+            # Como un usuario real sin nacionalidad: el aviso de la RFEG la mira
+            country_code=None,
         )
 
     async def find_by_ids(self, user_ids):

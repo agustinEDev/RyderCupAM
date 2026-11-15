@@ -81,7 +81,9 @@ class ActivateCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede activar la competición")
 
-            # 3. Activar la competición (la entidad valida la transición)
+            # 3. Activar la competición (la entidad valida la transición). Es el
+            #    organizador quien la abre, ahora: pasado el plazo, como reabrirla,
+            #    queda abierta hasta que la cierre él (O3, 16 nov 2026)
             competition.activate()
 
             # 4. Persistir cambios

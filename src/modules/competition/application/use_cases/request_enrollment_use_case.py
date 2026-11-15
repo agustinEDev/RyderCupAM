@@ -23,6 +23,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.correo_del_invitado import (
     correo_del_invitado,
 )
@@ -42,6 +45,13 @@ from src.modules.competition.application.services.handicap_obligatorio import ex
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
     guardar_la_inscripcion,
     viva,
+)
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    avisar_al_llenarse,
+)
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -144,6 +154,7 @@ class RequestEnrollmentUseCase:
         user_repository: UserRepositoryInterface,
         zonas: ICompetitionTimezone | None = None,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         """
         Args:
@@ -151,7 +162,9 @@ class RequestEnrollmentUseCase:
             user_repository: El genero, el hándicap y el correo de quien entra
             zonas: Para abrir una programada a la que ya le toca (D10)
             actividad: Los avisos al organizador y a los amigos (A1, A2)
+            plazo: El plazo de inscripción (15 nov 2026); sin él, no se mira
         """
+        self._plazo = plazo
         self._uow = uow
         # El género es obligatorio para apuntarse (#710)
         self._user_repo = user_repository
@@ -165,7 +178,7 @@ class RequestEnrollmentUseCase:
             CompetitionNotActiveError, CompetitionFullError, AlreadyEnrolledError,
             EnrollmentClosedError, TooManyEnrollmentsError, InvalidTeeColorError,
             TeeWindowRequiredError, TeeWindowNotFoundError, TeeWindowFullError,
-            TeeWindowHasRoomError, TeamsFormedError
+            TeeWindowHasRoomError, TeamsFormedError, EnrollmentDeadlinePassedError
         """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
@@ -195,6 +208,8 @@ class RequestEnrollmentUseCase:
                 raise CompetitionNotActiveError(
                     "Las inscripciones de esta competición no están abiertas."
                 )
+            # Y pasado su plazo, aunque siga abierta, tampoco (C2, 15 nov 2026)
+            await exigir_el_plazo(self._plazo, competition)
 
             # Antes que la franja: a quien ya está se le dice eso (revisor, 28 oct)
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
@@ -204,6 +219,8 @@ class RequestEnrollmentUseCase:
             # Con los equipos formados nadie entra solo; el organizador sí (29 oct
             # 2026). Tras lo de ya inscrito: a quien ya está se le dice eso (revisor)
             await exigir_sin_equipos_formados(self._uow, competition_id)
+            # Y nadie entra durante el draft (Agustín, 15 nov 2026)
+            await exigir_sin_draft_abierto(self._uow, competition_id)
 
             franjas = [
                 s
@@ -249,7 +266,7 @@ class RequestEnrollmentUseCase:
         # Ya guardado: lo que se le cuenta a cada uno (A1, A2)
         if aceptada is not None:
             await self._actividad.invitation_answered(aceptada)
-        await self._actividad.invitations_closed(cerradas)
+        await avisar_al_llenarse(self._actividad, competition, cerradas)
         await self._actividad.joined(competition, enrollment, franja, espera)
         # Solo en espera aún no juega: sus amigos se enteran cuando tenga plaza
         if not espera:

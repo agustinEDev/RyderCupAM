@@ -7,7 +7,7 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -142,6 +142,25 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_active_starting_by(self, first_day: date, last_day: date) -> list[Competition]:
+        """
+        Las abiertas (ACTIVE) que empiezan entre esos dos dias: las unicas cuyo
+        plazo de inscripcion puede haber pasado y que todavia importa cerrar
+        (15 nov 2026). Sin las que se abrieron el dia del torneo o despues: su
+        plazo (como muy tarde, las 00:00 UTC de ese dia) ya habia pasado al
+        abrirlas, y estan exentas en cualquier zona (16 nov 2026, F6).
+        """
+        pass
+
+    @abstractmethod
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        """
+        Las ACTIVE sin `enrollment_opened_at`: las abrio la release anterior entre
+        la migracion y el despliegue (16 nov 2026). Normalmente ninguna.
+        """
+        pass
+
+    @abstractmethod
     async def exists_with_name(
         self,
         name: CompetitionName,
@@ -251,6 +270,16 @@ class CompetitionRepositoryInterface(ABC):
     @abstractmethod
     async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
         """Esas competiciones en una sola lectura, no una por competicion (BE-3)."""
+        pass
+
+    @abstractmethod
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        """
+        De esas, las que están en ese estado, filtradas en la base y en orden de
+        id: quien las bloquee después lo hace siempre en el mismo orden (R1).
+        """
         pass
 
     @abstractmethod

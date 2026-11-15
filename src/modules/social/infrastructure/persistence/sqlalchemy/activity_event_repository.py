@@ -292,15 +292,21 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
     @staticmethod
     def _invitacion_cerrada(ahora: datetime) -> ColumnElement[bool]:
         """
-        Un INVITED_TO_TOURNAMENT cuya invitacion (su origen) ya no se puede
-        aceptar en `ahora`: no hay una PENDING sin caducar con ese id. Como con
+        Un INVITED_TO_TOURNAMENT (o un INVITATION_ACCEPTABLE_AGAIN, 15 nov 2026)
+        cuya invitacion (su origen) ya no se puede aceptar en `ahora`: no hay una
+        PENDING sin caducar con ese id. Como con
         los torneos, se mira la tabla `invitations` por su nombre y el id como
         texto.
         """
         tabla = activity_events_table.c
         invitaciones = table("invitations", column("id"), column("status"), column("expires_at"))
         return and_(
-            tabla.type == ActivityEventType.INVITED_TO_TOURNAMENT,
+            tabla.type.in_(
+                [
+                    ActivityEventType.INVITED_TO_TOURNAMENT,
+                    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN,
+                ]
+            ),
             not_(
                 exists().where(
                     cast(invitaciones.c.id, String) == tabla.source_match_id,
@@ -419,6 +425,18 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         tabla = activity_events_table.c
         stmt = delete(activity_events_table).where(
             tabla.type == type,
+            tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
+        )
+        return await self._borrar(stmt)
+
+    async def delete_pairs_of(
+        self, types: Collection[ActivityEventType], pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        if not types or not pairs:
+            return 0
+        tabla = activity_events_table.c
+        stmt = delete(activity_events_table).where(
+            tabla.type.in_(sorted(types)),
             tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
         )
         return await self._borrar(stmt)

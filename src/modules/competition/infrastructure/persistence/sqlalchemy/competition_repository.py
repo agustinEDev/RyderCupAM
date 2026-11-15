@@ -5,9 +5,9 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 """
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import and_, func, inspect, or_, select, update
+from sqlalchemy import DateTime, and_, cast, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import class_mapper, selectinload
 
@@ -238,6 +238,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                 campos_t.c.id,
                 campos_t.c.name,
                 campos_t.c.country_code,
+                campos_t.c.timezone,
             )
             .join(campos_t, campos_t.c.id == enlaces.c.golf_course_id)
             .where(enlaces.c.competition_id.in_(list(competition_ids)))
@@ -245,9 +246,9 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
-        for competition_id, golf_course_id, nombre, pais in result.all():
+        for competition_id, golf_course_id, nombre, pais, zona in result.all():
             campos.setdefault(competition_id, []).append(
-                CampoDeLaCompeticion(golf_course_id, nombre, pais)
+                CampoDeLaCompeticion(golf_course_id, nombre, pais, zona)
             )
         return campos
 
@@ -298,6 +299,30 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .order_by(Competition._created_at.desc())
             .limit(limit)
             .offset(offset)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_active_starting_by(self, first_day: date, last_day: date) -> list[Competition]:
+        """Las ACTIVE que empiezan entre esos dias, para el cierre por el plazo."""
+        tabla = competitions_table.c
+        statement = select(Competition).where(
+            Competition._status_value == CompetitionStatus.ACTIVE.value,
+            tabla.start_date >= first_day,
+            tabla.start_date <= last_day,
+            or_(
+                tabla.enrollment_opened_at.is_(None),
+                tabla.enrollment_opened_at < cast(tabla.start_date, DateTime),
+            ),
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_active_without_opening_time(self) -> list[Competition]:
+        """Las ACTIVE sin fecha de apertura (de la release anterior), para apuntarla."""
+        statement = select(Competition).where(
+            Competition._status_value == CompetitionStatus.ACTIVE.value,
+            competitions_table.c.enrollment_opened_at.is_(None),
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
@@ -510,4 +535,18 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .options(*self._agregado_completo())
         )
         result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        """Solo los ids, filtrados por estado en la base, en orden de id (R1)."""
+        if not competition_ids:
+            return []
+        tabla = competitions_table.c
+        result = await self._session.execute(
+            select(tabla.id)
+            .where(tabla.id.in_(competition_ids), tabla.status == status.value)
+            .order_by(tabla.id)
+        )
         return list(result.scalars().all())

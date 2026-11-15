@@ -15,6 +15,7 @@ from src.config.aviso_en_segundo_plano import (
 )
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.dependencies.comun import (
+    get_aviso_de_la_rfeg,
     get_competition_uow,
     get_country_repository,
     get_email_service,
@@ -55,6 +56,9 @@ from src.modules.user.application.ports.email_service_interface import IEmailSer
 from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
+)
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
 )
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.reenvio_de_verificacion_port import (
@@ -250,6 +254,7 @@ def get_register_user_use_case(
 def get_update_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = Depends(get_aviso_de_la_rfeg),
 ) -> UpdateUserHandicapUseCase:
     """
     Proveedor del caso de uso UpdateUserHandicapUseCase.
@@ -260,12 +265,14 @@ def get_update_handicap_use_case(
     3. Crea una instancia de `UpdateUserHandicapUseCase`.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateUserHandicapUseCase(uow, handicap_service)
+    # Si la RFEG lo da, sus competiciones cerradas se enteran (D1 y D4, 16 nov 2026)
+    return UpdateUserHandicapUseCase(uow, handicap_service, al_encontrarlo)
 
 
 def get_refresh_own_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = Depends(get_aviso_de_la_rfeg),
 ) -> RefreshOwnHandicapUseCase:
     """
     Proveedor del caso de uso RefreshOwnHandicapUseCase (RyderCupAM#340).
@@ -273,12 +280,14 @@ def get_refresh_own_handicap_use_case(
     El refresco del hándicap que antes hacía el login, ahora aparte para que el
     login no espere a la RFEG.
     """
-    return RefreshOwnHandicapUseCase(uow, handicap_service)
+    # Si la RFEG lo da, sus competiciones cerradas se enteran (D4, R5, R6)
+    return RefreshOwnHandicapUseCase(uow, handicap_service, al_encontrarlo)
 
 
 def get_update_multiple_handicaps_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = Depends(get_aviso_de_la_rfeg),
 ) -> UpdateMultipleHandicapsUseCase:
     """
     Proveedor del caso de uso UpdateMultipleHandicapsUseCase.
@@ -289,7 +298,7 @@ def get_update_multiple_handicaps_use_case(
     3. Crea una instancia de `UpdateMultipleHandicapsUseCase`.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateMultipleHandicapsUseCase(uow, handicap_service)
+    return UpdateMultipleHandicapsUseCase(uow, handicap_service, al_encontrarlo)
 
 
 def get_update_handicap_manually_use_case(

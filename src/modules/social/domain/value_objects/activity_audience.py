@@ -64,6 +64,17 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.PLACE_FROM_WAITING_LIST: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_NO_PLACE: ActivityAudience.SELF,
     ActivityEventType.TEE_WINDOW_REMOVED: ActivityAudience.SELF,
+    # Los hándicaps sin actualizar con la RFEG (15 nov 2026): asunto del
+    # organizador y de cada jugador no encontrado
+    ActivityEventType.HANDICAPS_NOT_UPDATED: ActivityAudience.SELF,
+    ActivityEventType.RFEG_HANDICAP_NOT_FOUND: ActivityAudience.SELF,
+    # Del cierre por el plazo (15 nov 2026): del organizador, que es quien los recibe
+    ActivityEventType.ENROLLMENTS_CLOSED: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED: ActivityAudience.SELF,
+    # Invitaciones con la inscripción cerrada (15 nov 2026): del invitado y del
+    # organizador, que son quienes los reciben
+    ActivityEventType.INVITATION_ACCEPTABLE_AGAIN: ActivityAudience.SELF,
+    ActivityEventType.TEAMS_UNDONE_BY_ENTRY: ActivityAudience.SELF,
 }
 
 

@@ -48,6 +48,10 @@ from src.modules.competition.application.services.partidas_del_jugador import (
     que_no_se_quede_solo,
 )
 from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
+from src.modules.competition.application.services.solicitudes_al_empezar import (
+    CerradoAlEmpezar,
+    avisar_de_lo_cerrado,
+)
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     arrancar_la_competicion,
@@ -56,7 +60,6 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     comprobar_que_se_juega,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
     ULTIMO_HOYO,
@@ -152,7 +155,7 @@ class CorregirHoyoDePartidaUseCase:
         llegada = self._reloj()
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
-        cerradas: list[Enrollment] = []
+        cerrado = CerradoAlEmpezar()
         async with self._uow:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             jugador = _del_jugador(partida, user_id)
@@ -164,7 +167,7 @@ class CorregirHoyoDePartidaUseCase:
                     GolpeDePartida.comprobar(getattr(body, campo), acepta_raya)
 
             if competicion.status == CompetitionStatus.CLOSED:
-                cerradas = await arrancar_la_competicion(self._uow, competicion)
+                cerrado = await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await _bloqueada(self._uow, partida)
             # Otra vez, ya bloqueada: pudieron moverlo mientras tanto
             jugador = _del_jugador(bloqueada, user_id)
@@ -195,8 +198,8 @@ class CorregirHoyoDePartidaUseCase:
                     await self._uow.partidas.guardar([bloqueada])
             await self._uow.golpes_de_partida.guardar(golpe)
 
-        # Si este hoyo la arrancó, ya guardado: «tu solicitud se cerró sin plaza»
-        await self._actividad.requests_closed(competicion, cerradas)
+        # Si este hoyo la arrancó, ya guardado: «tu solicitud se cerró sin plaza» y «no hubo plaza» (P3)
+        await avisar_de_lo_cerrado(self._actividad, competicion, cerrado)
 
 
 # Qué lado borrar de un hoyo: el del jugador, el del marcador o los dos

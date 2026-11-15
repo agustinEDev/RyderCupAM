@@ -26,10 +26,11 @@ from src.modules.competition.application.services.decision_del_partido import (
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.application.services.solicitudes_al_empezar import (
-    rechazar_las_solicitudes_pendientes,
+    CerradoAlEmpezar,
+    avisar_de_lo_cerrado,
+    cerrar_lo_pendiente,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -72,7 +73,7 @@ class SubmitHoleScoreUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa. Si el golpe
         # arranca la competicion, las solicitudes que cierra se avisan al final
         self._actividad = AvisosDeActividad(actividad)
-        self._por_avisar: list[tuple[Competition, list[Enrollment]]] = []
+        self._por_avisar: list[tuple[Competition, CerradoAlEmpezar]] = []
 
     async def execute(
         self,
@@ -175,9 +176,9 @@ class SubmitHoleScoreUseCase:
                 )
             await self._check_decided(match, match_id, match_format)
 
-        # Ya guardado: si este golpe la arrancó, «tu solicitud se cerró sin plaza»
-        for competicion, cerradas in self._por_avisar:
-            await self._actividad.requests_closed(competicion, cerradas)
+        # Ya guardado: si este golpe la arrancó, «tu solicitud se cerró sin plaza» y «no hubo plaza» (P3)
+        for competicion, cerrado in self._por_avisar:
+            await avisar_de_lo_cerrado(self._actividad, competicion, cerrado)
 
         # Return full scoring view
         from src.modules.competition.application.use_cases.get_scoring_view_use_case import (  # noqa: PLC0415
@@ -291,8 +292,8 @@ class SubmitHoleScoreUseCase:
             )
 
         if not competition.is_in_progress():
-            cerradas = await self._arranca_la_competicion(competition.id, no_se_puede)
-            self._por_avisar.append((competition, cerradas))
+            cerrado = await self._arranca_la_competicion(competition.id, no_se_puede)
+            self._por_avisar.append((competition, cerrado))
 
         # Con la fila bloqueada, y releyendo el estado: dos jugadores pueden
         # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
@@ -315,7 +316,7 @@ class SubmitHoleScoreUseCase:
 
     async def _arranca_la_competicion(
         self, competition_id: CompetitionId, no_se_puede: MatchNotScoringError
-    ) -> list[Enrollment]:
+    ) -> CerradoAlEmpezar:
         """Pone la competición en juego con su fila bloqueada (BE #375).
 
         Dos primeros golpes a la vez la arrancarían dos veces: el segundo espera
@@ -326,14 +327,14 @@ class SubmitHoleScoreUseCase:
         if competition is None:
             raise no_se_puede
         if competition.is_in_progress():
-            return []
+            return CerradoAlEmpezar()
         if competition.status != CompetitionStatus.CLOSED:
             raise no_se_puede
         competition.start()
         await self._uow.competitions.update(competition)
-        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes, y
-        # las devuelve para avisar en Actividad cuando se haya guardado (BE-2)
-        return await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
+        # Empezar, como iniciarla a mano, cierra lo pendiente (solicitudes e
+        # invitaciones en espera), y lo devuelve para avisar ya guardado (BE-2, P3)
+        return await cerrar_lo_pendiente(self._uow, competition.id)
 
     async def _update_own_scores(
         self,

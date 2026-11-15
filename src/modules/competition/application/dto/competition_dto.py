@@ -267,7 +267,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -436,7 +436,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -533,7 +533,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         le=MAX_ENROLLMENT_OPENING_DAYS,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
@@ -639,6 +639,54 @@ class HandicapUpdateStatusDTO(BaseModel):
             "Vacío si está completa o cortada."
         ),
     )
+    not_updated_players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "Exactamente la lista del aviso al organizador «{N} jugadores sin actualizar "
+            "con la RFEG» (15 nov 2026): no encontrados, fallidos o sin preguntar, "
+            "españoles (y todos si la competición es en España). Se rellena con la "
+            "competición cerrada y la última actualización terminada (completa o "
+            "incompleta); mientras se vuelve a pasar una incompleta, lo que dejó esa "
+            "pasada, del que sale quien la RFEG ya haya encontrado (como en el aviso). "
+            "Vacía en la primera pasada en curso, cortada, o con la competición ya "
+            "empezada."
+        ),
+    )
+
+
+class HandicapsNotUpdatedAsOrganizerDTO(BaseModel):
+    """Una competición que organizo con jugadores sin actualizar con la RFEG (H2, 15 nov 2026)."""
+
+    competition_id: UUID
+    competition_name: str
+    count: int = Field(..., description="Cuántos se quedaron sin actualizar.")
+    players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "Quiénes, con el nombre que eligieron para la competición: los españoles, "
+            "y todos si la competición es en España."
+        ),
+    )
+
+
+class HandicapNotFoundAsPlayerDTO(BaseModel):
+    """Una competición en la que la RFEG no encontró mi hándicap (H3, 15 nov 2026)."""
+
+    competition_id: UUID
+    competition_name: str
+
+
+class MyHandicapsNotUpdatedDTO(BaseModel):
+    """
+    Los hándicaps sin actualizar con la RFEG, para «Requiere tu Atención» (15 nov 2026).
+
+    Solo de competiciones cerradas y sin empezar, con su última actualización ya
+    terminada. Desaparece solo: al empezar la competición, o cuando el hándicap
+    se actualiza (desde el perfil o en otra pasada).
+    """
+
+    as_organizer: list[HandicapsNotUpdatedAsOrganizerDTO] = Field(default_factory=list)
+    as_player: list[HandicapNotFoundAsPlayerDTO] = Field(default_factory=list)
 
 
 class HandicapUpdateWindowDTO(BaseModel):
@@ -794,11 +842,32 @@ class CompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Cuántos días antes del torneo se abren solas las inscripciones, de "
-            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "2 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
             "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
             "apertura se mueve con él. Sin esto, la competición nace con las "
             "inscripciones ya abiertas."
         ),
+    )
+    # El plazo de inscripción (15-16 nov 2026)
+    enrollment_deadline: datetime | None = Field(
+        None,
+        description=(
+            "Hasta cuándo se apunta uno: las 12:00 del día anterior al torneo, en la "
+            "zona del primer campo (Europe/Madrid sin campo), con su desfase "
+            "(p. ej. 2026-11-19T12:00:00+01:00). Null sin fecha de inicio."
+        ),
+    )
+    enrollment_deadline_applies: bool = Field(
+        True,
+        description=(
+            "Si el plazo cuenta para ella. False mientras esté abierta y exenta: el "
+            "organizador la abrió o reabrió a mano pasado el plazo, y sigue abierta "
+            "hasta que la cierre él."
+        ),
+    )
+    enrollment_closed_by_deadline: bool = Field(
+        False,
+        description="Si las inscripciones las cerró el plazo y no el organizador.",
     )
     visibility: str = Field(
         ...,

@@ -234,4 +234,13 @@ class TestTipos:
             "PLACE_FROM_WAITING_LIST",
             "ENROLLMENT_NO_PLACE",
             "TEE_WINDOW_REMOVED",
+            # Hándicaps sin actualizar con la RFEG (H2 y H3, 15 nov 2026)
+            "HANDICAPS_NOT_UPDATED",
+            "RFEG_HANDICAP_NOT_FOUND",
+            # Cierre de inscripciones por el plazo (15 nov 2026)
+            "ENROLLMENTS_CLOSED",
+            "ENROLLMENT_CLOSE_BLOCKED",
+            # Invitaciones con la inscripción cerrada (15 nov 2026)
+            "INVITATION_ACCEPTABLE_AGAIN",
+            "TEAMS_UNDONE_BY_ENTRY",
         }

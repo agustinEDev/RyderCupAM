@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CloseBlockedReason,
     CompetitionActivityPublisherInterface,
     TeeTimeAssignment,
 )
@@ -129,6 +130,28 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             _ref(competition), [(e.user_id, str(e.id.value)) for e in enrollments]
         )
 
+    async def enrollments_closed(self, competition: Competition) -> None:
+        """Al organizador: el plazo cerro las inscripciones (C5)."""
+        await self._notices.enrollments_closed(competition.creator_id, _ref(competition))
+
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        """Al organizador: el plazo no pudo cerrarlas, con el motivo y cuantos (C4)."""
+        await self._notices.close_blocked(
+            competition.creator_id, _ref(competition), reason.value, players
+        )
+
+    async def enrollments_closed_withdrawn(self, competition: Competition) -> None:
+        """Al organizador se le retira el «se han cerrado» al reabrirse sola (O2)."""
+        await self._notices.enrollments_closed_withdrawn(
+            competition.creator_id, str(competition.id.value)
+        )
+
+    async def close_block_withdrawn(self, competition: Competition) -> None:
+        """Al organizador se le retira el «no se puede cerrar» (C4)."""
+        await self._notices.close_block_withdrawn(competition.creator_id, str(competition.id.value))
+
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
     ) -> None:
@@ -173,6 +196,59 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
                 if i.invitee_user_id is not None
             ]
         )
+
+    async def invitations_acceptable_again(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """A cada invitado con cuenta, «ya puedes aceptar», por su invitación (P2)."""
+        await self._notices.invitations_acceptable_again(
+            _ref(competition),
+            [
+                (i.invitee_user_id, str(i.id.value))
+                for i in invitations
+                if i.invitee_user_id is not None
+            ],
+        )
+
+    async def invitations_no_place(
+        self, competition: Competition, invitations: Sequence[Invitation]
+    ) -> None:
+        """A cada invitado con cuenta que esperaba, su «no hubo plaza», por su invitación (P3)."""
+        await self._notices.no_place(
+            _ref(competition),
+            [
+                (i.invitee_user_id, str(i.id.value))
+                for i in invitations
+                if i.invitee_user_id is not None
+            ],
+        )
+
+    async def teams_undone_by_entry(self, competition: Competition, enrollment: Enrollment) -> None:
+        """Al organizador: entró alguien y los equipos se deshicieron (B3)."""
+        await self._notices.teams_undone_by_entry(
+            competition.creator_id,
+            enrollment.user_id,
+            _ref(competition),
+            str(enrollment.id.value),
+            use_real_name=enrollment.use_real_name,
+        )
+
+    async def teams_formed(self, competition: Competition) -> None:
+        """
+        Al organizador se le retiran los «equipos deshechos» de esa competición (B3).
+
+        Se relee el reparto justo antes, como `enrolled` relee la inscripción: si al
+        llegar este aviso alguien ya los volvió a deshacer, su «se han deshecho» es
+        cierto y se queda (CodeRabbit, #867). Sin comparar horas: el reparto guarda la
+        local y los avisos, UTC.
+        """
+        async with self._competition_uow:
+            formados = await self._competition_uow.team_assignments.find_by_competition(
+                competition.id
+            )
+        if formados is None:
+            return
+        await self._notices.teams_undone_withdrawn(str(competition.id.value))
 
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
@@ -344,6 +420,28 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             ]
 
         await self._notices.tee_times(_ref(competition), str(round_id.value), _vigentes)
+
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        """Al organizador, cuántos se quedaron sin actualizar con la RFEG (H2)."""
+        await self._notices.handicaps_not_updated(competition.creator_id, _ref(competition), count)
+
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """A cada español al que la RFEG no encontró, el suyo (H3)."""
+        await self._notices.handicap_not_found(_ref(competition), list(user_ids))
+
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        """Ya no queda nadie sin actualizar: se retira el del organizador (D3)."""
+        await self._notices.handicaps_not_updated_withdrawn(
+            competition.creator_id, str(competition.id.value)
+        )
+
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """A quien ya no es un no encontrado, se le retira el suyo (D3)."""
+        await self._notices.handicap_not_found_withdrawn(str(competition.id.value), list(user_ids))
 
 
 def _franja(franja: Round) -> TeeWindowRef:

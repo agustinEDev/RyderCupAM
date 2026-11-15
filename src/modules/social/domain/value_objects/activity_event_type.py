@@ -53,6 +53,21 @@ class ActivityEventType(StrEnum):
     ENROLLMENT_NO_PLACE = "ENROLLMENT_NO_PLACE"
     # Se borro la franja en cuya espera estaba, la ultima suya, y salio
     TEE_WINDOW_REMOVED = "TEE_WINDOW_REMOVED"
+    # Hándicaps sin actualizar con la RFEG (15 nov 2026): «N jugadores sin
+    # actualizar con la RFEG en X» para el organizador, y «no hemos encontrado
+    # tu hándicap en la RFEG para X» para el jugador español
+    HANDICAPS_NOT_UPDATED = "HANDICAPS_NOT_UPDATED"
+    RFEG_HANDICAP_NOT_FOUND = "RFEG_HANDICAP_NOT_FOUND"
+    # El plazo de inscripcion (15 nov 2026), para el organizador: «se han
+    # cerrado las inscripciones de X» y «N jugadores sin franja (o sin
+    # hándicap) en X: colócalos y cierra»
+    ENROLLMENTS_CLOSED = "ENROLLMENTS_CLOSED"
+    ENROLLMENT_CLOSE_BLOCKED = "ENROLLMENT_CLOSE_BLOCKED"
+    # Invitaciones con la inscripción cerrada (15 nov 2026): para el invitado,
+    # «ya puedes aceptar la invitación» al reabrirse (P2); para el organizador,
+    # que alguien entró y los equipos se deshicieron, hay que volver a formarlos (B3)
+    INVITATION_ACCEPTABLE_AGAIN = "INVITATION_ACCEPTABLE_AGAIN"
+    TEAMS_UNDONE_BY_ENTRY = "TEAMS_UNDONE_BY_ENTRY"
 
     @property
     def is_achievement(self) -> bool:

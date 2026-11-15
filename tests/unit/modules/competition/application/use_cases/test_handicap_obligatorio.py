@@ -4,7 +4,8 @@ Para jugar un Stableford o un Medal hace falta hándicap (#251, decidido el 7 oc
 Como en los torneos de la RFEG: sin hándicap no se entra. El del perfil, o uno
 personalizado que ponga el organizador. Se exige por los mismos caminos que el
 género: crear la competición (el organizador queda inscrito), pedir plaza,
-aceptar una invitación, la inscripción directa y aprobar una solicitud. Y el
+aceptar una invitación y aprobar una solicitud (la inscripción directa del
+organizador se fue el 15 nov 2026, B-02). Y el
 organizador nunca puede dejar a nadie sin ninguno, ni tocarlo con las
 inscripciones cerradas. La Ryder no cambia.
 """
@@ -21,7 +22,6 @@ from src.modules.competition.application.dto.competition_dto import (
     StrokePlaySettingsDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
-    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
     RequestEnrollmentRequestDTO,
     SetCustomHandicapRequestDTO,
@@ -32,9 +32,6 @@ from src.modules.competition.application.services.handicap_obligatorio import (
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -163,27 +160,6 @@ class TestParaEntrarHaceFaltaHandicap:
 
         await RequestEnrollmentUseCase(e.uow, e.usuarios).execute(
             RequestEnrollmentRequestDTO(competition_id=torneo.value, user_id=con.value)
-        )
-
-    async def test_la_inscripcion_directa_sin_handicap_pide_uno_personalizado(self, e):
-        torneo = await e.torneo()
-        sin = e.usuarios.alta(None)
-
-        with pytest.raises(HandicapRequiredError, match="personalizado"):
-            await DirectEnrollPlayerUseCase(e.uow, e.usuarios).execute(
-                DirectEnrollPlayerRequestDTO(competition_id=torneo.value, user_id=sin.value),
-                e.creador,
-            )
-
-    async def test_la_inscripcion_directa_con_personalizado_si(self, e):
-        torneo = await e.torneo()
-        sin = e.usuarios.alta(None)
-
-        await DirectEnrollPlayerUseCase(e.uow, e.usuarios).execute(
-            DirectEnrollPlayerRequestDTO(
-                competition_id=torneo.value, user_id=sin.value, custom_handicap=Decimal("18.0")
-            ),
-            e.creador,
         )
 
     async def test_aprobar_una_solicitud_de_quien_no_tiene_handicap_no_se_puede(self, e):

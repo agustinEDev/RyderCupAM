@@ -1111,12 +1111,24 @@ The Ryder Cup Friends Team
             f"Hándicaps sin actualizar en {safe_competition} | "
             f"Handicaps not updated in {safe_competition}"
         )
+        # El texto aprobado por Agustín el 16 nov 2026: en la lista hay también no
+        # encontrados y extranjeros, y para ellos reintentar no sirve
+        a_mano = (
+            "A los que no se encontraron, o no tienen licencia española, ponles el "
+            "hándicap a mano desde la ficha de la competición. Si la RFEG no respondió, "
+            "vuelve a intentarlo con «Actualizar hándicaps»."
+        )
+        by_hand = (
+            "For those who weren't found, or don't have a Spanish licence, set their "
+            "handicap by hand from the competition page. If the RFEG didn't respond, try "
+            'again with "Update handicaps".'
+        )
         text_body = f"""
 Hola {safe_organizer},
 
-En "{safe_competition}" no se pudo actualizar con la RFEG el hándicap de: {lista}.
+Estos jugadores no se han podido actualizar con la RFEG en {safe_competition}: {lista}. {a_mano}
 
-Siguen con el hándicap que tenían. Puedes volver a intentarlo con el botón «Actualizar hándicaps» de la competición: {enlace}
+{enlace}
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -1125,9 +1137,9 @@ El equipo de Ryder Cup Friends
 
 Hello {safe_organizer},
 
-In "{safe_competition}", the RFEG handicap could not be updated for: {lista}.
+These players could not be updated with the RFEG in {safe_competition}: {lista}. {by_hand}
 
-They keep their previous handicap. You can try again with the "Update handicaps" button on the competition: {enlace}
+{enlace}
 
 Best regards,
 The Ryder Cup Friends Team
@@ -1143,19 +1155,20 @@ The Ryder Cup Friends Team
                 parrafo(
                     "Hola ",
                     negrita(safe_organizer),
-                    ", no se pudo actualizar con la RFEG el hándicap de estos jugadores:",
+                    ", estos jugadores no se han podido actualizar con la RFEG en ",
+                    negrita(safe_competition),
+                    ":",
                 ),
                 recuadro(safe_competition, *nombres),
-                parrafo(
-                    "Siguen con el hándicap que tenían. Puedes volver a intentarlo con el "
-                    "botón «Actualizar hándicaps» de la competición."
-                ),
+                parrafo(a_mano),
             ],
             boton=Boton("Ver la competición", enlace),
             ingles=Ingles(
                 frase(
-                    negrita(f"Handicaps not updated in {safe_competition}"),
-                    f": {lista}. Try again with the Update handicaps button.",
+                    negrita(
+                        f"These players could not be updated with the RFEG in {safe_competition}"
+                    ),
+                    f": {lista}. {by_hand}",
                 ),
                 Boton("View competition", enlace),
             ),
@@ -1164,6 +1177,90 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
+
+    async def send_handicap_not_found_email(
+        self,
+        to_email: str,
+        player_name: str,
+        competition_name: str,
+    ) -> bool:
+        """
+        Avisa al jugador español al que la RFEG no encontró (H3, 15 nov 2026).
+
+        Con el texto aprobado por Agustín el 15 nov 2026. Bilingüe (ES/EN), con la
+        plantilla común de los correos (BE #389). El botón abre la edición de su
+        perfil, que es donde se corrige el nombre y se vuelve a pedir a la RFEG.
+        """
+        safe_player = self._sanitize_name(player_name)
+        safe_competition = self._sanitize_name(competition_name)
+        enlace = f"{settings.FRONTEND_URL}/profile/edit"
+        revisa = (
+            "Revisa que tu nombre y apellidos en tu perfil sean los de tu licencia, "
+            "y vuelve a pedirlo desde tu perfil."
+        )
+        check = (
+            "Check that the first and last names in your profile match your licence, "
+            "and request it again from your profile."
+        )
+
+        subject = (
+            f"No hemos encontrado tu hándicap en la RFEG para {safe_competition} | "
+            f"We could not find your RFEG handicap for {safe_competition}"
+        )
+        text_body = f"""
+Hola {safe_player},
+
+No hemos encontrado tu hándicap en la RFEG para {safe_competition}. {revisa}
+
+{enlace}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_player},
+
+We could not find your handicap in the RFEG for {safe_competition}. {check}
+
+{enlace}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"No hemos encontrado tu hándicap en la RFEG para {safe_competition} · "
+            f"We could not find your RFEG handicap for {safe_competition}",
+            etiqueta="Hándicap",
+            titulo="No hemos encontrado tu hándicap",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_player),
+                    ", no hemos encontrado tu hándicap en la RFEG para ",
+                    negrita(safe_competition),
+                    ".",
+                ),
+                parrafo(revisa),
+            ],
+            boton=Boton("Ir a mi perfil", enlace),
+            ingles=Ingles(
+                frase(
+                    negrita(f"We could not find your handicap in the RFEG for {safe_competition}"),
+                    f". {check}",
+                ),
+                Boton("Go to my profile", enlace),
+            ),
+            pie="Te llega porque juegas esta competición en RyderCupFriends. "
+            "You get this because you play this competition on RyderCupFriends.",
+        )
+
+        recipient = f'"{safe_player}" <{to_email}>'
         return await self._send_email(
             recipient, subject, text_body, html_body, puede_ir_por_brevo=True
         )

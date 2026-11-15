@@ -21,8 +21,9 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     exigir_sitio,
 )
+from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
 from src.modules.competition.application.services.equipos_formados import (
-    exigir_sin_equipos_formados,
+    exigir_que_se_pueda_invitar,
 )
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.lo_que_ve_el_organizador import (
@@ -31,6 +32,10 @@ from src.modules.competition.application.services.lo_que_ve_el_organizador impor
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
+)
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+    exigir_el_plazo,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.invitation import Invitation
@@ -65,8 +70,11 @@ class SendInvitationByEmailUseCase:
         user_uow: UserUnitOfWorkInterface,
         email_service: IInvitationEmailService | None = None,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         self._uow = uow
+        # Pasado el plazo de inscripción no se invita (C2, 15 nov 2026); sin él, no se mira
+        self._plazo = plazo
         self._user_uow = user_uow
         self._email_service = email_service
         # Los avisos de Actividad (BE-2); sin el, no se avisa
@@ -130,10 +138,19 @@ class SendInvitationByEmailUseCase:
                     "Only the competition creator can send invitations."
                 )
 
-            # 3. Validar estado de competicion
+            # 3. Una programada a la que ya le tocaba se abre a su hora, no ahora:
+            #    abrirla tarde no la exime del plazo (F7, 16 nov 2026)
+            await EnrollmentOpener.abrir_las_que_toquen(
+                [competition], self._uow, self._plazo.zonas if self._plazo else None
+            )
+            # Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
-            # Con los equipos formados no podría aceptarse (30 oct 2026)
-            await exigir_sin_equipos_formados(self._uow, competition.id)
+            # Pasado el plazo, aunque siga abierta, no (C2). Una programada se abrió
+            # justo antes a su hora, así que tampoco: invitar no la exime (O3)
+            await exigir_el_plazo(self._plazo, competition)
+            # Con los equipos formados, solo si al aceptarla se pueden deshacer (sin
+            # partidos), y nunca con la sala de draft abierta (B3, 15 nov 2026)
+            await exigir_que_se_pueda_invitar(self._uow, competition)
 
             # 4 y 5a. Buscar user por email (puede no existir); no a uno mismo
             invitee_user = await self._cuenta_del_correo(request.invitee_email, inviter_id)
@@ -209,9 +226,10 @@ class SendInvitationByEmailUseCase:
             # 8. Persistir
             await self._uow.invitations.add(invitation)
 
-            # 10. Y con la primera invitacion se abren las inscripciones (BE #319).
-            # Aqui y no antes: abrir y fallar luego dejaria el torneo abierto sin
-            # nadie invitado, que es medio arranque
+            # 10. Y con la primera invitacion se abren las inscripciones (BE #319),
+            # si todavía no le tocaba abrirse (una a la que ya le tocaba se abrió
+            # arriba a su hora: invitar no la exime del plazo, O3). Aqui y no antes:
+            # abrir y fallar luego dejaria el torneo abierto sin nadie invitado
             if CompetitionPolicy.invitation_opens_enrollment(competition.status):
                 competition.activate()
                 await self._uow.competitions.update(competition)

@@ -154,6 +154,18 @@ class DuplicateInvitationViolation(BusinessRuleViolation):
     pass
 
 
+class InvitationOnHoldExistsViolation(DuplicateInvitationViolation):
+    """Ya tiene una invitacion en lista de espera a esa competicion: no se manda otra
+    (revision, 15 nov 2026). Hija de la de duplicada, para quien ya la capture."""
+
+    error_code = "INVITATION_ON_HOLD_EXISTS"
+    # Texto pendiente de aprobar por Agustín
+    MENSAJE = "Esa persona ya tiene una invitación en lista de espera."
+
+    def __init__(self) -> None:
+        super().__init__(self.MENSAJE)
+
+
 class InvitationExpiredViolation(BusinessRuleViolation):
     """Lanzada cuando la invitacion ya ha expirado."""
 
@@ -179,6 +191,23 @@ class InvitationNoRoomViolation(InvalidInvitationStatusViolation):
 
     error_code = "INVITATION_NO_ROOM"
     MENSAJE = "Esta invitación se quedó sin plaza"
+
+    def __init__(self) -> None:
+        super().__init__(self.MENSAJE)
+
+
+class InvitationOnHoldViolation(InvalidInvitationStatusViolation):
+    """La invitacion espera a que se reabra la inscripcion: no se acepta (P1, 15 nov 2026).
+
+    Hija de la de estado, como la de sin plaza: quien ya la capture no nota nada.
+    El texto es el aprobado por Agustín para el invitado.
+    """
+
+    error_code = "INVITATION_ON_HOLD"
+    MENSAJE = (
+        "En lista de espera: la inscripción está cerrada. "
+        "Si el organizador la reabre, podrás aceptarla."
+    )
 
     def __init__(self) -> None:
         super().__init__(self.MENSAJE)

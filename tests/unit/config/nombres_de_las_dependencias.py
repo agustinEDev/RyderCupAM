@@ -13,6 +13,8 @@ NOMBRES_DE_ANTES = (
     "_generador_al_abrir",
     "_recent_hole_report_senders",
     "_recent_hole_sample_senders",
+    # Actividad para la pasada de hándicaps en segundo plano (15 nov 2026)
+    "actividad_en_sesion_propia",
     "get_accept_terms_use_case",
     "get_activate_competition_use_case",
     "get_activate_uploaded_avatar_use_case",
@@ -27,6 +29,8 @@ NOMBRES_DE_ANTES = (
     "get_admin_set_user_active_use_case",
     "get_admin_update_user_use_case",
     "get_amigos",
+    # El aviso de la RFEG desde el perfil, con el interruptor del refresco (16 nov 2026)
+    "get_aviso_de_la_rfeg",
     "get_anotar_hoyo_de_partida_use_case",
     "get_anular_programacion_use_case",
     "get_approve_golf_course_use_case",
@@ -81,7 +85,6 @@ NOMBRES_DE_ANTES = (
     "get_delete_hole_sample_use_case",
     "get_delete_profile_photo_use_case",
     "get_delete_round_use_case",
-    "get_direct_enroll_player_use_case",
     "get_discard_hole_report_use_case",
     "get_draft_use_case",
     "get_email_service",
@@ -136,6 +139,7 @@ NOMBRES_DE_ANTES = (
     "get_list_hole_reviews_use_case",
     "get_list_hole_samples_use_case",
     "get_list_my_avatar_uploads_use_case",
+    "get_list_my_handicaps_not_updated_use_case",
     "get_list_my_invitations_use_case",
     "get_list_my_pending_envelopes_use_case",
     "get_list_my_quick_matches_use_case",
@@ -192,6 +196,8 @@ NOMBRES_DE_ANTES = (
     "get_reopen_hole_use_case",
     "get_reordenar_partidas_use_case",
     "get_reorder_golf_courses_use_case",
+    # El plazo de inscripción, uno para todas las puertas (16 nov 2026, F9)
+    "get_plazo_de_inscripcion",
     "get_request_enrollment_use_case",
     "get_request_golf_course_use_case",
     "get_request_password_reset_use_case",

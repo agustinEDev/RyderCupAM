@@ -12,6 +12,11 @@ actualización y se lanza esta pasada en segundo plano.
 - Si alguien se queda sin actualizar, la actualización queda **incompleta** y
   se avisa al organizador por correo. Una pasada sobre una incompleta termina
   solo lo que falta.
+- **Al terminar** (15 nov 2026, H1-H6), el organizador recibe la lista de los
+  que se quedaron sin actualizar con la RFEG (los españoles, y todos si la
+  competición es en España), por correo y en Actividad; y cada español al que
+  la RFEG no encontró en esta pasada, su correo y su aviso. Si la RFEG falló,
+  al jugador nada.
 - Si la competición empieza a mitad, la actualización se corta y la pasada
   para: lo pendiente se queda como estaba.
 
@@ -25,11 +30,10 @@ Cómo:
 - **Todo queda apuntado**, también lo que falla de forma inesperada.
 """
 
+import hashlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
@@ -39,21 +43,30 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
+from src.modules.competition.application.services.aviso_del_organizador import (
+    poner_al_dia_el_del_organizador,
+)
 from src.modules.competition.application.services.avisos_al_organizador import (
     AvisosAlOrganizador,
 )
+from src.modules.competition.application.services.avisos_de_actividad import (
+    AvisosDeActividad,
+    FabricaDeActividad,
+)
+from src.modules.competition.application.services.fijado_de_la_rfeg import (
+    FabricaDeHerramientas,
+    Herramientas,
+    corregir_el_fijado,
+)
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
-from src.modules.competition.application.services.jugadores_de_la_partida import (
-    JugadoresDeLaPartida,
-)
-from src.modules.competition.application.services.partidas_de_la_franja import (
-    recalcular_su_handicap,
-)
 from src.modules.competition.application.services.pendientes_de_actualizar import (
     PendientesDeActualizar,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.application.services.sin_actualizar_de_la_competicion import (
+    SinActualizarDeLaCompeticion,
+)
 from src.modules.competition.application.services.ventana_de_la_competicion import ventana_de
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
@@ -65,14 +78,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     MAX_INTENTOS,
+    CorreoDeActualizacion,
     ResultadoRefresco,
 )
-from src.modules.golf_course.domain.repositories.golf_course_repository import (
-    IGolfCourseRepository,
-)
-from src.modules.user.domain.repositories.user_repository_interface import (
-    UserRepositoryInterface,
-)
+from src.modules.competition.domain.services.sin_actualizar_con_la_rfeg import SinActualizar
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -83,28 +92,9 @@ PAUSA_ENTRE_JUGADORES = 2.0
 PAUSA_ENTRE_INTENTOS = 5.0
 
 
-@dataclass(frozen=True)
-class Herramientas:
-    """
-    Lo que hace falta para una parte de la pasada, sobre una misma sesión.
-
-    La competición y los usuarios TIENEN que compartir sesión: el hándicap nuevo
-    del perfil se guarda con los usuarios y se confirma al cerrar la unidad de
-    trabajo de la competición. Con sesiones distintas se perdería sin error
-    (CodeRabbit en la #507).
-    """
-
-    competiciones: CompetitionUnitOfWorkInterface
-    usuarios: UserRepositoryInterface
-    # Para la ventana: la pasada se corta 10 s por jugador antes de la salida
-    zonas: ICompetitionTimezone
-    # Para rehacer el hándicap de juego de sus partidas al corregir el fijado (#251,
-    # G1). Sin campos, las partidas no se tocan (los tests que no las usan)
-    campos: IGolfCourseRepository | None = None
-
-
-# Da herramientas nuevas cada vez, y las cierra al salir
-FabricaDeHerramientas = Callable[[], AbstractAsyncContextManager[Herramientas]]
+def _huella(lista: list[UserId]) -> str:
+    """La huella de una lista del organizador: la misma con los mismos jugadores."""
+    return hashlib.sha256(",".join(sorted(str(u.value) for u in lista)).encode()).hexdigest()
 
 
 class RefrescarHandicapsUseCase:
@@ -117,6 +107,7 @@ class RefrescarHandicapsUseCase:
         avisos: IHandicapUpdateEmailService | None,
         reloj: Callable[[], datetime],
         esperar: Callable[[float], Awaitable[None]],
+        actividad: FabricaDeActividad | None = None,
     ):
         """
         Args:
@@ -126,12 +117,15 @@ class RefrescarHandicapsUseCase:
             avisos: El correo al organizador si queda alguien sin actualizar
             reloj: La hora actual, con huso
             esperar: Las pausas
+            actividad: Monta Actividad para los avisos al terminar (15 nov 2026),
+                solo cuando hay que avisar (T1)
         """
         self._herramientas = herramientas
         self._handicap_service = handicap_service
         self._avisos = AvisosAlOrganizador(avisos)
         self._reloj = reloj
         self._esperar = esperar
+        self._actividad = actividad
 
     async def execute(self, update_id: uuid.UUID) -> int:
         """
@@ -204,10 +198,16 @@ class RefrescarHandicapsUseCase:
         En tres pasos para no tener la transacción abierta mientras la RFEG
         contesta: leer al jugador, preguntar, y apuntar (que es cuando se
         guarda también su hándicap nuevo y se corrige el fijado).
+
+        Lo que su perfil apuntó como actualizado mientras tanto no se pisa
+        (R2): se mira antes de preguntar, y al apuntar no lo pisa el propio
+        repositorio, en la misma sentencia.
         """
         try:
             async with self._herramientas() as h:
-                async with h.competiciones:
+                async with h.competiciones as uow:
+                    if await self._ya_actualizado(uow, update_id, user_id):
+                        return ResultadoRefresco.ACTUALIZADO
                     jugador = await h.usuarios.find_by_id(user_id)
                 if jugador is None:
                     # Ya no existe: no hay a quién preguntar, ni ahora ni luego
@@ -233,6 +233,14 @@ class RefrescarHandicapsUseCase:
             logger.exception("No se pudo refrescar el hándicap de %s", user_id)
             await self._apuntar_el_fallo(update_id, user_id)
             return ResultadoRefresco.FALLIDO
+
+    @staticmethod
+    async def _ya_actualizado(
+        uow: CompetitionUnitOfWorkInterface, update_id: uuid.UUID, user_id: UserId
+    ) -> bool:
+        """Si ya está apuntado como actualizado (lo apuntó su perfil, R2)."""
+        intento = await uow.handicap_updates.resultado_de(update_id, user_id)
+        return intento is not None and intento.resultado is ResultadoRefresco.ACTUALIZADO
 
     async def _corregir(
         self,
@@ -260,17 +268,7 @@ class RefrescarHandicapsUseCase:
             and actualizacion.sigue()
             and await self._dentro_de_la_ventana(uow, h.zonas, competicion, actualizacion)
         ):
-            await HandicapsAlCerrar(uow, h.usuarios).corregir(competicion, user_id, nuevo)
-            # Y sus partidas sin salir, con su hándicap de juego nuevo (G1)
-            if h.campos is not None:
-                await recalcular_su_handicap(
-                    uow,
-                    JugadoresDeLaPartida(h.campos, h.usuarios),
-                    competicion,
-                    user_id,
-                    zonas=h.zonas,
-                    ahora=self._reloj(),
-                )
+            await corregir_el_fijado(uow, h, competicion, user_id, nuevo, self._reloj())
 
     @staticmethod
     async def _bloquear(uow: CompetitionUnitOfWorkInterface, update_id: uuid.UUID) -> None:
@@ -293,7 +291,14 @@ class RefrescarHandicapsUseCase:
     async def _terminar(self, update_id: uuid.UUID) -> None:
         """
         Completa, o incompleta si alguien se quedó sin actualizar; y entonces se
-        avisa al organizador, ya fuera de la transacción.
+        avisa, ya fuera de la transacción (H1-H6, 15 nov 2026): al organizador,
+        si alguien se quedó sin actualizar con la RFEG; y a cada español al que
+        la RFEG no encontró (lo apuntado, también de una pasada anterior).
+
+        Los correos no se repiten (D2, 16 nov 2026): al jugador, uno por
+        competición; al organizador, otra vez solo si cambió la lista. Se
+        apuntan en la misma transacción, antes de enviarlos: un correo que
+        falle no se reintenta, pero dos pasadas a la vez no lo mandan dos veces.
         """
         async with self._herramientas() as h, h.competiciones as uow:
             actualizacion = await uow.handicap_updates.find_by_id(update_id)
@@ -310,10 +315,83 @@ class RefrescarHandicapsUseCase:
             # categorías iguales se rehacen con los corregidos (10 oct 2026)
             if actualizacion.origen is OrigenActualizacion.CIERRE:
                 await HandicapsAlCerrar(uow, h.usuarios).repartir_de_nuevo(competicion)
-            if not sin_actualizar:
-                return
-            nombres = await PlayerNames.de_la_competicion(
-                sin_actualizar, competicion.id, h.usuarios, uow
+            hecho = await SinActualizarDeLaCompeticion.de(
+                uow, h.usuarios, competicion, actualizacion
             )
-            organizador = await self._avisos.quien(h.usuarios, competicion)
-        await self._avisos.pendientes(organizador, competicion, list(nombres.values()))
+            # Todos los no encontrados apuntados, también los de una pasada que no
+            # llegó a terminar (C2): el correo, uno por competición; Actividad, al día
+            avisar = hecho.no_encontrados
+            nombres = await self._lista_si_cambio(uow, h, competicion, hecho.para_el_organizador)
+            organizador = (
+                await self._avisos.quien(h.usuarios, competicion) if nombres is not None else None
+            )
+            a_escribir = await self._sin_correo_todavia(uow, competicion, avisar)
+            jugadores = await h.usuarios.find_by_ids(a_escribir) if a_escribir else []
+        if nombres is not None:
+            await self._avisos.pendientes(organizador, competicion, nombres)
+        for jugador in jugadores:
+            await self._avisos.no_encontrado(jugador, competicion)
+        await self._en_actividad(competicion, avisar, hecho)
+
+    async def _lista_si_cambio(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        h: Herramientas,
+        competicion: Competition,
+        lista: list[UserId],
+    ) -> list[str] | None:
+        """
+        Los nombres para el correo del organizador, o None si no hay que
+        mandarlo: lista vacía, o la misma que recibió la última vez (D2). Una
+        lista vacía olvida la enviada: si vuelve, se manda otra vez.
+        """
+        correos, organizador = uow.handicap_updates, competicion.creator_id
+        tipo = CorreoDeActualizacion.LISTA_DEL_ORGANIZADOR
+        if not lista:
+            await correos.olvidar_correo(competicion.id, organizador, tipo)
+            return None
+        huella = _huella(lista)
+        if await correos.correo_enviado(competicion.id, organizador, tipo) == huella:
+            return None
+        await correos.apuntar_correo(competicion.id, organizador, tipo, huella, self._reloj())
+        nombres = await PlayerNames.de_la_competicion(lista, competicion.id, h.usuarios, uow)
+        return list(nombres.values())
+
+    async def _sin_correo_todavia(
+        self, uow: CompetitionUnitOfWorkInterface, competicion: Competition, avisar: list[UserId]
+    ) -> list[UserId]:
+        """A quién de los no encontrados no se le escribió nunca en esta competición (D2)."""
+        tipo = CorreoDeActualizacion.NO_ENCONTRADO
+        nuevos = []
+        for user_id in avisar:
+            if await uow.handicap_updates.correo_enviado(competicion.id, user_id, tipo) is None:
+                await uow.handicap_updates.apuntar_correo(
+                    competicion.id, user_id, tipo, "", self._reloj()
+                )
+                nuevos.append(user_id)
+        return nuevos
+
+    async def _en_actividad(
+        self,
+        competicion: Competition,
+        avisar: list[UserId],
+        hecho: SinActualizar,
+    ) -> None:
+        """
+        Los avisos de Actividad, que se renuevan en cada pasada; y los que ya no
+        son ciertos se retiran (D3). Actividad se monta aquí, con la pasada ya
+        terminada: si montarla o cerrarla falla, la pasada no se entera (T1). El
+        del organizador se lee y se publica con la competición bloqueada (R4).
+        """
+        if self._actividad is None:
+            return
+        try:
+            async with self._actividad() as publicador:
+                actividad = AvisosDeActividad(publicador)
+                await actividad.handicap_not_found(competicion, avisar)
+                await actividad.handicap_not_found_withdrawn(competicion, hecho.sin_aviso)
+        except Exception:
+            logger.warning(
+                "Could not publish the RFEG notices of %s", competicion.id.value, exc_info=True
+            )
+        await poner_al_dia_el_del_organizador(self._herramientas, self._actividad, competicion.id)
