@@ -191,3 +191,28 @@ class CompetitionActivityPublisherInterface(ABC):
         llegar la ultima. El adaptador de Actividad relee la ronda con ella
         bloqueada y compara con lo ya publicado (revision del 22 oct 2026).
         """
+
+    @abstractmethod
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        """
+        Al organizador: «{N} jugadores sin actualizar con la RFEG en X» (H2, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """
+        A cada jugador español al que la RFEG no encontró: que revise su nombre
+        y vuelva a pedirlo desde su perfil (H3, 15 nov 2026).
+        """
+
+    @abstractmethod
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        """Ya no queda nadie sin actualizar: el aviso del organizador se retira (D3)."""
+
+    @abstractmethod
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """Ya no son no encontrados: su aviso se retira, si lo tenían (D3)."""

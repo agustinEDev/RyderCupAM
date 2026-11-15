@@ -9,7 +9,7 @@ from typing import Protocol
 
 
 class IHandicapUpdateEmailService(Protocol):
-    """Correo al organizador cuando una actualización de hándicaps queda incompleta."""
+    """Los correos de las actualizaciones de hándicaps: al organizador y al no encontrado."""
 
     async def send_handicaps_pending_email(
         self,
@@ -26,6 +26,24 @@ class IHandicapUpdateEmailService(Protocol):
             competition_name: La competición
             competition_id: Para el enlace a su ficha
             pending_names: Quién se quedó sin actualizar
+
+        Returns:
+            True si se envió
+        """
+
+    async def send_handicap_not_found_email(
+        self,
+        to_email: str,
+        player_name: str,
+        competition_name: str,
+    ) -> bool:
+        """
+        Al jugador español al que la RFEG no encontró (H3, 15 nov 2026).
+
+        Args:
+            to_email: Su correo
+            player_name: Su nombre, el de su perfil
+            competition_name: La competición (el enlace va a su perfil, no a ella)
 
         Returns:
             True si se envió

@@ -15,6 +15,7 @@ from src.config.dependencies import (
     get_complete_competition_use_case,
     get_current_user,
     get_fill_captain_use_case,
+    get_list_my_handicaps_not_updated_use_case,
     get_name_captains_use_case,
     get_name_vice_captain_use_case,
     get_programar_actualizacion_use_case,
@@ -35,6 +36,7 @@ from src.modules.competition.application.dto.competition_dto import (
     FillCaptainRequestDTO,
     HandicapUpdateLaunchedDTO,
     HandicapUpdateRefusedDTO,
+    MyHandicapsNotUpdatedDTO,
     NameCaptainsBodyDTO,
     NameCaptainsRequestDTO,
     NameCaptainsResponseDTO,
@@ -78,6 +80,9 @@ from src.modules.competition.application.use_cases.complete_competition_use_case
 )
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
+)
+from src.modules.competition.application.use_cases.list_my_handicaps_not_updated_use_case import (
+    ListMyHandicapsNotUpdatedUseCase,
 )
 from src.modules.competition.application.use_cases.name_captains_use_case import (
     NameCaptainsUseCase,
@@ -685,6 +690,36 @@ async def cancel_scheduled_handicap_update(
         UserId(str(current_user.id)),
         is_admin=current_user.is_admin,
     )
+
+
+@router.get(
+    "/me/handicaps-not-updated",
+    response_model=MyHandicapsNotUpdatedDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Mis hándicaps sin actualizar con la RFEG",
+    description=(
+        "Alimenta el bloque «Requiere tu Atención» del panel (15 nov 2026). "
+        "`as_organizer`: cada competición que organiza quien pregunta con jugadores sin "
+        "actualizar con la RFEG (los españoles, y todos si la competición es en España). "
+        "`as_player`: cada competición en la que la RFEG no encontró su hándicap (solo "
+        "jugadores españoles; si la RFEG falló, no sale). Solo de competiciones cerradas y "
+        "sin empezar, con la última actualización terminada; deja de salir al empezar la "
+        "competición o al actualizarse el hándicap. Vacío casi siempre."
+    ),
+    tags=["Competitions - State Transitions"],
+)
+# Lo dispara el panel de TODO el mundo en cada montaje, como los sobres
+# pendientes: con el cubo unico de produccion (ADR-038), 60/min daria 429 mudos
+@limiter.limit("300/minute")
+async def list_my_handicaps_not_updated(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ListMyHandicapsNotUpdatedUseCase = Depends(
+        get_list_my_handicaps_not_updated_use_case
+    ),
+):
+    """Lo que tengo que mirar de los hándicaps con la RFEG (15 nov 2026)."""
+    return await use_case.execute(UserId(str(current_user.id)))
 
 
 # El texto de cada motivo, fijo y no el de la excepción (CodeQL, BE #562): las

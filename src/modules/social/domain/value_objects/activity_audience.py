@@ -64,6 +64,10 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.PLACE_FROM_WAITING_LIST: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_NO_PLACE: ActivityAudience.SELF,
     ActivityEventType.TEE_WINDOW_REMOVED: ActivityAudience.SELF,
+    # Los hándicaps sin actualizar con la RFEG (15 nov 2026): asunto del
+    # organizador y de cada jugador no encontrado
+    ActivityEventType.HANDICAPS_NOT_UPDATED: ActivityAudience.SELF,
+    ActivityEventType.RFEG_HANDICAP_NOT_FOUND: ActivityAudience.SELF,
 }
 
 

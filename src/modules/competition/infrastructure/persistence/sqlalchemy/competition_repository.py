@@ -511,3 +511,17 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        """Solo los ids, filtrados por estado en la base, en orden de id (R1)."""
+        if not competition_ids:
+            return []
+        tabla = competitions_table.c
+        result = await self._session.execute(
+            select(tabla.id)
+            .where(tabla.id.in_(competition_ids), tabla.status == status.value)
+            .order_by(tabla.id)
+        )
+        return list(result.scalars().all())

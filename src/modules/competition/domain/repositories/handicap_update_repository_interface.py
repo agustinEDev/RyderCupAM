@@ -15,6 +15,7 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
 )
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    CorreoDeActualizacion,
     Intento,
     ResultadoRefresco,
 )
@@ -54,6 +55,35 @@ class HandicapUpdateRepositoryInterface(ABC):
         momento: datetime,
     ) -> None:
         """Apunta el resultado de un jugador; si ya tenía, lo sustituye y suma un intento."""
+
+    @abstractmethod
+    async def resultado_de(self, update_id: uuid.UUID, user_id: UserId) -> Intento | None:
+        """Lo que contestó la RFEG por un jugador en esa actualización, y nada más."""
+
+    # Los correos ya enviados de una competición, para no repetirlos (D2, 16 nov 2026)
+
+    @abstractmethod
+    async def correo_enviado(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> str | None:
+        """La huella de lo enviado (cadena vacía si no la lleva), o None si no se envió."""
+
+    @abstractmethod
+    async def apuntar_correo(
+        self,
+        competition_id: CompetitionId,
+        user_id: UserId,
+        tipo: CorreoDeActualizacion,
+        huella: str,
+        momento: datetime,
+    ) -> None:
+        """Apunta un correo enviado; si ya había uno, lo sustituye."""
+
+    @abstractmethod
+    async def olvidar_correo(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> None:
+        """Lo enviado deja de contar: el siguiente se enviará."""
 
     # La que deja programada el organizador: una por competición (#251)
 

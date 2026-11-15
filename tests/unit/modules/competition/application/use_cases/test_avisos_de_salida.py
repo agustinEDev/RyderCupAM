@@ -182,6 +182,9 @@ class _Salidas(CompetitionActivityPublisherInterface):
     invitation_answered = invitations_closed = _nada  # type: ignore[assignment]
     # De la inscripcion directa (28 oct 2026)
     joined = placed_from_waiting_list = no_place = window_removed = _nada  # type: ignore[assignment]
+    # Hándicaps sin actualizar con la RFEG (15 nov 2026)
+    handicaps_not_updated = handicap_not_found = _nada  # type: ignore[assignment]
+    handicaps_not_updated_withdrawn = handicap_not_found_withdrawn = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

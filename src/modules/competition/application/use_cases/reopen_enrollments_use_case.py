@@ -36,6 +36,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -126,12 +127,22 @@ class ReopenEnrollmentsUseCase:
             # quedan: lo jugado no se borra (D1, #251)
             borradas = await self._borrar_las_que_no_salieron(competition.id)
 
+            # Sus avisos de hándicaps con la RFEG dejan de ser ciertos (CodeRabbit, #864)
+            inscritos = [
+                i.user_id
+                for i in await self._uow.enrollments.find_by_competition_and_status(
+                    competition.id, EnrollmentStatus.APPROVED
+                )
+            ]
+
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # Sin partida no hay salida: se retiran sus avisos (G4)
         for round_id, salidas in borradas.items():
             await self._actividad.salidas_cambiadas(competition, round_id, salidas, {})
+        await self._actividad.handicaps_not_updated_withdrawn(competition)
+        await self._actividad.handicap_not_found_withdrawn(competition, inscritos)
 
         # 5. Retornar DTO de respuesta
         return ReopenEnrollmentsResponseDTO(

@@ -7,6 +7,10 @@ Caso de uso para actualizar hándicaps de múltiples usuarios.
 
 import logging
 
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
+)
+from src.modules.user.application.services.handicap_de_la_rfeg import avisar_de_la_rfeg
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -30,7 +34,12 @@ class UpdateMultipleHandicapsUseCase:
     pero si un usuario falla, continúa con los demás.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, handicap_service: HandicapService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        handicap_service: HandicapService,
+        al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = None,
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -40,6 +49,8 @@ class UpdateMultipleHandicapsUseCase:
         """
         self._uow = uow
         self._handicap_service = handicap_service
+        # A quien la RFEG dé, sus competiciones cerradas se enteran (R7, 16 nov 2026)
+        self._al_encontrarlo = al_encontrarlo
 
     async def execute(self, user_ids: list[UserId]) -> dict[str, int]:
         """
@@ -70,6 +81,7 @@ class UpdateMultipleHandicapsUseCase:
             "errors": 0,
         }
 
+        encontrados: list[tuple[UserId, float]] = []
         async with self._uow:
             for user_id in user_ids:
                 # 1. Buscar usuario
@@ -88,6 +100,7 @@ class UpdateMultipleHandicapsUseCase:
                         user.update_handicap(handicap_value)
                         await self._uow.users.save(user)
                         stats["updated"] += 1
+                        encontrados.append((user_id, handicap_value))
                     else:
                         # Hándicap no encontrado en RFEG (respuesta válida)
                         stats["no_handicap_found"] += 1
@@ -106,4 +119,7 @@ class UpdateMultipleHandicapsUseCase:
 
             # El context manager (__aexit__) hace commit automático al final (transacción única)
 
+        # Ya guardados: solo lo que dio la RFEG
+        for user_id, handicap_value in encontrados:
+            await avisar_de_la_rfeg(self._al_encontrarlo, user_id, handicap_value)
         return stats

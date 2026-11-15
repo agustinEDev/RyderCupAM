@@ -254,6 +254,16 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        """
+        De esas, las que están en ese estado, filtradas en la base y en orden de
+        id: quien las bloquee después lo hace siempre en el mismo orden (R1).
+        """
+        pass
+
+    @abstractmethod
     async def find_status_mark(
         self, competition_id: CompetitionId
     ) -> tuple[CompetitionStatus, datetime] | None:

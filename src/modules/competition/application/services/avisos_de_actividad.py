@@ -8,6 +8,7 @@ Se deja constancia en el log y se sigue.
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
@@ -24,6 +25,12 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
+
+# Monta Actividad (con su propia sesión) y la cierra al salir: quien avisa fuera
+# de una petición la monta solo al avisar (T1, 16 nov 2026)
+FabricaDeActividad = Callable[
+    [], AbstractAsyncContextManager[CompetitionActivityPublisherInterface]
+]
 
 
 class AvisosDeActividad(CompetitionActivityPublisherInterface):
@@ -170,6 +177,36 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             return
         await self._avisar(
             "tee_times", lambda p: p.tee_times(competition, round_id, assigned, withdrawn)
+        )
+
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        await self._avisar(
+            "handicaps_not_updated", lambda p: p.handicaps_not_updated(competition, count)
+        )
+
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found", lambda p: p.handicap_not_found(competition, user_ids)
+        )
+
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        await self._avisar(
+            "handicaps_not_updated_withdrawn",
+            lambda p: p.handicaps_not_updated_withdrawn(competition),
+        )
+
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found_withdrawn",
+            lambda p: p.handicap_not_found_withdrawn(competition, user_ids),
         )
 
     async def salidas_cambiadas(

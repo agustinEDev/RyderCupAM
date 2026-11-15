@@ -5,6 +5,10 @@ Caso de uso para actualizar el hándicap de un usuario individual.
 """
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
+)
+from src.modules.user.application.services.handicap_de_la_rfeg import avisar_de_la_rfeg
 from src.modules.user.domain.errors.handicap_errors import (
     HandicapNotFoundError,
 )
@@ -32,7 +36,12 @@ class UpdateUserHandicapUseCase:
     4. Persistir los cambios
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, handicap_service: HandicapService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        handicap_service: HandicapService,
+        al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = None,
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -42,6 +51,8 @@ class UpdateUserHandicapUseCase:
         """
         self._uow = uow
         self._handicap_service = handicap_service
+        # Si la RFEG lo da, sus competiciones cerradas se enteran (D4, 16 nov 2026)
+        self._al_encontrarlo = al_encontrarlo
 
     async def execute(
         self, user_id: UserId, manual_handicap: float | None = None
@@ -69,6 +80,7 @@ class UpdateUserHandicapUseCase:
             # 2. Buscar hándicap usando el servicio
             handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
 
+            de_la_rfeg = handicap_value
             # 3. Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None:
                 if manual_handicap is not None:
@@ -88,4 +100,7 @@ class UpdateUserHandicapUseCase:
 
             # El context manager (__aexit__) hace commit automático y publica eventos
 
+        # Solo lo que dio la RFEG: el manual no cuenta como actualizado (D1)
+        if de_la_rfeg is not None:
+            await avisar_de_la_rfeg(self._al_encontrarlo, user_id, de_la_rfeg)
         return UserResponseDTO.model_validate(user)

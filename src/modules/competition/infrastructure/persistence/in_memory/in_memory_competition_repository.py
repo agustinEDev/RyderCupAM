@@ -164,3 +164,15 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         return [
             self._competitions[i] for i in dict.fromkeys(competition_ids) if i in self._competitions
         ]
+
+    async def find_ids_with_status(
+        self, competition_ids: list[CompetitionId], status: CompetitionStatus
+    ) -> list[CompetitionId]:
+        return sorted(
+            (
+                i
+                for i in dict.fromkeys(competition_ids)
+                if i in self._competitions and self._competitions[i].status == status
+            ),
+            key=lambda i: str(i.value),
+        )
