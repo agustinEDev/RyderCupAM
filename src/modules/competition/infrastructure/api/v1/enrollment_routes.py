@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from src.config.dependencies import (
     get_cancel_enrollment_use_case,
     get_current_user,
-    get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
     get_list_enrollments_use_case,
     get_remove_custom_handicap_use_case,
@@ -32,8 +31,6 @@ from src.modules.competition.application.dto.enrollment_dto import (
     TEE_COLOR_PATTERN,
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
-    DirectEnrollPlayerRequestDTO,
-    DirectEnrollPlayerResponseDTO,
     EnrolledUserDTO,
     EnrollmentResponseDTO,
     HandleEnrollmentRequestDTO,
@@ -52,9 +49,6 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -300,44 +294,6 @@ async def request_enrollment(
         # Mensaje fijo por código, no el de la excepción (CodeQL, 28 oct 2026)
         estado, codigo, texto = _FRANJA_QUE_NO_VALE[type(e)]
         return JSONResponse(status_code=estado, content={"detail": texto, "error_code": codigo})
-
-    except TeamsFormedError as e:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
-        )
-
-
-@router.post(
-    "/competitions/{competition_id}/enrollments/direct",
-    response_model=DirectEnrollPlayerResponseDTO,
-    status_code=status.HTTP_201_CREATED,
-    summary="Inscripción directa por creador",
-    description="El creador inscribe directamente a un jugador (estado APPROVED).",
-)
-async def direct_enroll_player(
-    competition_id: UUID,
-    request: DirectEnrollPlayerRequestDTO,
-    current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: DirectEnrollPlayerUseCase = Depends(get_direct_enroll_player_use_case),
-):
-    """
-    Inscripción directa por el creador.
-
-    Solo el creador de la competición puede usar este endpoint.
-    El jugador queda directamente en estado APPROVED. Con los equipos formados
-    se reinician; si ya hay partidos, no entra: 409 `TEAMS_FORMED` (30 oct 2026).
-    """
-    try:
-        # Asegurar que el competition_id del path coincida
-        request_dto = DirectEnrollPlayerRequestDTO(
-            competition_id=competition_id,
-            user_id=request.user_id,
-            custom_handicap=request.custom_handicap,
-            tee_color=request.tee_color,
-        )
-        creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
     except TeamsFormedError as e:
         return JSONResponse(

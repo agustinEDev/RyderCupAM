@@ -97,11 +97,12 @@ class TestCloseEnrollmentsUseCase:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             assert competition.status.value == "CLOSED"
 
-    async def test_i5_las_invitaciones_pendientes_se_quedan_sin_plaza(
+    async def test_i5_cerrar_no_toca_las_invitaciones(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
-        """Decidido el 24 sep (#710): al cerrar, las pendientes se rechazan por
-        falta de plazas. Aceptar una después metía a alguien con el draft hecho."""
+        """Desde el 15 nov 2026 (B-02, deshace #710): al cerrar, las pendientes siguen
+        vivas y se aceptan hasta que empieza. Empezar es lo que las cierra
+        (test_solo_invita_el_organizador, O5)."""
         create_use_case = CreateCompetitionUseCase(
             uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
         )
@@ -124,7 +125,7 @@ class TestCloseEnrollmentsUseCase:
             )
 
         pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
-        # Caducada sin que nadie la pasara a EXPIRED: caducada, no «sin plaza»
+        # Caducada sin que nadie la pasara a EXPIRED: cerrar tampoco la toca
         caducada = invitacion(esta, "c@test.com")
         caducada._expires_at = datetime.now() - timedelta(days=1)
         aceptada = invitacion(esta, "a@test.com")
@@ -143,8 +144,8 @@ class TestCloseEnrollmentsUseCase:
                 inv.id: (await uow.invitations.find_by_id(inv.id)).status
                 for inv in [*pendientes, caducada, aceptada, de_otra]
             }
-        assert [estados[p.id] for p in pendientes] == [InvitationStatus.NO_ROOM] * 2
-        assert estados[caducada.id] == InvitationStatus.EXPIRED
+        assert [estados[p.id] for p in pendientes] == [InvitationStatus.PENDING] * 2
+        assert estados[caducada.id] == InvitationStatus.PENDING
         assert estados[aceptada.id] == InvitationStatus.ACCEPTED
         assert estados[de_otra.id] == InvitationStatus.PENDING
 

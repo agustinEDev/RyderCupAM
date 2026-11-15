@@ -3,8 +3,9 @@ El género es obligatorio para apuntarse a una competición (#710, 24 sep).
 
 Las barras de salida se valoran por género: sin él no se sabe desde cuáles
 juega, y al generar los partidos se bloqueaba la sesión entera (BE #360). Se
-exige al entrar, por los tres caminos: pedir plaza, aceptar una invitación y
-la inscripción directa del organizador. El mensaje de la generación queda como
+exige al entrar, por los caminos que hay: pedir plaza, aceptar una invitación y
+aprobar una solicitud (la inscripción directa del organizador se fue el 15 nov
+2026, B-02). El mensaje de la generación queda como
 red para quien ya estuviera inscrito sin él.
 """
 

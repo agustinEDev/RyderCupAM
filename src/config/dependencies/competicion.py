@@ -64,9 +64,6 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
 )
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
-)
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
 )
@@ -416,10 +413,9 @@ def get_handicap_update_status_use_case(
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
-    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> NameCaptainsUseCase:
     """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
-    return NameCaptainsUseCase(uow, lanzador, actividad=actividad)
+    return NameCaptainsUseCase(uow, lanzador)
 
 
 def get_name_vice_captain_use_case(
@@ -596,15 +592,6 @@ def get_request_enrollment_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         actividad=actividad,
     )
-
-
-def get_direct_enroll_player_use_case(
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
-) -> DirectEnrollPlayerUseCase:
-    """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_handle_enrollment_use_case(

@@ -4,6 +4,8 @@ Con los equipos formados, quedan así (decidido el 29 oct 2026).
 Salgan del draft o los forme el organizador, el jugador ya no entra ni sale
 por su cuenta, y los equipos no se vuelven a formar. Si alguien no puede
 jugar, el organizador le quita y todo se reinicia (`TeamAssignmentWriter.deshacer`).
+Entrar aprobado o aceptando una invitación, sin partidos, los reinicia (B-02, P2,
+15 nov 2026).
 """
 
 from src.modules.competition.application.services.team_assignment_writer import (
@@ -45,7 +47,8 @@ async def reiniciar_para_que_entre(
     uow: CompetitionUnitOfWorkInterface, competition: Competition
 ) -> None:
     """
-    Antes de que el organizador meta a alguien: los equipos se reinician.
+    Antes de que entre alguien aprobado o aceptando una invitación (B-02): los
+    equipos se reinician.
 
     Con partidos el reinicio no se hace, y quien entrara se quedaba fuera de
     los dos equipos sin forma de arreglarlo (decidido el 30 oct 2026).

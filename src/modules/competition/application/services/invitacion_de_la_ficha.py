@@ -46,7 +46,9 @@ def se_le_ofrece_aceptar(
     if pendiente is None or inscrito:
         return False
     try:
-        CompetitionPolicy.can_accept_invitation(competition.status)
+        CompetitionPolicy.can_accept_invitation(
+            competition.status, stroke_play=competition.stroke_play is not None
+        )
     except InvitationCompetitionStatusViolation:
         return False
     return True

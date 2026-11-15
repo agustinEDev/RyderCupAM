@@ -31,24 +31,6 @@ class TestElGeneroParaApuntarse:
         assert respuesta.status_code == 400, respuesta.text
         assert "género en tu perfil" in respuesta.json()["detail"]
 
-    async def test_el_organizador_tampoco_lo_inscribe_sin_genero(self, client: AsyncClient):
-        creador = await create_authenticated_user(
-            client, "gp_creator2@test.com", "P@ssw0rd123!", "Creator", "Genero"
-        )
-        sin_genero = await create_authenticated_user(
-            client, "gp_none2@test.com", "P@ssw0rd123!", "Nadie", "Genero", gender=None
-        )
-        comp = await create_competition(client, creador["cookies"])
-        set_auth_cookies(client, creador["cookies"])
-
-        respuesta = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": sin_genero["user"]["id"]},
-        )
-
-        assert respuesta.status_code == 400, respuesta.text
-        assert "no tiene el género" in respuesta.json()["detail"]
-
     async def test_con_genero_no_se_nota_nada(self, client: AsyncClient):
         creador = await create_authenticated_user(
             client, "gp_creator3@test.com", "P@ssw0rd123!", "Creator", "Genero"

@@ -21,27 +21,38 @@ from src.modules.competition.domain.value_objects.competition_status import (
 class TestCanSendInvitation:
     """Tests para CompetitionPolicy.can_send_invitation()."""
 
-    def test_active_allows_send(self):
-        CompetitionPolicy.can_send_invitation(CompetitionStatus.ACTIVE)
+    @pytest.mark.parametrize("stroke_play", [False, True])
+    def test_active_allows_send(self, stroke_play):
+        CompetitionPolicy.can_send_invitation(CompetitionStatus.ACTIVE, stroke_play=stroke_play)
 
-    # I4 (#710, 24 sep): cerrada, no queda plaza. Una invitación enviada ahí
-    # nadie podría aceptarla
-    @pytest.mark.parametrize("status", [CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS])
-    def test_closed_or_in_progress_does_not_send(self, status):
+    # B-02 (15 nov 2026, deshace I4 de #710): el organizador invita también con la
+    # inscripción cerrada, hasta que empieza
+    def test_closed_allows_send_in_a_ryder(self):
+        CompetitionPolicy.can_send_invitation(CompetitionStatus.CLOSED, stroke_play=False)
+
+    # P1: un stroke play cerrado no, porque nadie podría aceptarla
+    def test_closed_stroke_play_does_not_send(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="plazas"):
-            CompetitionPolicy.can_send_invitation(status)
+            CompetitionPolicy.can_send_invitation(CompetitionStatus.CLOSED, stroke_play=True)
+
+    @pytest.mark.parametrize("stroke_play", [False, True])
+    def test_in_progress_does_not_send(self, stroke_play):
+        with pytest.raises(InvitationCompetitionStatusViolation, match="plazas"):
+            CompetitionPolicy.can_send_invitation(
+                CompetitionStatus.IN_PROGRESS, stroke_play=stroke_play
+            )
 
     def test_draft_allows_send(self):
         """BE #319: invitar a la primera persona es lo que abre el torneo."""
-        CompetitionPolicy.can_send_invitation(CompetitionStatus.DRAFT)
+        CompetitionPolicy.can_send_invitation(CompetitionStatus.DRAFT, stroke_play=False)
 
     def test_completed_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="COMPLETED"):
-            CompetitionPolicy.can_send_invitation(CompetitionStatus.COMPLETED)
+            CompetitionPolicy.can_send_invitation(CompetitionStatus.COMPLETED, stroke_play=False)
 
     def test_cancelled_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="CANCELLED"):
-            CompetitionPolicy.can_send_invitation(CompetitionStatus.CANCELLED)
+            CompetitionPolicy.can_send_invitation(CompetitionStatus.CANCELLED, stroke_play=False)
 
 
 class TestInvitationOpensEnrollment:
@@ -68,26 +79,37 @@ class TestInvitationOpensEnrollment:
 class TestCanAcceptInvitation:
     """Tests para CompetitionPolicy.can_accept_invitation()."""
 
-    def test_active_allows_accept(self):
-        CompetitionPolicy.can_accept_invitation(CompetitionStatus.ACTIVE)
+    @pytest.mark.parametrize("stroke_play", [False, True])
+    def test_active_allows_accept(self, stroke_play):
+        CompetitionPolicy.can_accept_invitation(CompetitionStatus.ACTIVE, stroke_play=stroke_play)
 
-    # I3 (#710, 24 sep): con los equipos hechos, entrar descuadra los partidos
-    @pytest.mark.parametrize("status", [CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS])
-    def test_closed_or_in_progress_does_not_accept(self, status):
+    # B-02 (15 nov 2026, deshace I3 de #710): cerrada se entra, con sitio
+    def test_closed_allows_accept_in_a_ryder(self):
+        CompetitionPolicy.can_accept_invitation(CompetitionStatus.CLOSED, stroke_play=False)
+
+    # P1: en un stroke play cerrado hay que reabrir
+    def test_closed_stroke_play_does_not_accept(self):
+        with pytest.raises(InvitationCompetitionStatusViolation, match="reabrir"):
+            CompetitionPolicy.can_accept_invitation(CompetitionStatus.CLOSED, stroke_play=True)
+
+    @pytest.mark.parametrize("stroke_play", [False, True])
+    def test_in_progress_does_not_accept(self, stroke_play):
         with pytest.raises(InvitationCompetitionStatusViolation, match="plazas"):
-            CompetitionPolicy.can_accept_invitation(status)
+            CompetitionPolicy.can_accept_invitation(
+                CompetitionStatus.IN_PROGRESS, stroke_play=stroke_play
+            )
 
     def test_draft_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="DRAFT"):
-            CompetitionPolicy.can_accept_invitation(CompetitionStatus.DRAFT)
+            CompetitionPolicy.can_accept_invitation(CompetitionStatus.DRAFT, stroke_play=False)
 
     def test_completed_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="COMPLETED"):
-            CompetitionPolicy.can_accept_invitation(CompetitionStatus.COMPLETED)
+            CompetitionPolicy.can_accept_invitation(CompetitionStatus.COMPLETED, stroke_play=False)
 
     def test_cancelled_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="CANCELLED"):
-            CompetitionPolicy.can_accept_invitation(CompetitionStatus.CANCELLED)
+            CompetitionPolicy.can_accept_invitation(CompetitionStatus.CANCELLED, stroke_play=False)
 
 
 class TestValidateInvitationRate:

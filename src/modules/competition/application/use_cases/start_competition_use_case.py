@@ -22,7 +22,8 @@ from src.modules.competition.application.services.actualizaciones_de_handicaps i
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.solicitudes_al_empezar import (
-    rechazar_las_solicitudes_pendientes,
+    avisar_de_lo_cerrado,
+    cerrar_lo_pendiente,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -135,14 +136,16 @@ class StartCompetitionUseCase:
             #     no se actualizó antes de empezar se queda como estaba (#251)
             await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
-            # 4c. Una solicitud que siga pendiente ya no cabe (21 oct)
-            cerradas = await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
+            # 4c. Una solicitud o una invitación que siga pendiente ya no cabe
+            #     (21 oct; las invitaciones, B-02)
+            cerrado = await cerrar_lo_pendiente(self._uow, competition.id)
 
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
-        # 5b. Ya guardado: a cada uno, «tu solicitud se cerró sin plaza» (BE-2)
-        await self._actividad.requests_closed(competition, cerradas)
+        # 5b. Ya guardado: a cada uno, «tu solicitud se cerró sin plaza» (BE-2), y
+        #     las invitaciones cerradas retiran su aviso
+        await avisar_de_lo_cerrado(self._actividad, competition, cerrado)
 
         # 6. Retornar DTO de respuesta
         return StartCompetitionResponseDTO(
