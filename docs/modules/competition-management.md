@@ -438,8 +438,9 @@ CREATE TABLE country_adjacencies (
 - `POST /api/v1/competitions/{id}/complete` - IN_PROGRESS → COMPLETED
 - `POST /api/v1/competitions/{id}/cancel` - Any status → CANCELLED
 
-### Enrollment Management (7 endpoints)
+### Enrollment Management (8 endpoints)
 - `POST /api/v1/competitions/{id}/enrollments` - Request enrollment
+- `POST /api/v1/competitions/{id}/enrollments/direct` - Direct enrollment (creator)
 - `GET /api/v1/competitions/{id}/enrollments` - List enrollments
 - `POST /api/v1/enrollments/{id}/approve` - Approve request
 - `POST /api/v1/enrollments/{id}/reject` - Reject request
@@ -477,7 +478,7 @@ CREATE TABLE country_adjacencies (
 ### Authorization
 - **Only creator** can update, delete or change tournament status
 - **Only creator** can approve/reject enrollment requests
-- **Nobody** enrolls a player directly: the creator invites and the player accepts (B-02, 15 Nov 2026)
+- **Only creator** can enroll players directly
 - **Only creator** can set custom handicaps
 - **Only owner** can cancel/withdraw from their own enrollment
 

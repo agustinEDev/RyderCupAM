@@ -103,6 +103,46 @@ class RequestEnrollmentResponseDTO(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# ======================================================================================
+# DTO para el Caso de Uso: Inscripción Directa por Creador
+# ======================================================================================
+
+
+class DirectEnrollPlayerRequestDTO(BaseModel):
+    """
+    DTO de entrada para que el creador inscriba directamente a un jugador.
+    """
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del jugador a inscribir.")
+    custom_handicap: Decimal | None = Field(
+        None,
+        ge=Decimal("-10.0"),
+        le=Decimal("54.0"),
+        description="Hándicap personalizado (opcional). Override del hándicap oficial.",
+    )
+    tee_color: str | None = Field(
+        None,
+        pattern=TEE_COLOR_PATTERN,
+        description=f"Asignado. {TEE_COLOR_DESCRIPTION}",
+    )
+
+
+class DirectEnrollPlayerResponseDTO(BaseModel):
+    """
+    DTO de salida para inscripción directa.
+    """
+
+    id: UUID = Field(..., description="ID único de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del jugador.")
+    status: str = Field(..., description="Estado de la inscripción (APPROVED).")
+    custom_handicap: Decimal | None = Field(
+        None, description="Hándicap personalizado si se especificó."
+    )
+    created_at: datetime = Field(..., description="Fecha y hora de la inscripción.")
+
     model_config = ConfigDict(from_attributes=True)
 
 

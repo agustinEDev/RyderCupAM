@@ -4,13 +4,8 @@ Con los equipos formados, quedan así (decidido el 29 oct 2026).
 Salgan del draft o los forme el organizador, el jugador ya no entra ni sale
 por su cuenta, y los equipos no se vuelven a formar. Si alguien no puede
 jugar, el organizador le quita y todo se reinicia (`TeamAssignmentWriter.deshacer`).
-Entrar aprobado o aceptando una invitación, sin partidos, los reinicia (B-02, P2,
-15 nov 2026).
 """
 
-from src.modules.competition.application.services.baja_de_la_competicion import (
-    exigir_sin_draft_abierto,
-)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
@@ -50,22 +45,17 @@ async def reiniciar_para_que_entre(
     uow: CompetitionUnitOfWorkInterface, competition: Competition
 ) -> None:
     """
-    Antes de que entre alguien aprobado o aceptando una invitación (B-02): los
-    equipos se reinician.
+    Antes de que el organizador meta a alguien: los equipos se reinician.
 
-    Con la sala de draft abierta no entra nadie: la sala no se enteraría
-    (B-02, P3; aquí para que valga en todos los caminos de entrar). Con partidos
-    el reinicio no se hace, y quien entrara se quedaba fuera de los dos equipos
-    sin forma de arreglarlo (decidido el 30 oct 2026).
+    Con partidos el reinicio no se hace, y quien entrara se quedaba fuera de
+    los dos equipos sin forma de arreglarlo (decidido el 30 oct 2026).
 
     Args:
         uow: Unit of Work ya abierto, con la competición bloqueada
         competition: La competición
 
     Raises:
-        DraftInProgressError: Con la sala de draft abierta
         TeamsFormedError: Si tiene equipos y no se pueden reiniciar
     """
-    await exigir_sin_draft_abierto(uow, competition.id)
     if not await TeamAssignmentWriter.deshacer(uow, competition):
         await exigir_sin_equipos_formados(uow, competition.id)

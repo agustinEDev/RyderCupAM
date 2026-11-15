@@ -53,16 +53,9 @@ MAX_INVITATIONS_PER_HOUR = 100
 MAX_INVITATIONS_PER_USER_PER_HOUR = 100
 
 
-# Ya en juego no quedan plazas: ni se invita ni se acepta. Hasta el 15 nov 2026
-# bastaba con cerrar la inscripción (#710); desde entonces el organizador solo
-# invita, también con la inscripción cerrada, hasta que empieza (B-02)
-EN_JUEGO = frozenset({CompetitionStatus.IN_PROGRESS})
+# Cerrada la inscripcion ya no quedan plazas: ni se invita ni se acepta (#710)
+INSCRIPCION_CERRADA = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
 SIN_PLAZAS = "No quedan plazas en esta competición: la inscripción está cerrada"
-# Un Stableford o un Medal cerrado ya fijó hándicaps y categorías (#251): para
-# entrar hay que reabrirlo, como al aprobar una solicitud (B-02, P1)
-STROKE_PLAY_CERRADO = (
-    "La inscripción está cerrada: para que entres, el organizador tiene que reabrirla."
-)
 
 
 class CompetitionPolicy:
@@ -195,16 +188,14 @@ class CompetitionPolicy:
             )
 
     @staticmethod
-    def can_send_invitation(competition_status: CompetitionStatus, *, stroke_play: bool) -> None:
+    def can_send_invitation(competition_status: CompetitionStatus) -> None:
         """
         Valida si el estado de la competicion permite enviar invitaciones.
 
-        Allowed: DRAFT, ACTIVE y CLOSED; en un Stableford o un Medal, CLOSED no.
+        Allowed: DRAFT, ACTIVE.
 
-        CLOSED vuelve el 15 nov 2026 (B-02, deshace #710): el organizador solo
-        invita, y lo puede hacer hasta que la competición empieza. En un stroke
-        play cerrado no, porque nadie podría aceptarla (P1): los hándicaps y las
-        categorías ya están fijados (#251).
+        CLOSED e IN_PROGRESS no desde el 24 sep (#710): cerrada la inscripcion
+        no quedan plazas, y una invitacion enviada ahi nadie podria aceptarla.
 
         DRAFT entra desde BE #319: invitar a la primera persona ES abrir el
         torneo, y quien invita no tiene por que pasar antes por un boton cuyo
@@ -213,24 +204,20 @@ class CompetitionPolicy:
 
         Args:
             competition_status: Estado actual de la competicion
-            stroke_play: Si es un Stableford o un Medal
 
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite invitaciones
         """
-        if competition_status in EN_JUEGO or (
-            stroke_play and competition_status == CompetitionStatus.CLOSED
-        ):
+        if competition_status in INSCRIPCION_CERRADA:
             raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
         allowed = {
             CompetitionStatus.DRAFT,
             CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
         }
         if competition_status not in allowed:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Invitations only allowed in DRAFT, ACTIVE or CLOSED status."
+                "Invitations only allowed in DRAFT or ACTIVE status."
             )
 
     @staticmethod
@@ -256,32 +243,27 @@ class CompetitionPolicy:
         return competition_status == CompetitionStatus.DRAFT
 
     @staticmethod
-    def can_accept_invitation(competition_status: CompetitionStatus, *, stroke_play: bool) -> None:
+    def can_accept_invitation(competition_status: CompetitionStatus) -> None:
         """
         Valida si el estado de la competicion permite aceptar invitaciones.
 
-        Allowed: ACTIVE y CLOSED; en un Stableford o un Medal, CLOSED no.
+        Allowed: ACTIVE.
 
-        Con la inscripción cerrada se entra desde el 15 nov 2026 (B-02, deshace
-        #710), con sitio y las mismas reglas que abierta. En un stroke play
-        cerrado no (P1): hay que reabrirlo, y la invitación sigue pendiente.
-        En juego, no.
+        Cerrada o en juego, no (decidido el 24 sep, #710): con los equipos
+        hechos, entrar descuadraba los partidos.
 
         Args:
             competition_status: Estado actual de la competicion
-            stroke_play: Si es un Stableford o un Medal
 
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite aceptar
         """
-        if competition_status in EN_JUEGO:
+        if competition_status in INSCRIPCION_CERRADA:
             raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
-        if stroke_play and competition_status == CompetitionStatus.CLOSED:
-            raise InvitationCompetitionStatusViolation(STROKE_PLAY_CERRADO)
-        if competition_status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
+        if competition_status != CompetitionStatus.ACTIVE:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Accepting invitations only allowed in ACTIVE or CLOSED status."
+                "Accepting invitations only allowed in ACTIVE status."
             )
 
     @staticmethod

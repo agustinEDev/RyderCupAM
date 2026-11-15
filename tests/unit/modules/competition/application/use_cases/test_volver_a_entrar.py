@@ -9,11 +9,9 @@ podía volver a entrar por ninguna vía. Ahora se reutiliza esa misma fila.
 |----|---------------------------------------------------------|---------------------------------|
 | V1 | Acepta una invitación con una retirada/rechazada vieja  | Entra: la misma fila, APPROVED  |
 | V2 | Pide plaza en una pública con una cancelada vieja       | APPROVED (28 oct), la misma fila|
+| V3 | El organizador le inscribe con una rechazada vieja      | APPROVED, con su hándicap y barra |
 | V4 | Con una APPROVED o pendiente                            | Igual que hoy: ya inscrito      |
 | -  | Lo de la vez anterior (equipo, hándicap fijado)         | No se arrastra                  |
-
-V3 (el organizador le inscribe con una vieja) se fue con la inscripción directa del
-organizador (B-02, 15 nov 2026): nadie vuelve sin su consentimiento.
 """
 
 from datetime import date, timedelta
@@ -24,9 +22,14 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import (
+    DirectEnrollPlayerRequestDTO,
     RequestEnrollmentRequestDTO,
 )
 from src.modules.competition.application.dto.invitation_dto import RespondInvitationRequestDTO
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    AlreadyEnrolledError as YaInscritoAMano,
+    DirectEnrollPlayerUseCase,
+)
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError as YaInscritoAlPedir,
     RequestEnrollmentUseCase,
@@ -284,4 +287,48 @@ async def test_v4_pide_plaza_con_una_viva_y_ya_esta(estado):
     with pytest.raises(YaInscritoAlPedir):
         await RequestEnrollmentUseCase(uow, _Usuarios()).execute(
             RequestEnrollmentRequestDTO(competition_id=competicion.id.value, user_id=jugador.value)
+        )
+
+
+@pytest.mark.parametrize("estado", CERRADAS)
+async def test_v3_el_organizador_le_inscribe_con_una_vieja(estado):
+    uow = InMemoryUnitOfWork()
+    organizador = UserId(uuid4())
+    competicion = await _abierta(uow, organizador)
+    jugador = UserId(uuid4())
+    vieja = _vieja(competicion.id, jugador, estado)
+    await _con(uow, vieja)
+
+    respuesta = await DirectEnrollPlayerUseCase(uow, _Usuarios()).execute(
+        DirectEnrollPlayerRequestDTO(
+            competition_id=competicion.id.value,
+            user_id=jugador.value,
+            custom_handicap=Decimal("7.0"),
+            tee_color="YELLOW",
+        ),
+        organizador,
+    )
+
+    assert respuesta.status == "APPROVED"
+    suya = await _suya(uow, competicion, jugador)
+    assert suya.id == vieja.id
+    assert suya.status == EnrollmentStatus.APPROVED
+    assert suya.custom_handicap == Decimal("7.0")
+    assert suya.tee_color == TeeColor.YELLOW
+
+
+@pytest.mark.parametrize("estado", [EnrollmentStatus.APPROVED, EnrollmentStatus.INVITED])
+async def test_v4_a_mano_con_una_viva_y_ya_esta(estado):
+    uow = InMemoryUnitOfWork()
+    organizador = UserId(uuid4())
+    competicion = await _abierta(uow, organizador)
+    jugador = UserId(uuid4())
+    await _con(uow, _vieja(competicion.id, jugador, estado))
+
+    with pytest.raises(YaInscritoAMano):
+        await DirectEnrollPlayerUseCase(uow, _Usuarios()).execute(
+            DirectEnrollPlayerRequestDTO(
+                competition_id=competicion.id.value, user_id=jugador.value
+            ),
+            organizador,
         )

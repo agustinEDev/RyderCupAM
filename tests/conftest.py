@@ -928,31 +928,6 @@ async def solicitud_pendiente(client: AsyncClient, competition_id: str, **cuerpo
     return {**inscripcion, "status": "REQUESTED"}
 
 
-async def inscrito_por_invitacion(
-    client: AsyncClient, organizador_cookies: dict, competition_id: str, jugador: dict
-) -> dict:
-    """El organizador invita a `jugador` y él acepta: queda inscrito (APPROVED).
-
-    Desde el 15 nov 2026 (B-02) el organizador ya no inscribe a nadie directamente:
-    solo invita. Es lo que usan los montajes que antes llamaban a
-    `/enrollments/direct`. Devuelve la respuesta de aceptar (con `enrollment_id`)
-    y deja en el cliente la sesión del organizador, como estaba.
-    """
-    set_auth_cookies(client, organizador_cookies)
-    enviada = await client.post(
-        f"/api/v1/competitions/{competition_id}/invitations",
-        json={"invitee_user_id": jugador["user"]["id"]},
-    )
-    assert enviada.status_code == 201, enviada.text
-    set_auth_cookies(client, jugador["cookies"])
-    aceptada = await client.post(
-        f"/api/v1/invitations/{enviada.json()['id']}/respond", json={"action": "ACCEPT"}
-    )
-    assert aceptada.status_code == 200, aceptada.text
-    set_auth_cookies(client, organizador_cookies)
-    return aceptada.json()
-
-
 async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
     """Helper para dejar una competición con las inscripciones abiertas.
 

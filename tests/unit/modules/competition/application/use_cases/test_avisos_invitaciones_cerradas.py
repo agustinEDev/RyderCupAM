@@ -7,18 +7,15 @@ el invitado ni el organizador, y se guarda:
 
 | Donde                                                | Pasa a    | Aviso                         |
 |------------------------------------------------------|-----------|-------------------------------|
-| Aceptar con la competicion ya en juego               | NO_ROOM   | Se retira aunque salte error  |
+| Aceptar con la inscripcion ya cerrada                | NO_ROOM   | Se retira aunque salte error  |
 | Responder una caducada                               | EXPIRED   | Se retira aunque salte error  |
 | Retirar una caducada (organizador)                   | EXPIRED   | Se retira aunque salte error  |
 | Listar las de la competicion (organizador)           | EXPIRED   | Se retira                     |
-| Empezar la competicion (B-02)                        | NO_ROOM   | Se retira                     |
-| Ocupar la ultima plaza: aceptar, aprobar             | NO_ROOM   | Se retira (las demas)         |
+| Cerrar la inscripcion a mano                         | NO_ROOM   | Se retira                     |
+| Nombrar capitanes (cierra la inscripcion)            | NO_ROOM   | Se retira                     |
+| Ocupar la ultima plaza: aceptar, aprobar, inscribir  | NO_ROOM   | Se retira (las demas)         |
 | Invitado sin cuenta                                  | -         | No hubo aviso: nada           |
 | El feed caido                                        | -         | La accion sigue (WARNING)     |
-
-Desde el 15 nov 2026 (B-02) cerrar la inscripcion, a mano o al nombrar capitanes,
-ya no cierra las pendientes: se aceptan hasta que empieza. Empezar es lo que las
-cierra (test_solo_invita_el_organizador, O5).
 """
 
 import logging
@@ -26,18 +23,32 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from src.modules.competition.application.dto.competition_dto import (
+    CloseEnrollmentsRequestDTO,
+    NameCaptainsRequestDTO,
+)
 from src.modules.competition.application.dto.enrollment_dto import (
+    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
 )
 from src.modules.competition.application.dto.invitation_dto import RespondInvitationRequestDTO
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
 )
+from src.modules.competition.application.use_cases.close_enrollments_use_case import (
+    CloseEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
+)
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.list_competition_invitations_use_case import (
     ListCompetitionInvitationsUseCase,
+)
+from src.modules.competition.application.use_cases.name_captains_use_case import (
+    NameCaptainsUseCase,
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
@@ -59,6 +70,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
 from tests.unit.modules.competition.application.use_cases.helpers import (
+    create_approved_enrollment,
     set_competition_status,
 )
 from tests.unit.modules.competition.application.use_cases.test_avisos_de_actividad import (
@@ -133,12 +145,12 @@ class TestAlResponder:
     async def test_aceptar_sin_plaza_la_cierra_y_retira_su_aviso(
         self, comp_uow, user_uow, registro
     ):
-        """Con la competicion en juego, pasa a NO_ROOM, se guarda y se avisa; luego el error."""
+        """Con la inscripcion cerrada, pasa a NO_ROOM, se guarda y se avisa; luego el error."""
         creador = await _usuario(user_uow, "creador@test.com")
         invitado = await _usuario(user_uow, "invitado@test.com")
         comp = await _competicion(comp_uow, creador, plazas=6)
         invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
-        await set_competition_status(comp_uow, comp.id, "IN_PROGRESS")
+        await set_competition_status(comp_uow, comp.id, "CLOSED")
 
         with pytest.raises(InvitationNoRoomViolation):
             await _responde(comp_uow, user_uow, registro, invitacion, invitado)
@@ -192,7 +204,7 @@ class TestAlResponder:
         invitado = await _usuario(user_uow, "invitado@test.com")
         comp = await _competicion(comp_uow, creador, plazas=6)
         invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
-        await set_competition_status(comp_uow, comp.id, "IN_PROGRESS")
+        await set_competition_status(comp_uow, comp.id, "CLOSED")
 
         with caplog.at_level(logging.WARNING), pytest.raises(InvitationNoRoomViolation):
             await _responde(comp_uow, user_uow, _Roto(), invitacion, invitado)
@@ -229,6 +241,47 @@ class TestElOrganizador:
 
         assert _cerradas(registro) == [("invitations_closed", [(caducada.id, invitado.id)])]
 
+    async def test_cerrar_la_inscripcion_retira_los_avisos_de_las_pendientes(
+        self, comp_uow, user_uow, registro
+    ):
+        creador = await _usuario(user_uow, "creador@test.com")
+        invitado = await _usuario(user_uow, "invitado@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=6)
+        invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
+        # Sin cuenta: no hubo aviso que retirar
+        await _sin_cuenta(comp_uow, comp.id, creador)
+        await create_approved_enrollment(
+            comp_uow, comp.id, (await _usuario(user_uow, "b@t.com")).id
+        )
+
+        await CloseEnrollmentsUseCase(comp_uow, actividad=registro).execute(
+            CloseEnrollmentsRequestDTO(competition_id=comp.id), creador.id
+        )
+
+        assert _cerradas(registro) == [("invitations_closed", [(invitacion.id, invitado.id)])]
+
+    async def test_nombrar_capitanes_retira_los_avisos_de_las_pendientes(
+        self, comp_uow, user_uow, registro
+    ):
+        creador = await _usuario(user_uow, "creador@test.com")
+        invitado = await _usuario(user_uow, "invitado@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=6)
+        jugadores = [(await _usuario(user_uow, f"j{i}@test.com")).id for i in range(3)]
+        for jugador in jugadores:
+            await create_approved_enrollment(comp_uow, comp.id, jugador)
+        invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
+
+        await NameCaptainsUseCase(comp_uow, actividad=registro).execute(
+            NameCaptainsRequestDTO(
+                competition_id=comp.id,
+                team_a_captain_id=jugadores[0].value,
+                team_b_captain_id=jugadores[1].value,
+            ),
+            creador.id,
+        )
+
+        assert _cerradas(registro) == [("invitations_closed", [(invitacion.id, invitado.id)])]
+
     async def test_aprobar_la_ultima_plaza_retira_los_avisos(self, comp_uow, user_uow, registro):
         creador = await _usuario(user_uow, "creador@test.com")
         pide = await _usuario(user_uow, "pide@test.com")
@@ -246,18 +299,31 @@ class TestElOrganizador:
 
         assert _cerradas(registro) == [("invitations_closed", [(invitacion.id, invitado.id)])]
 
+    async def test_inscribir_en_la_ultima_plaza_retira_los_avisos(
+        self, comp_uow, user_uow, registro
+    ):
+        creador = await _usuario(user_uow, "creador@test.com")
+        directo = await _usuario(user_uow, "directo@test.com")
+        invitado = await _usuario(user_uow, "invitado@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=2)
+        invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
+
+        await DirectEnrollPlayerUseCase(comp_uow, user_uow.users, actividad=registro).execute(
+            DirectEnrollPlayerRequestDTO(competition_id=comp.id, user_id=directo.id.value),
+            creador.id,
+        )
+
+        assert _cerradas(registro) == [("invitations_closed", [(invitacion.id, invitado.id)])]
+
     async def test_sin_llenarse_no_hay_aviso(self, comp_uow, user_uow, registro):
         creador = await _usuario(user_uow, "creador@test.com")
-        pide = await _usuario(user_uow, "pide@test.com")
+        directo = await _usuario(user_uow, "directo@test.com")
         invitado = await _usuario(user_uow, "invitado@test.com")
         comp = await _competicion(comp_uow, creador, plazas=4)
-        solicitud = Enrollment.request(EnrollmentId.generate(), CompetitionId(comp.id), pide.id)
-        async with comp_uow:
-            await comp_uow.enrollments.add(solicitud)
         await _pendiente(comp_uow, comp.id, creador, invitado)
 
-        await HandleEnrollmentUseCase(comp_uow, user_uow.users, actividad=registro).execute(
-            HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
+        await DirectEnrollPlayerUseCase(comp_uow, user_uow.users, actividad=registro).execute(
+            DirectEnrollPlayerRequestDTO(competition_id=comp.id, user_id=directo.id.value),
             creador.id,
         )
 

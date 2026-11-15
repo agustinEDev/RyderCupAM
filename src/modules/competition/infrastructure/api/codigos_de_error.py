@@ -66,6 +66,10 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
     CompetitionNotInProgressError as DeclareWalkoverCompetitionNotInProgressError,
     InvalidWalkoverError,
 )
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    AlreadyEnrolledError as DirectEnrollPlayerAlreadyEnrolledError,
+    CompetitionNotActiveError as DirectEnrollPlayerCompetitionNotActiveError,
+)
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     RoundNotPendingMatchesError,
 )
@@ -148,6 +152,7 @@ CODIGOS: dict[type[Exception], int] = {
     CreateRoundGolfCourseNotInCompetitionError: status.HTTP_400_BAD_REQUEST,
     DateOutOfRangeError: status.HTTP_400_BAD_REQUEST,
     DeclareWalkoverCompetitionNotInProgressError: status.HTTP_400_BAD_REQUEST,
+    DirectEnrollPlayerCompetitionNotActiveError: status.HTTP_400_BAD_REQUEST,
     EnrollmentClosedError: status.HTTP_400_BAD_REQUEST,
     EnrollmentStateError: status.HTTP_400_BAD_REQUEST,
     EnvelopesDecideThePairingsError: status.HTTP_400_BAD_REQUEST,
@@ -209,6 +214,7 @@ CODIGOS: dict[type[Exception], int] = {
     # 409: choca con lo que ya hay
     AlreadyEnrolledInvitationViolation: status.HTTP_409_CONFLICT,
     CompetitionAlreadyExistsError: status.HTTP_409_CONFLICT,
+    DirectEnrollPlayerAlreadyEnrolledError: status.HTTP_409_CONFLICT,
     DuplicateInvitationViolation: status.HTTP_409_CONFLICT,
     EarlyRevealNeedsBothCaptainsError: status.HTTP_409_CONFLICT,
     InvalidInvitationStatusViolation: status.HTTP_409_CONFLICT,

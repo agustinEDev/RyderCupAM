@@ -29,9 +29,6 @@ from src.modules.competition.application.dto.invitation_dto import (
     SendInvitationByEmailRequestDTO,
     SendInvitationByUserIdRequestDTO,
 )
-from src.modules.competition.application.services.baja_de_la_competicion import (
-    DraftInProgressError,
-)
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
@@ -83,8 +80,6 @@ logger = logging.getLogger(__name__)
 # Lo que se dice al invitar sin plazas (BE #359). La pantalla lo traduce por el
 # `error_code`; esto es para quien lea la API
 SIN_PLAZAS = "The competition is full: there are no places left to invite."
-# Aceptar con la sala de draft abierta: la invitación sigue pendiente (B-02, P3)
-DRAFT_ABIERTO = "Wait until the draft is over."
 # Y al agotar el freno por hora: el texto de la excepcion lleva el id de la
 # competicion. La pantalla lo dice con el `limit`, en su idioma
 FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
@@ -266,12 +261,7 @@ async def list_my_invitations(
     "/invitations/{invitation_id}/respond",
     response_model=RespondInvitationResponseDTO,
     summary="Respond to invitation",
-    description=(
-        "Accept or decline an invitation. Accepting works with enrollment open or "
-        "closed (not in a closed Stableford/Medal) until the competition starts. 409 "
-        "`INVITATION_NO_ROOM`, `TEAMS_FORMED` (teams with matches) or "
-        "`DRAFT_IN_PROGRESS` (draft room open)."
-    ),
+    description="Accept or decline an invitation.",
 )
 async def respond_to_invitation(
     invitation_id: UUID,
@@ -298,17 +288,10 @@ async def respond_to_invitation(
                 "error_code": InvitationNoRoomViolation.error_code,
             },
         )
-    # Con equipos formados y partidos no se entra (B-02, P2)
     except TeamsFormedError as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
-        )
-    # Con la sala de draft abierta, tampoco: espera a que acabe (B-02, P3)
-    except DraftInProgressError as e:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"detail": DRAFT_ABIERTO, "error_code": e.error_code},
         )
 
 

@@ -165,8 +165,7 @@ class HandleEnrollmentUseCase:
                     personalizado=enrollment.custom_handicap,
                 )
                 # Entra con los equipos formados y sin partidos: se reinician, como
-                # al quitar a alguien (27 oct 2026); con partidos, no entra (30 oct).
-                # Con la sala de draft abierta, tampoco (revisión de B-02, P3)
+                # al quitar a alguien (27 oct 2026); con partidos, no entra (30 oct)
                 await reiniciar_para_que_entre(self._uow, competition)
                 enrollment.approve()
                 # Si era la última plaza, las invitaciones pendientes se quedan sin

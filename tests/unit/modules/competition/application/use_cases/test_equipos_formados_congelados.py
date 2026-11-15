@@ -10,21 +10,19 @@ reinicia (equipos, sala, sobres y subcapitanes), como desde el 27 oct.
 |----|--------------------------------------------------|-----------------------------------|
 | J1 | El jugador se retira (también con partidos)      | TEAMS_FORMED                      |
 | J2 | El jugador se inscribe en una pública            | TEAMS_FORMED                      |
-| J4 | El jugador acepta una invitación, sin partidos   | Entra y se reinicia (B-02, P2)    |
-| J4 | El jugador acepta una invitación, con partidos   | TEAMS_FORMED; rechazarla, sí      |
+| J4 | El jugador acepta una invitación                 | TEAMS_FORMED; rechazarla, sí      |
 | J5 | El jugador cancela su solicitud pendiente        | Puede                             |
 | J6 | Todo lo anterior sin equipos formados            | Como antes                        |
 | O1 | El organizador le quita, sin partidos            | Se reinicia todo (test_quitar_inscrito) |
-| O2 | El organizador aprueba                           | Se reinicia todo (test_entrar_deshace_equipos) |
+| O2 | El organizador inscribe o aprueba                | Se reinicia todo (test_entrar_deshace_equipos) |
 | O4 | El organizador vuelve a formar equipos           | TEAMS_FORMED                      |
 | O5 | El organizador forma equipos con la sala abierta | DRAFT_IN_PROGRESS                 |
 | O6 | El organizador forma equipos tras un reinicio    | Como la primera vez               |
+| E1 | El organizador inscribe a mano, con partidos     | TEAMS_FORMED                      |
 | E3 | El organizador aprueba una solicitud, con partidos | TEAMS_FORMED; rechazarla, sí (E4) |
 | I1 | El organizador invita por id o por email (I2)    | TEAMS_FORMED; sin equipos, sí (I3) |
 
-E2 y E5 (entrar sin partidos reinicia) están en test_entrar_deshace_equipos. E1
-(inscribir a mano) se fue con la inscripción directa del organizador (B-02, 15 nov
-2026), y desde entonces aceptar una invitación entra como aprobar (P2). El
+E2 y E5 (entrar sin partidos reinicia) están en test_entrar_deshace_equipos. El
 organizador que también juega no sale: como cualquier jugador (30 oct 2026).
 """
 
@@ -36,6 +34,7 @@ import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import (
     CancelEnrollmentRequestDTO,
+    DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
     RequestEnrollmentRequestDTO,
     WithdrawEnrollmentRequestDTO,
@@ -58,6 +57,9 @@ from src.modules.competition.application.use_cases.assign_teams_use_case import 
 )
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -259,21 +261,8 @@ class TestJ4Invitacion:
             invitation_id=invitacion.id.value, user_id=invitado.id.value, action=accion
         )
 
-    async def test_aceptarla_sin_partidos_entra_y_se_reinician(self):
-        """B-02, P2 (15 nov 2026): como aprobar una solicitud."""
+    async def test_aceptarla_con_equipos_no(self):
         uow, comp_id, *_ = await _reabierta()
-        usuarios, invitado, invitacion = await self._invitado(uow, comp_id)
-
-        await RespondToInvitationUseCase(uow, usuarios).execute(
-            self._responde(invitacion, invitado, "ACCEPT")
-        )
-
-        assert (await _de(uow, comp_id, invitado.id)).status == EnrollmentStatus.APPROVED
-        assert await _equipos(uow, comp_id) is None
-
-    async def test_aceptarla_con_partidos_no(self):
-        uow, comp_id, round_id, equipo_a, equipo_b = await _reabierta()
-        await _con_partidos(uow, round_id, equipo_a, equipo_b)
         usuarios, invitado, invitacion = await self._invitado(uow, comp_id)
 
         with pytest.raises(TeamsFormedError):
@@ -386,6 +375,19 @@ class TestEElOrganizadorMeteAAlguienConPartidos:
 
     def _decide(self, solicitud, accion):
         return HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action=accion)
+
+    async def test_e1_inscribirle_a_mano_no(self):
+        uow, comp_id, organizador = await self._con_partidos()
+        nuevo = UserId(uuid4())
+
+        with pytest.raises(TeamsFormedError):
+            await DirectEnrollPlayerUseCase(uow, _Usuarios()).execute(
+                DirectEnrollPlayerRequestDTO(competition_id=comp_id.value, user_id=nuevo.value),
+                organizador,
+            )
+
+        assert await _de(uow, comp_id, nuevo) is None
+        assert await _equipos(uow, comp_id) is not None
 
     async def test_e3_aprobar_su_solicitud_no(self):
         uow, comp_id, organizador = await self._con_partidos()

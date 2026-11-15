@@ -140,22 +140,19 @@ class TestRespondToInvitationUseCase:
 
     # ==================== Con la inscripción cerrada (#710, 24 sep) ====================
 
-    async def _pendiente_en_juego(self, comp_uow, user_uow):
-        """Una pendiente que se coló con la competición ya en juego (empezar las cierra).
-
-        Hasta el 15 nov 2026 bastaba con la inscripción cerrada (#710); desde B-02,
-        cerrada se acepta y lo que deja sin plaza es estar en juego."""
+    async def _pendiente_en_una_cerrada(self, comp_uow, user_uow):
+        """Una invitación de antes del cambio, que se quedó pendiente al cerrar."""
         creator = await self._create_user(user_uow, email="c@test.com")
         invitee = await self._create_user(user_uow, email="i@test.com")
         created = await self._create_active_competition(comp_uow, creator.id)
         invitation = await self._create_pending_invitation(
             comp_uow, created.id, creator.id, invitee.id, "i@test.com"
         )
-        await set_competition_status(comp_uow, created.id, "IN_PROGRESS")
+        await set_competition_status(comp_uow, created.id, "CLOSED")
         return invitation, invitee
 
-    async def test_i6_aceptarla_en_juego_la_deja_sin_plaza(self, comp_uow, user_uow):
-        invitation, invitee = await self._pendiente_en_juego(comp_uow, user_uow)
+    async def test_i6_aceptarla_cerrada_la_deja_sin_plaza(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
         # Con su propia excepcion, que la ruta contesta con su codigo (BE #385)
@@ -176,7 +173,7 @@ class TestRespondToInvitationUseCase:
 
     async def test_i6b_otro_usuario_no_la_deja_sin_plaza(self, comp_uow, user_uow):
         """Solo el invitado responde: con el id de otra no se le cambia el estado."""
-        invitation, _ = await self._pendiente_en_juego(comp_uow, user_uow)
+        invitation, _ = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         intruso = await self._create_user(user_uow, email="x@test.com")
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
@@ -193,7 +190,7 @@ class TestRespondToInvitationUseCase:
         assert guardada.status == InvitationStatus.PENDING
 
     async def test_i6c_una_ya_sin_plaza_lo_dice_en_su_idioma(self, comp_uow, user_uow):
-        invitation, invitee = await self._pendiente_en_juego(comp_uow, user_uow)
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
         pedir = RespondInvitationRequestDTO(
             invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
@@ -260,7 +257,7 @@ class TestRespondToInvitationUseCase:
         comp_uow.competitions.find_by_id_for_update.assert_awaited()
 
     async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
-        invitation, invitee = await self._pendiente_en_juego(comp_uow, user_uow)
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
         result = await uc.execute(

@@ -11,12 +11,7 @@ from datetime import date, timedelta
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import (
-    create_authenticated_user,
-    create_competition,
-    inscrito_por_invitacion,
-    set_auth_cookies,
-)
+from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
 
 pytestmark = pytest.mark.asyncio
 
@@ -45,8 +40,12 @@ async def _con_un_inscrito(client: AsyncClient):
         },
     )
     set_auth_cookies(client, creador["cookies"])
-    dentro = await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
-    return creador, jugador, comp, dentro["enrollment_id"]
+    dentro = await client.post(
+        f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+        json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+    )
+    assert dentro.status_code == 201, dentro.text
+    return creador, jugador, comp, dentro.json()["id"]
 
 
 async def test_el_organizador_le_quita_se_le_avisa_y_se_le_puede_reinvitar(client: AsyncClient):
@@ -116,8 +115,12 @@ async def test_con_equipos_y_sin_partidos_quitarle_deshace_los_equipos(client: A
     for _ in range(3):
         jugador = await _jugador(client)
         set_auth_cookies(client, creador["cookies"])
-        inscrito = await inscrito_por_invitacion(client, creador["cookies"], comp["id"], jugador)
-        inscripciones.append(inscrito["enrollment_id"])
+        inscrito = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+        )
+        assert inscrito.status_code == 201, inscrito.text
+        inscripciones.append(inscrito.json()["id"])
     assert (
         await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
     ).status_code == 200

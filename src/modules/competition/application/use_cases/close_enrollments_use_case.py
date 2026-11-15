@@ -25,6 +25,9 @@ from src.modules.competition.application.services.actualizaciones_de_handicaps i
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -153,11 +156,13 @@ class CloseEnrollmentsUseCase:
             if desde_abierta:
                 await self._uow.esperas.vaciar(competition.id)
 
-            # 6. Las invitaciones pendientes siguen vivas: se aceptan hasta que
-            #    empieza (B-02, 15 nov 2026; antes se quedaban sin plaza, #710)
+            # 6. Las invitaciones pendientes se quedan sin plaza (#710)
+            sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition_id)
 
         # 7. Ya guardada, se lanza: la respuesta no espera a la RFEG
         self._actualizaciones.lanzar(actualizacion)
+        # Y las invitaciones cerradas retiran su aviso de invitado (22 oct 2026)
+        await self._actividad.invitations_closed(sin_plaza)
         # Quien se quedó en espera: «no hubo plaza» (A4)
         for inscripcion in sin_sitio:
             await self._actividad.left(competition.id, inscripcion.user_id)

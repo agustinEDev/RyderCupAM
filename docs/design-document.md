@@ -538,8 +538,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `/api/v1/competitions/{id}/activate`, `/close-enrollments`, `/start`, `/complete`, `/cancel`
 - `/api/v1/competitions/{id}/revert-status`, `/reopen-enrollments`
 
-**Enrollments (7)**:
+**Enrollments (8)**:
 - `/api/v1/competitions/{id}/enrollments` (GET, POST)
+- `/api/v1/competitions/{id}/enrollments/direct`
 - `/api/v1/enrollments/{id}/approve`, `/reject`, `/cancel`, `/withdraw`, `/handicap`
 
 **Countries (2)**:

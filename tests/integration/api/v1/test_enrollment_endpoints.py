@@ -20,7 +20,6 @@ from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
     create_competition,
-    inscrito_por_invitacion,
     set_auth_cookies,
     solicitud_pendiente,
 )
@@ -112,42 +111,121 @@ class TestRequestEnrollment:
         assert response.status_code == 409
 
 
-class TestSinInscripcionDirectaDelOrganizador:
-    """B-02 (15 nov 2026), O1: el organizador solo invita.
-
-    POST /api/v1/competitions/{id}/enrollments/direct ya no existe: ni para el
-    organizador ni para un admin, y nadie queda inscrito.
-    """
+class TestDirectEnrollPlayer:
+    """Tests para POST /api/v1/competitions/{id}/enrollments/direct"""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("quien", ["organizador", "admin"])
-    async def test_la_ruta_ya_no_existe(self, client: AsyncClient, quien: str):
+    async def test_direct_enroll_success(self, client: AsyncClient):
+        """Creador inscribe directamente a jugador retorna 201."""
         creator = await create_authenticated_user(
-            client, f"o1-{quien}-creator@test.com", "P@ssw0rd123!", "Creator", "Directa"
+            client, "creator4@test.com", "P@ssw0rd123!", "Creator", "Four"
         )
         player = await create_authenticated_user(
-            client, f"o1-{quien}-player@test.com", "P@ssw0rd123!", "Player", "Directa"
+            client, "player4@test.com", "P@ssw0rd123!", "Player", "Four"
         )
+
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
-        if quien == "admin":
-            admin = await create_admin_user(
-                client, "o1-admin@test.com", "AdminPass123!", "Admin", "Directa"
-            )
-            cookies = admin["cookies"]
-        else:
-            cookies = creator["cookies"]
 
-        set_auth_cookies(client, cookies)
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "APPROVED"
+
+    @pytest.mark.asyncio
+    async def test_direct_enroll_full_competition_returns_400(self, client: AsyncClient):
+        """Con el cupo lleno no se inscribe a nadie más: 400, como al aprobar (BE #325)."""
+        creator = await create_authenticated_user(
+            client, "creator325@test.com", "P@ssw0rd123!", "Creator", "Cupo"
+        )
+        jugadores = [
+            await create_authenticated_user(
+                client, f"player325-{i}@test.com", "P@ssw0rd123!", "Player", f"Cupo{'abc'[i]}"
+            )
+            for i in range(3)
+        ]
+        start = date.today() + timedelta(days=30)
+        comp = await create_competition(
+            client,
+            creator["cookies"],
+            {
+                "name": f"Cupo {uuid.uuid4().hex[:8]}",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "HANDICAP",
+                # El organizador ya ocupa una al crearla: quedan dos
+                "max_players": 3,
+                "team_assignment": "MANUAL",
+                "visibility": "PUBLIC",
+            },
+        )
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        respuestas = [
+            await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+                cookies=creator["cookies"],
+            )
+            for jugador in jugadores
+        ]
+
+        assert [r.status_code for r in respuestas] == [201, 201, 400]
+
+    @pytest.mark.asyncio
+    async def test_direct_enroll_not_creator_returns_403(self, client: AsyncClient):
+        """No creador intentando inscribir directamente retorna 403."""
+        creator = await create_authenticated_user(
+            client, "creator5@test.com", "P@ssw0rd123!", "Creator", "Five"
+        )
+        other = await create_authenticated_user(
+            client, "other5@test.com", "P@ssw0rd123!", "Other", "Five"
+        )
+        player = await create_authenticated_user(
+            client, "player5@test.com", "P@ssw0rd123!", "Player", "Five"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        set_auth_cookies(client, other["cookies"])
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
             json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
         )
 
-        assert response.status_code in (404, 405), response.text
-        set_auth_cookies(client, creator["cookies"])
-        inscritos = await client.get(f"/api/v1/competitions/{comp['id']}/enrollments")
-        assert player["user"]["id"] not in [e["user_id"] for e in inscritos.json()]
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_direct_enroll_by_admin_not_creator_succeeds(self, client: AsyncClient):
+        """Admin (no creador) puede inscribir directamente y retorna 201."""
+        creator = await create_authenticated_user(
+            client, "creator5b@test.com", "P@ssw0rd123!", "Creator", "FiveB"
+        )
+        admin = await create_admin_user(
+            client, "admin5b@test.com", "AdminPass123!", "Admin", "FiveB"
+        )
+        player = await create_authenticated_user(
+            client, "player5b@test.com", "P@ssw0rd123!", "Player", "FiveB"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=admin["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "APPROVED"
 
 
 class TestListEnrollments:
@@ -582,10 +660,12 @@ class TestSetCustomHandicap:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         # Inscripción directa
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         # Establecer handicap
         response = await client.put(
@@ -613,10 +693,12 @@ class TestSetCustomHandicap:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
@@ -644,10 +726,12 @@ class TestRemoveCustomHandicap:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
@@ -679,10 +763,12 @@ class TestRemoveCustomHandicap:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
@@ -711,10 +797,12 @@ class TestRemoveCustomHandicap:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         response = await client.delete(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
@@ -738,10 +826,12 @@ class TestRemoveCustomHandicap:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
@@ -789,10 +879,12 @@ class TestSetNamePreference:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
@@ -819,10 +911,12 @@ class TestSetNamePreference:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
@@ -849,10 +943,12 @@ class TestSetNamePreference:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         before = await client.get(
             f"/api/v1/competitions/{comp['id']}/enrollments",
@@ -895,10 +991,12 @@ class TestSetNamePreference:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
@@ -936,10 +1034,12 @@ class TestSetNamePreference:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
@@ -1040,10 +1140,12 @@ class TestEnrollmentEdgeCases:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        enroll_response = await inscrito_por_invitacion(
-            client, creator["cookies"], comp["id"], player
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
         )
-        enrollment_id = enroll_response["enrollment_id"]
+        enrollment_id = enroll_response.json()["id"]
 
         # Jugador intenta cambiar su propio handicap (no permitido)
         set_auth_cookies(client, player["cookies"])
@@ -1104,3 +1206,29 @@ class TestEnrollmentEdgeCases:
         data = response.json()
         assert len(data) == 2  # Creator auto-enrolled APPROVED + player1 APPROVED
         assert all(d["status"] == "APPROVED" for d in data)
+
+    @pytest.mark.asyncio
+    async def test_direct_enroll_with_custom_handicap(self, client: AsyncClient):
+        """Inscripción directa con handicap personalizado."""
+        creator = await create_authenticated_user(
+            client, "creator_ec6@test.com", "P@ssw0rd123!", "Creator", "EdgeSix"
+        )
+        player = await create_authenticated_user(
+            client, "player_ec6@test.com", "P@ssw0rd123!", "Player", "EdgeSix"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={
+                "competition_id": comp["id"],
+                "user_id": player["user"]["id"],
+                "custom_handicap": 12.5,
+            },
+            cookies=creator["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert float(response.json()["custom_handicap"]) == pytest.approx(12.5)
