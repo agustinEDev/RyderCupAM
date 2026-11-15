@@ -42,6 +42,7 @@ os.environ["TRUSTED_PROXIES"] = "127.0.0.1,testclient"
 
 # --- Importaciones de la Aplicación ---
 from main import app as fastapi_app
+from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
     async_session_maker,
@@ -462,6 +463,9 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
 
     login_response = await client.post("/api/v1/auth/login", json=login_data)
     assert login_response.status_code == 200
+    # Verificado, su login lanza el aviso de nuevo inicio en segundo plano: se espera
+    # aquí, para que sus lecturas no caigan dentro de lo que mida el test (B-17)
+    await espera_los_avisos_pendientes()
 
     # El token llega solo en la cookie (2.58.0), y el cliente ya la guarda
     access_token = login_response.cookies["access_token"]
@@ -531,6 +535,9 @@ async def create_authenticated_user(
         headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
     )
     assert login_response.status_code == 200
+    # Verificado, su login lanza el aviso de nuevo inicio en segundo plano: se espera
+    # aquí, para que sus lecturas no caigan dentro de lo que mida el test (B-17)
+    await espera_los_avisos_pendientes()
 
     # El access token, de su cookie: ya no viene en el cuerpo (2.58.0)
     token = login_response.cookies["access_token"]
