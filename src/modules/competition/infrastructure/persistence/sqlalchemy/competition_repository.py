@@ -238,6 +238,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                 campos_t.c.id,
                 campos_t.c.name,
                 campos_t.c.country_code,
+                campos_t.c.timezone,
             )
             .join(campos_t, campos_t.c.id == enlaces.c.golf_course_id)
             .where(enlaces.c.competition_id.in_(list(competition_ids)))
@@ -245,9 +246,9 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
-        for competition_id, golf_course_id, nombre, pais in result.all():
+        for competition_id, golf_course_id, nombre, pais, zona in result.all():
             campos.setdefault(competition_id, []).append(
-                CampoDeLaCompeticion(golf_course_id, nombre, pais)
+                CampoDeLaCompeticion(golf_course_id, nombre, pais, zona)
             )
         return campos
 

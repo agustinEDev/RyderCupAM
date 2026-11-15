@@ -388,3 +388,23 @@ async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: 
     assert await estado_en_bd(competicion["id"]) == "ACTIVE"
     assert await _fecha_de_la_sesion(sesion["id"]) == antes + timedelta(days=10)
     assert await _avisos(client, organizador, "ENROLLMENTS_CLOSED") == []
+
+
+async def test_la_ficha_y_el_listado_dicen_el_plazo(client: AsyncClient):
+    """
+    Given una competición del torneo dentro de 30 días, sin campo
+    When se lee su ficha y el listado
+    Then los dos traen el plazo (12:00 de Madrid del día antes, con desfase), que
+    le aplica y que no la ha cerrado
+    """
+    organizador, competicion = await _competicion(client)
+    set_auth_cookies(client, organizador["cookies"])
+
+    ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
+    listado = (await client.get("/api/v1/competitions?my_competitions=true")).json()
+
+    dia_antes = date.fromisoformat(competicion["start_date"]) - timedelta(days=1)
+    for datos in (ficha, next(c for c in listado if c["id"] == competicion["id"])):
+        assert datos["enrollment_deadline"].startswith(f"{dia_antes.isoformat()}T12:00:00+0")
+        assert datos["enrollment_deadline_applies"] is True
+        assert datos["enrollment_closed_by_deadline"] is False

@@ -835,6 +835,27 @@ class CompetitionResponseDTO(BaseModel):
             "inscripciones ya abiertas."
         ),
     )
+    # El plazo de inscripción (15-16 nov 2026)
+    enrollment_deadline: datetime | None = Field(
+        None,
+        description=(
+            "Hasta cuándo se apunta uno: las 12:00 del día anterior al torneo, en la "
+            "zona del primer campo (Europe/Madrid sin campo), con su desfase "
+            "(p. ej. 2026-11-19T12:00:00+01:00). Null sin fecha de inicio."
+        ),
+    )
+    enrollment_deadline_applies: bool = Field(
+        True,
+        description=(
+            "Si el plazo cuenta para ella. False mientras esté abierta y exenta: el "
+            "organizador la abrió o reabrió a mano pasado el plazo, y sigue abierta "
+            "hasta que la cierre él."
+        ),
+    )
+    enrollment_closed_by_deadline: bool = Field(
+        False,
+        description="Si las inscripciones las cerró el plazo y no el organizador.",
+    )
     visibility: str = Field(
         ...,
         description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.",

@@ -687,13 +687,20 @@ class Competition:
         """
         if self._status == CompetitionStatus.DRAFT:
             return False
-        inicio = self._dates.start_date
-        if not has_passed(inicio, timezone, now):
-            return False
-        if self._status != CompetitionStatus.ACTIVE:
-            return True
+        return has_passed(self._dates.start_date, timezone, now) and self.deadline_applies(timezone)
+
+    def deadline_applies(self, timezone: str | None) -> bool:
+        """
+        Si el plazo cuenta para ella: no, mientras esté abierta y exenta por
+        haberse abierto —o reabierto— a partir de él (R1, R2). Sin reloj: solo
+        depende de cuándo se abrió (16 nov 2026, para la app).
+        """
         abierta = self._enrollment_opened_at
-        return abierta is None or not has_passed(inicio, timezone, abierta)
+        return not (
+            self._status == CompetitionStatus.ACTIVE
+            and abierta is not None
+            and has_passed(self._dates.start_date, timezone, abierta)
+        )
 
     def due_to_close(self, timezone: str | None, now: datetime) -> bool:
         """Si le toca cerrarse sola (C3): abierta y con el plazo pasado (salvo R1/R2)."""

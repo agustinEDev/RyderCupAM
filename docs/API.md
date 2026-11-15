@@ -582,6 +582,10 @@ Enrolment closes at **12:00 the day before `start_date`**, in the time zone of t
 
 ### Competition Response (Computed Fields)
 
+- `enrollment_deadline` (datetime with offset, or null) - 12:00 the day before `start_date`, in the first course's time zone (`Europe/Madrid` without a course), e.g. `"2026-11-19T12:00:00+01:00"`
+- `enrollment_deadline_applies` (bool) - false while it is open and exempt (opened or reopened by hand after the deadline)
+- `enrollment_closed_by_deadline` (bool) - whether the deadline, not the organiser, closed enrolment
+
 - `is_creator` (bool) - Whether authenticated user is the creator
 - `enrolled_count` (int) - Number of enrolled players (APPROVED)
 - `location` (string) - Formatted country names (e.g.: "Spain, France")
