@@ -7,6 +7,8 @@ siga siendo cierto. La decisión está en el dominio
 (`sin_actualizar_con_la_rfeg`); aquí solo se reúne lo que necesita.
 """
 
+from collections.abc import Iterable, Mapping
+
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
     EstadoActualizacion,
@@ -16,6 +18,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.refresco_de_handicaps_service import Intento
 from src.modules.competition.domain.services.sin_actualizar_con_la_rfeg import (
     Inscrito,
     SinActualizar,
@@ -26,6 +29,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 ESPANA = "ES"
 
@@ -57,6 +61,22 @@ class SinActualizarDeLaCompeticion:
         )
         por_id = {u.id: u for u in await usuarios.find_by_ids([i.user_id for i in inscritos])}
         resultados = await uow.handicap_updates.resultados(actualizacion.id)
+        return SinActualizarDeLaCompeticion.de_lo_leido(
+            competicion, actualizacion, inscritos, por_id, resultados
+        )
+
+    @staticmethod
+    def de_lo_leido(
+        competicion: Competition,
+        actualizacion: ActualizacionDeHandicaps,
+        inscritos: Iterable[Enrollment],
+        por_id: Mapping[UserId, User],
+        resultados: Mapping[UserId, Intento],
+    ) -> SinActualizar:
+        """
+        Lo mismo, con lo ya leído: los inscritos aprobados, sus usuarios por id
+        y lo apuntado en la actualización.
+        """
         return sin_actualizar(
             [
                 Inscrito(

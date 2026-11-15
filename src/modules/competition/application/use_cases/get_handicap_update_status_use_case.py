@@ -8,9 +8,13 @@ administrador. No escribe nada: es una pregunta.
 
 Desde el 15 nov 2026 también lleva la lista del aviso «{N} jugadores sin
 actualizar con la RFEG», con la misma regla (`SinActualizarDeLaCompeticion`):
-el aviso lleva a esta ficha y tiene que nombrar a los mismos. Va aparte de
+el aviso lleva a esta ficha y tiene que nombrar a los mismos. Como el aviso,
+solo con la competición cerrada (al empezar desaparece, H5). Va aparte de
 `pending_players`, que sigue siendo quién falta por preguntar (lo que el botón
 termina) y lo que lee el front que ya está en producción.
+
+Las dos listas y sus nombres salen de una sola lectura de inscritos, de lo
+apuntado y de sus usuarios; y si no hace falta ninguna, no se lee nada más.
 """
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -31,6 +35,8 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -63,21 +69,31 @@ class GetHandicapUpdateStatusUseCase:
             actualizacion = await self._uow.handicap_updates.ultima_de(competition_id)
             if actualizacion is None:
                 return None
-            pendientes = []
-            if actualizacion.estado in CON_PENDIENTES:
-                pendientes = await PendientesDeActualizar.de(self._uow, actualizacion)
-            sin_actualizar = []
-            if SinActualizarDeLaCompeticion.terminada(actualizacion):
-                hecho = await SinActualizarDeLaCompeticion.de(
-                    self._uow, self._users, competicion, actualizacion
-                )
-                sin_actualizar = hecho.para_el_organizador
-            nombres = await PlayerNames.de_la_competicion(
-                list(dict.fromkeys([*pendientes, *sin_actualizar])),
-                competition_id,
-                self._users,
-                self._uow,
+            # Como el aviso: terminada y con la competición cerrada (H1, H5)
+            con_lista = competicion.status is CompetitionStatus.CLOSED and (
+                SinActualizarDeLaCompeticion.terminada(actualizacion)
             )
+            con_pendientes = actualizacion.estado in CON_PENDIENTES
+            pendientes: list[UserId] = []
+            sin_actualizar: list[UserId] = []
+            nombres: dict[UserId, str] = {}
+            if con_pendientes or con_lista:
+                inscritos = await self._uow.enrollments.find_by_competition_and_status(
+                    competition_id, EnrollmentStatus.APPROVED
+                )
+                resultados = await self._uow.handicap_updates.resultados(actualizacion.id)
+                usuarios = {
+                    u.id: u for u in await self._users.find_by_ids([i.user_id for i in inscritos])
+                }
+                if con_pendientes:
+                    pendientes = PendientesDeActualizar.de_lo_leido(inscritos, resultados)
+                if con_lista:
+                    sin_actualizar = SinActualizarDeLaCompeticion.de_lo_leido(
+                        competicion, actualizacion, inscritos, usuarios, resultados
+                    ).para_el_organizador
+                nombres = PlayerNames.de_lo_leido(
+                    list(dict.fromkeys([*pendientes, *sin_actualizar])), usuarios, inscritos
+                )
         return HandicapUpdateStatusDTO(
             status=actualizacion.estado.value,
             origin=actualizacion.origen.value,

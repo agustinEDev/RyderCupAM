@@ -10,12 +10,14 @@ de anotacion resuelve lo mismo de uno en uno y a proposito —son 2-4 jugadores 
 comparte `AsyncSession`, ver su comentario—, asi que esa no pasa por aqui.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -50,8 +52,20 @@ class PlayerNames:
         enrollments = await uow.enrollments.find_by_user_ids_and_competition(
             list(user_ids), competition_id
         )
+        return PlayerNames.de_lo_leido(user_ids, {u.id: u for u in users}, enrollments)
+
+    @staticmethod
+    def de_lo_leido(
+        user_ids: Sequence[UserId],
+        users: Mapping[UserId, User],
+        enrollments: Iterable[Enrollment],
+    ) -> dict[UserId, str]:
+        """
+        Lo mismo, con los usuarios y sus inscripciones en esta competición ya
+        leídos (para quien ya los tiene y no quiere leerlos otra vez).
+        """
         real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
         names: dict[UserId, str] = {
-            user.id: user.display_name_or_legal(user.id in real_name_wanted) for user in users
+            uid: user.display_name_or_legal(uid in real_name_wanted) for uid, user in users.items()
         }
         return {uid: names.get(uid, "") for uid in user_ids}
