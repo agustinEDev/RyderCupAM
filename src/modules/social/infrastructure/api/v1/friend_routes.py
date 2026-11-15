@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 
+from src.config.correo_verificado import usuario_con_correo_verificado
 from src.config.dependencies import (
     get_block_user_use_case,
     get_current_user,
@@ -88,7 +89,7 @@ class RespondFriendRequestBody(BaseModel):
 async def send_friend_request(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
     body: SendFriendRequestBody,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(usuario_con_correo_verificado),  # B-17
     use_case: SendFriendRequestUseCase = Depends(get_send_friend_request_use_case),
 ):
     request_dto = SendFriendRequestRequestDTO(
