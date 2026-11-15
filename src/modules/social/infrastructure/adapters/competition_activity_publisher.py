@@ -142,6 +142,10 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             competition.creator_id, _ref(competition), reason.value, players
         )
 
+    async def close_block_withdrawn(self, competition: Competition) -> None:
+        """Al organizador se le retira el «no se puede cerrar» (C4)."""
+        await self._notices.close_block_withdrawn(competition.creator_id, str(competition.id.value))
+
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
     ) -> None:

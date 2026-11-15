@@ -20,6 +20,10 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.plazo_de_inscripcion import (
+    PlazoDeInscripcion,
+)
+from src.modules.competition.application.services.reapertura import Reapertura
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -30,6 +34,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -92,6 +97,7 @@ class UpdateCompetitionUseCase:
         location_builder: LocationBuilder,
         golf_course_repository: IGolfCourseRepository,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        plazo: PlazoDeInscripcion | None = None,
     ):
         """
         Constructor.
@@ -101,12 +107,15 @@ class UpdateCompetitionUseCase:
             location_builder: Domain Service para construir Location
             golf_course_repository: Campos de golf (otro módulo): al cambiar la
                 ubicación, la entidad necesita el país de los suyos
+            plazo: El plazo de inscripción (15 nov 2026): con él, una cerrada por
+                el plazo puede moverse (R3); sin él, en CLOSED no se edita
         """
         self._uow = uow
         self._location_builder = location_builder
         self._golf_course_repo = golf_course_repository
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
+        self._plazo = plazo
 
     async def _paises_de_los_campos(self, competition: Competition) -> list[CountryCode]:
         """El país de cada campo de golf de la competición."""
@@ -204,6 +213,67 @@ class UpdateCompetitionUseCase:
                 "No se puede cambiar el modo de juego: ya hay sesiones con partidos."
             )
 
+    def _es_mover_una_cerrada_por_el_plazo(
+        self, competition: Competition, request: UpdateCompetitionRequestDTO
+    ) -> bool:
+        """
+        Cerrada por el plazo y llegando las dos fechas y nada más (R3, 15 nov 2026). Cerrada a mano, o con cualquier otro
+        campo, se sigue rechazando como siempre.
+        """
+        if competition.status is not CompetitionStatus.CLOSED:
+            return False
+        if not competition.enrollment_closed_by_deadline:
+            return False
+        fechas = {"start_date", "end_date"}
+        otros = {
+            campo
+            for campo in request.model_fields_set - fechas
+            if getattr(request, campo) is not None or campo == "enrollment_opens_days_before"
+        }
+        return not otros and request.start_date is not None and request.end_date is not None
+
+    async def _mover_si_la_cerro_el_plazo(
+        self,
+        competition_id: CompetitionId,
+        request: UpdateCompetitionRequestDTO,
+        user_id: UserId,
+        is_admin: bool,
+    ) -> UpdateCompetitionResponseDTO | None:
+        """
+        Cerrada por el plazo, mueve el torneo y, si el plazo nuevo está en el
+        futuro, la reabre por el camino de siempre: se cerrará en el plazo nuevo
+        (R3). None si no es el caso, y sigue el camino de siempre.
+        """
+        plazo = self._plazo
+        if plazo is None or request.start_date is None or request.end_date is None:
+            return None
+        async with self._uow:
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+            if competition is None or not self._es_mover_una_cerrada_por_el_plazo(
+                competition, request
+            ):
+                return None
+            if not is_admin and not competition.is_creator(user_id):
+                raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
+            rondas = await self._uow.rounds.find_by_competition(competition_id)
+            self._comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request)
+            competition.move_dates_closed_by_deadline(
+                DateRange(request.start_date, request.end_date)
+            )
+            reapertura = Reapertura(self._uow, plazo.zonas, plazo.ahora, self._actividad)
+            borradas = None
+            if await plazo.queda_plazo(competition):
+                borradas = await reapertura.reabrir(competition)
+            await self._uow.competitions.update(competition)
+
+        if borradas is not None:
+            await reapertura.avisar(competition, borradas)
+        return UpdateCompetitionResponseDTO(
+            id=competition.id.value,
+            name=str(competition.name),
+            updated_at=competition.updated_at,
+        )
+
     async def execute(
         self,
         competition_id: CompetitionId,
@@ -227,6 +297,11 @@ class UpdateCompetitionUseCase:
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionNotEditableError: Si no está en estado DRAFT
         """
+        # Cerrada por el plazo, se puede mover el torneo, y nada más (R3)
+        movida = await self._mover_si_la_cerro_el_plazo(competition_id, request, user_id, is_admin)
+        if movida is not None:
+            return movida
+
         async with self._uow:
             # 1. Buscar la competición
             # Bloqueada: mover las fechas no puede cruzarse con un cambio de las

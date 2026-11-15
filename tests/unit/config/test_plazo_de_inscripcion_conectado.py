@@ -9,11 +9,13 @@ from types import SimpleNamespace
 import pytest
 
 from src.config.dependencies import (
+    get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
     get_request_enrollment_use_case,
     get_respond_to_invitation_use_case,
     get_send_invitation_by_email_use_case,
     get_send_invitation_by_user_id_use_case,
+    get_update_competition_use_case,
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
@@ -42,8 +44,22 @@ GC_UOW = SimpleNamespace(golf_courses=object())
         lambda: get_respond_to_invitation_use_case(
             uow=UOW, user_uow=USER_UOW, gc_uow=GC_UOW, actividad=object()
         ),
+        lambda: get_direct_enroll_player_use_case(
+            uow=UOW, user_uow=USER_UOW, gc_uow=GC_UOW, actividad=object()
+        ),
+        lambda: get_update_competition_use_case(
+            uow=UOW, location_builder=object(), golf_course_uow=GC_UOW, actividad=object()
+        ),
     ],
-    ids=["apuntarse", "aprobar", "invitar-por-id", "invitar-por-correo", "aceptar"],
+    ids=[
+        "apuntarse",
+        "aprobar",
+        "invitar-por-id",
+        "invitar-por-correo",
+        "aceptar",
+        "inscribir-a-mano",
+        "mover-una-cerrada",
+    ],
 )
 def test_cada_puerta_lleva_el_plazo(construir):
     """C2. Given el proveedor de la API / When construye el caso de uso / Then lleva el plazo."""

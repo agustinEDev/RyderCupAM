@@ -79,5 +79,7 @@ class EnrollmentOpener:
         if not competition.due_to_open(zona):
             return
 
-        competition.activate()
+        # Abierta a su hora programada, aunque se abra ahora al mirarla: abrirla
+        # tarde no la exime del plazo de inscripcion (15 nov 2026)
+        competition.activate(now=competition.scheduled_opening_at(zona))
         await uow.competitions.update(competition)

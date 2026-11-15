@@ -447,6 +447,15 @@ class PublishCompetitionNoticesUseCase:
             ]
         )
 
+    async def close_block_withdrawn(self, organizer_id: UserId, competition_id: str) -> None:
+        """
+        Por fin se cerraron: el «N jugadores sin franja en X» ya no pide nada y
+        se retira (C4, Agustín, 15 nov 2026).
+        """
+        await self._retirar(
+            competition_id, [ActivityEventType.ENROLLMENT_CLOSE_BLOCKED], organizer_id
+        )
+
     async def placed_from_waiting_list(
         self, user_id: UserId, tournament: TournamentRef, franja: TeeWindowRef
     ) -> None:

@@ -12,6 +12,10 @@ El plazo de inscripción por la API y contra Postgres (15 nov 2026).
 | R1   | cerrada a mano y reabierta pasado el plazo                 | se entra, y la vuelta no la toca            |
 | R2   | creada con el torneo hoy                                   | se entra                                    |
 | R3   | movida más tarde                                           | se vuelve a entrar                          |
+| R3   | cerrada por el plazo y movida más tarde                    | se reabre sola                              |
+| R3   | cerrada a mano y movida                                    | 400: hay que reabrir antes                  |
+| C2   | el organizador inscribe a mano pasado el plazo             | 400 ENROLLMENT_DEADLINE_PASSED              |
+| C4   | se cierra por fin tras avisar                              | el aviso de bloqueo se retira               |
 
 «Pasado el plazo» se monta en la base de datos: el torneo, hoy (el plazo fue ayer a
 las 12:00), y abierta hace diez días.
@@ -28,6 +32,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.config.cierre_de_inscripciones import CierreDeInscripciones
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
+    add_one_session,
     create_authenticated_user,
     create_competition,
     estado_en_bd,
@@ -261,3 +266,76 @@ async def test_r3_movida_mas_tarde_se_vuelve_a_entrar(client: AsyncClient):
 
     respuesta = await _entra(client, await _usuario(client), competicion)
     assert respuesta.status_code == 201, respuesta.text
+
+
+async def _mover(client: AsyncClient, organizador: dict, competicion: dict, dias: int):
+    inicio = date.today() + timedelta(days=dias)
+    set_auth_cookies(client, organizador["cookies"])
+    return await client.put(
+        f"/api/v1/competitions/{competicion['id']}",
+        json={
+            "start_date": inicio.isoformat(),
+            "end_date": (inicio + timedelta(days=1)).isoformat(),
+        },
+    )
+
+
+async def test_r3_cerrada_por_el_plazo_y_movida_mas_tarde_se_reabre(client: AsyncClient):
+    organizador, competicion = await _competicion(client)
+    await _pasado_el_plazo(competicion)
+    await _vuelta()
+    assert await estado_en_bd(competicion["id"]) == "CLOSED"
+
+    movida = await _mover(client, organizador, competicion, 10)
+
+    assert movida.status_code == 200, movida.text
+    assert await estado_en_bd(competicion["id"]) == "ACTIVE"
+    respuesta = await _entra(client, await _usuario(client), competicion)
+    assert respuesta.status_code == 201, respuesta.text
+
+
+async def test_r3_cerrada_a_mano_no_se_mueve(client: AsyncClient):
+    organizador, competicion = await _competicion(client)
+    set_auth_cookies(client, organizador["cookies"])
+    cerrada = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
+    assert cerrada.status_code == 200, cerrada.text
+
+    movida = await _mover(client, organizador, competicion, 40)
+
+    assert movida.status_code == 400, movida.text
+    assert await estado_en_bd(competicion["id"]) == "CLOSED"
+
+
+async def test_c2_pasado_el_plazo_no_se_inscribe_a_mano(client: AsyncClient):
+    organizador, competicion = await _competicion(client)
+    jugador = await _usuario(client)
+    await _pasado_el_plazo(competicion)
+
+    set_auth_cookies(client, organizador["cookies"])
+    respuesta = await client.post(
+        f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+        json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json() == CERRADA
+
+
+async def test_c4_al_cerrarse_por_fin_se_retira_el_aviso_de_bloqueo(client: AsyncClient):
+    organizador, competicion = await _competicion(client, stroke_play=True)
+    await _pasado_el_plazo(competicion)
+    await _vuelta()
+    assert len(await _avisos(client, organizador, "ENROLLMENT_CLOSE_BLOCKED")) == 1
+    # El organizador coge plaza en una franja y la vuelta siguiente la cierra
+    # La franja, mañana: dentro del torneo movido a hoy y todavía por salir
+    manana = {**competicion, "start_date": (date.today() + timedelta(days=1)).isoformat()}
+    franja = await add_one_session(client, organizador["cookies"], manana)
+    set_auth_cookies(client, organizador["cookies"])
+    plaza = await client.post(f"/api/v1/competitions/rounds/{franja['id']}/places", json={})
+    assert plaza.status_code == 201, plaza.text
+
+    await _vuelta()
+
+    assert await estado_en_bd(competicion["id"]) == "CLOSED"
+    assert await _avisos(client, organizador, "ENROLLMENT_CLOSE_BLOCKED") == []
+    assert len(await _avisos(client, organizador, "ENROLLMENTS_CLOSED")) == 1

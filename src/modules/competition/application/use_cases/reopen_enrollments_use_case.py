@@ -20,25 +20,12 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
-from src.modules.competition.application.services.actualizaciones_de_handicaps import (
-    ActualizacionesDeHandicaps,
-)
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.partidas_del_jugador import (
-    salidas_por_hora,
-)
-from src.modules.competition.application.services.salidas_de_la_ronda import (
-    Salidas,
-    de_las_partidas,
-)
-from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.application.services.reapertura import Reapertura
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.value_objects.partida_id import PartidaId
-from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -114,36 +101,17 @@ class ReopenEnrollmentsUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede reabrir inscripciones")
 
-            # 3. Reabrir inscripciones (la entidad valida la transición)
-            # Con la hora: reabierta pasado el plazo, ya no se cierra sola (R1)
-            competition.reopen_enrollments(now=self._reloj())
-
-            # La actualización de hándicaps que esté a medias se corta: al volver
-            # a cerrar empieza otra (#251)
-            await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
-
-            # Las partidas que no han salido se borran: pueden entrar y salir
-            # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
-            # estado o por su hora: hasta la PR 5 nadie las pasa a IN_PROGRESS) se
-            # quedan: lo jugado no se borra (D1, #251)
-            borradas = await self._borrar_las_que_no_salieron(competition.id)
-
-            # Sus avisos de hándicaps con la RFEG dejan de ser ciertos (CodeRabbit, #864)
-            inscritos = [
-                i.user_id
-                for i in await self._uow.enrollments.find_by_competition_and_status(
-                    competition.id, EnrollmentStatus.APPROVED
-                )
-            ]
+            # 3. Reabrir inscripciones (la entidad valida la transición), con lo
+            #    que arrastra: hándicaps a medias y partidas sin salir (#251, D1)
+            reapertura = self._reapertura()
+            borradas = await reapertura.reabrir(competition)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # Sin partida no hay salida: se retiran sus avisos (G4)
-        for round_id, salidas in borradas.items():
-            await self._actividad.salidas_cambiadas(competition, round_id, salidas, {})
-        await self._actividad.handicaps_not_updated_withdrawn(competition)
-        await self._actividad.handicap_not_found_withdrawn(competition, inscritos)
+        # y los de hándicaps con la RFEG dejan de ser ciertos (CodeRabbit, #864)
+        await reapertura.avisar(competition, borradas)
 
         # 5. Retornar DTO de respuesta
         return ReopenEnrollmentsResponseDTO(
@@ -152,27 +120,5 @@ class ReopenEnrollmentsUseCase:
             reopened_at=competition.updated_at,
         )
 
-    async def _borrar_las_que_no_salieron(
-        self, competition_id: CompetitionId
-    ) -> dict[RoundId, Salidas]:
-        """
-        Returns:
-            Por franja, las salidas de los jugadores de las partidas borradas
-        """
-        partidas = await self._uow.partidas.de_la_competicion(competition_id)
-        ahora = self._reloj()
-        salidas: set[PartidaId] = set()
-        franjas: dict[RoundId, Round] = {}
-        for round_id in {p.round_id for p in partidas}:
-            franja = await self._uow.rounds.find_by_id(round_id)
-            if franja is not None:
-                franjas[round_id] = franja
-                de_la_franja = [p for p in partidas if p.round_id == round_id]
-                salidas |= await salidas_por_hora(franja, de_la_franja, self._zonas, ahora)
-        borrar = [p for p in partidas if not p.empezada and p.id not in salidas]
-        await self._uow.partidas.borrar(borrar)
-        return {
-            round_id: de_las_partidas(franja, [p for p in borrar if p.round_id == round_id])
-            for round_id, franja in franjas.items()
-            if any(p.round_id == round_id for p in borrar)
-        }
+    def _reapertura(self) -> Reapertura:
+        return Reapertura(self._uow, self._zonas, self._reloj, self._actividad)

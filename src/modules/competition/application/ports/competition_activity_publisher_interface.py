@@ -118,6 +118,10 @@ class CompetitionActivityPublisherInterface(ABC):
         """
 
     @abstractmethod
+    async def close_block_withdrawn(self, competition: Competition) -> None:
+        """Se cerro por fin: el aviso de que no se podia cerrar se retira (C4)."""
+
+    @abstractmethod
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
     ) -> None:

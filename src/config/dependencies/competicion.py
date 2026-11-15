@@ -282,8 +282,15 @@ def get_update_competition_use_case(
     3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
+    # Con el plazo: una cerrada por el plazo puede moverse de fecha (R3)
     return UpdateCompetitionUseCase(
-        uow, location_builder, golf_course_uow.golf_courses, actividad=actividad
+        uow,
+        location_builder,
+        golf_course_uow.golf_courses,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(golf_course_uow.golf_courses, uow.competitions)
+        ),
     )
 
 
@@ -618,10 +625,18 @@ def get_request_enrollment_use_case(
 def get_direct_enroll_player_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DirectEnrollPlayerUseCase:
     """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow, user_uow.users, actividad=actividad)
+    return DirectEnrollPlayerUseCase(
+        uow,
+        user_uow.users,
+        actividad=actividad,
+        plazo=PlazoDeInscripcion(
+            CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        ),
+    )
 
 
 def get_handle_enrollment_use_case(

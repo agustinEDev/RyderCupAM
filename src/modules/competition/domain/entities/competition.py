@@ -706,6 +706,39 @@ class Competition:
         instante = en_utc(now) if now is not None else datetime.now(UTC)
         self._enrollment_opened_at = instante.replace(tzinfo=None)
 
+    def scheduled_opening_at(self, timezone: str | None) -> datetime | None:
+        """
+        La hora a la que le toca abrirse sola, o None sin apertura programada.
+
+        Abierta tarde —nadie la miro hasta pasado el plazo— cuenta desde esta
+        hora, no desde que alguien la abrio: si no, quedaria exenta del plazo
+        sin que nadie lo decidiera (15 nov 2026).
+        """
+        return EnrollmentOpeningService.opens_at(
+            self._dates.start_date, self._enrollment_opens_days_before, timezone
+        )
+
+    def move_dates_closed_by_deadline(self, dates: DateRange) -> None:
+        """
+        Mueve el torneo con las inscripciones cerradas, solo si las cerro el plazo
+        (R3, 15 nov 2026). Cerradas a mano, las fechas siguen quietas: se reabre
+        antes. Si el plazo nuevo esta en el futuro, quien llama la reabre.
+
+        Raises:
+            CompetitionStateError: Si no esta cerrada, o la cerro el organizador
+        """
+        if self._status != CompetitionStatus.CLOSED or not self._enrollment_closed_by_deadline:
+            raise CompetitionStateError(
+                "Con las inscripciones cerradas a mano no se mueven las fechas: reábrelas antes."
+            )
+        if self._stroke_play is not None:
+            self._stroke_play.check_fits_in(self._days_of(dates))
+        self._mover_fechas(dates)
+        self._updated_at = datetime.now()
+        self._add_domain_event(
+            CompetitionUpdatedEvent(competition_id=str(self._id), name=str(self._name))
+        )
+
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
         return self._status.allows_modifications()

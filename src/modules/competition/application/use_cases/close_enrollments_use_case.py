@@ -183,6 +183,8 @@ class CloseEnrollmentsUseCase:
         # 4b. Cerrar inscripciones (la entidad valida la transición), diciendo si
         #     las cierra el plazo (C3, R3)
         desde_abierta = competition.status is CompetitionStatus.ACTIVE
+        # Si se le dijo que no se podía cerrar, ese aviso se retira al cerrar (C4)
+        estaba_avisada = competition.close_blocked_notified
         competition.close_enrollments(total_enrollments=total_enrollments, by_deadline=por_el_plazo)
 
         # 4c. Al cerrar desde ABIERTA se pregunta a la RFEG por todos, en segundo
@@ -201,7 +203,13 @@ class CloseEnrollmentsUseCase:
         # 6. Las invitaciones pendientes se quedan sin plaza (#710)
         sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition.id)
         return _Cierre(
-            competition, total_enrollments, sin_sitio, sin_plaza, actualizacion, por_el_plazo
+            competition,
+            total_enrollments,
+            sin_sitio,
+            sin_plaza,
+            actualizacion,
+            por_el_plazo,
+            estaba_avisada,
         )
 
     async def _despues(self, cierre: "_Cierre") -> CloseEnrollmentsResponseDTO:
@@ -218,6 +226,9 @@ class CloseEnrollmentsUseCase:
         # Y al organizador, si las cerró el plazo: «se han cerrado» (C5)
         if cierre.por_el_plazo:
             await self._actividad.enrollments_closed(competition)
+        # Y el «no se puede cerrar» ya no pide nada, la cierre quien la cierre (C4)
+        if cierre.estaba_avisada:
+            await self._actividad.close_block_withdrawn(competition)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(
@@ -246,3 +257,4 @@ class _Cierre:
     sin_plaza: list[Invitation]
     actualizacion: ActualizacionDeHandicaps | None
     por_el_plazo: bool
+    estaba_avisada: bool

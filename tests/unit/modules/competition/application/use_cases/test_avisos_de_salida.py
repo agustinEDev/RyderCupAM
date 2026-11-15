@@ -186,7 +186,7 @@ class _Salidas(CompetitionActivityPublisherInterface):
     handicaps_not_updated = handicap_not_found = _nada  # type: ignore[assignment]
     handicaps_not_updated_withdrawn = handicap_not_found_withdrawn = _nada  # type: ignore[assignment]
     # Del cierre por el plazo (15 nov 2026)
-    enrollments_closed = close_blocked = _nada  # type: ignore[assignment]
+    enrollments_closed = close_blocked = close_block_withdrawn = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

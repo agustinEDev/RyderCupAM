@@ -44,6 +44,15 @@ class PlazoDeInscripcion:
     def ahora(self) -> datetime:
         return self._reloj()
 
+    @property
+    def zonas(self) -> ICompetitionTimezone:
+        return self._zonas
+
+    async def queda_plazo(self, competition: Competition) -> bool:
+        """Si su plazo todavía no ha llegado, con su zona (R3)."""
+        zona = await self._zonas.for_competition(competition)
+        return self.ahora() < competition.enrollment_deadline(zona)
+
     async def vencido(self, competition: Competition) -> bool:
         """
         Si ya no entra nadie por el plazo. En borrador, sin mirar la zona: quien
