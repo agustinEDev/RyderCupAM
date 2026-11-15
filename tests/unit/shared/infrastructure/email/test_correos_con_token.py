@@ -84,6 +84,11 @@ CORREOS = [
         lambda s: s.send_handicaps_pending_email("a@b.com", "Ana", "Copa", "c-1", ["Luis"]),
     ),
     (
+        "rfeg_no_encontrado",
+        True,
+        lambda s: s.send_handicap_not_found_email("a@b.com", "Ana", "Copa", "c-1"),
+    ),
+    (
         "programada",
         True,
         lambda s: s.send_scheduled_handicaps_update_skipped_email(
@@ -138,6 +143,7 @@ def test_e13b_every_email_of_the_app_is_in_the_list():
         "send_invitation_email",
         "send_friend_request_email",
         "send_handicaps_pending_email",
+        "send_handicap_not_found_email",
         "send_scheduled_handicaps_update_skipped_email",
     }
     assert len(CORREOS) == len(del_servicio)

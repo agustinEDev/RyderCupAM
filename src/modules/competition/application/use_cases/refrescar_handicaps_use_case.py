@@ -12,6 +12,11 @@ actualización y se lanza esta pasada en segundo plano.
 - Si alguien se queda sin actualizar, la actualización queda **incompleta** y
   se avisa al organizador por correo. Una pasada sobre una incompleta termina
   solo lo que falta.
+- **Al terminar** (15 nov 2026, H1-H6), el organizador recibe la lista de los
+  que se quedaron sin actualizar con la RFEG (los españoles, y todos si la
+  competición es en España), por correo y en Actividad; y cada español al que
+  la RFEG no encontró en esta pasada, su correo y su aviso. Si la RFEG falló,
+  al jugador nada.
 - Si la competición empieza a mitad, la actualización se corta y la pasada
   para: lo pendiente se queda como estaba.
 
@@ -33,6 +38,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
@@ -42,6 +50,7 @@ from src.modules.competition.application.ports.handicap_update_email_service_int
 from src.modules.competition.application.services.avisos_al_organizador import (
     AvisosAlOrganizador,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
@@ -54,6 +63,9 @@ from src.modules.competition.application.services.pendientes_de_actualizar impor
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.application.services.sin_actualizar_de_la_competicion import (
+    SinActualizarDeLaCompeticion,
+)
 from src.modules.competition.application.services.ventana_de_la_competicion import ventana_de
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
@@ -117,6 +129,7 @@ class RefrescarHandicapsUseCase:
         avisos: IHandicapUpdateEmailService | None,
         reloj: Callable[[], datetime],
         esperar: Callable[[float], Awaitable[None]],
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
@@ -126,12 +139,14 @@ class RefrescarHandicapsUseCase:
             avisos: El correo al organizador si queda alguien sin actualizar
             reloj: La hora actual, con huso
             esperar: Las pausas
+            actividad: Los avisos de Actividad al terminar (15 nov 2026)
         """
         self._herramientas = herramientas
         self._handicap_service = handicap_service
         self._avisos = AvisosAlOrganizador(avisos)
         self._reloj = reloj
         self._esperar = esperar
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, update_id: uuid.UUID) -> int:
         """
@@ -140,14 +155,18 @@ class RefrescarHandicapsUseCase:
         """
         pendientes = await self._pendientes(update_id)
         preguntados = 0
+        # A quién no encontró la RFEG en esta pasada: solo a ellos se les avisa,
+        # y así otra pasada de una incompleta no se lo repite
+        no_encontrados: set[UserId] = set()
         for user_id in pendientes:
             if preguntados:
                 await self._esperar(PAUSA_ENTRE_JUGADORES)
             if not await self._sigue(update_id):
                 return preguntados
-            await self._refrescar(update_id, user_id)
+            if await self._refrescar(update_id, user_id) is ResultadoRefresco.NO_ENCONTRADO:
+                no_encontrados.add(user_id)
             preguntados += 1
-        await self._terminar(update_id)
+        await self._terminar(update_id, no_encontrados)
         return preguntados
 
     async def _pendientes(self, update_id: uuid.UUID) -> list[UserId]:
@@ -187,15 +206,23 @@ class RefrescarHandicapsUseCase:
         await uow.handicap_updates.update(actualizacion)
         return False
 
-    async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> None:
-        """Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga."""
+    async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> ResultadoRefresco | None:
+        """
+        Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga.
+
+        Returns:
+            Lo último que se apuntó, o None si se cortó antes de preguntar
+        """
+        resultado = None
         for intento in range(MAX_INTENTOS):
             if intento:
                 await self._esperar(PAUSA_ENTRE_INTENTOS)
                 if not await self._sigue(update_id):
-                    return
-            if await self._una_vez(update_id, user_id) is not ResultadoRefresco.FALLIDO:
-                return
+                    return resultado
+            resultado = await self._una_vez(update_id, user_id)
+            if resultado is not ResultadoRefresco.FALLIDO:
+                return resultado
+        return resultado
 
     async def _una_vez(self, update_id: uuid.UUID, user_id: UserId) -> ResultadoRefresco:
         """
@@ -290,10 +317,12 @@ class RefrescarHandicapsUseCase:
         except Exception:
             logger.exception("Tampoco se pudo apuntar el fallo de %s", user_id)
 
-    async def _terminar(self, update_id: uuid.UUID) -> None:
+    async def _terminar(self, update_id: uuid.UUID, no_encontrados: set[UserId]) -> None:
         """
         Completa, o incompleta si alguien se quedó sin actualizar; y entonces se
-        avisa al organizador, ya fuera de la transacción.
+        avisa, ya fuera de la transacción (H1-H6, 15 nov 2026): al organizador,
+        si alguien se quedó sin actualizar con la RFEG; y a cada español al que
+        la RFEG no encontró en esta pasada.
         """
         async with self._herramientas() as h, h.competiciones as uow:
             actualizacion = await uow.handicap_updates.find_by_id(update_id)
@@ -310,10 +339,19 @@ class RefrescarHandicapsUseCase:
             # categorías iguales se rehacen con los corregidos (10 oct 2026)
             if actualizacion.origen is OrigenActualizacion.CIERRE:
                 await HandicapsAlCerrar(uow, h.usuarios).repartir_de_nuevo(competicion)
-            if not sin_actualizar:
-                return
-            nombres = await PlayerNames.de_la_competicion(
-                sin_actualizar, competicion.id, h.usuarios, uow
+            hecho = await SinActualizarDeLaCompeticion.de(
+                uow, h.usuarios, competicion, actualizacion
             )
+            lista = hecho.para_el_organizador
+            avisar = [u for u in hecho.no_encontrados if u in no_encontrados]
+            # Los no encontrados avisados están también en la lista del organizador
+            if not lista:
+                return
+            nombres = await PlayerNames.de_la_competicion(lista, competicion.id, h.usuarios, uow)
             organizador = await self._avisos.quien(h.usuarios, competicion)
+            jugadores = await h.usuarios.find_by_ids(avisar) if avisar else []
         await self._avisos.pendientes(organizador, competicion, list(nombres.values()))
+        await self._actividad.handicaps_not_updated(competicion, len(lista))
+        for jugador in jugadores:
+            await self._avisos.no_encontrado(jugador, competicion)
+        await self._actividad.handicap_not_found(competicion, [j.id for j in jugadores])

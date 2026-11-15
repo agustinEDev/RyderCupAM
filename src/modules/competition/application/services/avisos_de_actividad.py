@@ -172,6 +172,20 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             "tee_times", lambda p: p.tee_times(competition, round_id, assigned, withdrawn)
         )
 
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        await self._avisar(
+            "handicaps_not_updated", lambda p: p.handicaps_not_updated(competition, count)
+        )
+
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found", lambda p: p.handicap_not_found(competition, user_ids)
+        )
+
     async def salidas_cambiadas(
         self,
         competition: Competition,

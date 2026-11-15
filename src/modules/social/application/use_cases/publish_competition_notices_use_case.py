@@ -40,6 +40,8 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        ActivityEventType.HANDICAPS_NOT_UPDATED,
+        ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
     }
 )
 
@@ -58,6 +60,9 @@ _SE_RENUEVAN = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        # Uno por torneo: otra pasada u otra actualización lo pone al día
+        ActivityEventType.HANDICAPS_NOT_UPDATED,
+        ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
     }
 )
 
@@ -467,6 +472,46 @@ class PublishCompetitionNoticesUseCase:
                     tournament,
                     self._de_la_franja(franja),
                 )
+            ]
+        )
+
+    # === Hándicaps con la RFEG ===
+
+    async def handicaps_not_updated(
+        self, organizer_id: UserId, tournament: TournamentRef, count: int
+    ) -> None:
+        """
+        «{N} jugadores sin actualizar con la RFEG en X», para el organizador (H2,
+        15 nov 2026). Uno por torneo: otra pasada lo renueva con su número.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.HANDICAPS_NOT_UPDATED,
+                    tournament.competition_id,
+                    tournament,
+                    {"count": count},
+                )
+            ]
+        )
+
+    async def handicap_not_found(
+        self, tournament: TournamentRef, user_ids: Sequence[UserId]
+    ) -> None:
+        """
+        «No hemos encontrado tu hándicap en la RFEG para X», a cada jugador
+        español al que la RFEG no encontró (H3, 15 nov 2026). Uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    user_id,
+                    ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+                    tournament.competition_id,
+                    tournament,
+                )
+                for user_id in user_ids
             ]
         )
 

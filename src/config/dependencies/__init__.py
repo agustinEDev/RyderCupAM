@@ -67,6 +67,7 @@ from src.config.dependencies.competicion import (
     get_list_competition_invitations_use_case,
     get_list_competitions_use_case,
     get_list_enrollments_use_case,
+    get_list_my_handicaps_not_updated_use_case,
     get_list_my_invitations_use_case,
     get_location_builder,
     get_make_draft_pick_use_case,
@@ -154,6 +155,7 @@ from src.config.dependencies.competicion_juego import (
 )
 from src.config.dependencies.comun import (
     ActivityUnitsOfWork,
+    actividad_en_sesion_propia,
     get_activity_db_session,
     get_activity_units_of_work,
     get_amigos,
@@ -300,6 +302,7 @@ __all__ = [
     "_generador_al_abrir",
     "_recent_hole_report_senders",
     "_recent_hole_sample_senders",
+    "actividad_en_sesion_propia",
     "get_accept_terms_use_case",
     "get_activate_competition_use_case",
     "get_activate_uploaded_avatar_use_case",
@@ -423,6 +426,7 @@ __all__ = [
     "get_list_hole_reviews_use_case",
     "get_list_hole_samples_use_case",
     "get_list_my_avatar_uploads_use_case",
+    "get_list_my_handicaps_not_updated_use_case",
     "get_list_my_invitations_use_case",
     "get_list_my_pending_envelopes_use_case",
     "get_list_my_quick_matches_use_case",

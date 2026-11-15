@@ -345,6 +345,16 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
         await self._notices.tee_times(_ref(competition), str(round_id.value), _vigentes)
 
+    async def handicaps_not_updated(self, competition: Competition, count: int) -> None:
+        """Al organizador, cuántos se quedaron sin actualizar con la RFEG (H2)."""
+        await self._notices.handicaps_not_updated(competition.creator_id, _ref(competition), count)
+
+    async def handicap_not_found(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """A cada español al que la RFEG no encontró, el suyo (H3)."""
+        await self._notices.handicap_not_found(_ref(competition), list(user_ids))
+
 
 def _franja(franja: Round) -> TeeWindowRef:
     """La franja como la cuenta un aviso: día, sesión y primera salida."""

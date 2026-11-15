@@ -9,6 +9,10 @@ aquí, en una tarea del propio proceso de la API: la respuesta no espera a la
 RFEG. Si el servidor se reinicia a mitad, la tarea muere y la actualización
 se queda en curso: detectarlo y avisar llega con el botón del organizador.
 
+Al terminar, la pasada avisa también en Actividad (15 nov 2026), con una sesión
+propia para Actividad, como el cierre de las partidas rápidas: lo que publica
+no debe deshacer lo guardado si falla.
+
 El vigilante, una vuelta por minuto en el mismo proceso, solo lanza las
 actualizaciones programadas y recupera las que un reinicio dejó en curso.
 
@@ -28,6 +32,9 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.candado_de_postgres import con_candado
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
@@ -59,6 +66,10 @@ logger = logging.getLogger(__name__)
 
 _ENCENDIDO = {"true", "1", "yes", "on"}
 
+# Monta Actividad sobre una sesión: la da la composición de dependencias, que
+# importa este módulo (pasarla evita el ciclo)
+FabricaDeActividad = Callable[[AsyncSession], CompetitionActivityPublisherInterface]
+
 
 def refresco_activado(entorno: Mapping[str, str]) -> bool:
     """Solo con `HANDICAP_REFRESH_ENABLED` encendido, y nunca en los tests."""
@@ -76,11 +87,13 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         handicap_service: HandicapService,
         avisos: IHandicapUpdateEmailService,
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        actividad: FabricaDeActividad | None = None,
     ):
         self.fabrica = fabrica_de_sesiones
         self._handicap_service = handicap_service
         self.avisos = avisos
         self._esperar = esperar
+        self._actividad = actividad
         # Referencias fuertes: una tarea sin ellas puede desaparecer a medias
         self._tareas: set[asyncio.Task[int | None]] = set()
 
@@ -96,16 +109,29 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
     async def pasada(self, update_id: uuid.UUID) -> int | None:
         """Una pasada entera; un fallo se registra y no sale de aquí."""
         try:
-            return await RefrescarHandicapsUseCase(
-                herramientas=self.herramientas,
-                handicap_service=self._handicap_service,
-                avisos=self.avisos,
-                reloj=lambda: datetime.now(UTC),
-                esperar=self._esperar,
-            ).execute(update_id)
+            async with self._actividad_de_la_pasada() as actividad:
+                return await RefrescarHandicapsUseCase(
+                    herramientas=self.herramientas,
+                    handicap_service=self._handicap_service,
+                    avisos=self.avisos,
+                    reloj=lambda: datetime.now(UTC),
+                    esperar=self._esperar,
+                    actividad=actividad,
+                ).execute(update_id)
         except Exception:
             logger.exception("Falló la actualización de hándicaps %s", update_id)
             return None
+
+    @asynccontextmanager
+    async def _actividad_de_la_pasada(
+        self,
+    ) -> AsyncIterator[CompetitionActivityPublisherInterface | None]:
+        """Actividad sobre su propia sesión, que se cierra al acabar la pasada."""
+        if self._actividad is None:
+            yield None
+            return
+        async with self.fabrica() as sesion:
+            yield self._actividad(sesion)
 
     async def esperar_a_todas(self) -> None:
         """Hasta que acaben las que estén en marcha (para los tests)."""

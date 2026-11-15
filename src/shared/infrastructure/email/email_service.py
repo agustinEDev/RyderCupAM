@@ -1168,6 +1168,91 @@ The Ryder Cup Friends Team
             recipient, subject, text_body, html_body, puede_ir_por_brevo=True
         )
 
+    async def send_handicap_not_found_email(
+        self,
+        to_email: str,
+        player_name: str,
+        competition_name: str,
+        competition_id: str,
+    ) -> bool:
+        """
+        Avisa al jugador español al que la RFEG no encontró (H3, 15 nov 2026).
+
+        Con el texto aprobado por Agustín el 15 nov 2026. Bilingüe (ES/EN), con la
+        plantilla común de los correos (BE #389). El botón abre la edición de su
+        perfil, que es donde se corrige el nombre y se vuelve a pedir a la RFEG.
+        """
+        safe_player = self._sanitize_name(player_name)
+        safe_competition = self._sanitize_name(competition_name)
+        enlace = f"{settings.FRONTEND_URL}/profile/edit"
+        revisa = (
+            "Revisa que tu nombre y apellidos en tu perfil sean los de tu licencia, "
+            "y vuelve a pedirlo desde tu perfil."
+        )
+        check = (
+            "Check that the first and last names in your profile match your licence, "
+            "and request it again from your profile."
+        )
+
+        subject = (
+            f"No hemos encontrado tu hándicap en la RFEG para {safe_competition} | "
+            f"We could not find your RFEG handicap for {safe_competition}"
+        )
+        text_body = f"""
+Hola {safe_player},
+
+No hemos encontrado tu hándicap en la RFEG para {safe_competition}. {revisa}
+
+{enlace}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_player},
+
+We could not find your handicap in the RFEG for {safe_competition}. {check}
+
+{enlace}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"No hemos encontrado tu hándicap en la RFEG para {safe_competition} · "
+            f"We could not find your RFEG handicap for {safe_competition}",
+            etiqueta="Hándicap",
+            titulo="No hemos encontrado tu hándicap",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_player),
+                    ", no hemos encontrado tu hándicap en la RFEG para ",
+                    negrita(safe_competition),
+                    ".",
+                ),
+                parrafo(revisa),
+            ],
+            boton=Boton("Ir a mi perfil", enlace),
+            ingles=Ingles(
+                frase(
+                    negrita(f"We could not find your handicap in the RFEG for {safe_competition}"),
+                    f". {check}",
+                ),
+                Boton("Go to my profile", enlace),
+            ),
+            pie="Te llega porque juegas esta competición en RyderCupFriends. "
+            "You get this because you play this competition on RyderCupFriends.",
+        )
+
+        recipient = f'"{safe_player}" <{to_email}>'
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
+
     async def send_scheduled_handicaps_update_skipped_email(
         self,
         to_email: str,

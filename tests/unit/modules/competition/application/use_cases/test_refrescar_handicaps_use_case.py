@@ -35,6 +35,19 @@ se avisa al organizador por correo.
 | Ryder cerrada                                     | Solo el perfil                           |
 | La RFEG se consulta                               | Sin ninguna transacción abierta          |
 | Un fallo inesperado                               | Se apunta como fallido, y sigue          |
+
+Sin actualizar con la RFEG (15 nov 2026, H1-H6; al final del fichero):
+
+| Caso | Al terminar la pasada                           | Organizador          | Jugador            |
+|------|-------------------------------------------------|----------------------|--------------------|
+| H1   | Todos actualizados                              | Nada                 | Nada               |
+| H3   | Español no encontrado (queda completa)          | Correo y Actividad   | Correo y Actividad |
+| H4   | Español con la RFEG caída (incompleta)          | Correo y Actividad   | Nada               |
+| H2   | Extranjero en una competición en España         | Correo y Actividad   | Nada (H6)          |
+| H6   | Extranjero en una competición fuera de España   | Nada                 | Nada               |
+| H1   | Otra pasada de una incompleta                   | Otra vez, al día     | No se repite       |
+| H1   | Se corta antes de acabar                        | Nada                 | Nada               |
+| —    | Correo o Actividad caídos                       | No tumban la pasada  |                    |
 """
 
 from contextlib import asynccontextmanager
@@ -188,6 +201,10 @@ class _Escenario:
         self.rfeg.search_handicap = AsyncMock(return_value=11.2)
         self.avisos = MagicMock()
         self.avisos.send_handicaps_pending_email = AsyncMock(return_value=True)
+        self.avisos.send_handicap_not_found_email = AsyncMock(return_value=True)
+        self.actividad = MagicMock()
+        self.actividad.handicaps_not_updated = AsyncMock()
+        self.actividad.handicap_not_found = AsyncMock()
         self.lanzador = _Lanzador(self.uow)
         self.esperas: list[float] = []
         self.creadores: dict[CompetitionId, UserId] = {}
@@ -196,7 +213,9 @@ class _Escenario:
     async def esperar(self, segundos: float) -> None:
         self.esperas.append(segundos)
 
-    async def torneo(self, tipo="RYDER_CUP", limites=("12.0",), contador=None) -> CompetitionId:
+    async def torneo(
+        self, tipo="RYDER_CUP", limites=("12.0",), contador=None, pais="ES"
+    ) -> CompetitionId:
         """Una competición con las inscripciones abiertas; su creador, sin personalizado."""
         creador = self.usuarios.alta()
         extra = {}
@@ -213,7 +232,7 @@ class _Escenario:
                 name="Medal de octubre",
                 start_date=date(2030, 10, 12),
                 end_date=date(2030, 10, 12),
-                main_country="ES",
+                main_country=pais,
                 play_mode="HANDICAP",
                 tournament_type=tipo,
                 **extra,
@@ -277,6 +296,7 @@ class _Escenario:
             avisos=self.avisos,
             reloj=lambda: self.ahora,
             esperar=self.esperar,
+            actividad=self.actividad,
         )
 
     async def pasar(self, torneo) -> int:
@@ -924,3 +944,238 @@ class TestCategoriasIgualesTrasElRefrescoDelCierre:
         await e.pasar(torneo)
 
         assert await self._limites(e, torneo) == (Decimal("12.0"),)
+
+
+class TestSinActualizarConLaRfeg:
+    """Lo que se avisa al terminar, según quién se quedó sin actualizar (H1-H6)."""
+
+    def _no_encuentra(self, e, *quienes):
+        """La RFEG no encuentra a esos; a los demás, sí."""
+        nombres = {e.nombre(u) for u in quienes}
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: None if nombre in nombres else 11.2
+        )
+
+    def _falla_con(self, e, *quienes):
+        """La RFEG falla con esos; a los demás los encuentra."""
+        nombres = {e.nombre(u) for u in quienes}
+
+        async def buscar(nombre):
+            if nombre in nombres:
+                raise TimeoutError
+            return 11.2
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=buscar)
+
+    def _organizador(self, e, torneo):
+        return e.usuarios.por_id[e.creadores[torneo]]
+
+    async def _competicion(self, e, torneo):
+        return await e.uow.competitions.find_by_id(torneo)
+
+    async def test_todos_actualizados_no_avisa_a_nadie(self, e):
+        """
+        Given una competición en la que la RFEG encuentra a todos
+        When termina la pasada
+        Then no se avisa a nadie (H1)
+        """
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.cerrar(torneo)
+
+        await e.pasar(torneo)
+
+        e.avisos.send_handicaps_pending_email.assert_not_awaited()
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+        e.actividad.handicap_not_found.assert_not_awaited()
+
+    async def test_espanol_no_encontrado_avisa_al_organizador_y_a_el(self, e):
+        """
+        Given un español al que la RFEG no encuentra
+        When termina la pasada (completa: no encontrado es una respuesta)
+        Then el organizador recibe correo y aviso con él, y él su correo y su aviso (H2, H3)
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._no_encuentra(e, perdido)
+
+        await e.pasar(torneo)
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.COMPLETA
+        organizador = self._organizador(e, torneo)
+        e.avisos.send_handicaps_pending_email.assert_awaited_once_with(
+            to_email=organizador.email.value,
+            organizer_name=organizador.get_full_name(),
+            competition_name="Medal de octubre",
+            competition_id=str(torneo.value),
+            pending_names=[e.nombre(perdido)],
+        )
+        competicion = await self._competicion(e, torneo)
+        e.actividad.handicaps_not_updated.assert_awaited_once_with(competicion, 1)
+        jugador = e.usuarios.por_id[perdido]
+        e.avisos.send_handicap_not_found_email.assert_awaited_once_with(
+            to_email=jugador.email.value,
+            player_name=jugador.get_full_name(),
+            competition_name="Medal de octubre",
+            competition_id=str(torneo.value),
+        )
+        e.actividad.handicap_not_found.assert_awaited_once_with(competicion, [perdido])
+
+    async def test_si_la_rfeg_falla_avisa_al_organizador_pero_al_jugador_no(self, e):
+        """
+        Given un español con el que la RFEG falla las tres veces
+        When termina la pasada (incompleta)
+        Then el organizador lo tiene en su lista, y el jugador no recibe nada (H4)
+        """
+        torneo = await e.torneo()
+        roto = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._falla_con(e, roto)
+
+        await e.pasar(torneo)
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.INCOMPLETA
+        assert e.avisos.send_handicaps_pending_email.await_args.kwargs["pending_names"] == [
+            e.nombre(roto)
+        ]
+        e.actividad.handicaps_not_updated.assert_awaited_once_with(
+            await self._competicion(e, torneo), 1
+        )
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+        e.actividad.handicap_not_found.assert_not_awaited()
+
+    async def test_extranjero_en_espana_va_a_la_lista_del_organizador(self, e):
+        """
+        Given un extranjero (sin licencia española) en una competición en España
+        When termina la pasada
+        Then sale en la lista del organizador, y él no recibe nada (H2, H6)
+        """
+        torneo = await e.torneo(pais="ES")
+        fuera = await e.inscrito(torneo, pais="FR")
+        await e.cerrar(torneo)
+
+        await e.pasar(torneo)
+
+        assert e.avisos.send_handicaps_pending_email.await_args.kwargs["pending_names"] == [
+            e.nombre(fuera)
+        ]
+        e.actividad.handicaps_not_updated.assert_awaited_once()
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+        e.actividad.handicap_not_found.assert_not_awaited()
+
+    async def test_extranjero_fuera_de_espana_no_avisa(self, e):
+        """
+        Given un extranjero en una competición fuera de España
+        When termina la pasada
+        Then no se avisa a nadie (H2, H6)
+        """
+        torneo = await e.torneo(pais="FR")
+        await e.inscrito(torneo, pais="FR")
+        await e.cerrar(torneo)
+
+        await e.pasar(torneo)
+
+        e.avisos.send_handicaps_pending_email.assert_not_awaited()
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+
+    async def test_espanol_no_encontrado_fuera_de_espana_tambien(self, e):
+        """
+        Given un español al que la RFEG no encuentra, en una competición fuera de España
+        When termina la pasada
+        Then el organizador lo tiene en su lista y él recibe su aviso (H2, H3)
+        """
+        torneo = await e.torneo(pais="FR")
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._no_encuentra(e, perdido)
+
+        await e.pasar(torneo)
+
+        assert e.avisos.send_handicaps_pending_email.await_args.kwargs["pending_names"] == [
+            e.nombre(perdido)
+        ]
+        e.actividad.handicap_not_found.assert_awaited_once_with(
+            await self._competicion(e, torneo), [perdido]
+        )
+
+    async def test_otra_pasada_avisa_al_organizador_y_no_repite_al_jugador(self, e):
+        """
+        Given una pasada que deja a uno no encontrado y a otro con la RFEG caída
+        When otra pasada de la incompleta encuentra al segundo
+        Then el organizador recibe otra vez su lista, ya al día, y al no encontrado
+             no se le repite el aviso (H1)
+        """
+        torneo = await e.torneo()
+        perdido, roto = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._no_encuentra(e, perdido)
+        nombres = {e.nombre(roto)}
+        primera = e.rfeg.search_handicap.side_effect
+
+        async def buscar(nombre):
+            if nombre in nombres:
+                raise TimeoutError
+            return primera(nombre)
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=buscar)
+        await e.pasar(torneo)
+        ultima = await e.ultima(torneo)
+        ultima.reanudar(e.ahora)
+        await e.uow.handicap_updates.update(ultima)
+        nombres.clear()
+
+        await e.pasar(torneo)
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.COMPLETA
+        listas = [
+            c.kwargs["pending_names"] for c in e.avisos.send_handicaps_pending_email.await_args_list
+        ]
+        assert listas == [
+            [e.nombre(perdido), e.nombre(roto)],
+            [e.nombre(perdido)],
+        ]
+        assert [c.args[1] for c in e.actividad.handicaps_not_updated.await_args_list] == [2, 1]
+        assert e.avisos.send_handicap_not_found_email.await_count == 1
+        assert e.actividad.handicap_not_found.await_count == 1
+
+    async def test_si_se_corta_no_avisa_a_nadie(self, e):
+        """
+        Given una pasada con un no encontrado y la competición que empieza a mitad
+        When la pasada se corta
+        Then no se avisa a nadie (H1: solo al terminar)
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._no_encuentra(e, perdido)
+        await e.iniciar(torneo)
+
+        await e.pasar(torneo)
+
+        e.avisos.send_handicaps_pending_email.assert_not_awaited()
+        e.actividad.handicaps_not_updated.assert_not_awaited()
+        e.avisos.send_handicap_not_found_email.assert_not_awaited()
+        e.actividad.handicap_not_found.assert_not_awaited()
+
+    async def test_correo_y_actividad_caidos_no_tumban_la_pasada(self, e):
+        """
+        Given el correo y Actividad caídos
+        When termina con un no encontrado
+        Then la pasada acaba igual y queda completa
+        """
+        torneo = await e.torneo()
+        perdido = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        self._no_encuentra(e, perdido)
+        e.avisos.send_handicaps_pending_email = AsyncMock(side_effect=RuntimeError)
+        e.avisos.send_handicap_not_found_email = AsyncMock(side_effect=RuntimeError)
+        e.actividad.handicaps_not_updated = AsyncMock(side_effect=RuntimeError)
+        e.actividad.handicap_not_found = AsyncMock(side_effect=RuntimeError)
+
+        assert await e.pasar(torneo) == 2
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.COMPLETA
+        e.actividad.handicap_not_found.assert_awaited_once()

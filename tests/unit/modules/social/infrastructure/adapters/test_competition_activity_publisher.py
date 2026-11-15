@@ -573,3 +573,35 @@ class TestClasificacionFinal:
 
         assert general.pedida == []
         assert avisos.llamadas == []
+
+
+class TestHandicapsSinActualizarConLaRfeg:
+    """Los avisos de los hándicaps sin actualizar con la RFEG (H2 y H3, 15 nov 2026)."""
+
+    async def test_al_organizador_cuantos(self, avisos):
+        """
+        Given una competición con su organizador
+        When se avisa de 2 sin actualizar
+        Then va al organizador, con el torneo y el número
+        """
+        competicion = _competicion()
+        competicion.creator_id = UserId(uuid4())
+
+        await CompetitionActivityPublisher(
+            avisos, _General([]), _Inscripciones()
+        ).handicaps_not_updated(competicion, 2)
+
+        assert avisos.llamadas == [
+            ("handicaps_not_updated", (competicion.creator_id, _ref(competicion), 2), {})
+        ]
+
+    async def test_a_cada_no_encontrado(self, avisos):
+        """Given dos no encontrados When se avisa Then van los dos, con el torneo."""
+        competicion = _competicion()
+        jugadores = (UserId(uuid4()), UserId(uuid4()))
+
+        await CompetitionActivityPublisher(
+            avisos, _General([]), _Inscripciones()
+        ).handicap_not_found(competicion, jugadores)
+
+        assert avisos.llamadas == [("handicap_not_found", (_ref(competicion), list(jugadores)), {})]

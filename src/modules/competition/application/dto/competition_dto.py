@@ -641,6 +641,41 @@ class HandicapUpdateStatusDTO(BaseModel):
     )
 
 
+class HandicapsNotUpdatedAsOrganizerDTO(BaseModel):
+    """Una competición que organizo con jugadores sin actualizar con la RFEG (H2, 15 nov 2026)."""
+
+    competition_id: UUID
+    competition_name: str
+    count: int = Field(..., description="Cuántos se quedaron sin actualizar.")
+    players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "Quiénes, con el nombre que eligieron para la competición: los españoles, "
+            "y todos si la competición es en España."
+        ),
+    )
+
+
+class HandicapNotFoundAsPlayerDTO(BaseModel):
+    """Una competición en la que la RFEG no encontró mi hándicap (H3, 15 nov 2026)."""
+
+    competition_id: UUID
+    competition_name: str
+
+
+class MyHandicapsNotUpdatedDTO(BaseModel):
+    """
+    Los hándicaps sin actualizar con la RFEG, para «Requiere tu Atención» (15 nov 2026).
+
+    Solo de competiciones cerradas y sin empezar, con su última actualización ya
+    terminada. Desaparece solo: al empezar la competición, o cuando el hándicap
+    se actualiza (desde el perfil o en otra pasada).
+    """
+
+    as_organizer: list[HandicapsNotUpdatedAsOrganizerDTO] = Field(default_factory=list)
+    as_player: list[HandicapNotFoundAsPlayerDTO] = Field(default_factory=list)
+
+
 class HandicapUpdateWindowDTO(BaseModel):
     """Si el organizador puede actualizar ahora los hándicaps con la RFEG (#251)."""
 

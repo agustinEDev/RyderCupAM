@@ -69,6 +69,9 @@ SOLO_EL_AUTOR = [
     ActivityEventType.PLACE_FROM_WAITING_LIST,
     ActivityEventType.ENROLLMENT_NO_PLACE,
     ActivityEventType.TEE_WINDOW_REMOVED,
+    # Hándicaps sin actualizar con la RFEG (15 nov 2026): el organizador y el jugador
+    ActivityEventType.HANDICAPS_NOT_UPDATED,
+    ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
 ]
 
 

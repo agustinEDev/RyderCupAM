@@ -603,6 +603,21 @@ def get_competition_activity_publisher(
     )
 
 
+def actividad_en_sesion_propia(sesion: AsyncSession) -> CompetitionActivityPublisherInterface:
+    """
+    Actividad fuera de una petición, sobre la sesión que se le da: la de la
+    pasada de hándicaps en segundo plano (15 nov 2026). Las mismas piezas que
+    `get_competition_activity_publisher`.
+    """
+    uows = get_activity_units_of_work(sesion)
+    return get_competition_activity_publisher(
+        get_publish_competition_notices_use_case(uows),
+        uows,
+        get_publish_tournament_achievements_use_case(uows),
+        get_publish_round_achievements_use_case(uows),
+    )
+
+
 def get_match_play_scoring() -> MatchPlayScoring:
     """Proveedor de las reglas del match play, sin lo de la Ryder (RyderCupAM#165)."""
     return MatchPlayScoring()
@@ -623,7 +638,10 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
         return None
     if _lanzador is None:
         _lanzador = LanzadorEnSegundoPlano(
-            async_session_maker, RFEGHandicapService(timeout=10), EmailService()
+            async_session_maker,
+            RFEGHandicapService(timeout=10),
+            EmailService(),
+            actividad=actividad_en_sesion_propia,
         )
     return _lanzador
 

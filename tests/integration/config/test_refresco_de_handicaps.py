@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.dependencies import actividad_en_sesion_propia
 from src.config.refresco_de_handicaps import (
     CANDADO_DEL_VIGILANTE,
     LanzadorEnSegundoPlano,
@@ -45,6 +46,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_upda
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     enrollments_table,
+)
+from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
+    activity_events_table,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
@@ -112,6 +116,7 @@ def _rfeg(handicap: float | None) -> MagicMock:
 def _avisos() -> MagicMock:
     avisos = MagicMock()
     avisos.send_handicaps_pending_email = AsyncMock(return_value=True)
+    avisos.send_handicap_not_found_email = AsyncMock(return_value=True)
     return avisos
 
 
@@ -200,3 +205,53 @@ async def test_con_el_candado_cogido_el_vigilante_se_salta_la_vuelta(db_session)
         )
 
     assert resultado is None
+
+
+async def test_un_espanol_no_encontrado_avisa_en_actividad_y_por_correo(db_session):
+    """
+    Given un Medal cerrado en España con un español al que la RFEG no encuentra
+    When se lanza la pasada con Actividad de verdad (15 nov 2026, H2 y H3)
+    Then el organizador tiene su aviso con 1, el jugador el suyo y su correo,
+         y lo apuntado guarda cuándo contestó la RFEG
+    """
+    organizador = await _jugador(db_session, 8.0)
+    perdido = await _jugador(db_session, 20.0)
+    torneo = await _medal_cerrado(db_session, [organizador, perdido])
+    actualizacion = await _actualizacion(db_session, torneo)
+    fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    rfeg = MagicMock()
+    rfeg.search_handicap = AsyncMock(
+        side_effect=lambda nombre: None if nombre == perdido.get_full_name() else 9.0
+    )
+    avisos = _avisos()
+
+    await LanzadorEnSegundoPlano(
+        fabrica, rfeg, avisos, esperar=_sin_pausas, actividad=actividad_en_sesion_propia
+    ).pasada(actualizacion.id)
+
+    async with fabrica() as otra:
+        filas = (
+            await otra.execute(
+                select(
+                    activity_events_table.c.user_id,
+                    activity_events_table.c.type,
+                    activity_events_table.c.payload,
+                ).where(activity_events_table.c.source_match_id == str(torneo.value))
+            )
+        ).all()
+        repo = SQLAlchemyHandicapUpdateRepository(otra)
+        terminada = await repo.find_by_id(actualizacion.id)
+        resultados = await repo.resultados(actualizacion.id)
+    assert terminada.estado is EstadoActualizacion.COMPLETA
+    # El tipo de la columna puede devolver el UserId o el UUID: se compara el UUID
+    avisados = {
+        (str(getattr(f.user_id, "value", f.user_id)), str(f.type)): f.payload for f in filas
+    }
+    assert set(avisados) == {
+        (str(organizador.id.value), "HANDICAPS_NOT_UPDATED"),
+        (str(perdido.id.value), "RFEG_HANDICAP_NOT_FOUND"),
+    }
+    assert avisados[(str(organizador.id.value), "HANDICAPS_NOT_UPDATED")]["count"] == 1
+    avisos.send_handicap_not_found_email.assert_awaited_once()
+    assert avisos.send_handicap_not_found_email.await_args.kwargs["to_email"] == str(perdido.email)
+    assert all(r.momento is not None for r in resultados.values())

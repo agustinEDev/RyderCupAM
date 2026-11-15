@@ -96,7 +96,7 @@ def test_d3_el_lanzador_de_actualizaciones_es_uno_por_proceso(monkeypatch):
     """Given el refresco encendido, When se pide el lanzador dos veces, Then es el mismo y vive en su submódulo."""
     comun = importlib.import_module("src.config.dependencies.comun")
     monkeypatch.setattr(comun, "refresco_activado", lambda _entorno: True)
-    monkeypatch.setattr(comun, "LanzadorEnSegundoPlano", lambda *_: MagicMock())
+    monkeypatch.setattr(comun, "LanzadorEnSegundoPlano", lambda *_, **__: MagicMock())
     monkeypatch.setattr(comun, "RFEGHandicapService", lambda **_: None)
     monkeypatch.setattr(comun, "EmailService", lambda: None)
     monkeypatch.setattr(comun, "_lanzador", None)
@@ -137,7 +137,9 @@ def test_d6_el_parche_del_correo_llega_tambien_al_lanzador(monkeypatch):
     comun = importlib.import_module("src.config.dependencies.comun")
     monkeypatch.setattr(comun, "refresco_activado", lambda _entorno: True)
     monkeypatch.setattr(comun, "RFEGHandicapService", lambda **_: None)
-    monkeypatch.setattr(comun, "LanzadorEnSegundoPlano", lambda _fabrica, _rfeg, avisos: avisos)
+    monkeypatch.setattr(
+        comun, "LanzadorEnSegundoPlano", lambda _fabrica, _rfeg, avisos, **_: avisos
+    )
     monkeypatch.setattr(comun, "_lanzador", None)
     falso = MagicMock()
 

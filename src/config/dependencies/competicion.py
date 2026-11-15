@@ -92,6 +92,9 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
 )
+from src.modules.competition.application.use_cases.list_my_handicaps_not_updated_use_case import (
+    ListMyHandicapsNotUpdatedUseCase,
+)
 from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
     ListMyInvitationsUseCase,
 )
@@ -411,6 +414,14 @@ def get_handicap_update_status_use_case(
 ) -> GetHandicapUpdateStatusUseCase:
     """La última actualización de hándicaps, para la ficha del organizador (#251)."""
     return GetHandicapUpdateStatusUseCase(uow, user_uow.users)
+
+
+def get_list_my_handicaps_not_updated_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyHandicapsNotUpdatedUseCase:
+    """Los hándicaps sin actualizar con la RFEG, para «Requiere tu Atención» (15 nov 2026)."""
+    return ListMyHandicapsNotUpdatedUseCase(uow, user_uow.users)
 
 
 def get_name_captains_use_case(

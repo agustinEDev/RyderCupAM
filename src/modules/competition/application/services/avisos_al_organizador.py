@@ -2,7 +2,8 @@
 AvisosAlOrganizador - Los correos al organizador sobre las actualizaciones de hándicaps (#251).
 
 Los usan la pasada (al acabar con alguien sin actualizar) y el vigilante (una
-cortada por un reinicio, o una programada que no se pudo lanzar). Un correo que
+cortada por un reinicio, o una programada que no se pudo lanzar). Desde el 15
+nov 2026, también el del jugador al que la RFEG no encontró. Un correo que
 falla se registra y no tumba nada: lo que pasó ya está guardado.
 """
 
@@ -55,6 +56,25 @@ class AvisosAlOrganizador:
                 organizador,
                 competition,
                 reason=motivo,
+            )
+
+    async def no_encontrado(self, jugador: User, competition: Competition) -> None:
+        """
+        Al jugador español al que la RFEG no encontró (H3, 15 nov 2026). No es
+        del organizador, pero es el mismo correo de la misma actualización.
+        """
+        if self._avisos is None:
+            return
+        try:
+            await self._avisos.send_handicap_not_found_email(
+                to_email=jugador.email.value,
+                player_name=jugador.get_full_name(),
+                competition_name=str(competition.name),
+                competition_id=str(competition.id.value),
+            )
+        except Exception:
+            logger.exception(
+                "No se pudo avisar al jugador no encontrado de %s", competition.id.value
             )
 
     @staticmethod
