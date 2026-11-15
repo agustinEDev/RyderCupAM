@@ -28,6 +28,9 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    CorreoDeActualizacion,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
@@ -212,7 +215,7 @@ async def test_un_espanol_no_encontrado_avisa_en_actividad_y_por_correo(db_sessi
     Given un Medal cerrado en España con un español al que la RFEG no encuentra
     When se lanza la pasada con Actividad de verdad (15 nov 2026, H2 y H3)
     Then el organizador tiene su aviso con 1, el jugador el suyo y su correo,
-         y lo apuntado guarda cuándo contestó la RFEG
+         y queda apuntado que ya se le escribió (D2)
     """
     organizador = await _jugador(db_session, 8.0)
     perdido = await _jugador(db_session, 20.0)
@@ -243,6 +246,18 @@ async def test_un_espanol_no_encontrado_avisa_en_actividad_y_por_correo(db_sessi
         terminada = await repo.find_by_id(actualizacion.id)
         resultados = await repo.resultados(actualizacion.id)
     assert terminada.estado is EstadoActualizacion.COMPLETA
+    assert sorted(r.resultado.value for r in resultados.values()) == [
+        "ACTUALIZADO",
+        "NO_ENCONTRADO",
+    ]
+    async with fabrica() as otra:
+        repo = SQLAlchemyHandicapUpdateRepository(otra)
+        escrito = await repo.correo_enviado(torneo, perdido.id, CorreoDeActualizacion.NO_ENCONTRADO)
+        lista = await repo.correo_enviado(
+            torneo, organizador.id, CorreoDeActualizacion.LISTA_DEL_ORGANIZADOR
+        )
+    assert escrito == ""
+    assert lista is not None and len(lista) == 64
     # El tipo de la columna puede devolver el UserId o el UUID: se compara el UUID
     avisados = {
         (str(getattr(f.user_id, "value", f.user_id)), str(f.type)): f.payload for f in filas
@@ -254,4 +269,3 @@ async def test_un_espanol_no_encontrado_avisa_en_actividad_y_por_correo(db_sessi
     assert avisados[(str(organizador.id.value), "HANDICAPS_NOT_UPDATED")]["count"] == 1
     avisos.send_handicap_not_found_email.assert_awaited_once()
     assert avisos.send_handicap_not_found_email.await_args.kwargs["to_email"] == str(perdido.email)
-    assert all(r.momento is not None for r in resultados.values())

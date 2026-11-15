@@ -1111,12 +1111,24 @@ The Ryder Cup Friends Team
             f"Hándicaps sin actualizar en {safe_competition} | "
             f"Handicaps not updated in {safe_competition}"
         )
+        # El texto aprobado por Agustín el 16 nov 2026: en la lista hay también no
+        # encontrados y extranjeros, y para ellos reintentar no sirve
+        a_mano = (
+            "A los que no se encontraron, o no tienen licencia española, ponles el "
+            "hándicap a mano desde la ficha de la competición. Si la RFEG no respondió, "
+            "vuelve a intentarlo con «Actualizar hándicaps»."
+        )
+        by_hand = (
+            "For those who weren't found, or don't have a Spanish licence, set their "
+            "handicap by hand from the competition page. If the RFEG didn't respond, try "
+            'again with "Update handicaps".'
+        )
         text_body = f"""
 Hola {safe_organizer},
 
-En "{safe_competition}" no se pudo actualizar con la RFEG el hándicap de: {lista}.
+Estos jugadores no se han podido actualizar con la RFEG en {safe_competition}: {lista}. {a_mano}
 
-Siguen con el hándicap que tenían. Puedes volver a intentarlo con el botón «Actualizar hándicaps» de la competición: {enlace}
+{enlace}
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -1125,9 +1137,9 @@ El equipo de Ryder Cup Friends
 
 Hello {safe_organizer},
 
-In "{safe_competition}", the RFEG handicap could not be updated for: {lista}.
+These players could not be updated with the RFEG in {safe_competition}: {lista}. {by_hand}
 
-They keep their previous handicap. You can try again with the "Update handicaps" button on the competition: {enlace}
+{enlace}
 
 Best regards,
 The Ryder Cup Friends Team
@@ -1143,19 +1155,20 @@ The Ryder Cup Friends Team
                 parrafo(
                     "Hola ",
                     negrita(safe_organizer),
-                    ", no se pudo actualizar con la RFEG el hándicap de estos jugadores:",
+                    ", estos jugadores no se han podido actualizar con la RFEG en ",
+                    negrita(safe_competition),
+                    ":",
                 ),
                 recuadro(safe_competition, *nombres),
-                parrafo(
-                    "Siguen con el hándicap que tenían. Puedes volver a intentarlo con el "
-                    "botón «Actualizar hándicaps» de la competición."
-                ),
+                parrafo(a_mano),
             ],
             boton=Boton("Ver la competición", enlace),
             ingles=Ingles(
                 frase(
-                    negrita(f"Handicaps not updated in {safe_competition}"),
-                    f": {lista}. Try again with the Update handicaps button.",
+                    negrita(
+                        f"These players could not be updated with the RFEG in {safe_competition}"
+                    ),
+                    f": {lista}. {by_hand}",
                 ),
                 Boton("View competition", enlace),
             ),
@@ -1173,7 +1186,6 @@ The Ryder Cup Friends Team
         to_email: str,
         player_name: str,
         competition_name: str,
-        competition_id: str,
     ) -> bool:
         """
         Avisa al jugador español al que la RFEG no encontró (H3, 15 nov 2026).

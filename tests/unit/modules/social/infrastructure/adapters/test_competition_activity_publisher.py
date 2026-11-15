@@ -605,3 +605,33 @@ class TestHandicapsSinActualizarConLaRfeg:
         ).handicap_not_found(competicion, jugadores)
 
         assert avisos.llamadas == [("handicap_not_found", (_ref(competicion), list(jugadores)), {})]
+
+    async def test_se_retira_el_del_organizador(self, avisos):
+        """Given una competición When ya no queda nadie Then se retira el de su organizador (D3)."""
+        competicion = _competicion()
+        competicion.creator_id = UserId(uuid4())
+
+        await CompetitionActivityPublisher(
+            avisos, _General([]), _Inscripciones()
+        ).handicaps_not_updated_withdrawn(competicion)
+
+        assert avisos.llamadas == [
+            (
+                "handicaps_not_updated_withdrawn",
+                (competicion.creator_id, str(competicion.id.value)),
+                {},
+            )
+        ]
+
+    async def test_se_retira_el_de_los_jugadores(self, avisos):
+        """Given dos jugadores When dejan de ser no encontrados Then se retira el suyo (D3)."""
+        competicion = _competicion()
+        jugadores = (UserId(uuid4()), UserId(uuid4()))
+
+        await CompetitionActivityPublisher(
+            avisos, _General([]), _Inscripciones()
+        ).handicap_not_found_withdrawn(competicion, jugadores)
+
+        assert avisos.llamadas == [
+            ("handicap_not_found_withdrawn", (str(competicion.id.value), list(jugadores)), {})
+        ]

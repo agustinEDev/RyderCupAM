@@ -7,7 +7,8 @@ GET /api/v1/competitions/me/handicaps-not-updated, contra Postgres.
 |------|----------------------------------------------------|------------------------------------|
 | H2   | Organizador con un español no encontrado           | as_organizer con 1 y su nombre     |
 | H3   | Ese español (aquí, el propio organizador)          | as_player con la competición       |
-| H5   | Actualiza su hándicap después                      | Nada                               |
+| D1   | Se pone el hándicap a mano                         | Sigue saliendo                     |
+| H5   | La RFEG lo encuentra desde su perfil               | Nada                               |
 | —    | Otro usuario                                       | Vacío                              |
 | —    | Sin sesión                                         | 401                                |
 """
@@ -129,19 +130,51 @@ async def test_el_no_encontrado_y_su_organizador_lo_ven(client: AsyncClient):
     ]
 
 
-async def test_si_actualiza_su_handicap_desaparece(client: AsyncClient):
+async def test_a_mano_no_cuenta(client: AsyncClient):
     """
     Given el no encontrado
-    When actualiza su hándicap después (desde su perfil)
-    Then ya no sale en ningún sitio (H5)
+    When se pone el hándicap a mano
+    Then le sigue saliendo a él y al organizador: solo cuenta la RFEG (D1)
     """
-    organizador, _ = await _cerrada_con_un_no_encontrado(client)
+    organizador, competicion = await _cerrada_con_un_no_encontrado(client)
     set_auth_cookies(client, organizador["cookies"])
     actualizado = await client.post(
         "/api/v1/handicaps/update-manual",
         json={"user_id": organizador["user"]["id"], "handicap": 16.0},
     )
     assert actualizado.status_code == 200, actualizado.text
+
+    respuesta = await client.get(URL)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert [c["competition_id"] for c in respuesta.json()["as_player"]] == [competicion["id"]]
+    assert [c["count"] for c in respuesta.json()["as_organizer"]] == [1]
+
+
+async def test_si_la_rfeg_lo_encuentra_desde_su_perfil_desaparece(client: AsyncClient):
+    """
+    Given el no encontrado
+    When lo pide a la RFEG desde su perfil y esta vez lo encuentra
+    Then ya no sale en ningún sitio (D1, H5)
+    """
+    from main import app
+    from src.config.dependencies import get_handicap_service
+    from tests.fakes.mock_handicap_service import MockHandicapService
+
+    organizador, _ = await _cerrada_con_un_no_encontrado(client)
+    set_auth_cookies(client, organizador["cookies"])
+    anterior = app.dependency_overrides.get(get_handicap_service)
+    app.dependency_overrides[get_handicap_service] = lambda: MockHandicapService(default=13.0)
+    try:
+        pedido = await client.post(
+            "/api/v1/handicaps/update", json={"user_id": organizador["user"]["id"]}
+        )
+    finally:
+        if anterior is None:
+            app.dependency_overrides.pop(get_handicap_service, None)
+        else:
+            app.dependency_overrides[get_handicap_service] = anterior
+    assert pedido.status_code == 200, pedido.text
 
     respuesta = await client.get(URL)
 

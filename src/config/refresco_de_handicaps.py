@@ -11,7 +11,8 @@ se queda en curso: detectarlo y avisar llega con el botón del organizador.
 
 Al terminar, la pasada avisa también en Actividad (15 nov 2026), con una sesión
 propia para Actividad, como el cierre de las partidas rápidas: lo que publica
-no debe deshacer lo guardado si falla.
+no debe deshacer lo guardado si falla. Se monta solo al avisar, con la pasada
+ya hecha (T1): si montarla o cerrarla falla, la pasada no se entera.
 
 El vigilante, una vuelta por minuto en el mismo proceso, solo lanza las
 actualizaciones programadas y recupera las que un reinicio dejó en curso.
@@ -26,8 +27,9 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -40,6 +42,9 @@ from src.modules.competition.application.ports.handicap_update_email_service_int
 )
 from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
     LanzadorDeActualizaciones,
+)
+from src.modules.competition.application.use_cases.handicap_de_la_rfeg_del_perfil_use_case import (
+    HandicapDeLaRfegDelPerfilUseCase,
 )
 from src.modules.competition.application.use_cases.refrescar_handicaps_use_case import (
     Herramientas,
@@ -57,7 +62,11 @@ from src.modules.competition.infrastructure.services.competition_timezone_from_c
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
 )
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
+)
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
@@ -109,27 +118,25 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
     async def pasada(self, update_id: uuid.UUID) -> int | None:
         """Una pasada entera; un fallo se registra y no sale de aquí."""
         try:
-            async with self._actividad_de_la_pasada() as actividad:
-                return await RefrescarHandicapsUseCase(
-                    herramientas=self.herramientas,
-                    handicap_service=self._handicap_service,
-                    avisos=self.avisos,
-                    reloj=lambda: datetime.now(UTC),
-                    esperar=self._esperar,
-                    actividad=actividad,
-                ).execute(update_id)
+            return await RefrescarHandicapsUseCase(
+                herramientas=self.herramientas,
+                handicap_service=self._handicap_service,
+                avisos=self.avisos,
+                reloj=lambda: datetime.now(UTC),
+                esperar=self._esperar,
+                # Se monta al avisar, con la pasada ya hecha: si falla, la pasada
+                # no se entera (T1)
+                actividad=None if self._actividad is None else self._actividad_en_su_sesion,
+            ).execute(update_id)
         except Exception:
             logger.exception("Falló la actualización de hándicaps %s", update_id)
             return None
 
     @asynccontextmanager
-    async def _actividad_de_la_pasada(
-        self,
-    ) -> AsyncIterator[CompetitionActivityPublisherInterface | None]:
-        """Actividad sobre su propia sesión, que se cierra al acabar la pasada."""
+    async def _actividad_en_su_sesion(self) -> AsyncIterator[CompetitionActivityPublisherInterface]:
+        """Actividad sobre su propia sesión, que se cierra al acabar de avisar."""
         if self._actividad is None:
-            yield None
-            return
+            raise RuntimeError("Sin Actividad no hay nada que montar")
         async with self.fabrica() as sesion:
             yield self._actividad(sesion)
 
@@ -137,18 +144,52 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         """Hasta que acaben las que estén en marcha (para los tests)."""
         await asyncio.gather(*self._tareas, return_exceptions=True)
 
-    @asynccontextmanager
-    async def herramientas(self) -> AsyncIterator[Herramientas]:
+    def herramientas(self) -> AbstractAsyncContextManager[Herramientas]:
         """Una sesión propia, que comparten la competición, los usuarios y los campos."""
-        async with self.fabrica() as sesion:
-            competiciones = SQLAlchemyCompetitionUnitOfWork(sesion)
-            campos = GolfCourseRepository(sesion)
-            yield Herramientas(
-                competiciones=competiciones,
-                usuarios=SQLAlchemyUserRepository(sesion),
-                zonas=CompetitionTimezoneFromCourse(campos, competiciones.competitions),
-                campos=campos,
-            )
+        return herramientas_en(self.fabrica)
+
+
+@asynccontextmanager
+async def herramientas_en(
+    fabrica: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[Herramientas]:
+    """Competición, usuarios, campos y husos sobre una sesión propia de esa fábrica."""
+    async with fabrica() as sesion:
+        competiciones = SQLAlchemyCompetitionUnitOfWork(sesion)
+        campos = GolfCourseRepository(sesion)
+        yield Herramientas(
+            competiciones=competiciones,
+            usuarios=SQLAlchemyUserRepository(sesion),
+            zonas=CompetitionTimezoneFromCourse(campos, competiciones.competitions),
+            campos=campos,
+        )
+
+
+class HandicapDeLaRfegEnLasCompeticiones(IHandicapEncontradoEnLaRfeg):
+    """
+    La RFEG dio el hándicap de un jugador desde su perfil o al entrar: sus
+    competiciones cerradas lo apuntan y, en stroke play, corrigen su fijado (D1
+    y D4, 16 nov 2026). Cruza módulos: por eso vive en la raíz de composición.
+
+    Con una sesión propia, después de guardado el perfil: si falla, el perfil
+    no se entera (queda en el log).
+    """
+
+    def __init__(
+        self,
+        fabrica: async_sessionmaker[AsyncSession],
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._fabrica = fabrica
+        self._reloj = reloj
+
+    async def encontrado(self, user_id: UserId, handicap: float) -> None:
+        try:
+            await HandicapDeLaRfegDelPerfilUseCase(
+                herramientas=lambda: herramientas_en(self._fabrica), reloj=self._reloj
+            ).execute(user_id, Decimal(str(handicap)))
+        except Exception:
+            logger.exception("Could not pass the RFEG handicap of %s to its competitions", user_id)
 
 
 # El candado de Postgres del vigilante: un número cualquiera, siempre el mismo

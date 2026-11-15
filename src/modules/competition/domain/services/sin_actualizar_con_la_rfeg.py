@@ -10,17 +10,19 @@ hándicaps, y en cada pasada de una incompleta:
   que les ponga el hándicap a mano.
 - **Al jugador español al que la RFEG no encontró**, su propio aviso. Si la
   RFEG falló, a él nada: no es cosa suya (H4). A un extranjero, nunca (H6).
-- **Lo actualizado después ya no cuenta** (H5): si su hándicap se actualizó
-  después de la respuesta de la RFEG (lo pidió desde su perfil, o una pasada
-  posterior lo encontró), ya no está sin actualizar.
+- **Solo cuenta lo que dijo la RFEG** (D1, 16 nov 2026): si después la RFEG
+  lo encuentra (otra pasada, o lo pide desde su perfil), queda apuntado como
+  actualizado y ya no sale (H5). Un hándicap puesto a mano no lo actualiza.
 - Quien tiene hándicap personalizado no cuenta: ese lo puso el organizador.
+- Quien entró después de una actualización completa no cuenta en ella (T4):
+  nadie le preguntó porque llegó tarde, no porque falte.
+- A quien no es un no encontrado se le retira su aviso, si lo tenía (D3).
 
 Aquí solo la decisión, sin red ni base de datos.
 """
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
 
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     Intento,
@@ -39,8 +41,6 @@ class Inscrito:
     existe: bool
     # Nacionalidad española en su perfil (`country_code == "ES"`)
     espanol: bool
-    # Cuándo se actualizó su hándicap por última vez (UTC)
-    actualizado_en: datetime | None
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,8 @@ class SinActualizar:
     para_el_organizador: list[UserId]
     # Los españoles a los que la RFEG no encontró, que reciben su aviso (H3)
     no_encontrados: list[UserId]
+    # Los demás inscritos: si tenían el aviso de no encontrado, se les retira (D3)
+    sin_aviso: list[UserId]
 
 
 def sin_actualizar(
@@ -58,33 +60,42 @@ def sin_actualizar(
     resultados: Mapping[UserId, Intento],
     *,
     en_espana: bool,
-    desde: datetime,
+    completa: bool,
 ) -> SinActualizar:
     """
     Args:
         inscritos: Los inscritos de la competición, en orden
         resultados: Lo apuntado por cada uno en la actualización
         en_espana: Si el país principal de la competición es España
-        desde: Cuándo se creó la actualización: para quien no tiene respuesta,
-            lo actualizado después ya no cuenta
+        completa: Si la actualización terminó completa: quien no tiene respuesta
+            en ella entró después (T4)
     """
     para_el_organizador: list[UserId] = []
     no_encontrados: list[UserId] = []
+    sin_aviso: list[UserId] = []
     for inscrito in inscritos:
-        if inscrito.handicap_personalizado or not inscrito.existe:
+        if not inscrito.existe:
             continue
         intento = resultados.get(inscrito.user_id)
-        if intento is not None and intento.resultado is ResultadoRefresco.ACTUALIZADO:
-            continue
-        referencia = intento.momento if intento is not None and intento.momento else desde
-        if inscrito.actualizado_en is not None and inscrito.actualizado_en > referencia:
-            continue
-        if inscrito.espanol or en_espana:
-            para_el_organizador.append(inscrito.user_id)
         if (
-            inscrito.espanol
+            not inscrito.handicap_personalizado
+            and inscrito.espanol
             and intento is not None
             and intento.resultado is ResultadoRefresco.NO_ENCONTRADO
         ):
             no_encontrados.append(inscrito.user_id)
-    return SinActualizar(para_el_organizador=para_el_organizador, no_encontrados=no_encontrados)
+        else:
+            sin_aviso.append(inscrito.user_id)
+        if (
+            inscrito.handicap_personalizado
+            or (intento is None and completa)
+            or (intento is not None and intento.resultado is ResultadoRefresco.ACTUALIZADO)
+        ):
+            continue
+        if inscrito.espanol or en_espana:
+            para_el_organizador.append(inscrito.user_id)
+    return SinActualizar(
+        para_el_organizador=para_el_organizador,
+        no_encontrados=no_encontrados,
+        sin_aviso=sin_aviso,
+    )

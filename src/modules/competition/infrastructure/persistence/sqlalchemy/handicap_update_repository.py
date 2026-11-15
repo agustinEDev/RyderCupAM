@@ -16,12 +16,14 @@ from src.modules.competition.domain.repositories.handicap_update_repository_inte
     HandicapUpdateRepositoryInterface,
 )
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    CorreoDeActualizacion,
     Intento,
     ResultadoRefresco,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     handicap_refreshes_table,
+    handicap_update_emails_table,
     handicap_update_schedules_table,
     handicap_updates_table,
 )
@@ -74,15 +76,12 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
     async def resultados(self, update_id: uuid.UUID) -> dict[UserId, Intento]:
         tabla = handicap_refreshes_table
         result = await self._session.execute(
-            select(tabla.c.user_id, tabla.c.result, tabla.c.attempts, tabla.c.refreshed_at).where(
+            select(tabla.c.user_id, tabla.c.result, tabla.c.attempts).where(
                 tabla.c.update_id == str(update_id)
             )
         )
         return {
-            fila.user_id: Intento(
-                ResultadoRefresco(fila.result), fila.attempts, momento=fila.refreshed_at
-            )
-            for fila in result
+            fila.user_id: Intento(ResultadoRefresco(fila.result), fila.attempts) for fila in result
         }
 
     async def apuntar(
@@ -108,6 +107,64 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
                     "attempts": tabla.c.attempts + 1,
                     "refreshed_at": fila.excluded.refreshed_at,
                 },
+            )
+        )
+
+    async def resultado_de(self, update_id: uuid.UUID, user_id: UserId) -> Intento | None:
+        tabla = handicap_refreshes_table
+        fila = (
+            await self._session.execute(
+                select(tabla.c.result, tabla.c.attempts).where(
+                    tabla.c.update_id == str(update_id), tabla.c.user_id == user_id
+                )
+            )
+        ).first()
+        return None if fila is None else Intento(ResultadoRefresco(fila.result), fila.attempts)
+
+    async def correo_enviado(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> str | None:
+        tabla = handicap_update_emails_table
+        return await self._session.scalar(
+            select(tabla.c.fingerprint).where(
+                tabla.c.competition_id == competition_id,
+                tabla.c.user_id == user_id,
+                tabla.c.kind == str(tipo),
+            )
+        )
+
+    async def apuntar_correo(
+        self,
+        competition_id: CompetitionId,
+        user_id: UserId,
+        tipo: CorreoDeActualizacion,
+        huella: str,
+        momento: datetime,
+    ) -> None:
+        tabla = handicap_update_emails_table
+        fila = insert(tabla).values(
+            competition_id=competition_id,
+            user_id=user_id,
+            kind=str(tipo),
+            fingerprint=huella,
+            sent_at=momento,
+        )
+        await self._session.execute(
+            fila.on_conflict_do_update(
+                index_elements=[tabla.c.competition_id, tabla.c.user_id, tabla.c.kind],
+                set_={"fingerprint": fila.excluded.fingerprint, "sent_at": fila.excluded.sent_at},
+            )
+        )
+
+    async def olvidar_correo(
+        self, competition_id: CompetitionId, user_id: UserId, tipo: CorreoDeActualizacion
+    ) -> None:
+        tabla = handicap_update_emails_table
+        await self._session.execute(
+            delete(tabla).where(
+                tabla.c.competition_id == competition_id,
+                tabla.c.user_id == user_id,
+                tabla.c.kind == str(tipo),
             )
         )
 

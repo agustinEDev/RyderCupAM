@@ -16,8 +16,7 @@ Aquí solo está la decisión, sin red ni base de datos.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from enum import StrEnum
 
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -38,6 +37,21 @@ class ResultadoRefresco(StrEnum):
         return self.value
 
 
+class CorreoDeActualizacion(StrEnum):
+    """
+    Los correos de una actualización que se apuntan para no repetirlos (D2, 16 nov 2026).
+
+    Uno por jugador y competición al no encontrarlo; al organizador, otra vez
+    solo si cambia la lista.
+    """
+
+    NO_ENCONTRADO = "PLAYER_NOT_FOUND"
+    LISTA_DEL_ORGANIZADOR = "ORGANIZER_LIST"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 @dataclass(frozen=True)
 class Candidato:
     """Un inscrito, con lo que decide si se le pregunta."""
@@ -52,9 +66,6 @@ class Intento:
 
     resultado: ResultadoRefresco
     intentos: int
-    # Cuándo se apuntó por última vez: lo actualizado después ya no cuenta como
-    # sin actualizar (15 nov 2026). No entra al comparar: es el mismo resultado
-    momento: datetime | None = field(default=None, compare=False)
 
 
 class RefrescoDeHandicapsService:

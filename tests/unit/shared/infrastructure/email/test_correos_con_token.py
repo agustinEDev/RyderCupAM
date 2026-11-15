@@ -86,7 +86,7 @@ CORREOS = [
     (
         "rfeg_no_encontrado",
         True,
-        lambda s: s.send_handicap_not_found_email("a@b.com", "Ana", "Copa", "c-1"),
+        lambda s: s.send_handicap_not_found_email("a@b.com", "Ana", "Copa"),
     ),
     (
         "programada",

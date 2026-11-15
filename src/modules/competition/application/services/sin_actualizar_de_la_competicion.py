@@ -12,6 +12,7 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     EstadoActualizacion,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -30,6 +31,10 @@ ESPANA = "ES"
 
 # Terminadas: la pasada ya dijo lo suyo (H1)
 _TERMINADAS = (EstadoActualizacion.COMPLETA, EstadoActualizacion.INCOMPLETA)
+
+
+def _en_espana(competicion: Competition) -> bool:
+    return competicion.location.main_country.value == ESPANA
 
 
 def es_espanol(usuario: User) -> bool:
@@ -59,16 +64,41 @@ class SinActualizarDeLaCompeticion:
                     handicap_personalizado=i.has_custom_handicap(),
                     existe=i.user_id in por_id,
                     espanol=i.user_id in por_id and es_espanol(por_id[i.user_id]),
-                    actualizado_en=(
-                        por_id[i.user_id].handicap_updated_at if i.user_id in por_id else None
-                    ),
                 )
                 for i in inscritos
             ],
             resultados,
-            en_espana=competicion.location.main_country.value == ESPANA,
-            desde=actualizacion.creada,
+            en_espana=_en_espana(competicion),
+            completa=actualizacion.estado is EstadoActualizacion.COMPLETA,
         )
+
+    @staticmethod
+    async def no_encontrado(
+        uow: CompetitionUnitOfWorkInterface,
+        jugador: User,
+        inscripcion: Enrollment,
+        competicion: Competition,
+        actualizacion: ActualizacionDeHandicaps,
+    ) -> bool:
+        """
+        Si a este jugador le toca el aviso de no encontrado, leyendo solo lo suyo
+        (T2): el panel lo pregunta cada vez que alguien entra.
+        """
+        intento = await uow.handicap_updates.resultado_de(actualizacion.id, jugador.id)
+        hecho = sin_actualizar(
+            [
+                Inscrito(
+                    user_id=jugador.id,
+                    handicap_personalizado=inscripcion.has_custom_handicap(),
+                    existe=True,
+                    espanol=es_espanol(jugador),
+                )
+            ],
+            {} if intento is None else {jugador.id: intento},
+            en_espana=_en_espana(competicion),
+            completa=actualizacion.estado is EstadoActualizacion.COMPLETA,
+        )
+        return jugador.id in hecho.no_encontrados
 
     @staticmethod
     def terminada(actualizacion: ActualizacionDeHandicaps) -> bool:

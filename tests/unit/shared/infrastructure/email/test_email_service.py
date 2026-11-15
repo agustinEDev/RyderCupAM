@@ -83,7 +83,7 @@ async def _todos_los_correos(servicio):
     servicio._send_email.reset_mock()
 
     # Al jugador al que la RFEG no encontró (H3, 15 nov 2026)
-    await servicio.send_handicap_not_found_email("a@b.com", "Ana", "Copa", "c-1")
+    await servicio.send_handicap_not_found_email("a@b.com", "Ana", "Copa")
     htmls["rfeg_no_encontrado"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
 
@@ -528,7 +528,7 @@ class TestTheHandicapNotFoundEmail:
         Then lleva el texto aprobado, en castellano y en inglés, y abre la edición
              de su perfil, donde se pide a la RFEG
         """
-        await correo.send_handicap_not_found_email("luis@b.com", "Luis", "Medal de octubre", "c-1")
+        await correo.send_handicap_not_found_email("luis@b.com", "Luis", "Medal de octubre")
 
         destinatario, asunto, texto, cuerpo = _enviado(correo)
         assert destinatario == '"Luis" <luis@b.com>'
@@ -546,7 +546,7 @@ class TestTheHandicapNotFoundEmail:
     @pytest.mark.asyncio
     async def test_names_are_escaped(self, correo):
         """Given nombres con HTML When se le escribe Then no van tal cual."""
-        await correo.send_handicap_not_found_email("luis@b.com", "<b>Luis</b>", "<i>Copa</i>", "c")
+        await correo.send_handicap_not_found_email("luis@b.com", "<b>Luis</b>", "<i>Copa</i>")
 
         _, _, _, cuerpo = _enviado(correo)
         assert "<b>Luis</b>" not in cuerpo
@@ -568,6 +568,42 @@ class TestTheHandicapsPendingEmail:
         assert f"{WEB}/competitions/c-1" in texto
         for nombre in ("Luis Pérez", "Eva Gil"):
             assert nombre in cuerpo and nombre in texto
+
+    @pytest.mark.asyncio
+    async def test_it_says_the_text_approved_on_16_nov(self, correo):
+        """
+        Given una lista con un no encontrado y un extranjero
+        When se escribe al organizador
+        Then lleva el texto aprobado el 16 nov 2026, en castellano y en inglés, con
+             el mismo asunto y el mismo botón de siempre
+        """
+        await correo.send_handicaps_pending_email(
+            "org@b.com", "Ana", "Medal de octubre", "c-1", ["Luis Pérez", "John Smith"]
+        )
+
+        _, asunto, texto, cuerpo = _enviado(correo)
+        es = (
+            "Estos jugadores no se han podido actualizar con la RFEG en Medal de octubre: "
+            "Luis Pérez, John Smith. A los que no se encontraron, o no tienen licencia "
+            "española, ponles el hándicap a mano desde la ficha de la competición. Si la "
+            "RFEG no respondió, vuelve a intentarlo con «Actualizar hándicaps»."
+        )
+        en = (
+            "These players could not be updated with the RFEG in Medal de octubre: "
+            "Luis Pérez, John Smith. For those who weren't found, or don't have a Spanish "
+            "licence, set their handicap by hand from the competition page. If the RFEG "
+            'didn\'t respond, try again with "Update handicaps".'
+        )
+        assert es in texto
+        assert en in texto
+        assert "no se pudo actualizar" not in texto
+        assert "ponles el hándicap a mano desde la ficha de la competición" in cuerpo
+        assert "set their handicap by hand from the competition page" in cuerpo
+        assert asunto == (
+            "Hándicaps sin actualizar en Medal de octubre | "
+            "Handicaps not updated in Medal de octubre"
+        )
+        assert _botones(cuerpo)[0] == f"{WEB}/competitions/c-1"
 
     @pytest.mark.asyncio
     async def test_player_names_are_escaped(self, correo):

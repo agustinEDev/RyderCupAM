@@ -70,7 +70,6 @@ class AvisosAlOrganizador:
                 to_email=jugador.email.value,
                 player_name=jugador.get_full_name(),
                 competition_name=str(competition.name),
-                competition_id=str(competition.id.value),
             )
         except Exception:
             logger.exception(

@@ -186,6 +186,22 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             "handicap_not_found", lambda p: p.handicap_not_found(competition, user_ids)
         )
 
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        await self._avisar(
+            "handicaps_not_updated_withdrawn",
+            lambda p: p.handicaps_not_updated_withdrawn(competition),
+        )
+
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        await self._avisar(
+            "handicap_not_found_withdrawn",
+            lambda p: p.handicap_not_found_withdrawn(competition, user_ids),
+        )
+
     async def salidas_cambiadas(
         self,
         competition: Competition,

@@ -515,6 +515,21 @@ class PublishCompetitionNoticesUseCase:
             ]
         )
 
+    async def handicaps_not_updated_withdrawn(
+        self, organizer_id: UserId, competition_id: str
+    ) -> None:
+        """Ya no queda nadie sin actualizar: el aviso del organizador se va (D3, 16 nov 2026)."""
+        await self._retirar(competition_id, [ActivityEventType.HANDICAPS_NOT_UPDATED], organizer_id)
+
+    async def handicap_not_found_withdrawn(
+        self, competition_id: str, user_ids: Sequence[UserId]
+    ) -> None:
+        """Ya no son no encontrados: su aviso se va (D3, 16 nov 2026)."""
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source_for_users(
+                competition_id, [ActivityEventType.RFEG_HANDICAP_NOT_FOUND], list(user_ids)
+            )
+
     @staticmethod
     def _de_la_franja(franja: TeeWindowRef | None) -> dict[str, Any]:
         """Lo que un aviso cuenta de su franja; sin franja, todo vacío."""

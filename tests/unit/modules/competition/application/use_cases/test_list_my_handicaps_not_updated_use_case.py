@@ -13,7 +13,12 @@ que borrar cuando deja de ser cierto.
 | H6   | Extranjero en una competición fuera de España              | Nada               | No         |
 | H1   | La primera pasada todavía en curso                         | Nada               | No         |
 | H1   | Una incompleta que se vuelve a pasar                       | Lo de antes        | Lo de antes|
-| H5   | El no encontrado actualiza su hándicap (desde su perfil)   | Nada               | No         |
+| H5   | La RFEG lo encuentra después (perfil u otra pasada)        | Nada               | No         |
+| D1   | Se pone el hándicap a mano                                 | Sigue              | Sigue      |
+| T4   | Aprobado después de una COMPLETA (nunca preguntado)        | Nada               | No         |
+| T2   | Organiza muchas: solo se leen las cerradas (por la base)   | —                  | —          |
+| T2   | Organiza y juega: cada competición se mira una vez         | —                  | —          |
+| T2   | Como jugador se lee solo su resultado                      | —                  | —          |
 | H5   | La competición empieza                                     | Nada               | No         |
 | H5   | Nadie queda sin actualizar                                 | Nada               | —          |
 | —    | Solo cuenta la última actualización                        | La última          | La última  |
@@ -22,12 +27,15 @@ que borrar cuando deja de ser cierto.
 """
 
 from datetime import UTC, date, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
 
 from src.modules.competition.application.dto.competition_dto import CreateCompetitionRequestDTO
+from src.modules.competition.application.services.sin_actualizar_de_la_competicion import (
+    SinActualizarDeLaCompeticion,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
@@ -43,6 +51,7 @@ from src.modules.competition.domain.services.refresco_de_handicaps_service impor
     ResultadoRefresco,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -77,6 +86,9 @@ class _Usuarios:
 
     async def find_by_ids(self, user_ids):
         return [self.por_id[u] for u in user_ids if u in self.por_id]
+
+    async def find_by_id(self, user_id):
+        return self.por_id.get(user_id)
 
 
 class _Escenario:
@@ -135,6 +147,13 @@ class _Escenario:
             competicion = await self.uow.competitions.find_by_id(torneo)
             competicion.start()
             await self.uow.competitions.update(competicion)
+
+    async def la_rfeg_lo_encuentra(self, torneo, user_id) -> None:
+        """Lo pidió desde su perfil y la RFEG lo encontró: queda apuntado (D1)."""
+        ultima = await self.uow.handicap_updates.ultima_de(torneo)
+        await self.uow.handicap_updates.apuntar(
+            ultima.id, user_id, ResultadoRefresco.ACTUALIZADO, CONTESTO + timedelta(hours=1)
+        )
 
     async def ver(self, quien: UserId):
         return await ListMyHandicapsNotUpdatedUseCase(self.uow, self.usuarios).execute(quien)
@@ -249,7 +268,7 @@ class TestOrganizador:
         torneo = await e.torneo()
         luis = await e.inscrito(torneo)
         await e.actualizacion(torneo, {luis: ResultadoRefresco.NO_ENCONTRADO})
-        e.usuarios.por_id[luis].handicap_updated_at = CONTESTO + timedelta(minutes=5)
+        await e.la_rfeg_lo_encuentra(torneo, luis)
 
         assert (await e.ver(e.organizador)).as_organizer == []
 
@@ -274,6 +293,76 @@ class TestOrganizador:
 
         assert visto.as_organizer == []
         assert visto.as_player == []
+
+    async def test_aprobado_tras_una_completa_no_sale(self, e):
+        """
+        Given una actualización COMPLETA y un jugador aprobado después
+        When el organizador mira
+        Then no sale: nadie le preguntó porque llegó tarde (T4)
+        """
+        torneo = await e.torneo()
+        await e.actualizacion(torneo, {})
+        await e.inscrito(torneo)
+
+        assert (await e.ver(e.organizador)).as_organizer == []
+
+    async def test_solo_lee_sus_cerradas(self, e):
+        """
+        Given un organizador con competiciones
+        When mira
+        Then se piden a la base solo las cerradas suyas, no todas (T2)
+        """
+        torneo = await e.torneo()
+        luis = await e.inscrito(torneo)
+        await e.actualizacion(torneo, {luis: ResultadoRefresco.NO_ENCONTRADO})
+        e.uow.competitions.find_by_creator = AsyncMock(side_effect=AssertionError("todas"))
+        original = e.uow.competitions.find_by_filters
+        pedidas = []
+
+        async def find_by_filters(**kwargs):
+            pedidas.append(kwargs)
+            return await original(**kwargs)
+
+        e.uow.competitions.find_by_filters = find_by_filters
+
+        assert _ids((await e.ver(e.organizador)).as_organizer) == [torneo.value]
+        assert [(p["creator_id"], p["status"]) for p in pedidas] == [
+            (e.organizador, CompetitionStatus.CLOSED)
+        ]
+
+    async def test_organiza_y_juega_se_mira_una_vez(self, e, monkeypatch):
+        """
+        Given un organizador que también juega y no fue encontrado
+        When mira
+        Then le sale en las dos listas y la competición se calcula una sola vez (T2)
+        """
+        torneo = await e.torneo()
+        await e.actualizacion(torneo, {e.organizador: ResultadoRefresco.NO_ENCONTRADO})
+        async with e.uow:
+            # El organizador ya está inscrito al crearla: se reescribe su resultado
+            ultima = await e.uow.handicap_updates.ultima_de(torneo)
+            await e.uow.handicap_updates.apuntar(
+                ultima.id, e.organizador, ResultadoRefresco.NO_ENCONTRADO, CONTESTO
+            )
+        calculos = []
+        original = SinActualizarDeLaCompeticion.de
+
+        async def contado(*args):
+            calculos.append(args[2].id)
+            return await original(*args)
+
+        monkeypatch.setattr(SinActualizarDeLaCompeticion, "de", staticmethod(contado))
+        monkeypatch.setattr(
+            SinActualizarDeLaCompeticion,
+            "no_encontrado",
+            staticmethod(AsyncMock(side_effect=AssertionError("otra vez"))),
+        )
+
+        visto = await e.ver(e.organizador)
+
+        assert _ids(visto.as_organizer) == [torneo.value]
+        assert _ids(visto.as_player) == [torneo.value]
+        assert calculos == [torneo]
 
 
 class TestJugador:
@@ -318,21 +407,34 @@ class TestJugador:
         torneo = await e.torneo()
         luis = await e.inscrito(torneo)
         await e.actualizacion(torneo, {luis: ResultadoRefresco.NO_ENCONTRADO})
-        e.usuarios.por_id[luis].handicap_updated_at = CONTESTO + timedelta(seconds=1)
+        await e.la_rfeg_lo_encuentra(torneo, luis)
 
         assert (await e.ver(luis)).as_player == []
 
-    async def test_actualizado_antes_de_que_contestara_la_rfeg_sigue(self, e):
+    async def test_a_mano_no_cuenta(self, e):
         """
-        Given su hándicap se actualizó después de crearse la actualización, pero
-              antes de que la RFEG contestara que no lo encuentra
-        When mira
-        Then le sigue saliendo: cuenta cuándo contestó la RFEG
+        Given un no encontrado
+        When se pone el hándicap a mano (él o un administrador)
+        Then le sigue saliendo a él y al organizador: solo cuenta la RFEG (D1)
         """
         torneo = await e.torneo()
         luis = await e.inscrito(torneo)
         await e.actualizacion(torneo, {luis: ResultadoRefresco.NO_ENCONTRADO})
-        e.usuarios.por_id[luis].handicap_updated_at = CREADA + timedelta(seconds=30)
+        e.usuarios.por_id[luis].handicap_updated_at = CONTESTO + timedelta(days=1)
+
+        assert _ids((await e.ver(luis)).as_player) == [torneo.value]
+        assert _ids((await e.ver(e.organizador)).as_organizer) == [torneo.value]
+
+    async def test_lee_solo_su_resultado(self, e):
+        """
+        Given un no encontrado en una competición que no organiza
+        When mira
+        Then se lee solo su resultado, no los de todos (T2)
+        """
+        torneo = await e.torneo()
+        luis = await e.inscrito(torneo)
+        await e.actualizacion(torneo, {luis: ResultadoRefresco.NO_ENCONTRADO})
+        e.uow.handicap_updates.resultados = AsyncMock(side_effect=AssertionError("todos"))
 
         assert _ids((await e.ver(luis)).as_player) == [torneo.value]
 

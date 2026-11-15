@@ -206,3 +206,13 @@ class CompetitionActivityPublisherInterface(ABC):
         A cada jugador español al que la RFEG no encontró: que revise su nombre
         y vuelva a pedirlo desde su perfil (H3, 15 nov 2026).
         """
+
+    @abstractmethod
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        """Ya no queda nadie sin actualizar: el aviso del organizador se retira (D3)."""
+
+    @abstractmethod
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """Ya no son no encontrados: su aviso se retira, si lo tenían (D3)."""

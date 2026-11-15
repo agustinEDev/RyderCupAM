@@ -11,6 +11,12 @@ from src.modules.user.application.dto.user_dto import (
     RefreshOwnHandicapRequestDTO,
     RefreshOwnHandicapResponseDTO,
 )
+from src.modules.user.application.ports.handicap_de_la_rfeg_port import (
+    IHandicapEncontradoEnLaRfeg,
+)
+from src.modules.user.application.use_cases.update_user_handicap_use_case import (
+    avisar_de_la_rfeg,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -35,7 +41,12 @@ class RefreshOwnHandicapUseCase:
     ocupada para nada.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, handicap_service: HandicapService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        handicap_service: HandicapService,
+        al_encontrarlo: IHandicapEncontradoEnLaRfeg | None = None,
+    ):
         """
         Args:
             uow: Unit of Work para leer y guardar el usuario
@@ -43,6 +54,8 @@ class RefreshOwnHandicapUseCase:
         """
         self._uow = uow
         self._handicap_service = handicap_service
+        # Si la RFEG lo da, sus competiciones cerradas se enteran (D4, 16 nov 2026)
+        self._al_encontrarlo = al_encontrarlo
 
     async def execute(
         self, request: RefreshOwnHandicapRequestDTO
@@ -94,6 +107,7 @@ class RefreshOwnHandicapUseCase:
             # sería afirmar algo que la BD no tiene, y null diría que no hay ninguno
             return RefreshOwnHandicapResponseDTO(needs_handicap=True, handicap=handicap_guardado)
 
+        await avisar_de_la_rfeg(self._al_encontrarlo, user.id, handicap_value)
         return self._resultado(user, needs_handicap=False)
 
     async def _consultar_rfeg(self, user: User) -> float | None:

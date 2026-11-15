@@ -11,8 +11,12 @@ mientras siga siendo cierto:
   que le pasó (H3). Si la RFEG falló, nada (H4); a un extranjero, nunca (H6).
 
 Se calcula al vuelo con la última actualización de cada competición: deja de
-salir solo al empezar la competición o cuando el hándicap se actualiza (H5),
+salir solo al empezar la competición o cuando la RFEG lo encuentra (H5, D1),
 sin nada que borrar. No escribe nada.
+
+Lo pide el panel de todo el mundo cada vez que se abre (T2): del organizador
+se leen solo sus competiciones cerradas, por la base; cada competición se
+calcula una vez; y como jugador se lee solo su propio resultado.
 """
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -25,12 +29,16 @@ from src.modules.competition.application.services.player_names import PlayerName
 from src.modules.competition.application.services.sin_actualizar_de_la_competicion import (
     SinActualizarDeLaCompeticion,
 )
+from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
+    ActualizacionDeHandicaps,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.sin_actualizar_con_la_rfeg import SinActualizar
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -59,18 +67,32 @@ class ListMyHandicapsNotUpdatedUseCase:
             Como organizador y como jugador; vacío casi siempre
         """
         async with self._uow:
+            como_organizador, ya_vistas = await self._como_organizador(user_id)
             return MyHandicapsNotUpdatedDTO(
-                as_organizer=await self._como_organizador(user_id),
-                as_player=await self._como_jugador(user_id),
+                as_organizer=como_organizador,
+                as_player=await self._como_jugador(user_id, ya_vistas),
             )
 
-    async def _como_organizador(self, user_id: UserId) -> list[HandicapsNotUpdatedAsOrganizerDTO]:
+    async def _como_organizador(
+        self, user_id: UserId
+    ) -> tuple[list[HandicapsNotUpdatedAsOrganizerDTO], dict[CompetitionId, bool]]:
+        """
+        Las suyas cerradas con alguien sin actualizar; y, de cada una mirada, si
+        él mismo es un no encontrado, para no calcularla otra vez como jugador.
+        """
         items = []
-        for competicion in await self._uow.competitions.find_by_creator(
-            user_id, limit=_TODAS_LAS_SUYAS
+        vistas: dict[CompetitionId, bool] = {}
+        for competicion in await self._uow.competitions.find_by_filters(
+            creator_id=user_id, status=CompetitionStatus.CLOSED, limit=_TODAS_LAS_SUYAS
         ):
-            hecho = await self._de(competicion)
-            if hecho is None or not hecho.para_el_organizador:
+            actualizacion = await self._terminada(competicion)
+            if actualizacion is None:
+                continue
+            hecho = await SinActualizarDeLaCompeticion.de(
+                self._uow, self._users, competicion, actualizacion
+            )
+            vistas[competicion.id] = user_id in hecho.no_encontrados
+            if not hecho.para_el_organizador:
                 continue
             nombres = await PlayerNames.de_la_competicion(
                 hecho.para_el_organizador, competicion.id, self._users, self._uow
@@ -86,21 +108,35 @@ class ListMyHandicapsNotUpdatedUseCase:
                     ],
                 )
             )
-        return items
+        return items, vistas
 
-    async def _como_jugador(self, user_id: UserId) -> list[HandicapNotFoundAsPlayerDTO]:
-        # Solo cuenta si sigue inscrito: lo mira la regla, con los aprobados
-        inscritas = list(
-            dict.fromkeys(
-                i.competition_id for i in await self._uow.enrollments.find_by_user(user_id)
-            )
-        )
-        if not inscritas:
+    async def _como_jugador(
+        self, user_id: UserId, ya_vistas: dict[CompetitionId, bool]
+    ) -> list[HandicapNotFoundAsPlayerDTO]:
+        """Donde sigue inscrito y la RFEG no lo encontró, leyendo solo lo suyo."""
+        inscripciones = {
+            i.competition_id: i
+            for i in await self._uow.enrollments.find_by_user(user_id)
+            if i.status == EnrollmentStatus.APPROVED
+        }
+        if not inscripciones:
             return []
+        jugador = None
         items = []
-        for competicion in await self._uow.competitions.find_by_ids(inscritas):
-            hecho = await self._de(competicion)
-            if hecho is not None and user_id in hecho.no_encontrados:
+        for competicion in await self._uow.competitions.find_by_ids(list(inscripciones)):
+            if competicion.id in ya_vistas:
+                no_encontrado = ya_vistas[competicion.id]
+            else:
+                actualizacion = await self._terminada(competicion)
+                if actualizacion is None:
+                    continue
+                jugador = jugador or await self._users.find_by_id(user_id)
+                if jugador is None:
+                    return []
+                no_encontrado = await SinActualizarDeLaCompeticion.no_encontrado(
+                    self._uow, jugador, inscripciones[competicion.id], competicion, actualizacion
+                )
+            if no_encontrado:
                 items.append(
                     HandicapNotFoundAsPlayerDTO(
                         competition_id=competicion.id.value,
@@ -109,9 +145,9 @@ class ListMyHandicapsNotUpdatedUseCase:
                 )
         return items
 
-    async def _de(self, competicion: Competition) -> SinActualizar | None:
+    async def _terminada(self, competicion: Competition) -> ActualizacionDeHandicaps | None:
         """
-        Lo de la última actualización, si el panel lo enseña: con la competición
+        La última actualización, si el panel la enseña: con la competición
         cerrada y sin empezar (al empezar desaparece, H5) y la actualización
         terminada (H1). De las demás no se lee nada más.
         """
@@ -120,6 +156,4 @@ class ListMyHandicapsNotUpdatedUseCase:
         actualizacion = await self._uow.handicap_updates.ultima_de(competicion.id)
         if actualizacion is None or not SinActualizarDeLaCompeticion.terminada(actualizacion):
             return None
-        return await SinActualizarDeLaCompeticion.de(
-            self._uow, self._users, competicion, actualizacion
-        )
+        return actualizacion

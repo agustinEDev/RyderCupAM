@@ -36,7 +36,6 @@ class IHandicapUpdateEmailService(Protocol):
         to_email: str,
         player_name: str,
         competition_name: str,
-        competition_id: str,
     ) -> bool:
         """
         Al jugador español al que la RFEG no encontró (H3, 15 nov 2026).
@@ -44,8 +43,7 @@ class IHandicapUpdateEmailService(Protocol):
         Args:
             to_email: Su correo
             player_name: Su nombre, el de su perfil
-            competition_name: La competición
-            competition_id: De qué competición es
+            competition_name: La competición (el enlace va a su perfil, no a ella)
 
         Returns:
             True si se envió

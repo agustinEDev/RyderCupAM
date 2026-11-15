@@ -28,6 +28,7 @@ from src.config.dependencies.comun import (
 )
 from src.config.freno_del_login import freno_del_login
 from src.config.reanudacion_del_refresco import VENTANA_CONFIGURADA
+from src.config.refresco_de_handicaps import HandicapDeLaRfegEnLasCompeticiones
 from src.config.settings import settings
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -250,6 +251,7 @@ def get_register_user_use_case(
 def get_update_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
 ) -> UpdateUserHandicapUseCase:
     """
     Proveedor del caso de uso UpdateUserHandicapUseCase.
@@ -260,12 +262,16 @@ def get_update_handicap_use_case(
     3. Crea una instancia de `UpdateUserHandicapUseCase`.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateUserHandicapUseCase(uow, handicap_service)
+    # Si la RFEG lo da, sus competiciones cerradas se enteran (D1 y D4, 16 nov 2026)
+    return UpdateUserHandicapUseCase(
+        uow, handicap_service, HandicapDeLaRfegEnLasCompeticiones(fabrica)
+    )
 
 
 def get_refresh_own_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
 ) -> RefreshOwnHandicapUseCase:
     """
     Proveedor del caso de uso RefreshOwnHandicapUseCase (RyderCupAM#340).
@@ -273,7 +279,9 @@ def get_refresh_own_handicap_use_case(
     El refresco del hándicap que antes hacía el login, ahora aparte para que el
     login no espere a la RFEG.
     """
-    return RefreshOwnHandicapUseCase(uow, handicap_service)
+    return RefreshOwnHandicapUseCase(
+        uow, handicap_service, HandicapDeLaRfegEnLasCompeticiones(fabrica)
+    )
 
 
 def get_update_multiple_handicaps_use_case(

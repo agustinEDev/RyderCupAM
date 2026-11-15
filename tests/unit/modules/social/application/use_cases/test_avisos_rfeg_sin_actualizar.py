@@ -8,6 +8,8 @@ Los avisos de Actividad de los hándicaps sin actualizar con la RFEG (15 nov 202
 | H3   | «No hemos encontrado tu hándicap en la RFEG para {torneo}»| cada no encontrado (SELF) |
 | H3   | otra actualización que tampoco lo encuentra: se renueva  | el jugador                 |
 | —    | al borrar el torneo se van                               | todos                      |
+| D3   | ya no queda nadie sin actualizar: se retira              | el del organizador         |
+| D3   | ya no es un no encontrado: se retira el suyo, no otros   | esos jugadores             |
 """
 
 from datetime import date
@@ -161,3 +163,46 @@ async def test_al_borrar_el_torneo_se_van():
 
     assert await _de(social, org, T.HANDICAPS_NOT_UPDATED) == []
     assert await _de(social, ana, T.RFEG_HANDICAP_NOT_FOUND) == []
+
+
+class TestSeRetiran:
+    async def test_el_del_organizador(self):
+        """
+        Given el aviso de 2 sin actualizar
+        When ya no queda nadie
+        Then se retira, y el de otro torneo se queda (D3)
+        """
+        social, avisos, org, _, _ = await _escenario()
+        torneo, otro = _torneo(), _torneo()
+        await avisos.handicaps_not_updated(org.id, torneo, 2)
+        await avisos.handicaps_not_updated(org.id, otro, 1)
+
+        await avisos.handicaps_not_updated_withdrawn(org.id, torneo.competition_id)
+
+        [queda] = await _de(social, org, T.HANDICAPS_NOT_UPDATED)
+        assert queda.source_match_id == otro.competition_id
+
+    async def test_el_de_los_jugadores_que_se_digan(self):
+        """
+        Given dos no encontrados con su aviso
+        When uno deja de serlo
+        Then se le retira el suyo y el otro lo conserva (D3)
+        """
+        social, avisos, _, ana, luis = await _escenario()
+        torneo = _torneo()
+        await avisos.handicap_not_found(torneo, [ana.id, luis.id])
+
+        await avisos.handicap_not_found_withdrawn(torneo.competition_id, [ana.id])
+
+        assert await _de(social, ana, T.RFEG_HANDICAP_NOT_FOUND) == []
+        assert len(await _de(social, luis, T.RFEG_HANDICAP_NOT_FOUND)) == 1
+
+    async def test_sin_nadie_no_toca_nada(self):
+        """Given un aviso When se retira para nadie Then sigue."""
+        social, avisos, _, ana, _ = await _escenario()
+        torneo = _torneo()
+        await avisos.handicap_not_found(torneo, [ana.id])
+
+        await avisos.handicap_not_found_withdrawn(torneo.competition_id, [])
+
+        assert len(await _de(social, ana, T.RFEG_HANDICAP_NOT_FOUND)) == 1

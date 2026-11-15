@@ -355,6 +355,18 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         """A cada español al que la RFEG no encontró, el suyo (H3)."""
         await self._notices.handicap_not_found(_ref(competition), list(user_ids))
 
+    async def handicaps_not_updated_withdrawn(self, competition: Competition) -> None:
+        """Ya no queda nadie sin actualizar: se retira el del organizador (D3)."""
+        await self._notices.handicaps_not_updated_withdrawn(
+            competition.creator_id, str(competition.id.value)
+        )
+
+    async def handicap_not_found_withdrawn(
+        self, competition: Competition, user_ids: Sequence[UserId]
+    ) -> None:
+        """A quien ya no es un no encontrado, se le retira el suyo (D3)."""
+        await self._notices.handicap_not_found_withdrawn(str(competition.id.value), list(user_ids))
+
 
 def _franja(franja: Round) -> TeeWindowRef:
     """La franja como la cuenta un aviso: día, sesión y primera salida."""

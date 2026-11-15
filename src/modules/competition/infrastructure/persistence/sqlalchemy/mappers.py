@@ -1364,6 +1364,29 @@ handicap_refreshes_table = Table(
     Column("refreshed_at", DateTime(timezone=True), nullable=False),
 )
 
+# Los correos de las actualizaciones ya enviados, para no repetirlos (D2, 16 nov
+# 2026): uno por jugador y competición al no encontrarlo en la RFEG; al
+# organizador, la huella de la lista enviada, para no mandarle la misma otra vez
+handicap_update_emails_table = Table(
+    "handicap_update_emails",
+    metadata,
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("kind", String(20), primary_key=True),
+    Column("fingerprint", String(64), nullable=False),
+    Column("sent_at", DateTime(timezone=True), nullable=False),
+)
+
 # Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:
 # sale de la hoja de salidas por el número. Los únicos se comprueban al final de
 # la transacción: un intercambio o un reordenado repite a medias un jugador o un

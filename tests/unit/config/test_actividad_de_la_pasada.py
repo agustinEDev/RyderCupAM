@@ -3,7 +3,8 @@ La pasada de hándicaps en segundo plano avisa en Actividad (15 nov 2026, H2 y H
 
 | Caso                                  | Resultado                                              |
 |---------------------------------------|--------------------------------------------------------|
-| Con Actividad                         | La pasada la recibe, montada sobre una sesión propia   |
+| Con Actividad                         | La pasada recibe cómo montarla; no se monta antes (T1) |
+| Montarla falla                        | La pasada corre igual (T1)                             |
 | Sin Actividad                         | La pasada no la recibe, y no se abre ninguna sesión    |
 | En producción                         | El lanzador del proceso lleva la de verdad             |
 """
@@ -58,11 +59,11 @@ def caso(monkeypatch):
     return _CasoQueApunta
 
 
-async def test_con_actividad_la_pasada_la_recibe_en_su_sesion(caso):
+async def test_con_actividad_la_pasada_recibe_como_montarla_y_no_se_monta_antes(caso):
     """
     Given un lanzador con Actividad
     When pasa una actualización
-    Then la pasada recibe la Actividad montada sobre una sesión propia, que se cierra al acabar
+    Then la pasada recibe cómo montarla, sin que se haya abierto ninguna sesión todavía (T1)
     """
     fabrica = _Fabrica()
     montadas: list[object] = []
@@ -75,10 +76,29 @@ async def test_con_actividad_la_pasada_la_recibe_en_su_sesion(caso):
 
     await lanzador.pasada(MagicMock())
 
-    assert montadas == fabrica.abiertas
-    assert len(montadas) == 1
-    assert caso.creados[0]["actividad"] == f"actividad sobre {id(montadas[0])}"
+    assert fabrica.abiertas == []
+    montar = caso.creados[0]["actividad"]
+    async with montar() as publicador:
+        assert publicador == f"actividad sobre {id(montadas[0])}"
+        assert montadas == fabrica.abiertas
     assert fabrica.cerradas == 1
+
+
+async def test_si_montarla_falla_la_pasada_ya_corrio(caso):
+    """
+    Given un lanzador cuya Actividad falla al montarse
+    When pasa una actualización
+    Then la pasada corre igual y dice lo suyo: montarla es cosa de la pasada, al avisar (T1)
+    """
+
+    def actividad(_sesion):
+        raise RuntimeError("actividad caida")
+
+    resultado = await LanzadorEnSegundoPlano(
+        _Fabrica(), MagicMock(), MagicMock(), actividad=actividad
+    ).pasada(MagicMock())
+
+    assert resultado == 0
 
 
 async def test_sin_actividad_no_la_recibe(caso):
