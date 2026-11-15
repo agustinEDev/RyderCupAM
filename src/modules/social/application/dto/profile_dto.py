@@ -158,7 +158,11 @@ class ActivityEventDTO(BaseModel):
             "en stroke play, null en una Ryder), `partner_ids` (compañeros de grupo o de "
             "pareja), `opponent_ids` (rivales; vacio en stroke play), `match_id` (null en "
             "stroke play) y `changed` (true si sustituye a una salida anterior de esa "
-            "ronda). Los nombres salen de `authors`: quien falte se pinta «un jugador»"
+            "ronda). Los nombres salen de `authors`: quien falte se pinta «un jugador». "
+            "En `ENROLLMENTS_CLOSED` (el plazo cerró las inscripciones, para el "
+            "organizador): `competition_id`, `competition_name`, `start_date` y `end_date`. "
+            "En `ENROLLMENT_CLOSE_BLOCKED` (el plazo no pudo cerrarlas): lo mismo, más "
+            "`reason` (NO_TEE_WINDOW o NO_HANDICAP) y `player_count` (cuántos aprobados)"
         ),
     )
     source_match_id: str = Field(

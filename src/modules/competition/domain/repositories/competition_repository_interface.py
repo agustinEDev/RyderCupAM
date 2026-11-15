@@ -7,7 +7,7 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -138,6 +138,15 @@ class CompetitionRepositoryInterface(ABC):
 
         Returns:
             List[Competition]: Lista de competiciones con el estado especificado
+        """
+        pass
+
+    @abstractmethod
+    async def find_active_starting_by(self, last_day: date) -> list[Competition]:
+        """
+        Las abiertas (ACTIVE) que empiezan como mucho ese dia: las unicas cuyo
+        plazo de inscripcion puede haber pasado (15 nov 2026). Sin limite: son
+        las de los proximos dias, no todas.
         """
         pass
 

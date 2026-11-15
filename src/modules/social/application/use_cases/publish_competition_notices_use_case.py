@@ -42,6 +42,8 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.TEE_WINDOW_REMOVED,
         ActivityEventType.HANDICAPS_NOT_UPDATED,
         ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
     }
 )
 
@@ -63,6 +65,10 @@ _SE_RENUEVAN = frozenset(
         # Uno por torneo: otra pasada u otra actualización lo pone al día
         ActivityEventType.HANDICAPS_NOT_UPDATED,
         ActivityEventType.RFEG_HANDICAP_NOT_FOUND,
+        # Del cierre por el plazo (15 nov 2026), uno por competicion: se puede
+        # cerrar otra vez (reabierta y movida) o bloquear con otro plazo
+        ActivityEventType.ENROLLMENTS_CLOSED,
+        ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
     }
 )
 
@@ -403,6 +409,42 @@ class PublishCompetitionNoticesUseCase:
                 )
             ],
             retirar=(enrollment_id, _DE_NO_ESTAR, player_id),
+        )
+
+    async def enrollments_closed(self, organizer_id: UserId, tournament: TournamentRef) -> None:
+        """
+        «Se han cerrado las inscripciones de X»: las cerro el plazo, a las 12:00
+        del dia anterior (C5, 15 nov 2026). Para el organizador; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENTS_CLOSED,
+                    tournament.competition_id,
+                    tournament,
+                )
+            ]
+        )
+
+    async def close_blocked(
+        self, organizer_id: UserId, tournament: TournamentRef, reason: str, players: int
+    ) -> None:
+        """
+        «N jugadores sin franja en X: colócalos y cierra» (o sin hándicap): el
+        plazo no pudo cerrarlas (C4, 15 nov 2026). Para el organizador, con el
+        motivo y cuántos; uno por torneo.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id,
+                    ActivityEventType.ENROLLMENT_CLOSE_BLOCKED,
+                    tournament.competition_id,
+                    tournament,
+                    {"reason": reason, "player_count": players},
+                )
+            ]
         )
 
     async def placed_from_waiting_list(

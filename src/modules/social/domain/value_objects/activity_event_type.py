@@ -58,6 +58,11 @@ class ActivityEventType(StrEnum):
     # tu hándicap en la RFEG para X» para el jugador español
     HANDICAPS_NOT_UPDATED = "HANDICAPS_NOT_UPDATED"
     RFEG_HANDICAP_NOT_FOUND = "RFEG_HANDICAP_NOT_FOUND"
+    # El plazo de inscripcion (15 nov 2026), para el organizador: «se han
+    # cerrado las inscripciones de X» y «N jugadores sin franja (o sin
+    # hándicap) en X: colócalos y cierra»
+    ENROLLMENTS_CLOSED = "ENROLLMENTS_CLOSED"
+    ENROLLMENT_CLOSE_BLOCKED = "ENROLLMENT_CLOSE_BLOCKED"
 
     @property
     def is_achievement(self) -> bool:

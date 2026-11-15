@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CloseBlockedReason,
     CompetitionActivityPublisherInterface,
     TeeTimeAssignment,
 )
@@ -127,6 +128,18 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         """A cada uno, su «no hubo plaza», por su inscripción (A4)."""
         await self._notices.no_place(
             _ref(competition), [(e.user_id, str(e.id.value)) for e in enrollments]
+        )
+
+    async def enrollments_closed(self, competition: Competition) -> None:
+        """Al organizador: el plazo cerro las inscripciones (C5)."""
+        await self._notices.enrollments_closed(competition.creator_id, _ref(competition))
+
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        """Al organizador: el plazo no pudo cerrarlas, con el motivo y cuantos (C4)."""
+        await self._notices.close_blocked(
+            competition.creator_id, _ref(competition), reason.value, players
         )
 
     async def window_removed(

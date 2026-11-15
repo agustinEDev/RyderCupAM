@@ -33,6 +33,10 @@ from src.config.arranque_seguro import (  # noqa: E402
     en_desarrollo_declarado,
 )
 from src.config.aviso_en_segundo_plano import drena_al_apagar  # noqa: E402
+from src.config.cierre_de_inscripciones import (  # noqa: E402
+    CierreDeInscripciones,
+    cierre_de_inscripciones_activado,
+)
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
@@ -189,6 +193,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tareas.append(asyncio.create_task(CierreDePartidasRapidas(async_session_maker).vigilar()))
         # Y la limpieza de dispositivos y refrescos viejos, también cada hora (BE #737)
         tareas.append(asyncio.create_task(LimpiezaDeSesiones(async_session_maker).vigilar()))
+    # Las inscripciones cierran solas a las 12:00 del día anterior al torneo; se mira
+    # cada hora (15 nov 2026). En PRO y en el Kind; en los tests no
+    if cierre_de_inscripciones_activado(os.environ):
+        tareas.append(asyncio.create_task(CierreDeInscripciones(async_session_maker).vigilar()))
     # La clave de Brevo, usada una vez al día para que no caduque (solo PRO)
     brevo = brevo_desde(os.environ)
     if vigia_activado(os.environ) and brevo is not None:

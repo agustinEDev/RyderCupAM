@@ -5,7 +5,7 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 """
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import and_, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -298,6 +298,15 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .order_by(Competition._created_at.desc())
             .limit(limit)
             .offset(offset)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_active_starting_by(self, last_day: date) -> list[Competition]:
+        """Las ACTIVE que empiezan como mucho ese dia, para el cierre por el plazo."""
+        statement = select(Competition).where(
+            Competition._status_value == CompetitionStatus.ACTIVE.value,
+            competitions_table.c.start_date <= last_day,
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

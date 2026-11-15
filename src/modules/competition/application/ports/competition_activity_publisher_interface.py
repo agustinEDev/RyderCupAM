@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, time
+from enum import StrEnum
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -54,6 +55,13 @@ class TeeTimeAssignment:
         )
 
 
+class CloseBlockedReason(StrEnum):
+    """Por que el plazo no pudo cerrar las inscripciones (C4, 15 nov 2026)."""
+
+    NO_TEE_WINDOW = "NO_TEE_WINDOW"
+    NO_HANDICAP = "NO_HANDICAP"
+
+
 class CompetitionActivityPublisherInterface(ABC):
     """
     Lo que `competition` le cuenta al feed, sin depender de el.
@@ -94,6 +102,19 @@ class CompetitionActivityPublisherInterface(ABC):
         """
         Se cerraron las inscripciones y seguian solo en espera: salen sin plaza
         (A4, 28 oct 2026).
+        """
+
+    @abstractmethod
+    async def enrollments_closed(self, competition: Competition) -> None:
+        """El plazo cerro las inscripciones: se le dice al organizador (C5)."""
+
+    @abstractmethod
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        """
+        El plazo no pudo cerrarlas: `players` aprobados sin franja o sin
+        hándicap. Se le dice al organizador una vez (C4).
         """
 
     @abstractmethod

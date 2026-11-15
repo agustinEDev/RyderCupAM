@@ -545,7 +545,7 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `team_1_name` (string, optional, max 50)
 - `team_2_name` (string, optional, max 50)
 - `visibility` (enum, optional: "PRIVATE" | "PUBLIC", default "PRIVATE") — a private competition is invisible to anyone not in it, and a place cannot be requested without an invitation
-- `enrollment_opens_days_before` (int, optional, 1-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
+- `enrollment_opens_days_before` (int, optional, 2-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
 
 ### Query Parameters (List)
 
@@ -569,6 +569,14 @@ Three things follow from that, and none of them is obvious:
 - The server's clock decides. Nothing about the opening is taken from the client.
 
 If the days asked for exceed the days left until the tournament starts, the opening is already in the past and the competition opens on the first read. That is deliberate — a past moment means "open it now" — but the caller gets something sooner than asked for, and the UI should say so.
+
+### Enrolment Deadline
+
+Enrolment closes at **12:00 the day before `start_date`**, in the time zone of the first course (`Europe/Madrid` with no course). It applies to Ryder Cup, Stableford and Medal, public and private.
+
+- From that moment nobody enters, even while the status is still `ACTIVE`: joining a public competition, inviting (by user or by email), accepting an invitation and approving a request answer **400** with `error_code: ENROLLMENT_DEADLINE_PASSED` («La inscripción está cerrada.»). Declining and rejecting still work.
+- A job runs every hour and closes (`ACTIVE → CLOSED`) the competitions past their deadline with the same use case as closing by hand. The organiser gets an `ENROLLMENTS_CLOSED` notice in Activity. A stroke play with approved players lacking a tee window or a handicap stays `ACTIVE` and the organiser gets **one** `ENROLLMENT_CLOSE_BLOCKED` notice (`reason`, `player_count`); the job retries every hour.
+- A competition opened or reopened **after** its deadline stays open until the organiser closes it by hand. Moving `start_date` later gives it a new deadline.
 
 ### Competition Response (Computed Fields)
 

@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CloseBlockedReason,
     CompetitionActivityPublisherInterface,
     TeeTimeAssignment,
 )
@@ -93,6 +94,14 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
         if not enrollments:
             return
         await self._avisar("no_place", lambda p: p.no_place(competition, enrollments))
+
+    async def enrollments_closed(self, competition: Competition) -> None:
+        await self._avisar("enrollments_closed", lambda p: p.enrollments_closed(competition))
+
+    async def close_blocked(
+        self, competition: Competition, reason: CloseBlockedReason, players: int
+    ) -> None:
+        await self._avisar("close_blocked", lambda p: p.close_blocked(competition, reason, players))
 
     async def window_removed(
         self, competition: Competition, franja: Round, enrollment: Enrollment
