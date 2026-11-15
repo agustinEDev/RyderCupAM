@@ -81,8 +81,9 @@ async def test_los_tipos_nuevos_caben_y_no_se_duplican(db_session):
 
     # Los ocho avisos de BE-2, ENROLLMENT_CONFIRMED (C), TEE_TIME_ASSIGNED (G),
     # ENROLLMENT_REMOVED (release social 2) y los tres de la inscripcion
-    # directa (release social 3)
-    assert len(await _tipos(repository, user)) == len(nuevos) == 15
+    # directa (release social 3), y los dos de la RFEG (HANDICAPS_NOT_UPDATED
+    # y RFEG_HANDICAP_NOT_FOUND)
+    assert len(await _tipos(repository, user)) == len(nuevos) == 17
 
 
 async def test_borrar_desde_un_origen_de_un_jugador(db_session):
