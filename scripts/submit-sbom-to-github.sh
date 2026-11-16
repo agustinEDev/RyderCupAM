@@ -116,9 +116,16 @@ API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/dependency-graph/sn
 
 # La versión del generador sale del propio SBOM: este paso tiene el token y no ejecuta
 # ninguna herramienta instalada (INF-04, re-auditoría del 16 nov 2026)
+# El SBOM viene del job sin token: la versión solo se acepta con forma de versión, para
+# que no pueda meter nada en el JSON que se envía con el token
 DETECTOR_VERSION=$(jq -r '[.metadata.tools.components[]? | select(.name == "cyclonedx-py") | .version][0] // "unknown"' "$SBOM_FILE")
-# Directos = los de requirements.txt; el resto del lock son indirectos (INF-03)
-DIRECTOS=$(grep -oE '^[A-Za-z0-9._-]+' requirements.txt | jq -R 'ascii_downcase | gsub("[-_.]+"; "-")' | jq -s .)
+if ! [[ "$DETECTOR_VERSION" =~ ^[0-9A-Za-z.+-]{1,40}$ ]]; then
+    DETECTOR_VERSION="unknown"
+fi
+# Directos = los de requirements.txt; el resto del lock son indirectos (INF-03). Desde
+# la raíz del repo, se llame desde donde se llame
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIRECTOS=$(grep -oE '^[A-Za-z0-9._-]+' "$RAIZ/requirements.txt" | jq -R 'ascii_downcase | gsub("[-_.]+"; "-")' | jq -s .)
 
 # Prepare payload
 # Reference: https://docs.github.com/en/rest/dependency-graph/dependency-submission
@@ -128,7 +135,7 @@ PAYLOAD=$(cat <<EOF
   "sha": "$REF_SHA",
   "ref": "$GITHUB_REF",
   "job": {
-    "correlator": "sbom_generation_$REF_SHA",
+    "correlator": "sbom_generation",
     "id": "$GITHUB_RUN_ID"
   },
   "detector": {

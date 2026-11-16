@@ -46,42 +46,42 @@ def _instalaciones(fichero: str) -> list[tuple[str, str, list[str]]]:
     ]
 
 
-def test_every_ci_job_installs_the_shipped_lock_before_the_dev_tools():
+def test_every_ci_job_installs_through_the_shared_script():
     """
-    Given: los pasos del CI y de Snyk que instalan dependencias de Python
-    When: instalan requirements-dev.txt o requirements.txt
-    Then: antes instalan pip desde requirements-bootstrap.lock y requirements.lock, los
-          dos con --require-hashes, y después comprueban que el lock sigue intacto
+    Given: los pasos del CI y de Snyk que instalan el proyecto
+    When: se mira qué ejecutan
+    Then: ninguno instala requirements*.txt a mano: todos llaman a
+          instalar_dependencias.sh (con --dev donde hacen falta las herramientas)
     """
-    revisados = 0
+    llamadas = 0
     for fichero in ("ci_cd_pipeline.yml", "snyk_review.yml"):
-        for job, nombre, ordenes in _instalaciones(fichero):
-            texto = "\n".join(ordenes)
-            # Las que instalan el proyecto (no una herramienta suelta sacada de un fichero)
-            if not re.search(r"-r requirements(-dev)?\.(txt|lock)\b", texto):
-                continue
-            revisados += 1
-            donde = f"{fichero} · {job} · {nombre}"
-            arranque = next(
-                (i for i, o in enumerate(ordenes) if "-r requirements-bootstrap.lock" in o), None
-            )
-            lock = next((i for i, o in enumerate(ordenes) if "-r requirements.lock" in o), None)
-            resto = next(
-                (
-                    i
-                    for i, o in enumerate(ordenes)
-                    if "-r requirements-dev.txt" in o or "-r requirements.txt" in o
-                ),
-                None,
-            )
-            assert arranque is not None and "--require-hashes" in ordenes[arranque], donde
-            assert lock is not None and "--require-hashes" in ordenes[lock], donde
-            assert arranque < lock, donde
-            assert resto is None or lock < resto, donde
-            despues = ordenes[(resto if resto is not None else lock) + 1 :]
-            assert any("comprobar_lock_instalado.py" in o for o in despues), donde
+        for job, paso in _pasos(fichero):
+            ordenes = _ordenes(paso["run"])
+            donde = f"{fichero} · {job} · {paso.get('name', '')}"
+            for orden in ordenes:
+                assert not re.search(r"pip install .*-r requirements", orden), donde
+            llamadas += sum("bash .github/scripts/instalar_dependencias.sh" in o for o in ordenes)
 
-    assert revisados >= 7, revisados
+    assert llamadas >= 8, llamadas
+
+
+def test_the_install_script_installs_the_locks_with_hashes_before_the_dev_tools():
+    """
+    Given: .github/scripts/instalar_dependencias.sh
+    When: se miran sus órdenes
+    Then: pip desde su lock y el proyecto desde requirements.lock, con --require-hashes;
+          después, solo con --dev, las herramientas; y al final comprueba los DOS locks
+    """
+    guion = (RAIZ / ".github" / "scripts" / "instalar_dependencias.sh").read_text(encoding="utf-8")
+    ordenes = [o for o in _ordenes(guion) if not o.startswith(("set ", "if ", "fi"))]
+
+    assert "--require-hashes --no-deps -r requirements-bootstrap.lock" in ordenes[0]
+    assert "--require-hashes -r requirements.lock" in ordenes[1]
+    assert "-r requirements-dev.txt" in ordenes[2]
+    assert ordenes[-1] == (
+        "python .github/scripts/comprobar_lock_instalado.py "
+        "requirements.lock requirements-bootstrap.lock"
+    )
 
 
 def test_no_ci_step_upgrades_pip_without_a_version_and_a_hash():
@@ -94,6 +94,8 @@ def test_no_ci_step_upgrades_pip_without_a_version_and_a_hash():
         for job, nombre, ordenes in _instalaciones(fichero):
             for orden in ordenes:
                 assert "--upgrade pip" not in orden, f"{fichero} · {job} · {nombre}"
+    guion = (RAIZ / ".github" / "scripts" / "instalar_dependencias.sh").read_text(encoding="utf-8")
+    assert "--upgrade pip" not in guion
 
 
 def test_the_sbom_comes_from_the_lock_and_its_tool_from_a_hashed_lock():
@@ -129,6 +131,11 @@ def test_the_sbom_comes_from_the_lock_and_its_tool_from_a_hashed_lock():
     guion = (RAIZ / "scripts" / "submit-sbom-to-github.sh").read_text(encoding="utf-8")
     assert "cyclonedx-py --version" not in guion
     assert '"requirements.lock"' in guion
+    # Un correlator fijo: cada envío sustituye al anterior, y el manifiesto viejo
+    # (requirements.txt) no se queda colgado en el grafo
+    assert '"correlator": "sbom_generation",' in guion
+    # La versión que llega en el SBOM solo entra con forma de versión
+    assert 'DETECTOR_VERSION="unknown"' in guion
 
 
 def test_the_sbom_tool_lock_pins_its_source_with_hashes():
@@ -148,12 +155,8 @@ def test_the_sbom_tool_lock_pins_its_source_with_hashes():
     assert all("--hash=sha256:" in b for b in bloques)
 
 
-def test_the_installed_lock_check_finds_a_moved_version(tmp_path):
-    """
-    Given: un lock con un paquete en una versión que no es la instalada
-    When: se ejecuta la comprobación del CI
-    Then: termina con error y nombra el paquete
-    """
+def _comprobador():
+    """El script de comprobación, cargado como módulo."""
     import importlib.util
 
     ruta = RAIZ / ".github" / "scripts" / "comprobar_lock_instalado.py"
@@ -161,6 +164,16 @@ def test_the_installed_lock_check_finds_a_moved_version(tmp_path):
     assert spec and spec.loader
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
+    return modulo
+
+
+def test_the_installed_lock_check_finds_a_moved_version(tmp_path):
+    """
+    Given: un lock con un paquete en una versión que no es la instalada
+    When: se ejecuta la comprobación del CI
+    Then: termina con error y nombra el paquete
+    """
+    modulo = _comprobador()
 
     lock = tmp_path / "requirements.lock"
     lock.write_text("pyyaml==0.0.1 \\\n    --hash=sha256:abc\n", encoding="utf-8")
@@ -178,13 +191,8 @@ def test_the_installed_lock_check_passes_with_other_spellings_of_the_names(tmp_p
     Then: no da ninguno por distinto
     """
     import importlib.metadata
-    import importlib.util
 
-    ruta = RAIZ / ".github" / "scripts" / "comprobar_lock_instalado.py"
-    spec = importlib.util.spec_from_file_location("comprobar_lock_instalado", ruta)
-    assert spec and spec.loader
-    modulo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(modulo)
+    modulo = _comprobador()
     version = importlib.metadata.version("pyyaml")
     extensiones = importlib.metadata.version("typing-extensions")
 
@@ -196,3 +204,22 @@ def test_the_installed_lock_check_passes_with_other_spellings_of_the_names(tmp_p
     )
 
     assert modulo.distintos(lock) == {}
+
+
+def test_the_lock_check_fails_when_any_of_several_locks_moved(tmp_path, monkeypatch, capsys):
+    """
+    Given: dos locks, el primero bien y el segundo (el de pip) con otra versión
+    When: se ejecuta la comprobación con los dos
+    Then: sale con 1 y nombra el lock que no coincide
+    """
+    import importlib.metadata
+
+    modulo = _comprobador()
+    bien = tmp_path / "requirements.lock"
+    bien.write_text(f"pyyaml=={importlib.metadata.version('pyyaml')}\n", encoding="utf-8")
+    mal = tmp_path / "requirements-bootstrap.lock"
+    mal.write_text("pip==0.0.1\n", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["x", str(bien), str(mal)])
+
+    assert modulo.main() == 1
+    assert "requirements-bootstrap.lock" in capsys.readouterr().out

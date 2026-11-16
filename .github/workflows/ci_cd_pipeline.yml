@@ -107,12 +107,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Run Unit Tests with Coverage
         run: |
@@ -208,12 +204,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Wait for PostgreSQL
         run: |
@@ -309,12 +301,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Wait for PostgreSQL
         run: |
@@ -380,12 +368,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Run Bandit (Python Security Linter)
         id: bandit
@@ -516,12 +500,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Run Ruff Linter
         id: lint
@@ -597,12 +577,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Lo mismo que la imagen: pip y requirements.lock con hashes; encima, las
-          # herramientas de desarrollo, sin mover ninguna versión del lock (INF-05)
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-          python .github/scripts/comprobar_lock_instalado.py
+          # Lo mismo que la imagen y, encima, las herramientas de desarrollo (INF-05)
+          bash .github/scripts/instalar_dependencias.sh --dev
 
       - name: Run Mypy Type Checker
         id: mypy
@@ -1128,6 +1104,7 @@ jobs:
           path: sbom
 
       - name: Submit SBOM to GitHub Dependency Graph
+        id: submit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1137,6 +1114,23 @@ jobs:
             ${{ github.event.repository.name }} \
             ${{ github.sha }} \
             ${{ github.ref }}
+
+      - name: Summary card
+        if: always()
+        env:
+          SUBMIT_OUTCOME: ${{ steps.submit.outcome }}
+        run: |
+          case "$SUBMIT_OUTCOME" in
+            success) RESULT="Submitted to the GitHub dependency graph as requirements.lock" ;;
+            failure) RESULT="Submission to the dependency graph FAILED, see the step log" ;;
+            *) RESULT="The submission did not run" ;;
+          esac
+          python3 .github/scripts/summary_card.py \
+            --title '📦 SBOM submission' \
+            --what 'Sends the SBOM of main to the GitHub dependency graph, so Dependabot alerts cover every shipped package. The only job with write access, and it runs no installed tool.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'See the submit step: usually a token or API error; the SBOM itself is in the sbom-cyclonedx artifact.' || true
 
   # ================================
   # JOB 10: GPG SIGNATURE VERIFICATION
@@ -1339,9 +1333,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          python -m pip install --require-hashes --no-deps -r requirements-bootstrap.lock
-          pip install --require-hashes -r requirements.lock
-          python .github/scripts/comprobar_lock_instalado.py
+          bash .github/scripts/instalar_dependencias.sh
 
       - name: Install oasdiff
         env:
