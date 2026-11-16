@@ -22,7 +22,7 @@ ruff==0.17.4
 
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
-import-linter==2.15
+import-linter==2.16
 # grimp - el grafo de importaciones que usa import-linter; lo importa también la prueba de ciclos
 # del dominio de usuarios (tests/unit/modules/user/domain/test_capas_del_dominio_de_usuarios.py)
 grimp==3.17
@@ -106,7 +106,7 @@ respx==0.23.1
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
 # Actualizado a 1.4.1: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
-pytest-asyncio==1.4.1.post1
+pytest-asyncio==1.5.0
 
 # pytest-cov - Plugin de cobertura para pytest
 # Sin versión fijada, como estaba en requirements.txt: se mueve tal cual para no
