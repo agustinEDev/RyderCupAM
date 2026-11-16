@@ -46,23 +46,39 @@ def _instalaciones(fichero: str) -> list[tuple[str, str, list[str]]]:
     ]
 
 
+# Quién instala el proyecto y cómo: con las herramientas de desarrollo (--dev) o solo lo
+# que se despliega. Un consumidor que falte o cambie de modo tiene que verse aquí
+INSTALADORES = {
+    ("ci_cd_pipeline.yml", "unit_tests"): "--dev",
+    ("ci_cd_pipeline.yml", "integration_tests"): "--dev",
+    ("ci_cd_pipeline.yml", "security_tests"): "--dev",
+    ("ci_cd_pipeline.yml", "security_checks"): "--dev",
+    ("ci_cd_pipeline.yml", "linting"): "--dev",
+    ("ci_cd_pipeline.yml", "type_checking"): "--dev",
+    ("ci_cd_pipeline.yml", "api_contract"): "",
+    ("snyk_review.yml", "snyk"): "",
+}
+
+
 def test_every_ci_job_installs_through_the_shared_script():
     """
-    Given: los pasos del CI y de Snyk que instalan el proyecto
+    Given: los pasos del CI y de Snyk
     When: se mira qué ejecutan
-    Then: ninguno instala requirements*.txt a mano: todos llaman a
-          instalar_dependencias.sh (con --dev donde hacen falta las herramientas)
+    Then: ninguno instala requirements*.txt a mano, y cada job que instala el proyecto
+          llama UNA vez a instalar_dependencias.sh, con --dev solo donde hacen falta
+          las herramientas (CodeRabbit en BE #884: un total no ve un job que falte)
     """
-    llamadas = 0
+    llamadas: dict[tuple[str, str], list[str]] = {}
     for fichero in ("ci_cd_pipeline.yml", "snyk_review.yml"):
         for job, paso in _pasos(fichero):
-            ordenes = _ordenes(paso["run"])
             donde = f"{fichero} · {job} · {paso.get('name', '')}"
-            for orden in ordenes:
+            for orden in _ordenes(paso["run"]):
                 assert not re.search(r"pip install .*-r requirements", orden), donde
-            llamadas += sum("bash .github/scripts/instalar_dependencias.sh" in o for o in ordenes)
+                if "bash .github/scripts/instalar_dependencias.sh" in orden:
+                    modo = orden.split("instalar_dependencias.sh", 1)[1].strip()
+                    llamadas.setdefault((fichero, job), []).append(modo)
 
-    assert llamadas >= 8, llamadas
+    assert llamadas == {clave: [modo] for clave, modo in INSTALADORES.items()}
 
 
 def test_the_install_script_installs_the_locks_with_hashes_before_the_dev_tools():
