@@ -49,11 +49,6 @@ class PlazoDeInscripcion:
     def zonas(self) -> ICompetitionTimezone:
         return self._zonas
 
-    async def hoy_en_el_campo(self, competition: Competition) -> date:
-        """Qué día es ahora en su campo, con el mismo reloj y la misma zona que el plazo (F-01)."""
-        zona = await self._zonas.for_competition(competition)
-        return fecha_en_el_campo(self.ahora(), zona)
-
     async def queda_plazo(self, competition: Competition) -> bool:
         """Si su plazo todavía no ha llegado, con su zona (R3)."""
         zona = await self._zonas.for_competition(competition)
@@ -77,22 +72,34 @@ class PlazoDeInscripcion:
         zona = await self._zonas.for_competition(competition)
         return competition.due_to_close(zona, self.ahora())
 
-    async def exigir_abierto(self, competition: Competition) -> None:
+    async def exigir_abierto(self, competition: Competition) -> date:
         """
+        Exige que el plazo deje entrar y devuelve qué día es en su campo, con una sola
+        consulta de la zona para las dos cosas (F-01).
+
         Raises:
             EnrollmentDeadlinePassedError: Si el plazo ya no deja entrar a nadie
         """
-        if await self.vencido(competition):
+        zona = await self._zonas.for_competition(competition)
+        ahora = self.ahora()
+        # La regla de la entidad, la misma que `vencido` (en borrador no cuenta, R2)
+        if competition.entries_closed_by_deadline(zona, ahora):
             raise EnrollmentDeadlinePassedError()
+        return fecha_en_el_campo(ahora, zona)
 
 
-async def exigir_el_plazo(plazo: PlazoDeInscripcion | None, competition: Competition) -> None:
+async def exigir_el_plazo(plazo: PlazoDeInscripcion | None, competition: Competition) -> date:
     """
     El plazo, si el caso de uso lo tiene: fuera de la API (tests, scripts) puede
     construirse sin él, como la zona de la apertura programada.
+
+    Returns:
+        Qué día es en el campo (F-01). Sin plazo, con la hora de ahora y la zona por
+        defecto del plazo.
 
     Raises:
         EnrollmentDeadlinePassedError: Si el plazo ya no deja entrar a nadie
     """
     if plazo is not None:
-        await plazo.exigir_abierto(competition)
+        return await plazo.exigir_abierto(competition)
+    return fecha_en_el_campo(ahora_en_utc(), None)

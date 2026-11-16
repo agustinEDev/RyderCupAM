@@ -130,7 +130,9 @@ class CompetitionPolicy:
         Example:
             >>> CompetitionPolicy.can_enroll(
             ...     user_id, comp_id, None, CompetitionStatus.ACTIVE,
-            ...     date(2026, 6, 1), 5
+            ...     competition_start_date=date(2026, 6, 1),
+            ...     today=date(2026, 6, 1),  # el día del torneo, en el campo: entra
+            ...     user_total_enrollments=5,
             ... )  # OK
         """
         # 1. Prevenir duplicados

@@ -577,6 +577,26 @@ class TestElDiaDelTorneoEsElDelCampo:
                 )
             )
 
+    async def test_la_zona_del_campo_se_pregunta_una_vez_por_inscripcion(self):
+        """
+        Given una inscripción con plazo
+        When alguien se apunta
+        Then la zona del campo se resuelve una vez: el plazo y el día del torneo la comparten
+        """
+        uow = CompetitionInMemoryUoW()
+        dia = date(2030, 6, 10)
+        competition = await self._abierta_tarde(uow, dia)
+        zonas = _Zonas("Europe/Madrid")
+        plazo = PlazoDeInscripcion(zonas, reloj=lambda: datetime.combine(dia, time(8), tzinfo=UTC))
+
+        await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, plazo=plazo).execute(
+            RequestEnrollmentRequestDTO(
+                competition_id=competition.id.value, user_id=UserId.generate().value
+            )
+        )
+
+        assert zonas.preguntas == 1
+
     async def test_en_un_campo_al_oeste_sigue_siendo_el_dia_del_torneo(self):
         """
         Given un torneo del 10 jun 2020 en un campo de Ciudad de México (UTC-6)
