@@ -397,6 +397,23 @@ jobs:
           # 30 sep 2026 solo contaba «CVE*» y dejaba pasar casi todo
           python .github/scripts/pip_audit_gate.py pip-audit-report.json
 
+      # La config de gitleaks tiene que detectar algo: hasta el 16 nov 2026 no cargaba
+      # ninguna regla y el escaneo de abajo pasaba siempre (INF-01). Mismo gitleaks que
+      # usa la acción, descargado con su sha256 de la release.
+      - name: Gitleaks self-test
+        id: gitleaks-self-test
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: 8.24.3
+          GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          PATH="$RUNNER_TEMP/gitleaks:$PATH" bash .github/scripts/gitleaks_self_test.sh
+
       - name: Check for Secrets with Gitleaks
         id: gitleaks
         if: ${{ !cancelled() }}
@@ -404,6 +421,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_VERSION: 8.24.3  # la misma que la autoprueba (y la que trae la acción)
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_NOTIFY_USER_LIST: ""
         # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
