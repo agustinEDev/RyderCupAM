@@ -10,6 +10,11 @@ updates:
       time: "09:00"
       timezone: "Europe/Madrid"
     open-pull-requests-limit: 10
+    # Espera 5 días antes de proponer una versión recién publicada: es la ventana
+    # de los paquetes envenenados de PyPI y npm, que se retiran en horas o días
+    # (INF-12). Las actualizaciones de seguridad no esperan.
+    cooldown:
+      default-days: 5
     labels:
       - "dependencies"
       - "automated"
@@ -63,6 +68,11 @@ updates:
   - package-ecosystem: "docker"
     directory: "/docker"
     target-branch: "develop"
+    # Espera 3 días antes de proponer una versión recién publicada: es la ventana
+    # de los paquetes envenenados de PyPI y npm, que se retiran en horas o días
+    # (INF-12). Las actualizaciones de seguridad no esperan.
+    cooldown:
+      default-days: 3
     schedule:
       interval: "weekly"
       day: "monday"
@@ -87,6 +97,11 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "develop"
+    # Espera 5 días antes de proponer una versión recién publicada: es la ventana
+    # de los paquetes envenenados de PyPI y npm, que se retiran en horas o días
+    # (INF-12). Las actualizaciones de seguridad no esperan.
+    cooldown:
+      default-days: 5
     schedule:
       interval: "weekly"
       day: "monday"
