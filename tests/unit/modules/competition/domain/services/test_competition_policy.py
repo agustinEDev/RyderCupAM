@@ -31,6 +31,9 @@ from src.modules.competition.domain.value_objects.competition_status import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
+# El día de hoy en el campo, fijo: la regla no mira el reloj, se lo dan (F-01)
+HOY_EN_EL_CAMPO = date(2030, 6, 10)
+
 # ======================================================================================
 # TESTS: can_create_competition
 # ======================================================================================
@@ -104,7 +107,7 @@ def test_can_enroll_allows_when_valid():
     """
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
-    start_date = date.today() + timedelta(days=7)
+    start_date = HOY_EN_EL_CAMPO + timedelta(days=7)
 
     # Should not raise
     CompetitionPolicy.can_enroll(
@@ -113,6 +116,7 @@ def test_can_enroll_allows_when_valid():
         existing_enrollment_id=None,
         competition_status=CompetitionStatus.ACTIVE,
         competition_start_date=start_date,
+        today=HOY_EN_EL_CAMPO,
         user_total_enrollments=5,
     )
 
@@ -126,7 +130,7 @@ def test_can_enroll_rejects_duplicate_enrollment():
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
     existing_enrollment_id = "existing-uuid"
-    start_date = date.today() + timedelta(days=7)
+    start_date = HOY_EN_EL_CAMPO + timedelta(days=7)
 
     with pytest.raises(DuplicateEnrollmentViolation) as exc_info:
         CompetitionPolicy.can_enroll(
@@ -135,6 +139,7 @@ def test_can_enroll_rejects_duplicate_enrollment():
             existing_enrollment_id=existing_enrollment_id,
             competition_status=CompetitionStatus.ACTIVE,
             competition_start_date=start_date,
+            today=HOY_EN_EL_CAMPO,
             user_total_enrollments=5,
         )
 
@@ -149,7 +154,7 @@ def test_can_enroll_rejects_when_user_at_enrollment_limit():
     """
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
-    start_date = date.today() + timedelta(days=7)
+    start_date = HOY_EN_EL_CAMPO + timedelta(days=7)
 
     with pytest.raises(MaxEnrollmentsExceededViolation) as exc_info:
         CompetitionPolicy.can_enroll(
@@ -158,6 +163,7 @@ def test_can_enroll_rejects_when_user_at_enrollment_limit():
             existing_enrollment_id=None,
             competition_status=CompetitionStatus.ACTIVE,
             competition_start_date=start_date,
+            today=HOY_EN_EL_CAMPO,
             user_total_enrollments=MAX_ENROLLMENTS_PER_USER,
         )
 
@@ -173,7 +179,7 @@ def test_can_enroll_rejects_when_competition_in_draft():
     """
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
-    start_date = date.today() + timedelta(days=7)
+    start_date = HOY_EN_EL_CAMPO + timedelta(days=7)
 
     with pytest.raises(InvalidCompetitionStatusViolation) as exc_info:
         CompetitionPolicy.can_enroll(
@@ -182,6 +188,7 @@ def test_can_enroll_rejects_when_competition_in_draft():
             existing_enrollment_id=None,
             competition_status=CompetitionStatus.DRAFT,
             competition_start_date=start_date,
+            today=HOY_EN_EL_CAMPO,
             user_total_enrollments=5,
         )
 
@@ -196,7 +203,7 @@ def test_can_enroll_rejects_when_competition_completed():
     """
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
-    start_date = date.today() - timedelta(days=7)  # Past date
+    start_date = HOY_EN_EL_CAMPO - timedelta(days=7)  # Past date
 
     with pytest.raises(InvalidCompetitionStatusViolation):
         CompetitionPolicy.can_enroll(
@@ -205,6 +212,7 @@ def test_can_enroll_rejects_when_competition_completed():
             existing_enrollment_id=None,
             competition_status=CompetitionStatus.COMPLETED,
             competition_start_date=start_date,
+            today=HOY_EN_EL_CAMPO,
             user_total_enrollments=5,
         )
 
@@ -220,7 +228,8 @@ def test_can_enroll_allows_on_the_start_day():
         competition_id=CompetitionId.generate(),
         existing_enrollment_id=None,
         competition_status=CompetitionStatus.ACTIVE,
-        competition_start_date=date.today(),
+        competition_start_date=HOY_EN_EL_CAMPO,
+        today=HOY_EN_EL_CAMPO,
         user_total_enrollments=5,
     )
 
@@ -237,7 +246,8 @@ def test_can_enroll_rejects_once_the_start_day_has_passed():
             competition_id=CompetitionId.generate(),
             existing_enrollment_id=None,
             competition_status=CompetitionStatus.ACTIVE,
-            competition_start_date=date.today() - timedelta(days=1),
+            competition_start_date=HOY_EN_EL_CAMPO - timedelta(days=1),
+            today=HOY_EN_EL_CAMPO,
             user_total_enrollments=5,
         )
 
@@ -250,7 +260,7 @@ def test_can_enroll_allows_when_competition_status_closed():
     """
     user_id = UserId.generate()
     competition_id = CompetitionId.generate()
-    start_date = date.today() + timedelta(days=7)
+    start_date = HOY_EN_EL_CAMPO + timedelta(days=7)
 
     # Should not raise
     CompetitionPolicy.can_enroll(
@@ -259,6 +269,7 @@ def test_can_enroll_allows_when_competition_status_closed():
         existing_enrollment_id=None,
         competition_status=CompetitionStatus.CLOSED,
         competition_start_date=start_date,
+        today=HOY_EN_EL_CAMPO,
         user_total_enrollments=5,
     )
 
@@ -397,3 +408,20 @@ def test_validate_date_range_allows_when_duration_at_limit():
 
     # Should not raise
     CompetitionPolicy.validate_date_range(start_date, end_date, "Test")
+
+
+def test_can_enroll_uses_the_date_it_is_given_not_the_clock_of_the_host():
+    """
+    Given: Un torneo que empezó en 2020 y una «fecha de hoy» del campo de ese mismo día
+    When: Se comprueba si puede inscribirse
+    Then: Entra: la regla usa la fecha del campo que le dan, no la del servidor (F-01)
+    """
+    CompetitionPolicy.can_enroll(
+        user_id=UserId.generate(),
+        competition_id=CompetitionId.generate(),
+        existing_enrollment_id=None,
+        competition_status=CompetitionStatus.ACTIVE,
+        competition_start_date=date(2020, 1, 1),
+        today=date(2020, 1, 1),
+        user_total_enrollments=5,
+    )

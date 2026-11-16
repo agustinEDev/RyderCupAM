@@ -33,7 +33,22 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
     async def find_by_id(self, friendship_id: FriendshipId) -> Friendship | None:
         return await self._session.get(Friendship, friendship_id)
 
+    async def find_by_id_for_update(self, friendship_id: FriendshipId) -> Friendship | None:
+        return await self._session.get(
+            Friendship, friendship_id, with_for_update=True, populate_existing=True
+        )
+
+    async def find_by_pair_for_update(
+        self, user_id_a: UserId, user_id_b: UserId
+    ) -> Friendship | None:
+        return await self._find_by_pair(user_id_a, user_id_b, bloqueada=True)
+
     async def find_by_pair(self, user_id_a: UserId, user_id_b: UserId) -> Friendship | None:
+        return await self._find_by_pair(user_id_a, user_id_b, bloqueada=False)
+
+    async def _find_by_pair(
+        self, user_id_a: UserId, user_id_b: UserId, *, bloqueada: bool
+    ) -> Friendship | None:
         stmt = select(Friendship).where(
             or_(
                 and_(
@@ -46,6 +61,9 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
                 ),
             )
         )
+        if bloqueada:
+            # Releída tras esperar: si otra la borró mientras, no se devuelve
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
         result = await self._session.execute(stmt)
         return result.scalars().first()
 
@@ -190,6 +208,8 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
                 ),
                 friendships_table.c.blocked_by.is_not(None),
                 friendships_table.c.blocked_by != user_id,
+                # Si él también bloqueó, no se le oculta (SB-02)
+                friendships_table.c.second_blocked_at.is_(None),
             )
         )
         result = await self._session.execute(stmt)

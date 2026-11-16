@@ -20,6 +20,10 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+    partido_no_anotable,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
@@ -89,6 +93,7 @@ class SubmitScorecardUseCase:
             if not round_entity:
                 raise RoundNotFoundError(f"Round not found for match {match_id_str}")
             match_format = round_entity.match_format
+            competicion = await self._la_competicion(match, round_entity)
 
             player_scores = await self._uow.hole_scores.find_by_match_and_player(match_id, user_id)
             ya_entregada = match.has_submitted_scorecard(user_id, match_format)
@@ -139,7 +144,7 @@ class SubmitScorecardUseCase:
                 )
 
                 # La competicion, para avisar del resultado en Actividad (BE-2)
-                competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+                competition = competicion
 
                 # Auto-complete round
                 all_matches = await self._uow.matches.find_by_round(match.round_id)
@@ -169,6 +174,22 @@ class SubmitScorecardUseCase:
             stats=stats,
             match_complete=match_complete,
         )
+
+    async def _la_competicion(self, match: Match, round_entity: Round) -> Competition | None:
+        """
+        La competición del partido, que tiene que estar en juego para entregar (SB-03).
+
+        Salvo para CERRAR un partido que ya tiene todas sus tarjetas y sigue abierto (el
+        caso de la BE #377): eso no admite nada nuevo, solo lo cierra, y se puede con
+        la competición terminada, cancelada o reabierta (decisión del dueño, 16 nov 2026).
+
+        Raises:
+            MatchNotScoringError: Si falta alguna tarjeta y la competición no se juega
+        """
+        competicion = await self._uow.competitions.find_by_id(round_entity.competition_id)
+        if match.all_scorecards_submitted(round_entity.match_format):
+            return competicion
+        return exigir_competicion_en_juego(competicion, partido_no_anotable)
 
     async def _avisar_del_resultado(
         self, competition: Competition | None, round_entity: Round, match: Match

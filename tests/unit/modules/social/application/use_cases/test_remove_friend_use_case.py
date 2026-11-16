@@ -99,7 +99,9 @@ class TestRemoveFriendUseCase:
         await self._add(uow, friendship)
 
         use_case = RemoveFriendUseCase(uow)
-        with pytest.raises(NotFriendshipParticipantError):
+        # El bloqueado recibe el 404 de una fila que no existe: el 403 le delataba el
+        # bloqueo (SB-02, caso 10)
+        with pytest.raises(FriendshipNotFoundError):
             await use_case.execute(str(friendship.id.value), str(blocked.value))
 
         await use_case.execute(str(friendship.id.value), str(blocker.value))

@@ -8,7 +8,6 @@ ya la foto nueva: galería llena, no entra.
 """
 
 import asyncio
-import threading
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -43,15 +42,16 @@ class _ProcesadorQueEsperaALaOtra(IImageProcessor):
     """
 
     def __init__(self) -> None:
-        self._barrera = threading.Barrier(2, timeout=10)
+        self._barrera = asyncio.Barrier(2)
 
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         """No se usa aquí."""
         return b"avatar"
 
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
-        """Espera a que la otra subida llegue también aquí (corre en un hilo)."""
-        self._barrera.wait()
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+        """Espera a que la otra subida llegue también aquí."""
+        async with asyncio.timeout(10):
+            await self._barrera.wait()
         return b"foto-procesada"
 
 

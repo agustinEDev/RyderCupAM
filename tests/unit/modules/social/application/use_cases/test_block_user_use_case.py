@@ -99,7 +99,7 @@ class TestBlockUserUseCase:
         A diferencia de un mock que fuerce directamente la excepcion, aqui la
         fila "ganadora" se inserta con el `add()` real del repositorio en
         memoria (que ahora aplica el mismo invariante de pareja unica que el
-        indice `uq_friendship_pair` de la BD) — solo se parchea `find_by_pair`
+        indice `uq_friendship_pair` de la BD) — solo se parchea `find_by_pair_for_update` (la lectura con la fila bloqueada)
         para simular la ventana de carrera (lectura antes del commit
         concurrente). La excepcion `DuplicateFriendshipViolation` la produce
         el propio adaptador, no el test.
@@ -114,7 +114,7 @@ class TestBlockUserUseCase:
         async with uow:
             await uow.friendships.add(winning_friendship)
 
-        original_find_by_pair = uow.friendships.find_by_pair
+        original_find_by_pair = uow.friendships.find_by_pair_for_update
         call_count = 0
 
         async def find_by_pair_with_race(user_id_a, user_id_b):
@@ -126,7 +126,7 @@ class TestBlockUserUseCase:
                 return None
             return await original_find_by_pair(user_id_a, user_id_b)
 
-        uow.friendships.find_by_pair = find_by_pair_with_race
+        uow.friendships.find_by_pair_for_update = find_by_pair_with_race
 
         response = await use_case.execute(str(blocker.id.value), str(blocked.id.value))
 
@@ -155,7 +155,7 @@ class TestBloqueoEnCarrera:
 
     def _carrera(self, uow, despues_del_choque=None):
         """La primera lectura no ve la fila; la segunda ve lo que haya (o nada)."""
-        original = uow.friendships.find_by_pair
+        original = uow.friendships.find_by_pair_for_update
         llamadas = 0
 
         async def find_by_pair(a, b):
@@ -167,7 +167,7 @@ class TestBloqueoEnCarrera:
                 await despues_del_choque()
             return await original(a, b)
 
-        uow.friendships.find_by_pair = find_by_pair
+        uow.friendships.find_by_pair_for_update = find_by_pair
 
     async def test_bloquear_mientras_llega_una_solicitud_del_otro_bloquea_igualmente(
         self, uow, user_uow

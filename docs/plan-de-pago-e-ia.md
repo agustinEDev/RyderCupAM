@@ -1,4 +1,4 @@
-# Plan de pago e IA: asistente del reglamento y entrenador de swing
+# Plan de pago e IA: asistente del reglamento, entrenador de swing y caddie
 
 > **Estado: aparcado** (26 oct 2026). No es para ahora: para cobrar hay que darse de alta como autónomo y queda mucho trabajo por delante. Este documento recoge lo decidido y lo estimado para retomarlo sin rehacer nada.
 >
@@ -39,11 +39,30 @@ Las cifras son estimaciones del 26 oct 2026 con precios consultados ese día, no
 
 ## 2. Entrenador de swing
 
-Inspirado en GolfFix: grabar o importar un swing, esqueleto, fases, tempo y fallos típicos, y después consejos y ejercicios. El análisis corre **en el móvil** con MediaPipe (gratis, sin carga en Render); los vídeos **no se suben** (solo métricas y fotogramas clave). Fases y riesgos en [RyderCupWeb#937](https://github.com/agustinEDev/RyderCupWeb/issues/937); costes corregidos en su comentario del 26 oct (el precio decidido es el de la sección 4 de este documento).
+Inspirado en GolfFix: grabar o importar un swing, esqueleto, fases, tempo y fallos típicos, y después consejos y ejercicios. El análisis corre **en el móvil** con MediaPipe (gratis, sin carga en Render); los vídeos **no se suben** (solo métricas y fotogramas clave). Fases y riesgos en [RyderCupWeb#937](https://github.com/agustinEDev/RyderCupWeb/issues/937); costes corregidos en su comentario del 26 oct (el precio decidido es el de la sección 5 de este documento).
 
 Referencias de precio: GolfFix 17,99 €/mes o 99,99 €/año (App Store España), Sportsbox ~15,99 $/mes, V1 Golf 9,99 $/mes. Hudl Technique ya no existe.
 
-## 3. Costes
+## 3. Caddie con IA (idea, por evaluar)
+
+> Añadido el 16 nov 2026. Solo es una idea: el esfuerzo, los costes y si encaja con las Reglas se estudian en [RyderCupAM#880](https://github.com/agustinEDev/RyderCupAM/issues/880) antes de decidir nada.
+
+**Qué sería.** Durante la vuelta, un caddie que ayuda a decidir cada golpe: distancias al green y a los obstáculos, qué palo usar según las distancias del propio jugador, a dónde apuntar y qué evitar. Iría en el plan de pago, junto al asistente del reglamento y el entrenador de swing.
+
+**Con qué contaría (ya lo tenemos):**
+- Los mapas de los hoyos importados de OpenStreetMap: 208 campos y 3.046 hoyos con salidas, greens, calles y obstáculos.
+- La posición del jugador mientras anota, que ya usa el mapa de la anotación, su hándicap y su historial hoyo a hoyo.
+
+**De lo que dependería (diseñado, sin construir):** el derecho Premium y los topes de IA de la épica [RyderCupAM#713](https://github.com/agustinEDev/RyderCupAM/issues/713); hay que contarlo al estimar el caddie.
+
+**Lo que hay que resolver antes:**
+1. **Las Reglas de Golf.** La Regla 4.3 limita el uso de dispositivos durante la vuelta, y un consejo de palo o de juego puede no estar permitido. Hay que confirmar qué se puede hacer y dónde: probablemente solo en partida rápida y práctica, nunca en una competición, y ver si afecta a las vueltas que cuentan para el hándicap.
+2. **Las distancias de cada palo del jugador**: si las escribe él, si se aprenden de sus vueltas anotadas o del entrenador de swing, y su privacidad.
+3. **La calidad de los mapas**: cuántos campos tienen greens y obstáculos completos, y qué hacer en los hoyos sin geometría.
+4. **Coste por vuelta y tope por usuario**, para que quepa en el presupuesto de créditos de la API y en el precio de 4,99 €/mes.
+5. **Sin cobertura en el campo**: qué funciona sin red.
+
+## 4. Costes
 
 **Construcción.** Con nuestro flujo de agentes: el tiempo de Agustín y menos de 30 $ de API en pruebas. Asistente: fases 0–2, 5–8 semanas; con la fase 3, 7–10 (la suma de la tabla de fases). Swing: fases 0–1, 6–8 semanas. Subcontratado (50–80 €/h): asistente con las fases 0–3, 220–320 h ≈ 11–26 k€; swing fases 0–1, 12–27 k€, y la fase 2, 12–32 k€ más contenido.
 
@@ -60,7 +79,7 @@ Referencias de precio: GolfFix 17,99 €/mes o 99,99 €/año (App Store España
 - 500 usuarios: ~50 € (estimado: Render algo mayor, un plan de pago de Mailgun y la IA del plan gratuito).
 - 2.200 usuarios: ~135 € = Render ~60 €, Mailgun ~35 € (hoy se comparte el cupo gratis de 100 correos al día con el Kind), Sentry ~25 €, dominio y otros ~5 €, IA del plan gratuito ~10 € (unos 5 $ de preguntas con Haiku más los análisis gratuitos, redondeado al alza).
 
-## 4. Precio y rentabilidad (decidido el 26 oct 2026)
+## 5. Precio y rentabilidad (decidido el 26 oct 2026)
 
 - **Gratis:** asistente con Haiku (~10 preguntas al mes), visor de swing y 3 análisis al mes.
 - **De pago: 4,99 €/mes o 39,99 €/año**, el asistente y el entrenador juntos.
@@ -81,7 +100,7 @@ Cada total es el coste técnico de su fila (16 / 50 / 135 €) más ~130 € el 
 
 **Conclusión.** La IA y la infraestructura son baratas; lo que pesa es poder facturar. Solo con suscripciones de jugadores se cubren costes hacia los 2.200 usuarios: en el límite alto de lo habitual el primer año (4 %) y por encima después (6,4 %), cuando suele pagar entre el 2 y el 5 %. **Siguiente paso a estudiar antes de cobrar:** cobrar también al organizador o al club (por competición grande o con un plan de club), que equivale a decenas de suscripciones de jugador.
 
-## 5. Antes de retomarlo
+## 6. Antes de retomarlo
 
 1. Darse de alta como autónomo y hablar con una gestoría (cuota, IVA, OSS).
 2. Estudiar el plan de organizador o de club.

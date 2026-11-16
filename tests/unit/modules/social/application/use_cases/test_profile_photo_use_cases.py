@@ -49,10 +49,10 @@ RAW = b"bytes-de-una-foto"
 class _FakeImageProcessor(IImageProcessor):
     """Evita depender de Pillow: la tuberia real se prueba en su propio test."""
 
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         return b"avatar-procesado"
 
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
         return b"foto-procesada-1080px"
 
 

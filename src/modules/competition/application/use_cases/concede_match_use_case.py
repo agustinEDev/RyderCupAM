@@ -13,6 +13,10 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+    partido_no_anotable,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -80,6 +84,8 @@ class ConcedeMatchUseCase:
             # (Agustín, 25 oct 2026)
             if not is_creator and user_id in match.withdrawn_player_ids:
                 raise NotMatchPlayerError("Estás retirado de este partido: concede tu pareja")
+            # Con la competición terminada, cancelada o reabierta no se decide nada (SB-03)
+            exigir_competicion_en_juego(competition, partido_no_anotable)
 
             match.concede(conceding_team, reason)
             await self._uow.matches.update(match)

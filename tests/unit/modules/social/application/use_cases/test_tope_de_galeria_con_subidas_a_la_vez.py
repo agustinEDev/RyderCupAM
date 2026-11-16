@@ -8,7 +8,6 @@ cuenta que decide se repite en la transacción que guarda, con la galería del
 dueño bloqueada antes de contar.
 """
 
-import asyncio
 from uuid import uuid4
 
 import pytest
@@ -82,28 +81,27 @@ class _ProcesadorQueLlenaLaGaleria(IImageProcessor):
         self._repositorio = repositorio
         self._user_id = user_id
 
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         """No se usa aquí."""
         return b"avatar"
 
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
         """Ocupa el último hueco libre, como haría otra subida a la vez."""
         foto = ProfilePhoto.create(
             user_id=self._user_id, image_data=b"de-la-otra", content_type="image/jpeg"
         )
-        # Corre en un hilo (asyncio.to_thread): un bucle propio para el alta
-        asyncio.run(self._repositorio.add(foto))
+        await self._repositorio.add(foto)
         return b"foto-procesada"
 
 
 class _ProcesadorTonto(IImageProcessor):
     """Devuelve unos bytes fijos."""
 
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         """No se usa aquí."""
         return b"avatar"
 
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
         """Unos bytes cualesquiera."""
         return b"foto-procesada"
 

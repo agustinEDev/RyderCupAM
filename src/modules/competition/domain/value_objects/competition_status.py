@@ -164,6 +164,16 @@ class CompetitionStatus(StrEnum):
             CompetitionStatus.CLOSED,
         }
 
+    def admite_anotar(self) -> bool:
+        """Si se anota, se concede o se entrega tarjeta: cerrada o en juego (SB-03).
+
+        La misma para stroke play y match play (decidido el 16 nov 2026). Cerrada
+        también: el primer golpe pone en juego la competición (BE #375). Abierta
+        —también reabierta con partidos ya empezados—, terminada o cancelada, no:
+        lo jugado se queda como esté.
+        """
+        return self in {CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS}
+
     def allows_handicap_edits(self) -> bool:
         """Verifica si el estado permite editar el hándicap personalizado de un jugador."""
         return self in {

@@ -152,11 +152,15 @@ class TestFriendshipBlock:
         assert friendship.status == FriendshipStatus.BLOCKED
         assert friendship.blocked_by == friendship.addressee_id
 
-    def test_block_when_already_blocked_raises(self):
+    def test_block_again_by_the_same_blocker_changes_nothing(self):
+        """SB-02: volver a bloquear es idempotente (antes lo era solo en el caso de uso)."""
         friendship = _make_friendship()
         friendship.block(friendship.requester_id)
-        with pytest.raises(InvalidFriendshipStatusViolation):
-            friendship.block(friendship.requester_id)
+        antes = (friendship.blocked_by, friendship.updated_at, friendship.second_blocked_at)
+
+        friendship.block(friendship.requester_id)
+
+        assert (friendship.blocked_by, friendship.updated_at, friendship.second_blocked_at) == antes
 
     def test_block_when_declined_raises(self):
         friendship = _make_friendship()

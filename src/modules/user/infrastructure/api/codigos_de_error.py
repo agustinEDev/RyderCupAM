@@ -14,6 +14,7 @@ from src.modules.user.domain.errors.user_errors import (
     AliasAlreadyTakenError,
     AvatarUploadNotFoundError,
     AvatarUploadTooLargeError,
+    ImageProcessingBusyError,
     InvalidAvatarImageError,
     TermsAcceptanceRequiredError,
     UserNotFoundError,
@@ -34,4 +35,10 @@ CODIGOS: dict[type[Exception], int] = {
     AvatarUploadTooLargeError: status.HTTP_413_CONTENT_TOO_LARGE,
     # 422: datos que no se pueden procesar
     TermsAcceptanceRequiredError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    # 503: ahora no se puede, más tarde sí (otras imágenes ocupan el turno, SB-01)
+    ImageProcessingBusyError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
+
+# Las que llevan además su `error_code` en la raíz: IMAGES_BUSY, con el texto aprobado
+# «Ahora mismo se están procesando otras imágenes...» (SB-01, 16 nov 2026)
+CON_SU_CODIGO: frozenset[type[Exception]] = frozenset({ImageProcessingBusyError})

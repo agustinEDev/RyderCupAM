@@ -6,8 +6,6 @@ vía IImageProcessor), la guarda en el historial del usuario (acotado a
 AVATAR_MAX_STORED_UPLOADS, podando la más antigua si se supera) y la activa.
 """
 
-import asyncio
-
 from src.modules.user.application.dto.avatar_dto import AvatarUploadInfoDTO
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.domain.entities.user import AVATAR_MAX_STORED_UPLOADS
@@ -38,14 +36,10 @@ class UploadAvatarUseCase:
             )
 
         # Procesado (validación de formato + crop/resize/compresión) fuera de la
-        # transacción: es CPU-bound, no necesita la sesión de BD abierta.
-        # Se despacha a un hilo aparte porque Pillow es síncrono/bloqueante y esta
-        # función se ejecuta dentro del event loop async de FastAPI: sin esto,
-        # decodificar/redimensionar una imagen bloquearía TODAS las peticiones
-        # concurrentes del proceso mientras dura el procesado.
-        processed_bytes = await asyncio.to_thread(
-            self._image_processor.process_avatar_image, raw_bytes
-        )
+        # transacción: es CPU-bound, no necesita la sesión de BD abierta. El
+        # adaptador lo saca del event loop y lo pone en cola con las demás imágenes
+        # del proceso (SB-01): aquí solo se espera el resultado.
+        processed_bytes = await self._image_processor.process_avatar_image(raw_bytes)
 
         async with self._uow:
             user_id_vo = UserId(user_id)

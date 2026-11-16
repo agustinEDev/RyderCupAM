@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from tests.unit.modules.competition.application.use_cases.helpers import con_su_competicion_en_juego
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,6 +54,7 @@ def _ronda(uow: InMemoryUnitOfWork, formato: MatchFormat):
     ronda.status = RoundStatus.IN_PROGRESS
     ronda.competition_id = MagicMock()
     uow._rounds._rounds[ronda.id] = ronda
+    con_su_competicion_en_juego(uow, ronda)
     return ronda
 
 
