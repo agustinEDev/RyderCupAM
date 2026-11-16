@@ -125,6 +125,60 @@ class TestEntregarLaTarjeta:
         assert (await e.partido()).scorecard_submitted_by
 
 
+class TestCerrarUnPartidoConTodasLasTarjetas:
+    """
+    Decisión del dueño (16 nov 2026): un partido abierto que ya tiene todas sus tarjetas
+    entregadas (el caso de la BE #377) se puede CERRAR aunque la competición ya no se
+    juegue. Solo cerrar: ni golpes ni tarjetas nuevas.
+    """
+
+    @staticmethod
+    async def _con_todas_las_tarjetas(estado: CompetitionStatus) -> _Escena:
+        e = _Escena()
+        e.uow.competitions.find_by_id.return_value.status = estado
+        jugadores = [p.user_id for p in e.match.team_a_players + e.match.team_b_players]
+        for jugador in jugadores:
+            e.match.submit_scorecard(jugador, e.ronda.match_format)
+        assert e.match.all_scorecards_submitted(e.ronda.match_format)
+        assert e.match.status == MatchStatus.IN_PROGRESS
+        await e.guardar(_filas_del_hoyo_1(e))
+        return e
+
+    @pytest.mark.parametrize("estado", NO_SE_JUEGA + SE_JUEGA)
+    async def test_se_cierra_aunque_la_competicion_no_se_juegue(self, estado):
+        e = await self._con_todas_las_tarjetas(estado)
+
+        respuesta = await SubmitScorecardUseCase(e.uow, ScoringService()).execute(
+            str(e.match.id), e.a1
+        )
+
+        assert respuesta.match_complete is True
+        assert (await e.partido()).status == MatchStatus.COMPLETED
+
+    @pytest.mark.parametrize("estado", NO_SE_JUEGA)
+    async def test_pero_no_admite_golpes(self, estado):
+        e = await self._con_todas_las_tarjetas(estado)
+
+        with pytest.raises(MatchNotScoringError):
+            await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
+                str(e.match.id), 1, _golpe(e), e.a1
+            )
+
+    @pytest.mark.parametrize("estado", NO_SE_JUEGA)
+    async def test_con_una_tarjeta_sin_entregar_sigue_el_409(self, estado):
+        e = _Escena()
+        e.uow.competitions.find_by_id.return_value.status = estado
+        jugadores = [p.user_id for p in e.match.team_a_players + e.match.team_b_players]
+        for jugador in jugadores[1:]:
+            e.match.submit_scorecard(jugador, e.ronda.match_format)
+        await e.guardar(_filas_del_hoyo_1(e))
+
+        with pytest.raises(MatchNotScoringError):
+            await SubmitScorecardUseCase(e.uow, ScoringService()).execute(str(e.match.id), e.a1)
+
+        assert (await e.partido()).status == MatchStatus.IN_PROGRESS
+
+
 class TestRetirarAUnJugador:
     """Retirar o devolver a un jugador cambia la decisión del partido: también es puntuación."""
 
