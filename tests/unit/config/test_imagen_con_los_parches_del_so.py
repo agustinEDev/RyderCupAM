@@ -16,7 +16,7 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[3]
 DOCKERFILE = RAIZ / "docker" / "Dockerfile"
 WORKFLOW = RAIZ / ".github" / "workflows" / "ci_cd_pipeline.yml"
-TRIVYIGNORE = RAIZ / ".trivyignore"
+TRIVYIGNORE = RAIZ / ".trivyignore.yaml"
 
 
 def _pasos_del_build() -> list[dict]:
@@ -109,16 +109,34 @@ def test_the_trivy_gate_blocks_fixable_high_and_critical():
     assert str(puerta["exit-code"]) == "1"
 
 
-def test_every_accepted_vulnerability_has_a_reason_and_an_expiry():
+def test_every_accepted_vulnerability_is_scoped_explained_and_expiring():
     """
-    Given: .trivyignore
+    Given: .trivyignore.yaml
     When: se mira cada vulnerabilidad aceptada
-    Then: lleva fecha de caducidad (`exp:`) y un comentario con el motivo justo encima
+    Then: va acotada a un paquete y versión concretos (purl), con su motivo (statement)
+          y fecha de caducidad; y no queda un .trivyignore de texto, que la aceptaría en
+          cualquier paquete de la imagen
     """
-    lineas = TRIVYIGNORE.read_text(encoding="utf-8").splitlines()
-    aceptadas = [(i, linea) for i, linea in enumerate(lineas) if linea.startswith("CVE-")]
+    aceptadas = yaml.safe_load(TRIVYIGNORE.read_text(encoding="utf-8"))["vulnerabilities"]
 
     assert aceptadas
-    for i, linea in aceptadas:
-        assert re.fullmatch(r"CVE-\d{4}-\d+ exp:\d{4}-\d{2}-\d{2}", linea), linea
-        assert i > 0 and lineas[i - 1].startswith("#"), f"Sin motivo encima: {linea}"
+    assert not (RAIZ / ".trivyignore").exists()
+    for vulnerabilidad in aceptadas:
+        assert re.fullmatch(r"CVE-\d{4}-\d+", vulnerabilidad["id"])
+        assert vulnerabilidad["purls"]
+        for purl in vulnerabilidad["purls"]:
+            assert re.fullmatch(r"pkg:[a-z]+/[\w.-]+@[\w.+-]+", purl), purl
+        assert len(vulnerabilidad["statement"]) > 40
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(vulnerabilidad["expired_at"]))
+
+
+def test_both_trivy_steps_use_the_scoped_ignore_file():
+    """
+    Given: el escaneo de Trivy (SARIF) y su puerta
+    When: se leen sus opciones
+    Then: los dos usan .trivyignore.yaml
+    """
+    pasos = _pasos_del_build()
+
+    for id_ in ("trivy_scan", "trivy_gate"):
+        assert _paso(pasos, id_)["with"]["trivyignores"] == ".trivyignore.yaml"

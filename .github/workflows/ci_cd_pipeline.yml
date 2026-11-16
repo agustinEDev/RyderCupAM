@@ -746,6 +746,7 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
           exit-code: '0'
+          trivyignores: '.trivyignore.yaml'  # las aceptadas, acotadas por purl (INF-02)
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
@@ -775,9 +776,10 @@ jobs:
           ignore-unfixed: true
           # Solo vulnerabilidades: un «secreto» de Trivy en site-packages no debe
           # tumbar el build (los secretos del repo los vigila Gitleaks). Para
-          # aceptar una vulnerabilidad concreta, un .trivyignore con el motivo
+          # aceptar una vulnerabilidad concreta, en .trivyignore.yaml con purl, motivo y caducidad
           scanners: 'vuln'
           exit-code: '1'
+          trivyignores: '.trivyignore.yaml'
 
       - name: Save Docker Image (artifact)
         if: matrix.comprobacion == 'build'
@@ -851,7 +853,7 @@ jobs:
               IF_FAILS='The container log is printed in the "Start like Render" step. Reproduce locally with .github/scripts/start-like-render.sh' ;;
             trivy)
               WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and a HIGH or CRITICAL one that already has a fix blocks.'
-              IF_FAILS='The fixable HIGH/CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore with the reason.' ;;
+              IF_FAILS='The fixable HIGH/CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore.yaml (purl, reason, expiry).' ;;
             *)
               WHAT='Builds the production image from docker/Dockerfile, generates the migration SQL offline (alembic upgrade head --sql) and keeps the image as the docker-image artifact.'
               IF_FAILS='See the failing step: the Dockerfile or requirements for the build, a migration for the offline SQL. Reproduce with: docker build -f docker/Dockerfile .' ;;
