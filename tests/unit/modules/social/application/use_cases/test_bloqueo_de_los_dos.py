@@ -372,3 +372,32 @@ class TestCarreras:
 
         await _bloquea(social_uow, user_uow, a, b)
         await _desbloquea(social_uow, b, de_b.id)
+
+
+async def test_responder_una_solicitud_la_lee_con_la_fila_bloqueada(social_uow, user_uow):
+    """
+    Given una solicitud pendiente de B a A
+    When A la responde
+    Then se lee con la fila bloqueada (FOR UPDATE), para que un bloqueo a la vez no se
+    cuele entre la comprobación y el accept()
+    """
+    a, b = await _usuario(user_uow), await _usuario(user_uow)
+    solicitud = Friendship.create(id=FriendshipId.generate(), requester_id=b.id, addressee_id=a.id)
+    async with social_uow:
+        await social_uow.friendships.add(solicitud)
+    leidas_sin_bloqueo: list[FriendshipId] = []
+    original = social_uow.friendships.find_by_id
+
+    async def sin_bloqueo(friendship_id):
+        leidas_sin_bloqueo.append(friendship_id)
+        return await original(friendship_id)
+
+    social_uow.friendships.find_by_id = sin_bloqueo
+
+    await RespondFriendRequestUseCase(social_uow, user_uow).execute(
+        RespondFriendRequestRequestDTO(
+            friendship_id=solicitud.id.value, user_id=a.id.value, action="ACCEPT"
+        )
+    )
+
+    assert leidas_sin_bloqueo == []
