@@ -39,6 +39,15 @@ def en_utc(instante: datetime) -> datetime:
     return instante.astimezone(UTC)
 
 
+def fecha_en_el_campo(now: datetime, timezone: str | None) -> date:
+    """
+    Qué día es ahora en el campo: la fecha de `now` leída con la zona del campo
+    (sin campo, la de Madrid), no la del servidor (F-01).
+    """
+    zona = zona_del_campo(timezone) or ZoneInfo(ZONA_SIN_CAMPO)
+    return en_utc(now).astimezone(zona).date()
+
+
 def has_passed(start_date: date, timezone: str | None, now: datetime) -> bool:
     """Si ya cerraron: desde las 12:00 en punto."""
     return en_utc(now) >= closes_at(start_date, timezone)

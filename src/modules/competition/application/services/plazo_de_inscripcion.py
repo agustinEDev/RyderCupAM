@@ -12,10 +12,11 @@ ahora, que es lo que sabe la aplicación.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 
 
@@ -47,6 +48,11 @@ class PlazoDeInscripcion:
     @property
     def zonas(self) -> ICompetitionTimezone:
         return self._zonas
+
+    async def hoy_en_el_campo(self, competition: Competition) -> date:
+        """Qué día es ahora en su campo, con el mismo reloj y la misma zona que el plazo (F-01)."""
+        zona = await self._zonas.for_competition(competition)
+        return fecha_en_el_campo(self.ahora(), zona)
 
     async def queda_plazo(self, competition: Competition) -> bool:
         """Si su plazo todavía no ha llegado, con su zona (R3)."""

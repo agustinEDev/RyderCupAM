@@ -7,7 +7,7 @@ la franja con hueco, o la lista de espera de una llena; sin franjas montadas
 (o en una Ryder) se entra con la barra y manda el maximo de jugadores.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
@@ -51,6 +51,7 @@ from src.modules.competition.application.services.invitaciones_al_cerrar import 
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
+    ahora_en_utc,
     exigir_el_plazo,
 )
 from src.modules.competition.domain.entities.competition import Competition
@@ -68,6 +69,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvitationExpiredViolation,
     MaxEnrollmentsExceededViolation,
 )
+from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -323,6 +325,15 @@ class RequestEnrollmentUseCase:
             tee_color=tee_color,
         )
 
+    async def _hoy_en_el_campo(self, competition: Competition) -> date:
+        """
+        Qué día es en su campo, con el reloj y la zona del plazo (F-01). Sin plazo
+        (tests, scripts), con la hora de ahora y la zona por defecto del plazo.
+        """
+        if self._plazo is not None:
+            return await self._plazo.hoy_en_el_campo(competition)
+        return fecha_en_el_campo(ahora_en_utc(), None)
+
     async def _exigir_que_puede(
         self, competition: Competition, user_id: UserId, existente: Enrollment | None
     ) -> None:
@@ -343,6 +354,7 @@ class RequestEnrollmentUseCase:
                 ),
                 competition_status=competition.status,
                 competition_start_date=competition.dates.start_date,
+                today=await self._hoy_en_el_campo(competition),
                 user_total_enrollments=user_total_enrollments,
             )
         except DuplicateEnrollmentViolation as e:

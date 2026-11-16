@@ -8,7 +8,7 @@ OWASP Coverage:
 - A04: Insecure Design (business logic abuse prevention)
 """
 
-from datetime import date, datetime
+from datetime import date
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -104,6 +104,7 @@ class CompetitionPolicy:
         existing_enrollment_id: str | None,
         competition_status: CompetitionStatus,
         competition_start_date: date,
+        today: date,
         user_total_enrollments: int,
     ) -> None:
         """
@@ -115,6 +116,9 @@ class CompetitionPolicy:
             existing_enrollment_id: ID de enrollment existente (None si no existe)
             competition_status: Estado actual de la competición
             competition_start_date: Fecha de inicio de la competición
+            today: Qué día es hoy EN EL CAMPO, con el reloj del plazo de inscripción.
+                La regla no mira el reloj del servidor: con él, cada campo tenía
+                su día según la zona del host (F-01)
             user_total_enrollments: Total de enrollments activos del usuario
 
         Raises:
@@ -156,7 +160,7 @@ class CompetitionPolicy:
         # 4. Validar restricción temporal: hasta el día de inicio INCLUIDO (BE #372).
         # El día del torneo es cuando más gente se apunta; lo que protege el
         # torneo es el estado (en juego ya no) y la aprobación del organizador
-        if datetime.now().date() > competition_start_date:
+        if today > competition_start_date:
             raise EnrollmentPastStartDateViolation(
                 f"Competition started on {competition_start_date}. Cannot enroll after start date."
             )

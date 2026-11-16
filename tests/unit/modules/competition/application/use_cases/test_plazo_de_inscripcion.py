@@ -18,8 +18,9 @@ Pasado el plazo de inscripción nadie entra (15 nov 2026).
 | C1   | sin campo, la hora de Madrid              | cierra a las 12:00 de Madrid   |                       |
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -50,6 +51,7 @@ from src.modules.competition.application.use_cases.reopen_enrollments_use_case i
     ReopenEnrollmentsUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
+    EnrollmentClosedError,
     RequestEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
@@ -502,14 +504,18 @@ class TestReabrirTarde:
 class TestCrearTarde:
     async def test_creada_con_el_plazo_pasado_se_entra(self):
         """R2. Given creada hoy para un torneo de hoy / When alguien se apunta / Then entra."""
+        # «Hoy» es el del campo (Madrid), con el mismo instante que el reloj del plazo:
+        # con la fecha UTC fallaba cada noche entre las 00:00 y la 01:00/02:00 de Madrid (F-01)
+        ahora = datetime.now(UTC)
+        hoy_en_madrid = ahora.astimezone(ZoneInfo("Europe/Madrid")).date()
         uow = CompetitionInMemoryUoW()
         creada = await CreateCompetitionUseCase(
             uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
         ).execute(
             CreateCompetitionRequestDTO(
                 name="Copa de hoy",
-                start_date=HOY,
-                end_date=HOY + timedelta(days=1),
+                start_date=hoy_en_madrid,
+                end_date=hoy_en_madrid + timedelta(days=1),
                 main_country="ES",
                 play_mode="SCRATCH",
                 max_players=24,
@@ -517,10 +523,75 @@ class TestCrearTarde:
             ),
             UserId.generate(),
         )
-        plazo = PlazoDeInscripcion(_Zonas(), reloj=lambda: datetime.now(UTC))
+        plazo = PlazoDeInscripcion(_Zonas(), reloj=lambda: ahora)
 
         respuesta = await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, plazo=plazo).execute(
             RequestEnrollmentRequestDTO(competition_id=creada.id, user_id=UserId.generate().value)
+        )
+
+        assert respuesta.status == EnrollmentStatus.APPROVED.value
+
+
+class TestElDiaDelTorneoEsElDelCampo:
+    """
+    F-01: «el torneo ya ha empezado» se decide con la fecha del CAMPO y el reloj del
+    plazo, no con la fecha del servidor. Torneos con la inscripción abierta pasado el
+    plazo (R2), para que solo cuente el día de inicio.
+    """
+
+    @staticmethod
+    async def _abierta_tarde(uow: CompetitionInMemoryUoW, dia: date) -> Competition:
+        competition = Competition.create(
+            id=CompetitionId.generate(),
+            creator_id=UserId.generate(),
+            name=CompetitionName(f"Copa {uuid4().hex[:6]}"),
+            dates=DateRange(dia, dia + timedelta(days=1)),
+            location=Location(main_country="ES"),
+            team_1_name="Europa",
+            team_2_name="USA",
+            play_mode=PlayMode.SCRATCH,
+            max_players=24,
+            visibility=Visibility.PUBLIC,
+        )
+        # Abierta el mismo día a las 6:00 UTC: pasado el plazo, así que se entra (R2)
+        competition.activate(now=datetime.combine(dia, time(6, 0), tzinfo=UTC))
+        async with uow:
+            await uow.competitions.add(competition)
+        return competition
+
+    async def test_pasada_la_medianoche_del_campo_el_torneo_de_ayer_ya_empezo(self):
+        """
+        Given un torneo del 10 jun 2030 en un campo de Madrid
+        When alguien se apunta el 10 a las 23:30 UTC (ya día 11 a las 01:30 en Madrid)
+        Then se rechaza: en el campo el torneo ya empezó, aunque en UTC siga siendo el 10
+        """
+        uow = CompetitionInMemoryUoW()
+        dia = date(2030, 6, 10)
+        competition = await self._abierta_tarde(uow, dia)
+        plazo = _plazo(datetime.combine(dia, time(23, 30), tzinfo=UTC), "Europe/Madrid")
+
+        with pytest.raises(EnrollmentClosedError):
+            await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, plazo=plazo).execute(
+                RequestEnrollmentRequestDTO(
+                    competition_id=competition.id.value, user_id=UserId.generate().value
+                )
+            )
+
+    async def test_en_un_campo_al_oeste_sigue_siendo_el_dia_del_torneo(self):
+        """
+        Given un torneo del 10 jun 2020 en un campo de Ciudad de México (UTC-6)
+        When alguien se apunta el 10 a las 23:30 UTC (17:30 del 10 en el campo)
+        Then entra: en el campo todavía es el día del torneo
+        """
+        uow = CompetitionInMemoryUoW()
+        dia = date(2020, 6, 10)
+        competition = await self._abierta_tarde(uow, dia)
+        plazo = _plazo(datetime.combine(dia, time(23, 30), tzinfo=UTC), "America/Mexico_City")
+
+        respuesta = await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, plazo=plazo).execute(
+            RequestEnrollmentRequestDTO(
+                competition_id=competition.id.value, user_id=UserId.generate().value
+            )
         )
 
         assert respuesta.status == EnrollmentStatus.APPROVED.value
