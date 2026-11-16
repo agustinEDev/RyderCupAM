@@ -25,7 +25,7 @@ ruff==0.17.4
 import-linter==2.15
 # grimp - el grafo de importaciones que usa import-linter; lo importa también la prueba de ciclos
 # del dominio de usuarios (tests/unit/modules/user/domain/test_capas_del_dominio_de_usuarios.py)
-grimp==3.17
+grimp==3.19
 
 # ================================
 # TYPE CHECKING
