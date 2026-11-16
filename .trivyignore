@@ -1,0 +1,9 @@
+# Vulnerabilidades aceptadas por la puerta de Trivy del CI. Cada una con su motivo y
+# fecha de caducidad (exp:): al caducar vuelve a bloquear y hay que revisarla.
+
+# setuptools 70.3.0 «instalado»: es la copia de pkg_resources que pip vendoriza
+# (pip/_vendor/vendor.txt dice setuptools==70.3.0), no un setuptools de verdad (el de
+# la imagen es el 84.2.1 de requirements.lock). El fallo (path traversal) está en
+# setuptools.package_index.PackageIndex, que pip no incluye. Revisar si una pip nueva
+# vendoriza un setuptools >= 78.1.1 (16 nov 2026, INF-02)
+CVE-2025-47273 exp:2027-02-16

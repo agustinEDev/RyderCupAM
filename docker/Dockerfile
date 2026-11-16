@@ -16,18 +16,24 @@
 # imagen, y Dependabot (ecosistema docker) abre una PR semanal cuando cambia el
 # digest de la imagen, con su CI y su Trivy. Digest del índice multiplataforma:
 # vale para Render (amd64) y para el Kind en un Mac (arm64).
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 
 # 2. Paquetes del sistema (BE #308)
 # - upgrade en la misma capa que el update: recoge los parches de Debian publicados
 #   después del digest de la imagen base, pero solo cuando se reconstruye la capa
-#   (cambia el Dockerfile o el digest de la base, o --no-cache); con caché se
-#   reutiliza tal cual. El digest lo renueva Dependabot (ecosistema docker)
+#   (cambia el Dockerfile o el digest de la base, APT_REFRESH, o --no-cache); con
+#   caché se reutiliza tal cual. El digest lo renueva Dependabot (ecosistema docker)
+# - APT_REFRESH (INF-02, 16 nov 2026): el CI le pasa el día, y así la capa se rehace
+#   una vez al día aunque nada cambie. Antes la caché de capas del CI guardaba la del
+#   30 sep y Trivy escaneaba un zlib1g y un apt con CVE HIGH ya arreglados. Sin valor
+#   (Render, Kind) la capa depende solo de la caché de quien construye
 # - netcat-openbsd: el `nc` con el que entrypoint.sh espera a PostgreSQL
 # Sin postgresql-client: nada lo usa en esta imagen (todo psql, pg_dump y
 # pg_isready se ejecuta en el contenedor de Postgres) y arrastraba perl, krb5,
 # ldap y sasl, con la mayoría de las alertas de Trivy. psycopg2-binary trae su libpq
-RUN apt-get update \
+ARG APT_REFRESH=""
+RUN echo "apt refresh: ${APT_REFRESH}" \
+    && apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
