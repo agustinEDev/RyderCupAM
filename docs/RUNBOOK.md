@@ -267,7 +267,8 @@ pide en su aviso.
    (o `\i /s/rol_de_la_api.sql` con Docker). Va en una transacción: si algo falla no
    cambia nada. Se puede repetir y se niega si la base no está migrada. Después,
    `\password rydercup_app`. El script también quita a `n8n_lectura` la lectura automática
-   de las tablas futuras (DB-03); sus permisos de hoy no cambian.
+   de las tablas futuras (DB-03); sus permisos sobre las de hoy los recorta
+   `scripts/db/rol_de_n8n.sql` (sección siguiente).
 4. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
    ACTUAL de `DATABASE_URL` y desplegar. Todo sigue igual.
 5. **Render, el cambio:** `DATABASE_URL` pasa a
@@ -281,3 +282,28 @@ Las tablas que creen las migraciones futuras ya le dan permiso a `rydercup_app` 
 que el script no toca: comprobarlo antes del cambio con `\ddp` (tiene que salir
 `backup_ro=r` en las tablas del dueño); si no sale, las copias no llevarían las tablas
 nuevas.
+
+## n8n solo lee lo del informe (DB-01)
+
+`n8n_lectura` es el usuario con el que n8n saca el informe de los lunes. Tenía `SELECT` en
+42 de las 43 tablas (también `users` con los hashes, `refresh_tokens`, `password_history`).
+`scripts/db/rol_de_n8n.sql` le quita todo y le deja solo las columnas que lee la consulta
+del informe (`~/n8n-cbg/workflows/informe-semanal.json`, nodo «Datos de la app (solo
+lectura)»), solo lectura y con tiempos límite.
+
+1. **Entrar como el dueño**, como en la sección anterior (pasos 1 y 2).
+2. `\set ON_ERROR_STOP on` y `\i scripts/db/rol_de_n8n.sql`. Va en una transacción y
+   comprueba el resultado antes del `COMMIT`: si sale «conserva permisos de tabla entera»,
+   esos permisos los dio otro usuario (el `REVOKE` solo quita los que dio quien lo
+   ejecuta) y no ha cambiado nada; ejecutarlo como ese usuario.
+3. **Mirar las consultas del final:** ninguna tabla entera legible, exactamente las 11
+   columnas, `false` en hashes, correos, `refresh_tokens` y `password_history`, y los
+   cuatro ajustes del rol (`default_transaction_read_only=on`, `statement_timeout=30s`,
+   `idle_in_transaction_session_timeout=60s`, `lock_timeout=5s`).
+4. **Probar el informe sin mandarlo:** en n8n, abrir el flujo del informe y ejecutar solo
+   el nodo «Datos de la app (solo lectura)». Tiene que devolver una fila con los números.
+5. **Volver atrás** (si el informe falla y no hay tiempo): `GRANT SELECT ON public.users,
+   public.competitions, public.enrollments, public.quick_matches TO n8n_lectura;`.
+
+Si el informe pasa a leer otra columna, se añade en el paso 3 del script y en su
+comprobación del paso 5, y se vuelve a ejecutar.
