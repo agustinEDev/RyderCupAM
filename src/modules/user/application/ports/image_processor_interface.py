@@ -3,6 +3,9 @@ Image Processor Interface - Application Layer Port
 
 Define el contrato para el procesado de imágenes subidas como avatar.
 La capa de aplicación depende de esta abstracción, no de Pillow directamente.
+
+Es asíncrono porque procesar una imagen es caro en CPU y en memoria: cómo se saca
+del event loop y cuántas se procesan a la vez lo decide el adaptador (SB-01).
 """
 
 from abc import ABC, abstractmethod
@@ -18,7 +21,7 @@ class IImageProcessor(ABC):
     """
 
     @abstractmethod
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         """
         Valida y normaliza una imagen subida para usarla como avatar.
 
@@ -38,7 +41,7 @@ class IImageProcessor(ABC):
         pass
 
     @abstractmethod
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
         """
         Valida y normaliza una imagen subida a la galería del perfil.
 

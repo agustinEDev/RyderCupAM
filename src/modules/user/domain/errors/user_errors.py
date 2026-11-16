@@ -144,4 +144,17 @@ class InvalidAvatarImageError(UserDomainError):
 
     pass
 
+
+class ImageProcessingBusyError(UserDomainError):
+    """
+    La imagen no se ha podido procesar porque otras llevaban demasiado rato en cola.
+
+    Las imágenes se procesan de una en una en todo el proceso (SB-01): decodificar
+    una foto grande se lleva cientos de megas. La que llega mientras otra está en
+    marcha espera su turno, y si la espera pasa del tope se rechaza con esto en vez
+    de quedarse colgada. No dice nada de la imagen: puede volver a subirse tal cual.
+    """
+
+    pass
+
     pass

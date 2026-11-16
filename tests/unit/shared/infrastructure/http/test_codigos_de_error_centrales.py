@@ -151,6 +151,8 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.user.domain.errors.user_errors.AliasAlreadyTakenError": 409,
     "src.modules.user.domain.errors.user_errors.AvatarUploadNotFoundError": 404,
     "src.modules.user.domain.errors.user_errors.AvatarUploadTooLargeError": 413,
+    # Nuevo (SB-01): la imagen lleva demasiado rato esperando su turno; puede reintentarse
+    "src.modules.user.domain.errors.user_errors.ImageProcessingBusyError": 503,
     "src.modules.user.domain.errors.user_errors.InvalidAvatarImageError": 400,
     "src.modules.user.domain.errors.user_errors.TermsAcceptanceRequiredError": 422,
     "src.modules.user.domain.errors.user_errors.UserNotFoundError": 404,
