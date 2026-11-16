@@ -113,9 +113,9 @@ class JWTTokenService:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
-            # Verificar que sea un access token (v1.8.0+)
-            if payload.get("type") == "refresh":
-                # No permitir refresh tokens en endpoints de access token
+            # Solo lo que es de acceso, no lo que no es de refresh (SB-04): otro JWT
+            # firmado con la misma clave, sin tipo o con otro, no vale como acceso
+            if payload.get("type") != "access":
                 return None
 
             return payload
