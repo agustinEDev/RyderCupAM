@@ -160,6 +160,15 @@ class PillowImageProcessor(IImageProcessor):
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida") from exc
 
+        # Lo que de verdad se va a decodificar, ya con draft, no puede pasar del tope
+        # de lo que se decodifica entero: un JPEG panorámico (50000x1000) para el
+        # avatar no se reduce, porque manda su lado corto, y se decodificaría entero
+        decodifica_ancho, decodifica_alto = image.size
+        if decodifica_ancho * decodifica_alto > MAX_INPUT_PIXELS:
+            raise InvalidAvatarImageError(
+                f"La imagen es demasiado grande ({width}x{height} píxeles)"
+            )
+
         # Corrige la orientación según el tag EXIF antes de nada más: si no, las
         # fotos tomadas en vertical con el móvil se guardarían giradas. Un HEIC
         # no pasa por aquí dos veces: pillow-heif ya lo entrega girado y con el

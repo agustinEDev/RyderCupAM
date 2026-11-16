@@ -250,6 +250,40 @@ class TestTopesDePixelesYDecodificacionReducida:
         except InvalidAvatarImageError as error:
             assert "demasiado grande" not in str(error)
 
+    async def test_rechaza_un_jpeg_panoramico_que_no_se_puede_reducir_para_el_avatar(self):
+        """
+        Given un JPEG de 50000x1000 (50 MP, dentro del tope) para el avatar
+        When se procesa
+        Then se rechaza por grande: con el lado corto por debajo de 1024, draft no
+        reduce nada y se decodificaría entero (cientos de megas)
+        """
+        processor = PillowImageProcessor()
+
+        with pytest.raises(InvalidAvatarImageError, match="demasiado grande"):
+            await processor.process_avatar_image(self._jpeg_que_declara(50000, 1000))
+
+    async def test_el_mismo_panoramico_en_la_galeria_si_se_reduce(self):
+        """
+        Given el mismo JPEG de 50000x1000 en la galería (manda el lado largo)
+        When se procesa
+        Then no se rechaza por grande: draft lo reduce a 1/8
+        """
+        processor = PillowImageProcessor()
+
+        try:
+            await processor.process_gallery_image(self._jpeg_que_declara(50000, 1000))
+        except InvalidAvatarImageError as error:
+            assert "demasiado grande" not in str(error)
+
+    async def test_un_avatar_que_draft_reduce_bajo_el_tope_no_se_rechaza(self):
+        """Given un JPEG de 12000x4000 (48 MP) / Then draft lo baja a 3 MP y no es «grande»."""
+        processor = PillowImageProcessor()
+
+        try:
+            await processor.process_avatar_image(self._jpeg_que_declara(12000, 4000))
+        except InvalidAvatarImageError as error:
+            assert "demasiado grande" not in str(error)
+
     async def test_rechaza_un_png_por_encima_del_tope_de_los_demas_formatos(self):
         """
         Given un PNG de 5001x5000 (25,005 MP), que se decodificaría entero
