@@ -184,7 +184,7 @@ class TestTopesDePixelesYDecodificacionReducida:
     """
     SB-01: un archivo pequeño puede declarar muchísimos píxeles y llevarse cientos
     de megas al decodificarse. El JPEG se decodifica ya reducido al tamaño de salida
-    (`Image.draft`), así que mantiene el tope de 40 MP; el resto de formatos se
+    (`Image.draft`), así que su tope es de 50 MP; el resto de formatos se
     decodifica entero y tiene un tope más bajo.
     """
 
@@ -201,14 +201,54 @@ class TestTopesDePixelesYDecodificacionReducida:
         Image.new("L", (width, height), 128).save(buffer, "JPEG")
         return buffer.getvalue()
 
-    def test_el_tope_del_jpeg_sigue_en_40_megapixeles(self):
+    @staticmethod
+    def _jpeg_que_declara(width: int, height: int) -> bytes:
         """
-        Given el tope de píxeles del JPEG
-        Then sigue en 40 MP: cambiarlo cambia qué fotos se aceptan, y eso se decide aparte
+        Un JPEG pequeño con otras dimensiones en la cabecera (SOF0): Pillow solo lee la
+        cabecera para saber el tamaño, así que se prueba el tope sin crear la imagen.
         """
-        from src.modules.user.infrastructure.external import pillow_image_processor
+        buffer = io.BytesIO()
+        Image.new("L", (16, 16), 128).save(buffer, "JPEG")
+        datos = bytearray(buffer.getvalue())
+        sof = datos.index(b"\xff\xc0")
+        datos[sof + 5 : sof + 9] = height.to_bytes(2, "big") + width.to_bytes(2, "big")
+        return bytes(datos)
 
-        assert pillow_image_processor.MAX_JPEG_INPUT_PIXELS == 40_000_000
+    async def test_una_foto_de_48_megapixeles_entra_en_jpeg(self):
+        """
+        Given un JPEG de 8064x6048 (una foto de 48 MP de iPhone: 48,8 MP)
+        When se procesa
+        Then entra: decodificado ya reducido, cabe bajo el tope del JPEG (50 MP)
+        """
+        processor = PillowImageProcessor()
+
+        result = await processor.process_avatar_image(self._jpeg_gris(8064, 6048))
+
+        assert Image.open(io.BytesIO(result)).size == (AVATAR_TARGET_SIZE, AVATAR_TARGET_SIZE)
+
+    async def test_rechaza_un_jpeg_por_encima_de_50_megapixeles(self):
+        """
+        Given un JPEG que declara 8165x6124 (50,003 MP)
+        When se procesa
+        Then se rechaza por grande, sin decodificarlo
+        """
+        processor = PillowImageProcessor()
+
+        with pytest.raises(InvalidAvatarImageError, match="demasiado grande"):
+            await processor.process_gallery_image(self._jpeg_que_declara(8165, 6124))
+
+    async def test_un_jpeg_justo_en_el_tope_no_se_rechaza_por_grande(self):
+        """
+        Given un JPEG que declara 10000x5000 (50 MP justos), con datos de 16x16
+        When se procesa
+        Then no se rechaza por grande (lo que salga de unos datos de 16x16 da igual aquí)
+        """
+        processor = PillowImageProcessor()
+
+        try:
+            await processor.process_gallery_image(self._jpeg_que_declara(10000, 5000))
+        except InvalidAvatarImageError as error:
+            assert "demasiado grande" not in str(error)
 
     async def test_rechaza_un_png_por_encima_del_tope_de_los_demas_formatos(self):
         """

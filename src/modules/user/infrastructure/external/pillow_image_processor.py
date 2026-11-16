@@ -46,8 +46,10 @@ AVATAR_JPEG_QUALITY = 85
 # memoria al decodificarse). Se miran en la cabecera, antes de decodificar nada.
 #
 # El JPEG se decodifica ya reducido al tamaño de salida (`Image.draft`, hasta 1/8
-# por lado), así que su tope se queda en los 40 MP de siempre (SB-01).
-MAX_JPEG_INPUT_PIXELS = 40_000_000
+# por lado), así que su tope sube a 50 MP: entran las fotos de 48 MP de un iPhone
+# (8064x6048). Medido: un JPEG progresivo de 48-50 MP sube ~150-170 MB, por
+# debajo de los ~195 MB del peor PNG aceptado; y van de uno en uno (SB-01, 16 nov 2026).
+MAX_JPEG_INPUT_PIXELS = 50_000_000
 # El resto (PNG, HEIC, WEBP) se decodifica entero: unos 3 bytes por píxel y varias
 # copias. 25 MP son las fotos de 24 MP de cámara (un iPhone de 24 MP guarda
 # 5712x4284 = 24,47 MP), que tienen que seguir entrando (SB-01).
@@ -166,8 +168,8 @@ class PillowImageProcessor(IImageProcessor):
     def _decodificar_reducido(image: Image.Image, escala: float) -> None:
         """
         Pide al decodificador del JPEG que lo entregue ya reducido (1/2, 1/4 o 1/8
-        por lado), sin bajar del tamaño que necesita la salida: una foto de 40 MP
-        para un avatar de 512 px se decodifica en ~0,6 MP en vez de en 40.
+        por lado), sin bajar del tamaño que necesita la salida: una foto de 48 MP
+        para un avatar de 512 px se decodifica en ~0,8 MP en vez de en 48.
         La reducción fina la hace después el LANCZOS de siempre.
         """
         if escala >= 1:

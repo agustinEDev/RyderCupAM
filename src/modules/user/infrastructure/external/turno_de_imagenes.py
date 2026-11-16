@@ -37,7 +37,7 @@ from src.modules.user.domain.errors.user_errors import ImageProcessingBusyError
 P = ParamSpec("P")
 T = TypeVar("T")
 
-# Lo más que espera una imagen a que le toque. La peor que se acepta (un JPEG de 40 MP
+# Lo más que espera una imagen a que le toque. La peor que se acepta (un JPEG de 50 MP
 # o un PNG de 25 MP) tarda en torno a medio segundo, así que 20 s dan para una cola de
 # decenas de subidas a la vez, más que cualquier pico real; pasado eso es mejor decir
 # «inténtalo en un momento» que dejar la petición colgada hasta que corte el cliente.
