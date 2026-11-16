@@ -55,11 +55,11 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies and Snyk CLI
         run: |
-          pip install -r requirements.txt
+          bash .github/scripts/instalar_dependencias.sh
           npm install --global "snyk@${SNYK_CLI_VERSION}"
 
       - name: Build the production image (linux/amd64)
