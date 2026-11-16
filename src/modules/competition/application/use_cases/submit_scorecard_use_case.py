@@ -22,6 +22,7 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.competicion_en_juego import (
     exigir_competicion_en_juego,
+    partido_no_anotable,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.hole_score import HoleScore
@@ -94,7 +95,8 @@ class SubmitScorecardUseCase:
             match_format = round_entity.match_format
             # Con la competición terminada, cancelada o reabierta no se entrega (SB-03)
             competicion = exigir_competicion_en_juego(
-                await self._uow.competitions.find_by_id(round_entity.competition_id)
+                await self._uow.competitions.find_by_id(round_entity.competition_id),
+                partido_no_anotable,
             )
 
             player_scores = await self._uow.hole_scores.find_by_match_and_player(match_id, user_id)

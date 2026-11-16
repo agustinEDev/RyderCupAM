@@ -34,6 +34,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+)
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
 )
@@ -89,9 +92,9 @@ def comprobar_que_se_juega(competicion: Competition | None) -> Competition:
     Raises:
         PartidaNoAnotableError: Si no
     """
-    if competicion is None or not competicion.status.admite_anotar():
-        raise PartidaNoAnotableError("Esta competición no está en juego.")
-    return competicion
+    return exigir_competicion_en_juego(
+        competicion, lambda _: PartidaNoAnotableError("Esta competición no está en juego.")
+    )
 
 
 async def comprobar_que_abrio(
@@ -141,9 +144,7 @@ async def arrancar_la_competicion(
     Devuelve lo que se cerró al empezar (solicitudes pendientes e invitaciones en espera),
     para que quien llama avise en Actividad cuando haya guardado (BE-2, P3).
     """
-    bloqueada = await uow.competitions.find_by_id_for_update(competicion.id)
-    if bloqueada is None or not bloqueada.status.admite_anotar():
-        raise PartidaNoAnotableError("Esta competición no está en juego.")
+    bloqueada = comprobar_que_se_juega(await uow.competitions.find_by_id_for_update(competicion.id))
     if bloqueada.status == CompetitionStatus.CLOSED:
         bloqueada.start()
         await uow.competitions.update(bloqueada)

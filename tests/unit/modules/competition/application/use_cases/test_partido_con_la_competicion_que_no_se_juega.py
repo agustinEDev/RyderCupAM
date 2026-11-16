@@ -167,3 +167,32 @@ class TestLaRegla:
     @pytest.mark.parametrize("estado", list(CompetitionStatus))
     def test_se_anota_solo_cerrada_o_en_juego(self, estado):
         assert estado.admite_anotar() is (estado in SE_JUEGA)
+
+
+class TestStrokePlayConLaFilaBloqueada:
+    """
+    El stroke play relee la competición con su fila bloqueada antes de ponerla en juego:
+    si entre la primera lectura y el bloqueo la terminaron, cancelaron o reabrieron,
+    el golpe no entra (la misma regla, con el error del stroke play).
+    """
+
+    @pytest.mark.parametrize("estado", NO_SE_JUEGA)
+    async def test_si_al_bloquearla_ya_no_se_juega_no_se_arranca(self, estado):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+            PartidaNoAnotableError,
+            arrancar_la_competicion,
+        )
+
+        leida = MagicMock(status=CompetitionStatus.CLOSED)
+        bloqueada = MagicMock(status=estado)
+        uow = MagicMock()
+        uow.competitions.find_by_id_for_update = AsyncMock(return_value=bloqueada)
+        uow.competitions.update = AsyncMock()
+
+        with pytest.raises(PartidaNoAnotableError):
+            await arrancar_la_competicion(uow, leida)
+
+        bloqueada.start.assert_not_called()
+        uow.competitions.update.assert_not_called()
