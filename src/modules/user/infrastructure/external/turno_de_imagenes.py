@@ -27,6 +27,7 @@ import concurrent.futures
 import contextlib
 import contextvars
 import functools
+import threading
 import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -45,6 +46,9 @@ TIEMPO_MAXIMO_DE_ESPERA_S = 20.0
 
 # Un hilo, creado con la primera imagen y no al importar el módulo
 _pool: ThreadPoolExecutor | None = None
+# Para que dos primeras imágenes a la vez desde loops de hilos distintos no creen dos
+# pools (serían dos decodificaciones a la vez)
+_cerrojo_del_pool = threading.Lock()
 
 # Un semáforo por event loop: `asyncio.Semaphore` se ata al loop en el que se usa por
 # primera vez (los tests crean uno por test). Débil, para no retener loops cerrados.
@@ -56,7 +60,9 @@ _turnos: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]
 def _el_pool() -> ThreadPoolExecutor:
     global _pool  # noqa: PLW0603 - estado del proceso, creado al primer uso
     if _pool is None:
-        _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="imagenes")
+        with _cerrojo_del_pool:
+            if _pool is None:
+                _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="imagenes")
     return _pool
 
 

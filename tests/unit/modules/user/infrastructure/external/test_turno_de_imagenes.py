@@ -207,3 +207,29 @@ async def test_un_error_al_procesar_suelta_el_turno():
         await en_su_turno(falla)
 
     assert await asyncio.wait_for(en_su_turno(lambda: "siguiente"), timeout=1) == "siguiente"
+
+
+def test_dos_primeras_imagenes_a_la_vez_desde_hilos_distintos_comparten_un_solo_pool(
+    monkeypatch,
+):
+    """
+    Given el proceso sin pool todavía (arranque en frío)
+    When dos loops de hilos distintos piden el pool exactamente a la vez
+    Then los dos reciben el mismo: con dos pools habría dos decodificaciones a la vez
+    """
+    monkeypatch.setattr(turno_de_imagenes, "_pool", None)
+    salida = threading.Barrier(8)
+    pools: list[object] = []
+
+    def pide() -> None:
+        salida.wait()
+        pools.append(turno_de_imagenes._el_pool())
+
+    hilos = [threading.Thread(target=pide) for _ in range(8)]
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join()
+
+    assert len({id(pool) for pool in pools}) == 1
+    turno_de_imagenes._el_pool().shutdown(wait=False)
