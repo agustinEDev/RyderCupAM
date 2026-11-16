@@ -397,6 +397,23 @@ jobs:
           # 30 sep 2026 solo contaba «CVE*» y dejaba pasar casi todo
           python .github/scripts/pip_audit_gate.py pip-audit-report.json
 
+      # La config de gitleaks tiene que detectar algo: hasta el 16 nov 2026 no cargaba
+      # ninguna regla y el escaneo de abajo pasaba siempre (INF-01). Mismo gitleaks que
+      # usa la acción, descargado con su sha256 de la release.
+      - name: Gitleaks self-test
+        id: gitleaks-self-test
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: 8.24.3
+          GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          PATH="$RUNNER_TEMP/gitleaks:$PATH" bash .github/scripts/gitleaks_self_test.sh
+
       - name: Check for Secrets with Gitleaks
         id: gitleaks
         if: ${{ !cancelled() }}
@@ -404,6 +421,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_VERSION: 8.24.3  # la misma que la autoprueba (y la que trae la acción)
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_NOTIFY_USER_LIST: ""
         # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
@@ -588,6 +606,21 @@ jobs:
             --result "$RESULT" \
             --if-fails 'The errors, with file, line and code, are in the "Run Mypy Type Checker" step log. Reproduce with: mypy src/' || true
 
+  # El día (UTC) para APT_REFRESH, calculado UNA vez para las tres entradas de build:
+  # la capa del apt-get upgrade se rehace una vez al día aunque la caché la tenga
+  # (INF-02), y las tres construyen la misma imagen aunque una arranque pasada la
+  # medianoche (Trivy escanea la misma que guarda el build)
+  apt_refresh:
+    name: 📅 OS packages refresh key
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      day: ${{ steps.dia.outputs.day }}
+    steps:
+      - name: Today (UTC)
+        id: dia
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
   # ================================
   # JOB 7: BUILD & CONTAINER SCAN
   # ================================
@@ -620,7 +653,7 @@ jobs:
     # matriz, si se salta no se despliega y sus tres checks se quedan «esperando»
     # (no cuentan como aprobados). Lo que solo se salta (API contract o Dependency
     # Review en un push) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, apt_refresh]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 25
     permissions:
@@ -659,6 +692,8 @@ jobs:
           push: false
           load: true
           tags: rydercupam:${{ github.sha }}
+          build-args: |
+            APT_REFRESH=${{ needs.apt_refresh.outputs.day }}
           cache-from: type=gha
           # Escribe la caché solo el build; las otras dos la leen
           cache-to: ${{ matrix.comprobacion == 'build' && 'type=gha,mode=max' || '' }}
@@ -711,6 +746,7 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
           exit-code: '0'
+          trivyignores: '.trivyignore.yaml'  # las aceptadas, acotadas por purl (INF-02)
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
@@ -726,22 +762,24 @@ jobs:
           # volverían a abrir
           category: trivy-image
 
-      - name: Trivy gate (CRITICAL with a fix)
+      - name: Trivy gate (HIGH or CRITICAL with a fix)
         id: trivy_gate
         if: matrix.comprobacion == 'trivy'
-        # Bloquea las CRÍTICAS que ya tienen arreglo (decidido el 30 sep 2026). Las
-        # que no lo tienen no se pueden arreglar subiendo nada: siguen en el SARIF
+        # Bloquea las HIGH y CRITICAL que ya tienen arreglo (INF-02, 16 nov 2026; antes
+        # solo las CRITICAL, y zlib1g y apt con HIGH arreglados pasaban). Las que no lo
+        # tienen no se pueden arreglar subiendo nada: siguen en el SARIF
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: 'rydercupam:${{ github.sha }}'
           format: 'table'
-          severity: 'CRITICAL'
+          severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
           # Solo vulnerabilidades: un «secreto» de Trivy en site-packages no debe
           # tumbar el build (los secretos del repo los vigila Gitleaks). Para
-          # aceptar una vulnerabilidad concreta, un .trivyignore con el motivo
+          # aceptar una vulnerabilidad concreta, en .trivyignore.yaml con purl, motivo y caducidad
           scanners: 'vuln'
           exit-code: '1'
+          trivyignores: '.trivyignore.yaml'
 
       - name: Save Docker Image (artifact)
         if: matrix.comprobacion == 'build'
@@ -802,8 +840,8 @@ jobs:
                   *) RESULT="${COUNTS:-No readable Trivy SARIF, see the step log}" ;;
                 esac
                 case "$GATE_OUTCOME" in
-                  success) RESULT="$RESULT · gate passed: no CRITICAL vulnerability with a fix" ;;
-                  failure) RESULT="$RESULT · gate FAILED: a CRITICAL vulnerability has a fix, or the scan could not run (e.g. its database download), see the step log" ;;
+                  success) RESULT="$RESULT · gate passed: no HIGH or CRITICAL vulnerability with a fix" ;;
+                  failure) RESULT="$RESULT · gate FAILED: a HIGH or CRITICAL vulnerability has a fix, or the scan could not run (e.g. its database download), see the step log" ;;
                   *) RESULT="$RESULT · gate did not run" ;;
                 esac
                 ;;
@@ -814,8 +852,8 @@ jobs:
               WHAT='Starts the image exactly like Render: entrypoint.sh, alembic upgrade head against a real PostgreSQL with a driverless URL, then uvicorn, and waits for /health to report the expected version.'
               IF_FAILS='The container log is printed in the "Start like Render" step. Reproduce locally with .github/scripts/start-like-render.sh' ;;
             trivy)
-              WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and only a CRITICAL one that already has a fix blocks.'
-              IF_FAILS='The fixable CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore with the reason.' ;;
+              WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and a HIGH or CRITICAL one that already has a fix blocks.'
+              IF_FAILS='The fixable HIGH/CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore.yaml (purl, reason, expiry).' ;;
             *)
               WHAT='Builds the production image from docker/Dockerfile, generates the migration SQL offline (alembic upgrade head --sql) and keeps the image as the docker-image artifact.'
               IF_FAILS='See the failing step: the Dockerfile or requirements for the build, a migration for the offline SQL. Reproduce with: docker build -f docker/Dockerfile .' ;;

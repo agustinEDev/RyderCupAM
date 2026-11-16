@@ -33,12 +33,12 @@ class FakeImageProcessor(IImageProcessor):
     def __init__(self, should_fail: bool = False):
         self.should_fail = should_fail
 
-    def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+    async def process_avatar_image(self, raw_bytes: bytes) -> bytes:
         if self.should_fail:
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida")
         return b"processed-jpeg-bytes"
 
-    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+    async def process_gallery_image(self, raw_bytes: bytes) -> bytes:
         """La galería no se prueba aquí, pero el puerto la exige (BE #177)."""
         if self.should_fail:
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida")

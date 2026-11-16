@@ -218,7 +218,7 @@ class RefreshToken:
         Example:
             >>> user_id = UserId.generate()
             >>> device_id = UserDeviceId.generate()
-            >>> token_jwt = "eyJhbGciOiJIUzI1NiIsInR5..."
+            >>> token_jwt = "<jwt firmado>"
             >>> refresh_token = RefreshToken.create(user_id, token_jwt, device_id)
         """
         token_id = RefreshTokenId.generate()

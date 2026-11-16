@@ -41,7 +41,20 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
     async def find_by_id(self, friendship_id: FriendshipId) -> Friendship | None:
         return self._friendships.get(friendship_id)
 
+    async def find_by_id_for_update(self, friendship_id: FriendshipId) -> Friendship | None:
+        """En memoria no hay bloqueos de fila: la misma lectura."""
+        return self._friendships.get(friendship_id)
+
+    async def find_by_pair_for_update(
+        self, user_id_a: UserId, user_id_b: UserId
+    ) -> Friendship | None:
+        """En memoria no hay bloqueos de fila: la misma lectura."""
+        return self._de_la_pareja(user_id_a, user_id_b)
+
     async def find_by_pair(self, user_id_a: UserId, user_id_b: UserId) -> Friendship | None:
+        return self._de_la_pareja(user_id_a, user_id_b)
+
+    def _de_la_pareja(self, user_id_a: UserId, user_id_b: UserId) -> Friendship | None:
         for f in self._friendships.values():
             if {f.requester_id, f.addressee_id} == {user_id_a, user_id_b}:
                 return f
@@ -121,6 +134,7 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
             and user_id in (f.requester_id, f.addressee_id)
             and f.blocked_by is not None
             and f.blocked_by != user_id
+            and f.second_blocked_at is None
         ]
 
     async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:

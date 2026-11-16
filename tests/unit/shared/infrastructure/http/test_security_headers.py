@@ -9,12 +9,13 @@ avatares que el frontend carga desde api.*), una CSP (rompería /docs) y quitan
 Cache-Control: no-store. Aquí se fija exactamente lo que la API enviaba.
 
 Desde F-15 (auditoría OWASP del 9 nov 2026) la API manda además una CSP que no deja
-cargar nada ni enmarcarla, salvo en /docs y /redoc, que cargan sus scripts.
+cargar nada ni enmarcarla; /docs y /redoc, la suya, con sus scripts fijados (P-02).
 """
 
 import pytest
 from starlette.responses import Response
 
+from src.shared.infrastructure.http.paginas_de_la_documentacion import CSP_DE_LA_DOCUMENTACION
 from src.shared.infrastructure.http.security_headers import apply_security_headers
 
 POLITICA = {
@@ -88,15 +89,16 @@ class TestSecurityHeaders:
         assert response.headers["cache-control"] == "no-store"
 
     @pytest.mark.parametrize("ruta", ["/docs", "/redoc", "/docs/", "/redoc/"])
-    def test_the_docs_pages_get_no_csp(self, ruta):
+    def test_the_docs_pages_get_their_own_csp(self, ruta):
         """
         Given: una respuesta de las páginas de la documentación
         When: se aplica la política con su ruta
-        Then: lleva todas las cabeceras menos la CSP, que rompería sus scripts
+        Then: lleva todas las cabeceras, con la CSP de la documentación, que solo deja
+              cargar sus scripts fijados del CDN (P-02; antes iban sin ninguna CSP)
         """
         response = Response("x")
         apply_security_headers(response, ruta)
-        esperadas = {k: v for k, v in POLITICA.items() if k != "content-security-policy"}
+        esperadas = POLITICA | {"content-security-policy": CSP_DE_LA_DOCUMENTACION}
         assert _cabeceras(response) == esperadas
 
     @pytest.mark.parametrize("ruta", ["/openapi.json", "/docs/oauth2-redirect", "/api/v1/docs"])

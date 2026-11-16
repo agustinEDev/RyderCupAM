@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 import main
 from src.config import rate_limit
 from src.config.rate_limit import EXEMPT_FROM_DEFAULT_LIMIT, limiter
+from src.shared.infrastructure.http import paginas_de_la_documentacion as paginas
 
 USUARIO = "docs-user"
 CLAVE = "docs-pass-de-prueba"  # nosec B105 - test credential, not a real secret
@@ -85,6 +86,28 @@ def test_with_credentials_the_docs_pages_load_the_private_schema(cliente, ruta):
 
     assert respuesta.status_code == 200
     assert "/openapi.json" in respuesta.text
+
+
+@pytest.mark.parametrize(
+    ("ruta", "recurso", "huella"),
+    [
+        ("/docs", paginas.SWAGGER_JS, paginas.SWAGGER_JS_SRI),
+        ("/docs", paginas.SWAGGER_CSS, paginas.SWAGGER_CSS_SRI),
+        ("/redoc", paginas.REDOC_JS, paginas.REDOC_JS_SRI),
+    ],
+)
+def test_the_real_docs_pages_load_the_pinned_cdn_files_with_sri(cliente, ruta, recurso, huella):
+    """
+    Given: La app real con la documentación protegida
+    When: Se piden /docs y /redoc con las credenciales
+    Then: Cargan del CDN el fichero de versión fija con su integrity (P-02), no la página
+          de FastAPI con la versión flotante y sin SRI
+    """
+    respuesta = cliente.get(ruta, headers=_basic(USUARIO, CLAVE))
+
+    assert respuesta.status_code == 200
+    assert f'src="{recurso}"' in respuesta.text or f'href="{recurso}"' in respuesta.text
+    assert f'integrity="{huella}"' in respuesta.text
 
 
 def test_the_schema_generated_offline_is_unchanged():

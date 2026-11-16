@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.69.0] - 2026-11-16
+
+**Endurecimiento tras la re-auditoría: imágenes, bloqueos, anotar con el torneo parado,
+cabeceras e imagen Docker** (#877, #881; merge-back de la 2.68.0 en #870). Sin cambio de
+contrato: el backend sale primero. Una migración: `e5a7c9b1d3f6` (columna
+`friendships.second_blocked_at`, nula; solo metadatos en Postgres).
+
+### Added
+
+- **Bloqueo de los dos** (SB-02): si B ya había bloqueado a A y A le bloquea también, se
+  guardan los dos bloqueos en la misma fila. A recibe la respuesta construida desde su lado y
+  B no ve ningún cambio; cuando uno desbloquea, sigue el bloqueo del otro.
+- **503 `IMAGES_BUSY`** cuando la cola de imágenes lleva más de 20 s esperando, con texto
+  «Ahora mismo se están procesando otras imágenes…».
+- **JPEG hasta 50 MP** (decodificados reducidos) y fotos del iPhone con mapa de ganancia HDR
+  (MPO).
+- `/docs` y `/redoc` propios, con los scripts del CDN fijados por versión con SRI y una CSP
+  estricta (P-02).
+
+### Fixed
+
+- **Las imágenes se procesan de una en una** por proceso (SB-01); un JPEG que tras la
+  decodificación reducida seguiría por encima de 25 MP se rechaza con el 400 de siempre, y el
+  resto de formatos tienen tope de 25 MP.
+- **Anotar solo con la competición en juego** (SB-03): hoyos, concesiones, tarjetas y
+  retirar o reincorporar en fourball dan 409 si la competición está ACTIVE, COMPLETED o
+  CANCELLED. Un partido con todas las tarjetas entregadas se puede cerrar igualmente.
+- Desbloquear un bloqueo ajeno, o responder a una solicitud que acabó en bloqueo, da 404 (sin
+  pista de que existe).
+- El día de inicio de las inscripciones se decide con el reloj del campo, igual que el plazo
+  (F-01).
+- Las redirecciones mantienen https detrás del proxy TLS: se usa el último
+  `X-Forwarded-Proto` y nunca se baja a http (P-03).
+- Imagen base renovada; los paquetes del sistema se actualizan en una capa propia y Trivy
+  bloquea vulnerabilidades HIGH/CRITICAL con arreglo (INF-02).
+- gitleaks con sus reglas por defecto y una autoprueba en el CI; fuera la excepción del
+  prefijo JWT (INF-01).
+- `scripts/db/rol_de_n8n.sql`: el rol `n8n_lectura` solo lee las 11 columnas del informe
+  semanal, en solo lectura y con tiempos límite (DB-01). Se ejecuta a mano en Render como
+  dueño de la BD.
+
+### Changed
+
+- Dependabot solo propone digests nuevos de la imagen base de Python.
+- Plan de pago: idea del caddie con IA (`docs/plan-de-pago-e-ia.md`, sección 3; #880).
+
 ## [2.68.0] - 2026-11-15
 
 **Cierre automático de inscripciones, invitaciones en espera y avisos de la RFEG** (#864,

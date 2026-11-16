@@ -71,7 +71,7 @@ class RefreshTokenRepositoryInterface(ABC):
             RefreshToken si existe y el hash coincide, None si no
 
         Example:
-            >>> token_jwt = "eyJhbGciOiJIUzI1NiIsInR5..."
+            >>> token_jwt = "<jwt firmado>"
             >>> refresh_token = await repository.find_by_token_hash(token_jwt)
             >>> if refresh_token and refresh_token.is_valid(token_jwt):
             >>>     # Token válido, renovar access token

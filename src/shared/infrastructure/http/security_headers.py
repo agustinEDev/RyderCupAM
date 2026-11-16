@@ -12,8 +12,9 @@ enviaba la API con secure 0.3, fijada en
 tests/unit/shared/infrastructure/http/test_security_headers.py.
 
 Desde F-15 (auditoría OWASP del 9 nov 2026), además, una CSP que no deja cargar nada
-ni enmarcar la respuesta: la API solo sirve JSON e imágenes. Salvo en /docs y /redoc,
-cuyas páginas cargan sus scripts de un CDN.
+ni enmarcar la respuesta: la API solo sirve JSON e imágenes. /docs y /redoc, que cargan
+sus scripts de un CDN, llevan la suya: solo esos ficheros, fijados y con SRI (P-02, 16
+nov 2026; antes iban sin ninguna CSP).
 """
 
 from secure import (
@@ -26,6 +27,8 @@ from secure import (
     XFrameOptions,
 )
 from starlette.responses import Response
+
+from src.shared.infrastructure.http.paginas_de_la_documentacion import CSP_DE_LA_DOCUMENTACION
 
 _secure_headers = Secure(
     hsts=StrictTransportSecurity().max_age(63072000).include_subdomains(),  # 2 años
@@ -41,8 +44,8 @@ _secure_headers = Secure(
 
 CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'none'"
 
-# Las páginas de la documentación: cargan Swagger UI y ReDoc de un CDN. Exactas
-_PAGINAS_SIN_CSP = frozenset({"/docs", "/redoc"})
+# Las páginas de la documentación: cargan Swagger UI y ReDoc de un CDN, con su CSP. Exactas
+_PAGINAS_DE_LA_DOCUMENTACION = frozenset({"/docs", "/redoc"})
 
 
 def apply_security_headers(response: Response, path: str | None = None) -> None:
@@ -55,11 +58,13 @@ def apply_security_headers(response: Response, path: str | None = None) -> None:
 
     Args:
         response: La respuesta
-        path: La ruta pedida; /docs y /redoc salen sin la CSP
+        path: La ruta pedida; /docs y /redoc salen con la CSP de la documentación
     """
     route_cache_control = response.headers.get("cache-control")
     _secure_headers.set_headers(response)
     if route_cache_control is not None:
         response.headers["cache-control"] = route_cache_control
-    if path is None or (path.rstrip("/") or "/") not in _PAGINAS_SIN_CSP:
+    if path is not None and (path.rstrip("/") or "/") in _PAGINAS_DE_LA_DOCUMENTACION:
+        response.headers["content-security-policy"] = CSP_DE_LA_DOCUMENTACION
+    else:
         response.headers["content-security-policy"] = CONTENT_SECURITY_POLICY

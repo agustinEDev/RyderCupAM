@@ -40,6 +40,19 @@ class FriendshipRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, friendship_id: FriendshipId) -> Friendship | None:
+        """
+        Como `find_by_id`, con la fila bloqueada hasta el final de la transacción
+        (SB-02): bloquear y desbloquear a la vez la misma pareja van en fila.
+        """
+
+    @abstractmethod
+    async def find_by_pair_for_update(
+        self, user_id_a: UserId, user_id_b: UserId
+    ) -> Friendship | None:
+        """Como `find_by_pair`, con la fila bloqueada hasta el final de la transacción (SB-02)."""
+
+    @abstractmethod
     async def find_by_pair(self, user_id_a: UserId, user_id_b: UserId) -> Friendship | None:
         """
         Busca la relacion de amistad (en cualquier estado) entre dos usuarios,
@@ -107,7 +120,8 @@ class FriendshipRepositoryInterface(ABC):
     async def find_blocker_ids(self, user_id: UserId) -> list[UserId]:
         """
         Quienes bloquearon a `user_id`, solo en ese sentido (F-09): para ellos
-        no existe. A quienes bloqueó él no los incluye.
+        no existe. A quienes bloqueó él no los incluye, tampoco si le bloquearon
+        antes: con los dos bloqueos ninguno desaparece para el otro (SB-02).
         """
 
     @abstractmethod

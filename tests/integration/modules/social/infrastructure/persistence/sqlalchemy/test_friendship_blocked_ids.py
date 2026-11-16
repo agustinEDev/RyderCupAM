@@ -50,3 +50,30 @@ async def test_devuelve_los_bloqueos_en_las_dos_direcciones(db_session):
     bloqueados = await SQLAlchemyFriendshipRepository(db_session).find_blocked_ids(yo.id)
 
     assert set(bloqueados) == {bloque.id, me_bloqueo.id}
+
+
+async def test_con_los_dos_bloqueos_ninguno_se_oculta_al_otro(db_session):
+    """
+    SB-02. Given B bloqueó a A y A bloqueó a B (una fila, `second_blocked_at` puesto)
+    When se piden quiénes bloquearon a cada uno
+    Then ninguno sale (si saliera, sabría que el otro también le bloqueó), y el bloqueo
+    sigue contando para `find_blocked_ids`; la fila se lee y se guarda con la columna
+    """
+    a, b, c = [await _user(db_session) for _ in range(3)]
+    fila = Friendship.create_blocked(id=FriendshipId(uuid4()), blocker_id=b.id, blocked_id=a.id)
+    fila.block(a.id)
+    repo = SQLAlchemyFriendshipRepository(db_session)
+    await repo.add(fila)
+    await _relacion(db_session, c, a, bloqueo=True)
+    # Los ids, antes de expirar: leerlos de una entidad expirada dispararía una carga
+    # síncrona fuera del bucle async (MissingGreenlet)
+    a_id, b_id, c_id = a.id, b.id, c.id
+    await db_session.commit()
+    db_session.expire_all()
+
+    releida = await repo.find_by_pair_for_update(a_id, b_id)
+
+    assert releida.second_blocked_at is not None
+    assert set(await repo.find_blocker_ids(a_id)) == {c_id}
+    assert await repo.find_blocker_ids(b_id) == []
+    assert b_id in await repo.find_blocked_ids(a_id)

@@ -31,7 +31,7 @@ def hash_token(token: str) -> str:
         Hash hexadecimal SHA-256 del token (64 caracteres)
 
     Example:
-        >>> token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        >>> token = "<jwt firmado>"
         >>> hashed = hash_token(token)
         >>> len(hashed)
         64

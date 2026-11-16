@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -17,6 +18,7 @@ from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
@@ -245,3 +247,19 @@ async def plaza_para_todos(uow: InMemoryUnitOfWork, competition_id) -> None:
             await uow.plazas.add(
                 PlazaEnFranja.crear(competition_id, franja.id, user_id, datetime.now(UTC))
             )
+
+
+def con_su_competicion_en_juego(uow, ronda) -> None:
+    """
+    Registra en el UoW en memoria la competición de una sesión simulada, en juego.
+
+    Anotar, conceder, entregar y retirar en match play miran que la competición se
+    esté jugando (SB-03); los tests que montan solo el partido y su sesión necesitan
+    también la competición.
+    """
+
+    competicion = MagicMock()
+    competicion.id = ronda.competition_id
+    competicion.status = CompetitionStatus.IN_PROGRESS
+    competicion.is_creator = lambda _uid: False
+    uow._competitions._competitions[ronda.competition_id] = competicion

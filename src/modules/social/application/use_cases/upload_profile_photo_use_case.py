@@ -1,7 +1,5 @@
 """Caso de Uso: Subir una foto a la galeria del perfil."""
 
-import asyncio
-
 from src.modules.social.application.dto.profile_photo_dto import ProfilePhotoDTO
 from src.modules.social.application.exceptions import ProfileGalleryFullError
 from src.modules.social.domain.entities.profile_photo import (
@@ -84,10 +82,9 @@ class UploadProfilePhotoUseCase:
         _rechazar_si_esta_llena(ya_tiene)
 
         # Procesado fuera de cualquier transaccion: es CPU-bound y no necesita la
-        # sesion abierta. Y en un hilo aparte porque Pillow es sincrono: sin eso,
-        # redimensionar una foto bloquearia TODAS las peticiones del proceso
-        # mientras dura
-        processed = await asyncio.to_thread(self._image_processor.process_gallery_image, raw_bytes)
+        # sesion abierta. El adaptador lo saca del event loop y lo pone en cola con
+        # las demas imagenes del proceso (SB-01)
+        processed = await self._image_processor.process_gallery_image(raw_bytes)
 
         photo = ProfilePhoto.create(
             user_id=user_id, image_data=processed, content_type="image/jpeg", caption=caption

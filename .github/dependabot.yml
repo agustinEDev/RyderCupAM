@@ -58,7 +58,7 @@ updates:
     # - sqlalchemy / alembic / asyncpg: toda la persistencia y las migraciones
     # - fastapi / starlette / pydantic: el contrato de la API
 
-  # Imagen base del Dockerfile (python:3.12-slim): la mayoría de alertas de Trivy
+  # Imagen base del Dockerfile (python:3.14-slim): la mayoría de alertas de Trivy
   # son paquetes del sistema operativo de esta imagen
   - package-ecosystem: "docker"
     directory: "/docker"
@@ -75,10 +75,13 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    # El FROM va fijado por digest (python:3.x-slim@sha256:…): Dependabot propone
-    # cada semana el digest nuevo, que es como entran los parches del SO. También
-    # propondrá saltos de Python (3.14 → 3.15…), que son una decisión: antes de
-    # mergearlos, la versión nueva tiene que estar en la matriz obligatoria del CI.
+    # El FROM va fijado por digest (python:3.14-slim@sha256:…): Dependabot propone
+    # cada semana el digest nuevo, que es como entran los parches del SO. Los saltos
+    # de Python (3.14 → 3.15, 3 → 4) no los propone: son una decisión, y antes la
+    # versión nueva tiene que estar en la matriz obligatoria del CI. Se suben a mano.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Acciones de GitHub usadas en los workflows
   - package-ecosystem: "github-actions"

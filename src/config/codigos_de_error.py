@@ -13,7 +13,10 @@ from src.modules.quick_match.infrastructure.api.codigos_de_error import (
     CODIGOS as CODIGOS_DE_PARTIDA_RAPIDA,
 )
 from src.modules.social.infrastructure.api.codigos_de_error import CODIGOS as CODIGOS_DE_SOCIAL
-from src.modules.user.infrastructure.api.codigos_de_error import CODIGOS as CODIGOS_DE_USUARIO
+from src.modules.user.infrastructure.api.codigos_de_error import (
+    CODIGOS as CODIGOS_DE_USUARIO,
+    CON_SU_CODIGO as CON_SU_CODIGO_DE_USUARIO,
+)
 from src.shared.infrastructure.http.codigos_de_error_compartidos import CODIGOS_COMPARTIDOS
 
 _MAPAS = (
@@ -38,4 +41,4 @@ def todos_los_codigos() -> dict[type[Exception], int]:
 
 def los_que_llevan_su_codigo() -> frozenset[type[Exception]]:
     """Las del mapa que responden también con su `error_code` en la raíz."""
-    return CON_SU_CODIGO_DE_COMPETICION
+    return CON_SU_CODIGO_DE_COMPETICION | CON_SU_CODIGO_DE_USUARIO

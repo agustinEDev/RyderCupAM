@@ -7,7 +7,7 @@ la franja con hueco, o la lista de espera de una llena; sin franjas montadas
 (o en una Ryder) se entra con la barra y manda el maximo de jugadores.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
@@ -208,14 +208,15 @@ class RequestEnrollmentUseCase:
                 raise CompetitionNotActiveError(
                     "Las inscripciones de esta competición no están abiertas."
                 )
-            # Y pasado su plazo, aunque siga abierta, tampoco (C2, 15 nov 2026)
-            await exigir_el_plazo(self._plazo, competition)
+            # Y pasado su plazo, aunque siga abierta, tampoco (C2, 15 nov 2026). De ahí
+            # sale también qué día es en el campo, con la misma zona (F-01)
+            hoy_en_el_campo = await exigir_el_plazo(self._plazo, competition)
 
             # Antes que la franja: a quien ya está se le dice eso (revisor, 28 oct)
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
                 user_id, competition_id
             )
-            await self._exigir_que_puede(competition, user_id, existing_enrollment)
+            await self._exigir_que_puede(competition, user_id, existing_enrollment, hoy_en_el_campo)
             # Con los equipos formados nadie entra solo; el organizador sí (29 oct
             # 2026). Tras lo de ya inscrito: a quien ya está se le dice eso (revisor)
             await exigir_sin_equipos_formados(self._uow, competition_id)
@@ -324,7 +325,11 @@ class RequestEnrollmentUseCase:
         )
 
     async def _exigir_que_puede(
-        self, competition: Competition, user_id: UserId, existente: Enrollment | None
+        self,
+        competition: Competition,
+        user_id: UserId,
+        existente: Enrollment | None,
+        hoy_en_el_campo: date,
     ) -> None:
         """Duplicados, límite por jugador y fecha, con los «no» traducidos (BE #372)."""
         user_total_enrollments = await self._uow.enrollments.count_active_by_user(user_id)
@@ -343,6 +348,7 @@ class RequestEnrollmentUseCase:
                 ),
                 competition_status=competition.status,
                 competition_start_date=competition.dates.start_date,
+                today=hoy_en_el_campo,
                 user_total_enrollments=user_total_enrollments,
             )
         except DuplicateEnrollmentViolation as e:

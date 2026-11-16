@@ -1,0 +1,17 @@
+# Vulnerabilidades aceptadas por Trivy en el CI (escaneo y puerta), cada una acotada a un
+# paquete y versión concretos (purl), con su motivo y su caducidad: al caducar vuelve a
+# bloquear y hay que revisarla. La usan los dos pasos de Trivy (`trivyignores`).
+vulnerabilities:
+  # El «setuptools 70.3.0» de la imagen es la copia de pkg_resources que pip lleva dentro
+  # (pip/_vendor/vendor.txt dice setuptools==70.3.0). El setuptools instalado de verdad
+  # es el 84.2.1 de requirements.lock, que con este purl sí se escanearía. Sin `paths`:
+  # Trivy no dice en qué fichero lo ve (la alerta sale como «Python») y una ruta
+  # equivocada dejaría la excepción sin efecto. (INF-02, 16 nov 2026)
+  - id: CVE-2025-47273
+    purls:
+      - "pkg:pypi/setuptools@70.3.0"
+    statement: >-
+      Only pip's vendored pkg_resources from setuptools 70.3.0; the path traversal is in
+      setuptools.package_index.PackageIndex, which pip does not vendor. Revisit when pip
+      vendors setuptools >= 78.1.1.
+    expired_at: 2027-02-16
