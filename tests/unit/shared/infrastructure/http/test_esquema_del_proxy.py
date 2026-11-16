@@ -6,17 +6,22 @@ http://api.../countries`: uvicorn corre sin `--proxy-headers`, así que la app c
 petición llegó por http (Render termina el TLS). Activar `--proxy-headers` arreglaría el
 esquema pero también cambiaría `request.client` con X-Forwarded-For, y la IP del cliente
 se decide en un solo sitio (ADR-038, `cloudflare_client_ip`). Este middleware solo mira
-`X-Forwarded-Proto` y solo SUBE a https: nunca baja de https a http ni toca el cliente.
+`X-Forwarded-Proto` (su ÚLTIMO valor, el del proxy más cercano; el primero lo puede poner
+el cliente) y solo SUBE a https: nunca baja de https a http ni toca el cliente. Cambia el
+esquema en el mismo scope, como uvicorn con --proxy-headers: los middlewares de fuera (y
+Sentry) ven https y lo que la app añade al scope (`route`, `endpoint`, `state`).
 
 | Caso | Petición                                                  | Esperado                     |
 |------|-----------------------------------------------------------|------------------------------|
 | E1   | /countries/ por http con X-Forwarded-Proto: https         | 307 a https://               |
 | E2   | /countries/ por http sin la cabecera (local)              | 307 a http://, como antes    |
 | E3   | por https con X-Forwarded-Proto: http (falso)             | sigue https: nunca baja      |
-| E4   | «HTTPS», « https » o «https, http» (lista de proxies)     | https (el primero manda)     |
+| E4   | «HTTPS», « https » o «http, https» (lista de proxies)     | https (el último manda)      |
+| E4b  | «https, http», o dos cabeceras y la última http           | no cambia: manda el último   |
 | E5   | X-Forwarded-For en la petición                            | el cliente no cambia         |
 | E6   | un websocket con X-Forwarded-Proto: https                 | wss                          |
 | E7   | lo que no es HTTP ni websocket (el lifespan)              | pasa sin mirar               |
+| E8   | el scope de quien llama                                   | es el mismo, ya con https    |
 """
 
 import asyncio
@@ -86,20 +91,21 @@ def test_a_forged_http_never_downgrades_https():
     assert _scope_visto(_scope(esquema="https", proto=b"http"))["scheme"] == "https"
 
 
-@pytest.mark.parametrize("proto", [b"HTTPS", b" https ", b"https, http", b"https,http"])
-def test_the_first_proto_of_the_list_decides(proto):
+@pytest.mark.parametrize("proto", [b"HTTPS", b" https ", b"http, https", b"http,https"])
+def test_the_last_proto_of_the_list_decides(proto):
     """
-    Given: X-Forwarded-Proto con mayúsculas, espacios o una lista de proxies (E4)
+    Given: X-Forwarded-Proto con mayúsculas, espacios o una lista de proxies (E4); el
+           último valor lo pone el proxy más cercano, el primero lo puede poner el cliente
     When: la petición pasa por el middleware
     Then: https
     """
     assert _scope_visto(_scope(proto=proto))["scheme"] == "https"
 
 
-@pytest.mark.parametrize("proto", [b"http", b"ftp", b"", b"http, https"])
-def test_anything_but_https_first_leaves_the_scheme(proto):
+@pytest.mark.parametrize("proto", [b"http", b"ftp", b"", b"https, http", b"https,http"])
+def test_anything_but_https_last_leaves_the_scheme(proto):
     """
-    Given: X-Forwarded-Proto que no empieza por https
+    Given: X-Forwarded-Proto cuyo último valor no es https (E4b)
     When: la petición pasa por el middleware
     Then: el esquema no cambia
     """
@@ -141,14 +147,31 @@ def test_the_lifespan_passes_untouched():
     assert _scope_visto(scope) == {"type": "lifespan"}
 
 
-def test_the_caller_scope_is_not_mutated():
+def test_with_two_headers_the_last_one_decides():
     """
-    Given: el scope de una petición
-    When: el middleware cambia el esquema
-    Then: lo hace en una copia, sin tocar el scope original
+    Given: dos cabeceras X-Forwarded-Proto, la primera https y la última http (E4b)
+    When: pasa por el middleware
+    Then: el esquema no cambia
+    """
+    scope = _scope(proto=b"https")
+    scope["headers"].append((b"x-forwarded-proto", b"http"))
+
+    assert _scope_visto(scope)["scheme"] == "http"
+
+
+def test_the_scheme_changes_in_the_callers_own_scope():
+    """
+    Given: el scope de una petición tras el proxy (E8)
+    When: pasa por el middleware y la app le añade la ruta
+    Then: quien llamó ve el mismo scope, con https y con lo que añadió la app (así los
+          middlewares de fuera y Sentry ven https, la ruta y el endpoint)
     """
     scope = _scope(proto=b"https")
 
-    _scope_visto(scope)
+    async def app(scope, receive, send):
+        scope["route"] = "la ruta"
 
-    assert scope["scheme"] == "http"
+    asyncio.run(EsquemaDelProxy(app)(scope, None, None))
+
+    assert scope["scheme"] == "https"
+    assert scope["route"] == "la ruta"

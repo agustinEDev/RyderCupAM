@@ -9,8 +9,13 @@ en la redirección de la barra final: `GET https://api.../api/v1/countries/` con
 `uvicorn --proxy-headers` lo arreglaría, pero reescribe también `client` con
 X-Forwarded-For, y la IP del cliente se decide en un solo sitio (ADR-038,
 `cloudflare_client_ip`, el cubo compartido del rate limit): cambiarla de paso no. Este
-middleware solo mira X-Forwarded-Proto y solo SUBE a https (o wss). Una cabecera falsa
-solo puede pedir lo que ya es el caso en producción, y nunca baja de https a http.
+middleware solo mira X-Forwarded-Proto y solo SUBE a https (o wss). Decide el ÚLTIMO
+valor, el del proxy más cercano (Render); el primero lo puede escribir el cliente. Nunca
+baja de https a http.
+
+Cambia el esquema en el mismo scope, como uvicorn con --proxy-headers: así los middlewares
+de fuera (y Sentry) ven https y también lo que la app añade al scope (`route`,
+`endpoint`, `state`).
 """
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -29,16 +34,17 @@ class EsquemaDelProxy:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Cambia solo el esquema, en una copia del scope; el resto llega igual."""
+        """Cambia solo el esquema, en el mismo scope; el resto llega igual."""
         seguro = _SEGURO.get(scope["type"])
         if seguro is not None and _vino_por_https(scope):
-            scope = {**scope, "scheme": seguro}
+            scope["scheme"] = seguro
         await self.app(scope, receive, send)
 
 
 def _vino_por_https(scope: Scope) -> bool:
-    """Si el primer valor de X-Forwarded-Proto (el del proxy más externo) es https."""
+    """Si el último valor de X-Forwarded-Proto (el del proxy más cercano) es https."""
+    ultimo = b""
     for nombre, valor in scope.get("headers", []):
         if nombre == b"x-forwarded-proto":
-            return valor.split(b",")[0].strip().lower() == b"https"
-    return False
+            ultimo = valor.split(b",")[-1]
+    return ultimo.strip().lower() == b"https"

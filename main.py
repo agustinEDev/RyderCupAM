@@ -414,7 +414,9 @@ app.add_middleware(CorrelationMiddleware)
 
 # https tras el proxy de Render: solo el esquema, por X-Forwarded-Proto, y solo hacia
 # https; la IP del cliente no la toca (P-03). Sin él la redirección de la barra final
-# bajaba a http://. Fuera de todo lo anterior, para que ninguno vea el esquema viejo
+# bajaba a http://. Fuera de todo lo anterior; por fuera solo quedan el de depuración y
+# add_security_headers, que se ejecutan antes y no miran el esquema. Lo cambia en el mismo
+# scope, así que al volver ellos (y Sentry) también ven https
 app.add_middleware(EsquemaDelProxy)
 
 # Debug middleware para ver requests CORS (solo en desarrollo)
