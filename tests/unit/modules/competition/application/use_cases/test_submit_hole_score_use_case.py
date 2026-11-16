@@ -30,6 +30,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from tests.unit.modules.competition.application.use_cases.helpers import con_su_competicion_en_juego
 
 
 def _make_player(user_id=None, handicap=10, strokes=()):
@@ -247,6 +248,7 @@ class TestSubmitHoleScoreValidation:
         match, mock_round = _setup_match(uow, [a], [b])
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
+        con_su_competicion_en_juego(uow, mock_round)
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
         body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=4)

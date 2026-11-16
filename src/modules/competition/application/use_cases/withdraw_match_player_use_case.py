@@ -11,6 +11,9 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     WithdrawalNotAllowedError,
 )
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+)
 from src.modules.competition.application.services.decision_del_partido import (
     revisa_la_decision,
 )
@@ -69,6 +72,8 @@ class WithdrawMatchPlayerUseCase:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
 
             self._autoriza(match, actor_id, player_id, is_admin or competition.is_creator(actor_id))
+            # Retirar o devolver cambia la decisión del partido: solo en juego (SB-03)
+            exigir_competicion_en_juego(competition)
 
             try:
                 if undo:

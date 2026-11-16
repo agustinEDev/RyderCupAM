@@ -82,9 +82,6 @@ class PartidaNoAnotableError(Exception):
     error_code = "GROUP_NOT_SCORING"
 
 
-_ANOTABLE = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
-
-
 def comprobar_que_se_juega(competicion: Competition | None) -> Competition:
     """
     Cerrada o en juego: lo único en que se anota o se tocan las tarjetas.
@@ -92,7 +89,7 @@ def comprobar_que_se_juega(competicion: Competition | None) -> Competition:
     Raises:
         PartidaNoAnotableError: Si no
     """
-    if competicion is None or competicion.status not in _ANOTABLE:
+    if competicion is None or not competicion.status.admite_anotar():
         raise PartidaNoAnotableError("Esta competición no está en juego.")
     return competicion
 
@@ -145,7 +142,7 @@ async def arrancar_la_competicion(
     para que quien llama avise en Actividad cuando haya guardado (BE-2, P3).
     """
     bloqueada = await uow.competitions.find_by_id_for_update(competicion.id)
-    if bloqueada is None or bloqueada.status not in _ANOTABLE:
+    if bloqueada is None or not bloqueada.status.admite_anotar():
         raise PartidaNoAnotableError("Esta competición no está en juego.")
     if bloqueada.status == CompetitionStatus.CLOSED:
         bloqueada.start()

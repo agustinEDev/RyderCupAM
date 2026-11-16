@@ -21,6 +21,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+)
 from src.modules.competition.application.services.decision_del_partido import (
     revisa_la_decision,
 )
@@ -138,6 +141,11 @@ class SubmitHoleScoreUseCase:
             if not round_entity:
                 raise RoundNotFoundError("La ronda asociada no existe")
             match_format = round_entity.match_format
+            # Y con la competición en juego: un partido que se quedó abierto no se
+            # sigue anotando con ella terminada, cancelada o reabierta (SB-03)
+            exigir_competicion_en_juego(
+                await self._uow.competitions.find_by_id(round_entity.competition_id)
+            )
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
             own_score_locked = match.has_submitted_scorecard(user_id, match_format)
@@ -265,9 +273,7 @@ class SubmitHoleScoreUseCase:
         # Cerrada también vale: la competición está en juego en cuanto su primer
         # partido se puede anotar, y si nadie pulsó «Iniciar» la arranca el
         # primer golpe (BE #375). Reabierta o sin cerrar, no está lista
-        if not competition or not (
-            competition.is_in_progress() or competition.status == CompetitionStatus.CLOSED
-        ):
+        if not competition or not competition.status.admite_anotar():
             raise no_se_puede
 
         # La hora es la LOCAL del campo donde se juega esa ronda, no la de la

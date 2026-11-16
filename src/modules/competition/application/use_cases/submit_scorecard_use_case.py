@@ -20,6 +20,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.competicion_en_juego import (
+    exigir_competicion_en_juego,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
@@ -89,6 +92,10 @@ class SubmitScorecardUseCase:
             if not round_entity:
                 raise RoundNotFoundError(f"Round not found for match {match_id_str}")
             match_format = round_entity.match_format
+            # Con la competición terminada, cancelada o reabierta no se entrega (SB-03)
+            competicion = exigir_competicion_en_juego(
+                await self._uow.competitions.find_by_id(round_entity.competition_id)
+            )
 
             player_scores = await self._uow.hole_scores.find_by_match_and_player(match_id, user_id)
             ya_entregada = match.has_submitted_scorecard(user_id, match_format)
@@ -139,7 +146,7 @@ class SubmitScorecardUseCase:
                 )
 
                 # La competicion, para avisar del resultado en Actividad (BE-2)
-                competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+                competition = competicion
 
                 # Auto-complete round
                 all_matches = await self._uow.matches.find_by_round(match.round_id)

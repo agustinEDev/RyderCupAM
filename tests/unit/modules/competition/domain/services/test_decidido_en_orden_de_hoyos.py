@@ -57,6 +57,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from tests.unit.modules.competition.application.use_cases.helpers import con_su_competicion_en_juego
 
 F = MatchFormat
 GOLPES = {"A": (4, 5), "B": (5, 4), "HALVED": (4, 4)}
@@ -222,6 +223,7 @@ def _ronda(uow, match, formato):
     ronda.session_type = MagicMock(value="MORNING")
     ronda.golf_course_id = GolfCourseId.generate()
     uow._rounds._rounds[ronda.id] = ronda
+    con_su_competicion_en_juego(uow, ronda)
     return ronda
 
 
