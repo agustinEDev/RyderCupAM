@@ -156,5 +156,3 @@ class ImageProcessingBusyError(UserDomainError):
     """
 
     pass
-
-    pass

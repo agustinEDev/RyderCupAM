@@ -28,7 +28,12 @@ register_heif_opener()
 # única forma de poner avatar desde un iPhone era hacer una foto nueva, porque la
 # cámara del navegador entrega JPEG y la fototeca entrega el HEIC original (BE #232).
 # Ojo, Pillow lo identifica como "HEIF", no como "HEIC".
-ALLOWED_INPUT_FORMATS = {"HEIF", "JPEG", "PNG", "WEBP"}
+ALLOWED_INPUT_FORMATS = {"HEIF", "JPEG", "MPO", "PNG", "WEBP"}
+
+# Los que son JPEG por dentro. Un JPEG de iPhone con mapa de ganancia HDR lleva dos
+# imágenes y Pillow lo abre como «MPO», una subclase de su JPEG: mismo tope, misma
+# decodificación reducida y sale la primera imagen, como de cualquier JPEG.
+JPEG_FORMATS = {"JPEG", "MPO"}
 
 # Dimensión final (cuadrada) del avatar
 AVATAR_TARGET_SIZE = 512
@@ -138,7 +143,8 @@ class PillowImageProcessor(IImageProcessor):
 
         # Comprobar el tope de píxeles ANTES de decodificar nada (Image.open()
         # solo lee la cabecera; .size no fuerza la decodificación completa).
-        tope = MAX_JPEG_INPUT_PIXELS if probe_format == "JPEG" else MAX_INPUT_PIXELS
+        es_jpeg = probe_format in JPEG_FORMATS
+        tope = MAX_JPEG_INPUT_PIXELS if es_jpeg else MAX_INPUT_PIXELS
         if width * height > tope:
             raise InvalidAvatarImageError(
                 f"La imagen es demasiado grande ({width}x{height} píxeles)"
@@ -149,7 +155,7 @@ class PillowImageProcessor(IImageProcessor):
             # Image.verify() deja el objeto inutilizable para operaciones posteriores;
             # hay que reabrirlo desde los mismos bytes para poder procesarlo de verdad.
             image: Image.Image = Image.open(io.BytesIO(raw_bytes))
-            if probe_format == "JPEG":
+            if es_jpeg:
                 self._decodificar_reducido(image, escala_de_salida(width, height))
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida") from exc

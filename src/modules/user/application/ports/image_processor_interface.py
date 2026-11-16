@@ -37,6 +37,8 @@ class IImageProcessor(ABC):
 
         Raises:
             InvalidAvatarImageError: Si no es una imagen válida/soportada
+            ImageProcessingBusyError: Si lleva demasiado rato esperando a que se
+                procesen otras imágenes (503; puede reintentarse tal cual)
         """
         pass
 
@@ -62,5 +64,7 @@ class IImageProcessor(ABC):
 
         Raises:
             InvalidAvatarImageError: Si no es una imagen válida/soportada
+            ImageProcessingBusyError: Si lleva demasiado rato esperando a que se
+                procesen otras imágenes (503; puede reintentarse tal cual)
         """
         pass

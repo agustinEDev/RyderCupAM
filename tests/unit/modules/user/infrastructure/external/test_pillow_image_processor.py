@@ -323,3 +323,59 @@ class TestTopesDePixelesYDecodificacionReducida:
         assert (decodificado_ancho * decodificado_alto < ancho * alto) == se_reduce
         assert min(decodificado_ancho, decodificado_alto) >= minimo_corto
         assert max(decodificado_ancho, decodificado_alto) >= minimo_largo
+
+
+class TestJpegConMapaDeGananciaHdr:
+    """
+    Los JPEG del iPhone con mapa de ganancia HDR llevan dos imágenes: Pillow los abre
+    como «MPO» (subclase de su JPEG). Se tratan como JPEG: admitidos, tope de 50 MP y
+    decodificados ya reducidos. Sale la primera imagen, en JPEG, como siempre.
+    """
+
+    @staticmethod
+    def _mpo(width: int, height: int, mode: str = "RGB") -> bytes:
+        principal = Image.new(mode, (width, height), 200 if mode == "L" else (200, 30, 30))
+        mapa = Image.new(mode, (max(1, width // 4), max(1, height // 4)))
+        buffer = io.BytesIO()
+        principal.save(buffer, "MPO", save_all=True, append_images=[mapa])
+        return buffer.getvalue()
+
+    def test_pillow_lo_abre_como_mpo(self):
+        assert Image.open(io.BytesIO(self._mpo(64, 48))).format == "MPO"
+
+    async def test_entra_y_sale_la_primera_imagen_en_jpeg(self):
+        """Given un MPO de dos imágenes / When se procesa / Then JPEG con la primera."""
+        processor = PillowImageProcessor()
+
+        result = await processor.process_gallery_image(self._mpo(400, 300))
+
+        salida = Image.open(io.BytesIO(result))
+        assert salida.format == "JPEG"
+        assert salida.size == (400, 300)
+        assert salida.convert("RGB").getpixel((10, 10))[0] > 150
+
+    async def test_tiene_el_tope_del_jpeg_y_no_el_de_los_demas(self):
+        """Given un MPO de 30 MP (por encima de 25, por debajo de 50) / Then entra."""
+        processor = PillowImageProcessor()
+
+        result = await processor.process_avatar_image(self._mpo(6000, 5000, mode="L"))
+
+        assert Image.open(io.BytesIO(result)).size == (AVATAR_TARGET_SIZE, AVATAR_TARGET_SIZE)
+
+    async def test_se_decodifica_ya_reducido(self, monkeypatch):
+        """Given un MPO de 4000x3000 / When se procesa / Then se pide reducido (draft)."""
+        from PIL import JpegImagePlugin
+
+        tamanos: list[tuple[int, int]] = []
+        draft_original = JpegImagePlugin.JpegImageFile.draft
+
+        def draft_espiado(self, mode, size):
+            resultado = draft_original(self, mode, size)
+            tamanos.append(self.size)
+            return resultado
+
+        monkeypatch.setattr(JpegImagePlugin.JpegImageFile, "draft", draft_espiado)
+
+        await PillowImageProcessor().process_avatar_image(self._mpo(4000, 3000))
+
+        assert tamanos and tamanos[-1][0] * tamanos[-1][1] < 4000 * 3000
