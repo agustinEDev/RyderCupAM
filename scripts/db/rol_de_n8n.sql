@@ -46,6 +46,10 @@ REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM n8n_lectura;
 --    este se ejecuta solo)
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM n8n_lectura;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM n8n_lectura;
+--    También los globales (sin IN SCHEMA): un permiso por defecto global no se quita
+--    con el de esquema, y daría a n8n las tablas que creen las migraciones futuras.
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM n8n_lectura;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM n8n_lectura;
 
 -- 3. Solo las columnas del informe
 GRANT SELECT (is_active, created_at, first_name, last_name) ON public.users TO n8n_lectura;
@@ -98,6 +102,16 @@ BEGIN
 
     IF tablas <> '{}' THEN
         RAISE EXCEPTION 'n8n_lectura conserva permisos de tabla entera en %', tablas;
+    END IF;
+    -- Ningún permiso por defecto (de esquema o global, de cualquier dueño) que dé a
+    -- n8n_lectura o a PUBLIC las tablas o secuencias que se creen después
+    IF EXISTS (
+        SELECT 1
+          FROM pg_default_acl d, aclexplode(d.defaclacl) a
+         WHERE d.defaclobjtype IN ('r', 'S')
+           AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname = 'n8n_lectura'))
+    ) THEN
+        RAISE EXCEPTION 'Queda un permiso por defecto para n8n_lectura o PUBLIC (ver pg_default_acl)';
     END IF;
 
     -- Redundante con lo de arriba, pero es lo que importa: ni el hash ni el correo
