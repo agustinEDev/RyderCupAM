@@ -52,7 +52,8 @@ Referencias de precio: GolfFix 17,99 €/mes o 99,99 €/año (App Store España
 **Con qué contaría (ya lo tenemos):**
 - Los mapas de los hoyos importados de OpenStreetMap: 208 campos y 3.046 hoyos con salidas, greens, calles y obstáculos.
 - La posición del jugador mientras anota, que ya usa el mapa de la anotación, su hándicap y su historial hoyo a hoyo.
-- El derecho Premium y los topes de IA de la épica [RyderCupAM#713](https://github.com/agustinEDev/RyderCupAM/issues/713).
+
+**De lo que dependería (diseñado, sin construir):** el derecho Premium y los topes de IA de la épica [RyderCupAM#713](https://github.com/agustinEDev/RyderCupAM/issues/713); hay que contarlo al estimar el caddie.
 
 **Lo que hay que resolver antes:**
 1. **Las Reglas de Golf.** La Regla 4.3 limita el uso de dispositivos durante la vuelta, y un consejo de palo o de juego puede no estar permitido. Hay que confirmar qué se puede hacer y dónde: probablemente solo en partida rápida y práctica, nunca en una competición, y ver si afecta a las vueltas que cuentan para el hándicap.

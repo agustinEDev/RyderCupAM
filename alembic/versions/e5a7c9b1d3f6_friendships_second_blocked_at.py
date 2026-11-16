@@ -8,9 +8,12 @@ lo de siempre: bloquea solo uno.
 Compatibilidad: columna nullable y sin valor por defecto. En Postgres es un cambio de
 metadatos, sin reescribir la tabla. No hay datos que migrar: todas las filas quedan a
 NULL, que es exactamente lo que había. La release anterior sigue funcionando con la
-tabla migrada: no la lee, y sus INSERT la dejan a NULL. Solo durante la ventana del
-despliegue, un desbloqueo hecho por el código viejo borraría la fila aunque tuviera los
-dos bloqueos; al migrar no hay ninguna con los dos, así que no se pierde nada.
+tabla migrada: no la lee, y sus INSERT la dejan a NULL. Riesgo aceptado: mientras
+convivan las dos versiones en el despliegue (segundos, hasta que Render retira la
+instancia vieja), si el código nuevo guarda un segundo bloqueo y el viejo atiende un
+desbloqueo de esa misma pareja, la fila se borra y se pierden los dos bloqueos. Al
+migrar no hay ninguna fila con los dos, así que solo afecta a lo que pase en esa
+ventana.
 
 Downgrade: quita la columna. Una fila con los dos bloqueos se queda con el primero
 (`blocked_by`, que es quien bloqueó antes): el código viejo no sabe representar dos. El
