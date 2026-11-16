@@ -26,7 +26,6 @@ useDefault = true
 
   # Valores de ejemplo conocidos, que no son secretos
   regexes = [
-    '''eyJhbGciOiJIUzI1NiIsInR5''',  # Prefijo de JWT de ejemplo en la documentación
     '''your-secret-key-change-me''',  # Marcador
     '''rydercupam_password''',        # Contraseña de ejemplo del entorno local
     '''your-mailgun-key''',           # Marcador
