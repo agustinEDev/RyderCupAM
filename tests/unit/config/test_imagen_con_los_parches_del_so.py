@@ -56,6 +56,25 @@ def test_the_os_packages_layer_depends_on_a_refresh_argument():
     assert "${APT_REFRESH}" in texto[run:upgrade]
 
 
+def test_refreshing_the_os_packages_does_not_reinstall_python_packages():
+    """
+    Given: el Dockerfile
+    When: se ordenan el ARG, el pip install, el apt-get upgrade y el cambio de usuario
+    Then: el ARG y el upgrade van DESPUÉS del pip install (un APT_REFRESH nuevo no tira
+          su caché) y antes de `USER app` (el upgrade necesita root); en la imagen final
+          los paquetes del SO quedan al día
+    """
+    texto = DOCKERFILE.read_text(encoding="utf-8")
+    pip = texto.find("--require-hashes -r requirements.lock")
+    arg = texto.find("ARG APT_REFRESH")
+    upgrade = texto.find("apt-get upgrade")
+    usuario = texto.find("\nUSER app")
+
+    assert -1 not in (pip, arg, upgrade, usuario)
+    assert pip < arg < upgrade < usuario
+    assert texto.count("apt-get upgrade") == 1
+
+
 def test_the_ci_computes_the_day_once_for_the_three_image_builds():
     """
     Given: el job de build del CI, una matriz de tres entradas (build, render, trivy) que
