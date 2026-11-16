@@ -395,7 +395,7 @@ def test_an_error_with_a_code_not_asked_for_answers_as_always(cliente_con_codigo
     assert respuesta.json() == {"detail": "sin pedirlo"}
 
 
-def test_only_the_deadline_on_hold_and_draft_errors_bring_their_code_through_the_central_map():
+def test_only_the_deadline_on_hold_draft_and_images_busy_errors_bring_their_code():
     """
     Given: El mapa central
     When: Se miran las que llevan su `error_code`
@@ -414,8 +414,33 @@ def test_only_the_deadline_on_hold_and_draft_errors_bring_their_code_through_the
         "src.modules.competition.domain.exceptions.competition_violations."
         "InvitationOnHoldExistsViolation",
         "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError",
+        # Imágenes ocupadas (SB-01): el front lo traduce por su código
+        "src.modules.user.domain.errors.user_errors.ImageProcessingBusyError",
     }
     assert los_que_llevan_su_codigo() <= todos_los_codigos().keys()
+
+
+def test_images_busy_answers_503_with_its_code_and_the_approved_text():
+    """
+    Given: Una subida de imagen que lleva demasiado rato esperando su turno (SB-01)
+    When: La app la traduce con el mapa central
+    Then: 503 con el texto aprobado y `error_code` IMAGES_BUSY en la raíz
+    """
+    from src.config.codigos_de_error import los_que_llevan_su_codigo
+    from src.modules.user.domain.errors.user_errors import ImageProcessingBusyError
+
+    texto = "Ahora mismo se están procesando otras imágenes. Inténtalo de nuevo en unos segundos."
+    app_de_prueba = FastAPI()
+    registra_los_codigos(app_de_prueba, todos_los_codigos(), los_que_llevan_su_codigo())
+
+    @app_de_prueba.get("/subida")
+    async def subida():
+        raise ImageProcessingBusyError(texto)
+
+    respuesta = TestClient(app_de_prueba).get("/subida")
+
+    assert respuesta.status_code == 503
+    assert respuesta.json() == {"detail": texto, "error_code": "IMAGES_BUSY"}
 
 
 def test_the_app_answers_the_deadline_with_its_code():

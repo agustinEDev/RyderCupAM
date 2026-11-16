@@ -38,3 +38,7 @@ CODIGOS: dict[type[Exception], int] = {
     # 503: ahora no se puede, más tarde sí (otras imágenes ocupan el turno, SB-01)
     ImageProcessingBusyError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
+
+# Las que llevan además su `error_code` en la raíz: IMAGES_BUSY, con el texto aprobado
+# «Ahora mismo se están procesando otras imágenes...» (SB-01, 16 nov 2026)
+CON_SU_CODIGO: frozenset[type[Exception]] = frozenset({ImageProcessingBusyError})

@@ -153,6 +153,8 @@ class ImageProcessingBusyError(UserDomainError):
     una foto grande se lleva cientos de megas. La que llega mientras otra está en
     marcha espera su turno, y si la espera pasa del tope se rechaza con esto en vez
     de quedarse colgada. No dice nada de la imagen: puede volver a subirse tal cual.
+
+    Lleva `error_code` en la respuesta: el front lo traduce por el código.
     """
 
-    pass
+    error_code = "IMAGES_BUSY"

@@ -133,8 +133,12 @@ async def test_si_la_espera_pasa_del_tope_se_devuelve_un_error_controlado(monkey
     llamadas: list[str] = []
 
     try:
-        with pytest.raises(ImageProcessingBusyError):
+        with pytest.raises(ImageProcessingBusyError) as error:
             await en_su_turno(lambda: llamadas.append("no debería correr"))
+        assert str(error.value) == (
+            "Ahora mismo se están procesando otras imágenes. Inténtalo de nuevo en unos segundos."
+        )
+        assert error.value.error_code == "IMAGES_BUSY"
     finally:
         ocupado.soltar.set()
         await primera
