@@ -25,7 +25,9 @@ def distintos(lock: Path) -> dict[str, tuple[str, str | None]]:
     """Paquete → (versión del lock, versión instalada o None) de cada uno que no coincide."""
     fijados = {_normaliza(n): v for n, v in PIN.findall(lock.read_text(encoding="utf-8"))}
     instalados = {
-        _normaliza(d.metadata["Name"]): d.version for d in importlib.metadata.distributions()
+        _normaliza(d.metadata["Name"]): d.version
+        for d in importlib.metadata.distributions()
+        if d.metadata["Name"]  # una distribución con metadatos rotos no tiene nombre
     }
     return {n: (v, instalados.get(n)) for n, v in fijados.items() if instalados.get(n) != v}
 

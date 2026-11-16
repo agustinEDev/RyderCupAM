@@ -76,7 +76,8 @@ def test_every_ci_job_installs_the_shipped_lock_before_the_dev_tools():
             )
             assert arranque is not None and "--require-hashes" in ordenes[arranque], donde
             assert lock is not None and "--require-hashes" in ordenes[lock], donde
-            assert resto is None or arranque < lock < resto, donde
+            assert arranque < lock, donde
+            assert resto is None or lock < resto, donde
             despues = ordenes[(resto if resto is not None else lock) + 1 :]
             assert any("comprobar_lock_instalado.py" in o for o in despues), donde
 
@@ -97,26 +98,33 @@ def test_no_ci_step_upgrades_pip_without_a_version_and_a_hash():
 
 def test_the_sbom_comes_from_the_lock_and_its_tool_from_a_hashed_lock():
     """
-    Given: el job del SBOM
-    When: se miran sus pasos
-    Then: instala el generador con --require-hashes desde su lock, genera el SBOM desde
-          requirements.lock y el paso que tiene el token no ejecuta cyclonedx-py
+    Given: los jobs del SBOM
+    When: se miran sus pasos y permisos
+    Then: el que genera instala el generador con --require-hashes desde su lock, genera
+          desde requirements.lock y solo lee; el que envía es el único con escritura y no
+          instala ni ejecuta ninguna herramienta (comparten nada más que el artifact)
     """
-    pasos = [p for job, p in _pasos("ci_cd_pipeline.yml") if job == "sbom_generation"]
-    texto = {p.get("name", ""): p["run"] for p in pasos}
+    flujo = yaml.safe_load((FLUJOS / "ci_cd_pipeline.yml").read_text(encoding="utf-8"))
+    genera = flujo["jobs"]["sbom_generation"]
+    envia = flujo["jobs"]["sbom_submission"]
+    runs = [p["run"] for p in genera["steps"] if "run" in p]
 
-    instalar = next(r for r in texto.values() if "cyclonedx-bom" in r or "sbom-tools" in r)
+    instalar = next(r for r in runs if "sbom-tools" in r)
     assert "--require-hashes" in instalar
     assert "-r .github/sbom-tools.lock" in instalar
-
-    generar = next(r for r in texto.values() if "cyclonedx-py requirements" in r)
+    generar = next(r for r in runs if "cyclonedx-py requirements" in r)
     assert re.search(r"cyclonedx-py requirements requirements\.lock\b", generar)
 
-    con_token = [p for p in pasos if "GITHUB_TOKEN" in (p.get("env") or {})]
-    assert con_token
-    for paso in con_token:
-        assert "cyclonedx-py" not in paso["run"]
-        assert "pip install" not in paso["run"]
+    assert genera["permissions"] == {"contents": "read"}
+    assert not any("GITHUB_TOKEN" in (p.get("env") or {}) for p in genera["steps"])
+
+    assert envia["permissions"] == {"contents": "write"}
+    assert envia["needs"] == ["sbom_generation"]
+    for paso in envia["steps"]:
+        texto = paso.get("run", "") + str(paso.get("uses", ""))
+        assert "pip install" not in texto
+        assert "cyclonedx-py" not in texto
+        assert "setup-python" not in texto
 
     guion = (RAIZ / "scripts" / "submit-sbom-to-github.sh").read_text(encoding="utf-8")
     assert "cyclonedx-py --version" not in guion
@@ -140,7 +148,7 @@ def test_the_sbom_tool_lock_pins_its_source_with_hashes():
     assert all("--hash=sha256:" in b for b in bloques)
 
 
-def test_the_installed_lock_check_finds_a_moved_version(tmp_path, monkeypatch):
+def test_the_installed_lock_check_finds_a_moved_version(tmp_path):
     """
     Given: un lock con un paquete en una versión que no es la instalada
     When: se ejecuta la comprobación del CI
@@ -161,3 +169,30 @@ def test_the_installed_lock_check_finds_a_moved_version(tmp_path, monkeypatch):
 
     assert "pyyaml" in distintos
     assert distintos["pyyaml"][0] == "0.0.1"
+
+
+def test_the_installed_lock_check_passes_with_other_spellings_of_the_names(tmp_path):
+    """
+    Given: un lock con paquetes instalados escritos con otra grafía (PyYAML, Typing_Extensions)
+    When: se ejecuta la comprobación del CI
+    Then: no da ninguno por distinto
+    """
+    import importlib.metadata
+    import importlib.util
+
+    ruta = RAIZ / ".github" / "scripts" / "comprobar_lock_instalado.py"
+    spec = importlib.util.spec_from_file_location("comprobar_lock_instalado", ruta)
+    assert spec and spec.loader
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    version = importlib.metadata.version("pyyaml")
+    extensiones = importlib.metadata.version("typing-extensions")
+
+    lock = tmp_path / "requirements.lock"
+    lock.write_text(
+        f"PyYAML=={version} \\\n    --hash=sha256:abc\n    # via -r requirements.txt\n"
+        f"Typing_Extensions=={extensiones} \\\n    --hash=sha256:abc\n",
+        encoding="utf-8",
+    )
+
+    assert modulo.distintos(lock) == {}
