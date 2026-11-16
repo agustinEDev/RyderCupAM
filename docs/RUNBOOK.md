@@ -314,8 +314,10 @@ lectura)»), solo lectura y con tiempos límite.
    `idle_in_transaction_session_timeout=60s`, `lock_timeout=5s`).
 4. **Probar el informe sin mandarlo:** en n8n, abrir el flujo del informe y ejecutar solo
    el nodo «Datos de la app (solo lectura)». Tiene que devolver una fila con los números.
-5. **Volver atrás** (si el informe falla y no hay tiempo): `GRANT SELECT ON public.users,
-   public.competitions, public.enrollments, public.quick_matches TO n8n_lectura;`.
+5. **Volver atrás no hace falta para el informe:** si el paso 4 falla con «permission
+   denied for ... column X», el informe ha pasado a leer una columna nueva; se añade al
+   script (pasos 3 y 5) y se vuelve a ejecutar. Nunca devolver la tabla entera: un
+   `GRANT SELECT ON public.users` vuelve a dar el hash, el correo y el token de reseteo.
 
 Si el informe pasa a leer otra columna, se añade en el paso 3 del script y en su
 comprobación del paso 5, y se vuelve a ejecutar.
