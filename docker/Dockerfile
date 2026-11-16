@@ -26,7 +26,9 @@ FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916
 # - APT_REFRESH (INF-02, 16 nov 2026): el CI le pasa el día, y así la capa se rehace
 #   una vez al día aunque nada cambie. Antes la caché de capas del CI guardaba la del
 #   30 sep y Trivy escaneaba un zlib1g y un apt con CVE HIGH ya arreglados. Sin valor
-#   (Render, Kind) la capa depende solo de la caché de quien construye
+#   (Render, Kind) la capa depende solo de la caché de quien construye: en Render,
+#   «Clear build cache & deploy» al cambiar este fichero o con una alerta de Trivy del
+#   SO (docs/RUNBOOK.md, «Render: paquetes del sistema de la imagen al día»)
 # - netcat-openbsd: el `nc` con el que entrypoint.sh espera a PostgreSQL
 # Sin postgresql-client: nada lo usa en esta imagen (todo psql, pg_dump y
 # pg_isready se ejecuta en el contenedor de Postgres) y arrastraba perl, krb5,

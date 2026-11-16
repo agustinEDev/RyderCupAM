@@ -36,6 +36,18 @@ docker-compose down -v && docker-compose up -d
 ./k8s/scripts/destroy-cluster.sh
 ```
 
+### Render: paquetes del sistema de la imagen al día (INF-02)
+
+Render construye la imagen con su propia caché de capas y no pasa `APT_REFRESH` (el CI le
+pasa el día, Render nada): la capa del `apt-get upgrade` del Dockerfile se queda como la
+primera vez que la construyó. Hacer **Manual Deploy → «Clear build cache & deploy»** en el
+servicio del backend cuando:
+
+- cambie `docker/Dockerfile` (digest de la imagen base incluido), y
+- Trivy (pestaña Security o la puerta del CI) avise de un paquete del sistema con arreglo.
+
+Es el mismo despliegue de siempre, solo que sin caché: tarda unos minutos más.
+
 ### Comandos kubectl Esenciales
 ```bash
 # Pods y estado
