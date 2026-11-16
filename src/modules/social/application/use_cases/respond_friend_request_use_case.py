@@ -40,7 +40,11 @@ class RespondFriendRequestUseCase:
 
         async with self._uow:
             friendship = await self._uow.friendships.find_by_id(friendship_id)
-            if not friendship:
+            # Una solicitud que acabó en bloqueo ya no existe como solicitud: el mismo
+            # 404 que si la hubieran cancelado, antes de mirar quién la responde. El
+            # 409 «status BLOCKED» (o el 403 de no ser el destinatario) delataba el
+            # bloqueo (SB-02, revisión)
+            if not friendship or friendship.is_blocked():
                 raise FriendshipNotFoundError(f"Friendship request not found: {friendship_id}")
 
             if friendship.addressee_id != current_user_id:

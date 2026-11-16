@@ -29,6 +29,10 @@ class BlockUserUseCase:
     Si el otro ya le había bloqueado, se guardan los dos bloqueos (SB-02, 16 nov
     2026) y la respuesta es la de un bloqueo suyo: nada de la fila del otro (ni
     quién la puso ni cuándo) le dice que el otro le bloqueó antes.
+
+    Residuo conocido: la fila conserva su id. Si guardaba el `friendship_id` de una
+    amistad o solicitud que el otro convirtió en bloqueo, al bloquear recibe ese
+    mismo id y podría deducir que la fila «sobrevivió» (aceptado en el diseño D1).
     """
 
     def __init__(

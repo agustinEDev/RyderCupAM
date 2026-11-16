@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.social.application.dto.friendship_dto import RespondFriendRequestRequestDTO
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
     FriendshipNotFoundError,
@@ -23,6 +24,9 @@ from src.modules.social.application.use_cases.get_player_profile_use_case import
     GetPlayerProfileUseCase,
 )
 from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
+from src.modules.social.application.use_cases.respond_friend_request_use_case import (
+    RespondFriendRequestUseCase,
+)
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.exceptions.social_violations import BlockedUserViolation
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
@@ -113,6 +117,15 @@ class TestCaso4ALeBloqueaQuienYaLeBloqueo:
         assert de_a.created_at == de_a.updated_at == de_a.responded_at
         assert de_a.created_at >= de_b.created_at
 
+    async def test_las_fechas_de_a_son_las_de_su_bloqueo(self, social_uow, los_dos):
+        """Las tres fechas de la respuesta de A son las de SU bloqueo, no las de la fila de B."""
+        a, b, de_a, de_b = los_dos
+
+        fila = await _fila(social_uow, a, b)
+
+        assert de_a.created_at == de_a.updated_at == de_a.responded_at == fila.second_blocked_at
+        assert (fila.created_at, fila.updated_at) == (de_b.created_at, de_b.updated_at)
+
     async def test_b_no_nota_nada(self, social_uow, user_uow, los_dos):
         """Caso 4 y 5: B vuelve a bloquear y recibe exactamente lo mismo que la primera vez."""
         a, b, _, de_b = los_dos
@@ -181,6 +194,63 @@ class TestCasos7a10Desbloquear:
 
         with pytest.raises(NotFriendshipParticipantError):
             await _desbloquea(social_uow, c, de_b.id)
+
+
+class TestUnaSolicitudQueAcaboEnBloqueo:
+    """
+    B manda solicitud a A y luego B bloquea a A: la misma fila pasa a BLOCKED. Lo que
+    A haga con el id de esa solicitud tiene que responder como si la fila no existiera,
+    igual que si B la hubiera cancelado (404), no con un 409 «status BLOCKED».
+    """
+
+    async def _solicitud_que_bloquea(self, social_uow, user_uow):
+        a, b = await _usuario(user_uow), await _usuario(user_uow)
+        solicitud = Friendship.create(
+            id=FriendshipId.generate(), requester_id=b.id, addressee_id=a.id
+        )
+        async with social_uow:
+            await social_uow.friendships.add(solicitud)
+        await _bloquea(social_uow, user_uow, b, a)
+        return a, b, solicitud.id.value
+
+    @pytest.mark.parametrize("accion", ["ACCEPT", "DECLINE"])
+    async def test_responderla_es_el_404_de_una_que_no_existe(self, social_uow, user_uow, accion):
+        a, b, fila_id = await self._solicitud_que_bloquea(social_uow, user_uow)
+
+        with pytest.raises(FriendshipNotFoundError):
+            await RespondFriendRequestUseCase(social_uow, user_uow).execute(
+                RespondFriendRequestRequestDTO(
+                    friendship_id=fila_id, user_id=a.id.value, action=accion
+                )
+            )
+
+        assert (await _fila(social_uow, a, b)).bloqueado_por(b.id)
+
+    async def test_responderla_quien_no_es_el_destinatario_tambien_es_404(
+        self, social_uow, user_uow
+    ):
+        """El 404 va antes de mirar quién es el destinatario: el 403 también diría que existe."""
+        _a, b, fila_id = await self._solicitud_que_bloquea(social_uow, user_uow)
+
+        with pytest.raises(FriendshipNotFoundError):
+            await RespondFriendRequestUseCase(social_uow, user_uow).execute(
+                RespondFriendRequestRequestDTO(
+                    friendship_id=fila_id, user_id=b.id.value, action="ACCEPT"
+                )
+            )
+
+    async def test_cancelar_la_suya_tras_bloquearle_el_otro_es_404(self, social_uow, user_uow):
+        """A mandó la solicitud y B le bloqueó: cancelarla es el 404 de una que no existe."""
+        a, b = await _usuario(user_uow), await _usuario(user_uow)
+        solicitud = Friendship.create(
+            id=FriendshipId.generate(), requester_id=a.id, addressee_id=b.id
+        )
+        async with social_uow:
+            await social_uow.friendships.add(solicitud)
+        await _bloquea(social_uow, user_uow, b, a)
+
+        with pytest.raises(FriendshipNotFoundError):
+            await _desbloquea(social_uow, a, solicitud.id.value)
 
 
 class TestCasos11a16LoQueVeCadaUno:
