@@ -62,7 +62,7 @@ class SendFriendRequestUseCase:
             existing = await self._uow.friendships.find_by_pair(requester_id, addressee_id)
 
             if existing is not None:
-                self._rechaza_si_ya_hay_relacion(existing, addressee_id)
+                self._rechaza_si_ya_hay_relacion(existing, requester_id)
                 # DECLINED es terminal: se elimina el registro anterior y se reenvia.
                 # Flush explicito: el indice unico uq_friendship_pair (LEAST/GREATEST)
                 # rechaza el INSERT si el DELETE no se ha aplicado ya en BD (SQLAlchemy
@@ -85,7 +85,7 @@ class SendFriendRequestUseCase:
                 # (o un DECLINED), cambió por medio: que lo intente de nuevo
                 ganadora = await self._uow.friendships.find_by_pair(requester_id, addressee_id)
                 if ganadora is not None:
-                    self._rechaza_si_ya_hay_relacion(ganadora, addressee_id)
+                    self._rechaza_si_ya_hay_relacion(ganadora, requester_id)
                 raise InvalidFriendshipStatusViolation(
                     "The relationship changed while sending the request; try again."
                 ) from None
@@ -93,12 +93,14 @@ class SendFriendRequestUseCase:
         return await self._build_response(friendship)
 
     @staticmethod
-    def _rechaza_si_ya_hay_relacion(existing: Friendship, addressee_id: UserId) -> None:
+    def _rechaza_si_ya_hay_relacion(existing: Friendship, requester_id: UserId) -> None:
         """Lo que se responde si la pareja ya tiene una relación que no deja escribir."""
-        # Si me bloqueó, no existe para mí: lo mismo que un destinatario que no
-        # está, sin pista del bloqueo (F-09). Si le bloqueé yo, el 403 de siempre
-        if existing.bloqueado_por(addressee_id):
-            raise AddresseeNotFoundError(f"User not found: {addressee_id}")
+        # Si me bloqueó (y yo a él no), no existe para mí: lo mismo que un
+        # destinatario que no está, sin pista del bloqueo (F-09). Si le bloqueé yo,
+        # también si él me había bloqueado antes, el 403 de siempre (SB-02)
+        if existing.lo_oculta_a(requester_id):
+            otro = existing.other_user_id(requester_id)
+            raise AddresseeNotFoundError(f"User not found: {otro}")
         if existing.is_blocked():
             raise BlockedUserViolation(
                 "Cannot send a friend request: a block exists between both users."

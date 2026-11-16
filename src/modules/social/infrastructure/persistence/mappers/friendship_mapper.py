@@ -104,6 +104,8 @@ friendships_table = Table(
     Column("responded_at", DateTime, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    # Cuándo bloqueó el otro participante, si también bloqueó (SB-02)
+    Column("second_blocked_at", DateTime, nullable=True),
 )
 
 
@@ -129,5 +131,6 @@ def start_social_mappers() -> None:
                 "_responded_at": friendships_table.c.responded_at,
                 "_created_at": friendships_table.c.created_at,
                 "_updated_at": friendships_table.c.updated_at,
+                "_second_blocked_at": friendships_table.c.second_blocked_at,
             },
         )

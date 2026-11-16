@@ -178,7 +178,8 @@ class GetPlayerProfileUseCase:
             ),
             amigos,
             friendship.bloqueado_por(viewer_id),
-            friendship.bloqueado_por(target_id),
+            # Si se bloquearon los dos, no se le oculta: lo vería como suyo (SB-02)
+            friendship.lo_oculta_a(viewer_id),
         )
 
     @staticmethod
