@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.70.0] - 2026-11-16
+
+**Cadena de suministro del CI: lo que se prueba y se audita es lo que lleva la imagen, y el
+SBOM sale del lock** (#884; merge-back de la 2.69.0 en #883). Solo cambia el CI: ni código de
+la API, ni contrato, ni migraciones.
+
+### Security
+
+- **El CI instala las dependencias de los locks con `--require-hashes`**
+  (`.github/scripts/instalar_dependencias.sh`), igual que la imagen, y comprueba que las
+  versiones instaladas son las del lock (`comprobar_lock_instalado.py`). Lo usan los seis
+  jobs de pruebas y lint, el contrato de la API y Snyk (INF-05). Las herramientas de
+  desarrollo siguen sin hash (residual aceptado).
+- **El SBOM se genera desde `requirements.lock`** (55 paquetes, 31 directos y 24 indirectos)
+  con un generador fijado por hash (`.github/sbom-tools.lock`) (INF-03/INF-04).
+- **El envío del SBOM a GitHub va en su propio job** (`sbom_submission`, solo en `main`, el
+  único con `contents: write`), que descarga el artefacto del job de generación, de solo
+  lectura. El script de envío usa un correlator fijo y valida la versión del detector.
+
 ## [2.69.0] - 2026-11-16
 
 **Endurecimiento tras la re-auditoría: imágenes, bloqueos, anotar con el torneo parado,
