@@ -65,12 +65,15 @@ async def test_con_los_dos_bloqueos_ninguno_se_oculta_al_otro(db_session):
     repo = SQLAlchemyFriendshipRepository(db_session)
     await repo.add(fila)
     await _relacion(db_session, c, a, bloqueo=True)
+    # Los ids, antes de expirar: leerlos de una entidad expirada dispararía una carga
+    # síncrona fuera del bucle async (MissingGreenlet)
+    a_id, b_id, c_id = a.id, b.id, c.id
     await db_session.commit()
     db_session.expire_all()
 
-    releida = await repo.find_by_pair_for_update(a.id, b.id)
+    releida = await repo.find_by_pair_for_update(a_id, b_id)
 
     assert releida.second_blocked_at is not None
-    assert set(await repo.find_blocker_ids(a.id)) == {c.id}
-    assert await repo.find_blocker_ids(b.id) == []
-    assert b.id in await repo.find_blocked_ids(a.id)
+    assert set(await repo.find_blocker_ids(a_id)) == {c_id}
+    assert await repo.find_blocker_ids(b_id) == []
+    assert b_id in await repo.find_blocked_ids(a_id)
