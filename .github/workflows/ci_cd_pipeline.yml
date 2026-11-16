@@ -830,8 +830,8 @@ jobs:
                   *) RESULT="${COUNTS:-No readable Trivy SARIF, see the step log}" ;;
                 esac
                 case "$GATE_OUTCOME" in
-                  success) RESULT="$RESULT · gate passed: no CRITICAL vulnerability with a fix" ;;
-                  failure) RESULT="$RESULT · gate FAILED: a CRITICAL vulnerability has a fix, or the scan could not run (e.g. its database download), see the step log" ;;
+                  success) RESULT="$RESULT · gate passed: no HIGH or CRITICAL vulnerability with a fix" ;;
+                  failure) RESULT="$RESULT · gate FAILED: a HIGH or CRITICAL vulnerability has a fix, or the scan could not run (e.g. its database download), see the step log" ;;
                   *) RESULT="$RESULT · gate did not run" ;;
                 esac
                 ;;
@@ -842,7 +842,7 @@ jobs:
               WHAT='Starts the image exactly like Render: entrypoint.sh, alembic upgrade head against a real PostgreSQL with a driverless URL, then uvicorn, and waits for /health to report the expected version.'
               IF_FAILS='The container log is printed in the "Start like Render" step. Reproduce locally with .github/scripts/start-like-render.sh' ;;
             trivy)
-              WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and only a CRITICAL one that already has a fix blocks.'
+              WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and a HIGH or CRITICAL one that already has a fix blocks.'
               IF_FAILS='The fixable HIGH/CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore with the reason.' ;;
             *)
               WHAT='Builds the production image from docker/Dockerfile, generates the migration SQL offline (alembic upgrade head --sql) and keeps the image as the docker-image artifact.'
