@@ -3,38 +3,37 @@
 
 title = "Ryder Cup AM - GitLeaks Configuration"
 
-# Paths to ignore completely
+# Las reglas por defecto de gitleaks (claves de AWS, GitHub, Slack, claves privadas,
+# «generic-api-key» con entropía...). Sin esto el fichero no tenía NINGUNA regla y el
+# escaneo pasaba siempre (INF-01, auditoría del 16 nov 2026). Lo vigilan el paso
+# «Gitleaks self-test» del CI y tests/unit/config/test_gitleaks_con_reglas.py.
+[extend]
+useDefault = true
+
+# Lo que se salta, cuanto más estrecho mejor: cada entrada esconde un secreto real que
+# caiga ahí. Sin stopwords genéricas («test», «example»...): tapaban cualquier secreto
+# que contuviera esa palabra.
 [allowlist]
-  description = "Allowlist for known false positives"
-  
-  # Ignore test files with example tokens
+  description = "Known false positives"
+
+  # Rutas ancladas al principio (antes `.*test.*\.py` saltaba también `latest_x.py`):
+  # - tests/: tokens, JWT y contraseñas de ejemplo de las pruebas
+  # k8s/api-secret.yaml NO se salta: solo debe llevar marcadores; los valores de verdad
+  # van en k8s/api-secret.local.yaml (en .gitignore, nunca se sube).
   paths = [
-    '''tests/.*''',
-    '''.*test.*\.py''',
-    # k8s/api-secret.yaml is intentionally NOT excluded: it must only
-    # ever contain genuine placeholders. Real values live in
-    # k8s/api-secret.local.yaml (gitignored, never committed).
+    '''^tests/''',
   ]
 
-  # Ignore specific patterns that are safe
+  # Valores de ejemplo conocidos, que no son secretos
   regexes = [
-    '''eyJhbGciOiJIUzI1NiIsInR5''',  # Example JWT prefix in documentation
-    '''your-secret-key-change-me''',  # Placeholder values
-    '''rydercupam_password''',        # Example password (not real)
-    '''your-mailgun-key''',            # Placeholder API key
+    '''your-secret-key-change-me''',  # Marcador
+    '''rydercupam_password''',        # Contraseña de ejemplo del entorno local
+    '''your-mailgun-key''',           # Marcador
+    # Los marcadores de k8s/api-secret.yaml, en base64 (el Secret de Kubernetes los
+    # lleva así; cada uno lleva al lado, en claro, el valor de ejemplo que codifica).
+    # Exactos y anclados: un valor nuevo en ese fichero vuelve a saltar.
+    '''^Y2hhbmdlbWUtbG9jYWwtb25seQ==$''',          # changeme-local-only
+    '''^eW91ci1zZWNyZXQta2V5LWNoYW5nZS1tZQ==$''',  # your-secret-key-change-me
+    '''^Y2hhbmdlbWUtZG9jcy1hZG1pbjEyMw==$''',      # changeme-docs-admin123
+    '''^eW91ci1tYWlsZ3VuLWFwaS1rZXk=$''',          # your-mailgun-api-key
   ]
-
-  # Ignore commits (if needed)
-  commits = []
-
-  # Ignore specific stopwords that indicate examples/tests
-  stopwords = [
-    '''example''',
-    '''test''',
-    '''mock''',
-    '''fake''',
-    '''placeholder''',
-    '''change-me''',
-  ]
-
-# Additional rules can be added here if needed

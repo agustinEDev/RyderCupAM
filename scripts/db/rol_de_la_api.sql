@@ -65,9 +65,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 REVOKE ALL ON public.alembic_version FROM rydercup_app;
 
 -- 6. n8n ya no lee sola cada tabla nueva (auditoría de la fase 6, DB-03; decidido por
---    Agustín el 14 nov 2026). Sus permisos de hoy (las 4 tablas del informe de los lunes,
---    dados a mano) no cambian; si necesita otra, se le da a mano. backup_ro sí sigue
---    leyendo las tablas nuevas: las copias tienen que llevarlas
+--    Agustín el 14 nov 2026). Sus permisos sobre las tablas de hoy los deja en las
+--    columnas del informe de los lunes scripts/db/rol_de_n8n.sql (DB-01, 16 nov 2026:
+--    este paso no los tocaba, y n8n leía 42 tablas). backup_ro sí sigue leyendo las
+--    tablas nuevas: las copias tienen que llevarlas
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'n8n_lectura') THEN

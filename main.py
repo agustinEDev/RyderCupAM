@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager  # noqa: E402
 import uvicorn  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -122,6 +121,7 @@ from src.shared.infrastructure.http.codigos_de_error import registra_los_codigos
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
+from src.shared.infrastructure.http.esquema_del_proxy import EsquemaDelProxy  # noqa: E402
 from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
     informa_del_secreto_de_origen,
 )
@@ -130,6 +130,10 @@ from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
 )
 from src.shared.infrastructure.http.limite_superado import (  # noqa: E402
     ApuntaLosLimitesSuperados,
+)
+from src.shared.infrastructure.http.paginas_de_la_documentacion import (  # noqa: E402
+    pagina_de_redoc,
+    pagina_de_swagger,
 )
 from src.shared.infrastructure.http.ruta_sin_barras_codificadas import (  # noqa: E402
     RutaSinBarrasCodificadas,
@@ -408,6 +412,13 @@ app.add_middleware(ApuntaLosLimitesSuperados)
 # Correlation ID Middleware (debe capturar todos los requests)
 app.add_middleware(CorrelationMiddleware)
 
+# https tras el proxy de Render: solo el esquema, por X-Forwarded-Proto, y solo hacia
+# https; la IP del cliente no la toca (P-03). Sin él la redirección de la barra final
+# bajaba a http://. Fuera de todo lo anterior; por fuera solo quedan el de depuración y
+# add_security_headers, que se ejecutan antes y no miran el esquema. Lo cambia en el mismo
+# scope, así que al volver ellos (y Sentry) también ven https
+app.add_middleware(EsquemaDelProxy)
+
 # Debug middleware para ver requests CORS (solo en desarrollo)
 # Va casi al final para ejecutarse casi primero (solo le envuelve el de las cabeceras)
 # Con la regla del arranque: un ENVIRONMENT mal escrito no lo monta (fase 6, B-09)
@@ -623,16 +634,16 @@ app.include_router(
 async def get_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
-    """Swagger UI protegido con HTTP Basic Auth."""
-    return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
+    """Swagger UI protegido con HTTP Basic Auth, con sus scripts fijados y con SRI (P-02)."""
+    return pagina_de_swagger("/openapi.json")
 
 
 @app.get("/redoc", include_in_schema=False)
 async def get_redoc_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
-    """ReDoc UI protegido con HTTP Basic Auth."""
-    return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
+    """ReDoc UI protegido con HTTP Basic Auth, con su script fijado y con SRI (P-02)."""
+    return pagina_de_redoc("/openapi.json")
 
 
 @app.get("/openapi.json", include_in_schema=False)

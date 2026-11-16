@@ -102,6 +102,9 @@ fi
 # =============================================================================
 echo "🎯 Iniciando aplicación FastAPI en puerto ${PORT:-8000}..."
 
+# Sin --proxy-headers a propósito: también reescribiría la IP del cliente con
+# X-Forwarded-For, y esa se decide en la app (ADR-038, cloudflare_client_ip). El esquema
+# https tras el proxy lo pone el middleware EsquemaDelProxy (P-03, 16 nov 2026)
 # Usar --reload solo en desarrollo para hot-reload de código
 if [ "$ENVIRONMENT" = "development" ]; then
   echo "🔧 Modo DESARROLLO: hot-reload habilitado"
