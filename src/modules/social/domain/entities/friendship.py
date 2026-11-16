@@ -231,6 +231,10 @@ class Friendship:
             return None
         return self.other_user_id(self._blocked_by)
 
+    def segundo_bloqueo_de(self, user_id: UserId) -> datetime | None:
+        """Cuándo bloqueó `user_id`, si su bloqueo es el segundo; si no, None (SB-02)."""
+        return self._second_blocked_at if self.segundo_bloqueador() == user_id else None
+
     def lo_oculta_a(self, viewer_id: UserId) -> bool:
         """
         Si para `viewer_id` el otro no existe (F-09): el otro le bloqueó y él no

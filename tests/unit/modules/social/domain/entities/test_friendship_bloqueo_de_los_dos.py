@@ -108,6 +108,14 @@ class TestQuienVeAQuien:
         assert fila.segundo_bloqueador() == a
         assert _bloqueo_de(b, a).segundo_bloqueador() is None
 
+    def test_la_hora_del_segundo_bloqueo_solo_es_del_segundo(self, a, b):
+        fila = _bloqueo_de(b, a)
+        fila.block(a)
+
+        assert fila.segundo_bloqueo_de(a) == fila.second_blocked_at
+        assert fila.segundo_bloqueo_de(b) is None
+        assert _bloqueo_de(b, a).segundo_bloqueo_de(a) is None
+
 
 class TestDesbloquear:
     def test_desbloquea_el_primero_y_queda_el_del_segundo(self, a, b):

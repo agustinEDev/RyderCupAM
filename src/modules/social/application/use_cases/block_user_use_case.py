@@ -108,9 +108,9 @@ class BlockUserUseCase:
             friendship.updated_at,
             friendship.responded_at,
         )
-        if friendship.segundo_bloqueador() == blocker_id and friendship.second_blocked_at:
+        if (su_bloqueo := friendship.segundo_bloqueo_de(blocker_id)) is not None:
             requester_id, addressee_id = blocker_id, friendship.other_user_id(blocker_id)
-            creada = actualizada = respondida = friendship.second_blocked_at
+            creada = actualizada = respondida = su_bloqueo
 
         async with self._user_uow:
             requester = await self._user_uow.users.find_by_id(requester_id)
