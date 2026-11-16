@@ -600,13 +600,13 @@ class TestElDiaDelTorneoEsElDelCampo:
     async def test_en_un_campo_al_oeste_sigue_siendo_el_dia_del_torneo(self):
         """
         Given un torneo del 10 jun 2020 en un campo de Ciudad de México (UTC-6)
-        When alguien se apunta el 10 a las 23:30 UTC (17:30 del 10 en el campo)
-        Then entra: en el campo todavía es el día del torneo
+        When alguien se apunta el 11 a las 00:30 UTC (18:30 del 10 en el campo)
+        Then entra: en UTC ya es el día siguiente, pero en el campo todavía es el del torneo
         """
         uow = CompetitionInMemoryUoW()
         dia = date(2020, 6, 10)
         competition = await self._abierta_tarde(uow, dia)
-        plazo = _plazo(datetime.combine(dia, time(23, 30), tzinfo=UTC), "America/Mexico_City")
+        plazo = _plazo(datetime(2020, 6, 11, 0, 30, tzinfo=UTC), "America/Mexico_City")
 
         respuesta = await RequestEnrollmentUseCase(uow, USUARIOS_CON_GENERO, plazo=plazo).execute(
             RequestEnrollmentRequestDTO(
