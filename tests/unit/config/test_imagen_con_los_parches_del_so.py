@@ -56,20 +56,25 @@ def test_the_os_packages_layer_depends_on_a_refresh_argument():
     assert "${APT_REFRESH}" in texto[run:upgrade]
 
 
-def test_the_ci_passes_the_current_day_to_the_image_build():
+def test_the_ci_computes_the_day_once_for_the_three_image_builds():
     """
-    Given: el job de build del CI
-    When: se mira el paso que construye la imagen
-    Then: le pasa APT_REFRESH con el día, sacado de un paso anterior: la capa de paquetes
-          se reconstruye una vez al día aunque el Dockerfile no cambie
+    Given: el job de build del CI, una matriz de tres entradas (build, render, trivy) que
+           construyen cada una su imagen
+    When: se mira de dónde sale APT_REFRESH
+    Then: de un job previo que calcula el día UNA vez y del que depende build: las tres
+          construyen la misma imagen aunque una arranque tras la medianoche UTC, y Trivy
+          escanea la misma que guarda el build
     """
-    pasos = _pasos_del_build()
-    fecha = _paso(pasos, "apt_refresh")
-    build = _paso(pasos, "image")
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    dia = workflow["jobs"]["apt_refresh"]
+    build = workflow["jobs"]["build"]
+    imagen = _paso(build["steps"], "image")
 
-    assert "date -u +%F" in fecha["run"]
-    assert pasos.index(fecha) < pasos.index(build)
-    assert "APT_REFRESH=${{ steps.apt_refresh.outputs.day }}" in build["with"]["build-args"]
+    assert "date -u +%F" in "".join(paso.get("run", "") for paso in dia["steps"])
+    assert dia["outputs"]["day"]
+    assert "apt_refresh" in build["needs"]
+    assert "APT_REFRESH=${{ needs.apt_refresh.outputs.day }}" in imagen["with"]["build-args"]
+    assert not any("date -u" in paso.get("run", "") for paso in build["steps"])
 
 
 def test_the_trivy_gate_blocks_fixable_high_and_critical():

@@ -606,6 +606,21 @@ jobs:
             --result "$RESULT" \
             --if-fails 'The errors, with file, line and code, are in the "Run Mypy Type Checker" step log. Reproduce with: mypy src/' || true
 
+  # El día (UTC) para APT_REFRESH, calculado UNA vez para las tres entradas de build:
+  # la capa del apt-get upgrade se rehace una vez al día aunque la caché la tenga
+  # (INF-02), y las tres construyen la misma imagen aunque una arranque pasada la
+  # medianoche (Trivy escanea la misma que guarda el build)
+  apt_refresh:
+    name: 📅 OS packages refresh key
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      day: ${{ steps.dia.outputs.day }}
+    steps:
+      - name: Today (UTC)
+        id: dia
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
   # ================================
   # JOB 7: BUILD & CONTAINER SCAN
   # ================================
@@ -638,7 +653,7 @@ jobs:
     # matriz, si se salta no se despliega y sus tres checks se quedan «esperando»
     # (no cuentan como aprobados). Lo que solo se salta (API contract o Dependency
     # Review en un push) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, apt_refresh]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 25
     permissions:
@@ -668,13 +683,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
-      # El día (UTC) para APT_REFRESH: la capa del apt-get upgrade se rehace una vez al
-      # día aunque la caché la tenga (INF-02). Sin esto Trivy escaneaba los paquetes
-      # del SO del primer build tras el último cambio del Dockerfile
-      - name: OS packages refresh key
-        id: apt_refresh
-        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
-
       - name: Build Docker Image
         id: image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
@@ -685,7 +693,7 @@ jobs:
           load: true
           tags: rydercupam:${{ github.sha }}
           build-args: |
-            APT_REFRESH=${{ steps.apt_refresh.outputs.day }}
+            APT_REFRESH=${{ needs.apt_refresh.outputs.day }}
           cache-from: type=gha
           # Escribe la caché solo el build; las otras dos la leen
           cache-to: ${{ matrix.comprobacion == 'build' && 'type=gha,mode=max' || '' }}
