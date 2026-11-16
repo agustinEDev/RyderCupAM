@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from src.shared.infrastructure.http.paginas_de_la_documentacion import CSP_DE_LA_DOCUMENTACION
 
 CSP = "default-src 'none'; frame-ancestors 'none'"
 COMUNES = ("strict-transport-security", "x-content-type-options", "x-frame-options")
@@ -97,11 +98,12 @@ def test_a_cors_preflight_has_the_headers(cliente):
 
 
 @pytest.mark.parametrize("ruta", ["/docs", "/redoc"])
-def test_the_docs_pages_have_no_csp_but_keep_the_rest(cliente, monkeypatch, ruta):
+def test_the_docs_pages_have_their_own_csp_and_keep_the_rest(cliente, monkeypatch, ruta):
     """
     Given: Las páginas de la documentación, que cargan sus scripts de un CDN
     When: Se piden con sus credenciales
-    Then: Sin CSP (las rompería) y con las demás cabeceras
+    Then: Con la CSP de la documentación (solo sus scripts fijados, P-02) y las demás
+          cabeceras
     """
     monkeypatch.setattr(main.settings, "DOCS_USERNAME", "u")
     monkeypatch.setattr(main.settings, "DOCS_PASSWORD", "p")
@@ -110,6 +112,6 @@ def test_the_docs_pages_have_no_csp_but_keep_the_rest(cliente, monkeypatch, ruta
     respuesta = cliente.get(ruta, headers={"Authorization": f"Basic {basic}"})
 
     assert respuesta.status_code == 200
-    assert "content-security-policy" not in respuesta.headers
+    assert respuesta.headers["content-security-policy"] == CSP_DE_LA_DOCUMENTACION
     for cabecera in COMUNES:
         assert cabecera in respuesta.headers

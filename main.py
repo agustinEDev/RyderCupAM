@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager  # noqa: E402
 import uvicorn  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -130,6 +129,10 @@ from src.shared.infrastructure.http.limite_del_cuerpo import (  # noqa: E402
 )
 from src.shared.infrastructure.http.limite_superado import (  # noqa: E402
     ApuntaLosLimitesSuperados,
+)
+from src.shared.infrastructure.http.paginas_de_la_documentacion import (  # noqa: E402
+    pagina_de_redoc,
+    pagina_de_swagger,
 )
 from src.shared.infrastructure.http.ruta_sin_barras_codificadas import (  # noqa: E402
     RutaSinBarrasCodificadas,
@@ -623,16 +626,16 @@ app.include_router(
 async def get_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
-    """Swagger UI protegido con HTTP Basic Auth."""
-    return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
+    """Swagger UI protegido con HTTP Basic Auth, con sus scripts fijados y con SRI (P-02)."""
+    return pagina_de_swagger("/openapi.json")
 
 
 @app.get("/redoc", include_in_schema=False)
 async def get_redoc_documentation(
     username: str = Depends(verify_docs_credentials),  # noqa: ARG001
 ):
-    """ReDoc UI protegido con HTTP Basic Auth."""
-    return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
+    """ReDoc UI protegido con HTTP Basic Auth, con su script fijado y con SRI (P-02)."""
+    return pagina_de_redoc("/openapi.json")
 
 
 @app.get("/openapi.json", include_in_schema=False)
