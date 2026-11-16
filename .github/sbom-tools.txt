@@ -1,0 +1,4 @@
+# El generador del SBOM del CI. Su lock, con hashes:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url \
+#     --output-file .github/sbom-tools.lock .github/sbom-tools.txt
+cyclonedx-bom==8.0.1
