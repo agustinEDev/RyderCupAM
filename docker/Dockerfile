@@ -16,7 +16,7 @@
 # imagen, y Dependabot (ecosistema docker) abre una PR semanal cuando cambia el
 # digest de la imagen, con su CI y su Trivy. Digest del índice multiplataforma:
 # vale para Render (amd64) y para el Kind en un Mac (arm64).
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 # 2. Paquetes del sistema (BE #308)
 # - upgrade en la misma capa que el update: recoge los parches de Debian publicados
