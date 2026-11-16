@@ -10,8 +10,12 @@ de sesión escribían en los dos.
 
 Se quita la restricción. La unicidad sigue garantizada por el índice único, que es el
 que usan las búsquedas. Un `ALTER TABLE … DROP CONSTRAINT` toma un bloqueo exclusivo
-breve: la tabla es pequeña y el `lock_timeout` de las migraciones (`alembic/env.py`)
-corta si alguien la tuviera bloqueada.
+(no hay versión CONCURRENTLY para una restricción): espera a que acaben las
+transacciones que tocan la tabla, que son de milisegundos (renovar sesión, entrar), y
+mientras espera, los logins y renovaciones nuevos esperan detrás. Si en 5 s no lo
+consigue, el `lock_timeout` de las migraciones (`alembic/env.py`) la aborta, la guardia
+del arranque para el despliegue y la versión anterior sigue sirviendo: se vuelve a
+desplegar. Riesgo aceptado: como mucho 5 s de espera en el login durante el despliegue.
 
 Compatibilidad: la release anterior no nombra la restricción en ningún sitio; sus
 INSERT siguen fallando con un duplicado igual que antes, por el índice único.

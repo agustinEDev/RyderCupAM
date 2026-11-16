@@ -6,7 +6,9 @@
 -- docs/RUNBOOK.md, «Restaurar producción».
 --
 --   DB-04  Tiempos límite del usuario de la API a nivel de rol, los mismos que la API pone
---          en cada conexión (src/config/database.py), más la espera por un bloqueo, que la
+--          en cada conexión (src/config/database.py, DB_STATEMENT_TIMEOUT_MS y
+--          DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: si se cambian en Render, cambiarlos aquí y
+--          volver a ejecutarlo), más la espera por un bloqueo, que la
 --          API no fija: 10 s (decidido por Agustín el 17 nov 2026). Cubren a quien entre
 --          como rydercup_app por otro camino. Los de n8n_lectura los pone rol_de_n8n.sql.
 --   DB-06  Nadie crea tablas temporales salvo a quien se le dé (la app, la copia nocturna
