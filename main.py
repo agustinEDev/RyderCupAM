@@ -121,6 +121,7 @@ from src.shared.infrastructure.http.codigos_de_error import registra_los_codigos
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
+from src.shared.infrastructure.http.esquema_del_proxy import EsquemaDelProxy  # noqa: E402
 from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
     informa_del_secreto_de_origen,
 )
@@ -410,6 +411,11 @@ app.add_middleware(ApuntaLosLimitesSuperados)
 
 # Correlation ID Middleware (debe capturar todos los requests)
 app.add_middleware(CorrelationMiddleware)
+
+# https tras el proxy de Render: solo el esquema, por X-Forwarded-Proto, y solo hacia
+# https; la IP del cliente no la toca (P-03). Sin él la redirección de la barra final
+# bajaba a http://. Fuera de todo lo anterior, para que ninguno vea el esquema viejo
+app.add_middleware(EsquemaDelProxy)
 
 # Debug middleware para ver requests CORS (solo en desarrollo)
 # Va casi al final para ejecutarse casi primero (solo le envuelve el de las cabeceras)
