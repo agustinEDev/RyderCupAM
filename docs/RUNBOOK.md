@@ -318,6 +318,3 @@ lectura)»), solo lectura y con tiempos límite.
    denied for ... column X», el informe ha pasado a leer una columna nueva; se añade al
    script (pasos 3 y 5) y se vuelve a ejecutar. Nunca devolver la tabla entera: un
    `GRANT SELECT ON public.users` vuelve a dar el hash, el correo y el token de reseteo.
-
-Si el informe pasa a leer otra columna, se añade en el paso 3 del script y en su
-comprobación del paso 5, y se vuelve a ejecutar.
