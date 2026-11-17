@@ -7,12 +7,8 @@ Esta entidad gestiona el ciclo de vida de invitaciones enviadas por el creador.
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
-from ..events.invitation_accepted_event import InvitationAcceptedEvent
-from ..events.invitation_created_event import InvitationCreatedEvent
-from ..events.invitation_declined_event import InvitationDeclinedEvent
 from ..exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationExpiredViolation,
@@ -69,7 +65,6 @@ class Invitation:
         responded_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
         sent_by_email: bool = False,
     ):
         if not invitee_email or not invitee_email.strip():
@@ -89,7 +84,6 @@ class Invitation:
         self._responded_at = responded_at
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
-        self._domain_events: list[DomainEvent] = domain_events or []
         # Si el organizador la mandó tecleando un correo (y no eligiendo a un usuario):
         # decide qué ve de ella (auditoría de la fase 6, B-01/B-03)
         self._sent_by_email = sent_by_email
@@ -129,14 +123,6 @@ class Invitation:
             sent_by_email=sent_by_email,
         )
 
-        event = InvitationCreatedEvent(
-            invitation_id=str(invitation._id),
-            competition_id=str(invitation._competition_id),
-            inviter_id=str(invitation._inviter_id),
-            invitee_email=invitation._invitee_email,
-        )
-        invitation.add_domain_event(event)
-
         return invitation
 
     @classmethod
@@ -155,7 +141,7 @@ class Invitation:
         updated_at: datetime | None = None,
         sent_by_email: bool = False,
     ) -> "Invitation":
-        """Reconstruye una invitacion desde la base de datos (sin domain events)."""
+        """Reconstruye una invitacion desde la base de datos."""
         return cls(
             id=id,
             competition_id=competition_id,
@@ -285,15 +271,6 @@ class Invitation:
         self._responded_at = now
         self._updated_at = now
 
-        event = InvitationAcceptedEvent(
-            invitation_id=str(self._id),
-            competition_id=str(self._competition_id),
-            invitee_user_id=str(self._invitee_user_id)
-            if self._invitee_user_id is not None
-            else None,
-        )
-        self.add_domain_event(event)
-
     def decline(self, respondida_por: UserId | None = None) -> None:
         """Rechaza la invitacion (PENDING -> DECLINED). Como `accept`, la ata a quien
         responde si no lo estaba. Una en espera no caduca: se rechaza siempre."""
@@ -311,15 +288,6 @@ class Invitation:
         self._status = InvitationStatus.DECLINED
         self._responded_at = now
         self._updated_at = now
-
-        event = InvitationDeclinedEvent(
-            invitation_id=str(self._id),
-            competition_id=str(self._competition_id),
-            invitee_user_id=str(self._invitee_user_id)
-            if self._invitee_user_id is not None
-            else None,
-        )
-        self.add_domain_event(event)
 
     def reject_for_no_room(self) -> None:
         """Rechaza la invitacion por falta de plazas (PENDING u ON_HOLD -> NO_ROOM, #710).
@@ -388,24 +356,6 @@ class Invitation:
         if self.is_pending():
             self._status = InvitationStatus.EXPIRED
             self._updated_at = datetime.now()
-
-    # ===========================================
-    # DOMAIN EVENTS
-    # ===========================================
-
-    def add_domain_event(self, event: DomainEvent) -> None:
-        """Registra un evento de dominio en la entidad."""
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        self._domain_events = []
 
     # ===========================================
     # METODOS ESPECIALES

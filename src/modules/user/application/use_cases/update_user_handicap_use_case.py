@@ -32,7 +32,7 @@ class UpdateUserHandicapUseCase:
     El flujo es:
     1. Buscar el usuario en el repositorio
     2. Consultar el hándicap en el servicio externo
-    3. Actualizar el usuario (emitiendo evento de dominio)
+    3. Actualizar el usuario
     4. Persistir los cambios
     """
 

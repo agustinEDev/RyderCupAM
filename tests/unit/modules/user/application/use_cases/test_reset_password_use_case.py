@@ -95,7 +95,7 @@ class TestResetPasswordSuccess:
         )
         # Verificada: sin verificar, restablecer se la queda (aviso aparte, BE #753)
         user.confirm_email_ownership()
-        token = user.generate_password_reset_token(ip_address="1.1.1.1")
+        token = user.generate_password_reset_token()
         old_password_hash = user.password.hashed_value
 
         async with uow:

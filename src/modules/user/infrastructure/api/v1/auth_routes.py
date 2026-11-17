@@ -136,7 +136,6 @@ from src.shared.infrastructure.security.cookie_handler import (
     delete_refresh_token_cookie,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
-    read_access_token,
     set_auth_cookie,
     set_csrf_cookie,
     set_refresh_token_cookie,
@@ -394,9 +393,7 @@ async def logout_user(
        - Previene renovación de access tokens después del logout
        - OWASP A01: Broken Access Control
 
-    3. **Domain Event** (Existente):
-       - Registra el evento de logout en el dominio
-       - Auditoría y trazabilidad
+    3. **Log de seguridad**: registra el logout (auditoría y trazabilidad)
 
     Security Improvements (OWASP A01/A07):
     - delete_auth_cookie(): Elimina access token del navegador
@@ -422,16 +419,6 @@ async def logout_user(
     """
     user_id = str(current_user.id)
 
-    # El token de la cookie (la regla de get_current_user, que ya exigió que esté).
-    # La comprobación solo acota el tipo: sin cookie no se llega aquí
-    token = read_access_token(request)
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token no encontrado",
-        )
-
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
     logout_request.ip_address = get_trusted_client_ip(
@@ -445,7 +432,7 @@ async def logout_user(
     # el que mande el cliente (auditoría de la fase 6, B-05)
     logout_request.device_id = getattr(request.state, "dispositivo_actual", None)
 
-    logout_response = await use_case.execute(logout_request, user_id, token)
+    logout_response = await use_case.execute(logout_request, user_id)
 
     if not logout_response:
         raise HTTPException(

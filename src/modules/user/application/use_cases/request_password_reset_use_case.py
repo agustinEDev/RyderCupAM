@@ -38,7 +38,6 @@ class RequestPasswordResetUseCase:
     - Buscar usuario por email (sin revelar si existe)
     - Generar token de reseteo con expiración de 1 hora (se guarda su hash)
     - Enviar email con enlace de reseteo
-    - Registrar evento de dominio para auditoría
     - Aplicar timing attack prevention
 
     Security (OWASP A01, A07):
@@ -146,9 +145,7 @@ class RequestPasswordResetUseCase:
             cabe = bloqueado is not None and bloqueado.cuenta_un_correo_de_reset(datetime.now())
             if cabe and bloqueado is not None:
                 user = bloqueado
-                token = user.generate_password_reset_token(
-                    ip_address=ip_address, user_agent=user_agent
-                )
+                token = user.generate_password_reset_token()
                 await self._uow.users.save(user)
             # Commit automático al salir del contexto
 

@@ -23,11 +23,6 @@ src/
 │       │   ├── entities/        # User, UserOAuthAccount (Sprint 3)
 │       │   ├── value_objects/   # UserId, Email, Password, Handicap,
 │       │   │                    # OAuthAccountId, OAuthProvider (Sprint 3)
-│       │   ├── events/          # UserRegistered, HandicapUpdated,
-│       │   │                    # UserLoggedIn, UserLoggedOut,
-│       │   │                    # UserProfileUpdated, UserEmailChanged, UserPasswordChanged,
-│       │   │                    # EmailVerifiedEvent,
-│       │   │                    # GoogleAccountLinkedEvent, GoogleAccountUnlinkedEvent (Sprint 3)
 │       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork,
 │       │   │                    # UserOAuthAccountRepository) (Sprint 3)
 │       │   ├── services/        # Domain services (interfaces)
@@ -64,19 +59,18 @@ src/
 │           └── services/       # MailgunContactMailer
 │
 └── shared/
-    ├── domain/         # Base classes (DomainEvent, Entity)
-    └── infrastructure/ # Shared utilities (JWT handler, EventBus, EmailService)
+    ├── domain/         # Base classes (DomainEvent for security events, Entity)
+    └── infrastructure/ # Shared utilities (JWT handler, EmailService)
 
 tests/
 ├── unit/               # Tests aislados
 │   └── modules/user/
-│       ├── domain/     # Entities, VOs, Events
+│       ├── domain/     # Entities, VOs
 │       ├── application/# Use Cases, DTOs  
 │       └── infrastructure/ # Repos, External services
 │
 └── integration/        # Tests con BD/API
     ├── api/v1/         # Auth routes, handicap routes
-    ├── domain_events/  # Event integration
     └── modules/user/   # Application integration
 ```
 

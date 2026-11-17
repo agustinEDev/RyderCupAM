@@ -102,7 +102,7 @@ class TestAdminListUsersUseCase:
     async def test_filters_by_is_active(self, uow):
         user = await self._create_user(uow, "Deactivated", "User", "gone@test.com")
         async with uow:
-            user.deactivate(deactivated_by_user_id="admin-id")
+            user.deactivate()
             await uow.users.save(user)
         await self._create_user(uow, "Active", "User", "active@test.com")
 

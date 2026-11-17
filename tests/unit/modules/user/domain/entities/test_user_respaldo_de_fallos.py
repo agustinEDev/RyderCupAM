@@ -139,7 +139,7 @@ def test_r5_el_desbloqueo_limpia_contador_ventana_y_bloqueo():
     user = _usuario()
     # Ahora de verdad: el desbloqueo mira si sigue bloqueado con la hora del reloj
     _falla(user, 50, datetime.now(), cada=timedelta(seconds=0))
-    user.unlock(unlocked_by_user_id="admin")
+    user.unlock()
 
     assert user.failed_login_attempts == 0
     assert user.locked_until is None
@@ -302,5 +302,5 @@ def test_r13_el_bloqueo_diario_cuenta_los_fallos_del_dia():
 
     assert user.is_locked()
     assert user.failed_login_attempts_for_audit == 150
-    user.unlock(unlocked_by_user_id="admin")
+    user.unlock()
     assert not user.is_locked()

@@ -55,7 +55,6 @@ class ResetPasswordUseCase:
     - Invalidar token (uso único)
     - Revocar TODAS las sesiones activas del usuario
     - Enviar email de confirmación
-    - Registrar evento de dominio para auditoría
 
     Security (OWASP A01, A02, A07):
     - Usuario no autenticado (endpoint público)
@@ -174,7 +173,6 @@ class ResetPasswordUseCase:
             4. Invalida token (uso único)
             5. Revoca TODOS los refresh tokens del usuario
             6. Envía email de confirmación
-            7. Registra evento de dominio (PasswordResetCompletedEvent)
 
         Example:
             >>> request = ResetPasswordRequestDTO(
@@ -271,8 +269,6 @@ class ResetPasswordUseCase:
                 user.reset_password(
                     token=request.token,
                     new_password=nueva,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                 )
             except ValueError as e:
                 # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)

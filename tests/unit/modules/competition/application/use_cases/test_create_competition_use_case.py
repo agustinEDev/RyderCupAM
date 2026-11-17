@@ -17,7 +17,6 @@ from src.modules.competition.domain.services.location_builder import (
     InvalidCountryError,
     LocationBuilder,
 )
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -360,42 +359,6 @@ class TestComoNaceLaCompeticion:
         respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
 
         assert respuesta.status == "DRAFT"
-
-    @pytest.mark.asyncio
-    async def test_abrirla_al_nacer_anuncia_el_evento(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """Nacer abierta tiene que emitir el evento, como cualquier apertura.
-
-        Es el motivo de abrirla llamando a `activate()` y no naciendo en ACTIVE
-        desde el factory: el estado se habria movido sin que nadie se enterase.
-        """
-        use_case = CreateCompetitionUseCase(
-            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
-        )
-
-        respuesta = await use_case.execute(self._peticion(), creator_id)
-
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(respuesta.id))
-        eventos = [type(e).__name__ for e in competition.get_domain_events()]
-        assert "CompetitionActivatedEvent" in eventos
-
-    @pytest.mark.asyncio
-    async def test_la_que_espera_no_anuncia_apertura(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """Todavia no ha abierto: anunciarlo diria algo que no ha pasado."""
-        use_case = CreateCompetitionUseCase(
-            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
-        )
-
-        respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
-
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(respuesta.id))
-        eventos = [type(e).__name__ for e in competition.get_domain_events()]
-        assert "CompetitionActivatedEvent" not in eventos
 
 
 # ==================== El organizador juega: su género, al crear (#710, 24 sep) ====================

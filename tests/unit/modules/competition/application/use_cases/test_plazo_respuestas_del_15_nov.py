@@ -47,9 +47,6 @@ from src.modules.competition.domain.entities.competition import (
     Competition,
     CompetitionStateError,
 )
-from src.modules.competition.domain.events.competition_enrollments_reopened_event import (
-    CompetitionEnrollmentsReopenedEvent,
-)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
@@ -176,10 +173,6 @@ class TestMoverUnaCerradaPorElPlazo:
         assert movida.enrollment_opened_at == DESPUES.replace(tzinfo=None)
         assert await _plazo(DESPUES + timedelta(days=1)).le_toca_cerrarse(movida) is False
         assert await _plazo(DESPUES + timedelta(days=7)).le_toca_cerrarse(movida) is True
-        # Por el camino de reabrir de siempre
-        assert any(
-            isinstance(e, CompetitionEnrollmentsReopenedEvent) for e in movida.get_domain_events()
-        )
 
     async def test_con_el_plazo_nuevo_ya_pasado_cambian_las_fechas_y_sigue_cerrada(self):
         """R3. Given cerrada por el plazo / When se mueve pero su plazo nuevo ya pasó / Then CLOSED."""

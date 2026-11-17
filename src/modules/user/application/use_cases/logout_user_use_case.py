@@ -51,16 +51,13 @@ class LogoutUserUseCase:
         self._security_audit = security_audit
         self._uow = uow
 
-    async def execute(
-        self, request: LogoutRequestDTO, user_id: str, token: str | None = None
-    ) -> LogoutResponseDTO | None:
+    async def execute(self, request: LogoutRequestDTO, user_id: str) -> LogoutResponseDTO | None:
         """
         Ejecuta el caso de uso de logout.
 
         Args:
             request: DTO de logout con contexto de seguridad (IP, User-Agent)
             user_id: ID del usuario obtenido del token JWT
-            token: Token JWT original (actualmente no usado)
 
         Returns:
             LogoutResponseDTO con confirmación y timestamp
@@ -76,7 +73,7 @@ class LogoutUserUseCase:
             ...     ip_address="192.168.1.1",
             ...     user_agent="Mozilla/5.0..."
             ... )
-            >>> response = await use_case.execute(request, "user-123", "jwt-token")
+            >>> response = await use_case.execute(request, "user-123")
             >>> print(response.message)  # "Logout exitoso"
         """
         # Obtener security logger
@@ -96,8 +93,8 @@ class LogoutUserUseCase:
         # 2. Hora del logout para la respuesta
         logout_time = datetime.now()
 
-        # 3. y 4. Los refresh tokens de ESTE dispositivo (BE #376), en la misma
-        # transacción que el usuario: el que llega en la petición y todos los de su
+        # 3. y 4. Los refresh tokens de ESTE dispositivo (BE #376), en una sola
+        # transacción: el que llega en la petición y todos los de su
         # dispositivo (logins anteriores y la cadena de la rotación, F-02). Uno de otra
         # persona no se toca, y sin token no hay sesión que cerrar aquí
         async with self._uow:
@@ -113,10 +110,7 @@ class LogoutUserUseCase:
                 tokens_revoked_count = await self._cierra_este_dispositivo(
                     user_id_vo, request.refresh_token
                 )
-
-            # Guardar usuario dentro de la misma transacción
-            await self._uow.users.save(user)
-            # Commit automático al salir del contexto (atomicidad garantizada)
+            # El usuario no cambia al cerrar sesión: solo los tokens. Commit al salir
 
         # 5. Security Logging: Logout exitoso
         registra_sin_romper(
@@ -172,8 +166,8 @@ class LogoutUserUseCase:
         revoca en bloque los tokens del dispositivo del token que llega, tras bloquear
         el dispositivo como hacen los refrescos (F-02): un refresco a la vez espera, o
         termina antes y su sucesor también se revoca. Devuelve cuántos. (La fila del
-        usuario no se toca: cerrar sesión solo apunta un evento, y no choca con un
-        cambio de contraseña.)
+        usuario no se toca: al cerrar sesión no cambia nada de él, y así no choca con
+        un cambio de contraseña.)
         """
         if not refresh_token_jwt:
             return 0

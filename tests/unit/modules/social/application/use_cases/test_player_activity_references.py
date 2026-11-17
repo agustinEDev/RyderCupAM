@@ -267,7 +267,7 @@ class TestPrivacidadDeLosNombrados:
         yo = await _user(user_uow)
         amigo = await _user(user_uow, "Amigo")
         eva = await _user(user_uow, "Eva")
-        eva.deactivate(str(uuid4()))
+        eva.deactivate()
         async with user_uow:
             await user_uow.users.save(eva)
         await _amistad(social_uow, yo, amigo)

@@ -254,7 +254,7 @@ async def test_s9_only_a_replaced_token_keeps_the_cookie(como):
     uow, usuario, dispositivo, viejo, caso = await _escena()
     await _nuevo(uow, usuario, dispositivo.id)
     if como == "desactivada":
-        usuario.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        usuario.deactivate()
         await uow.users.save(usuario)
     elif como == "dispositivo revocado":
         viejo._revoked = False

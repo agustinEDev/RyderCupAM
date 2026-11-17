@@ -280,33 +280,10 @@ Pure domain service for match play scoring logic.
 
 ---
 
-## 🔄 Domain Events Implemented
+## 🔄 Domain Events
 
-### Competition Events (11 events)
-1. `CompetitionCreatedEvent` - Tournament created
-2. `CompetitionUpdatedEvent` - Tournament updated
-3. `CompetitionActivatedEvent` - Transition to ACTIVE
-4. `EnrollmentsClosedEvent` - Transition to CLOSED
-5. `CompetitionStartedEvent` - Transition to IN_PROGRESS
-6. `CompetitionCompletedEvent` - Transition to COMPLETED
-7. `CompetitionCancelledEvent` - Tournament cancelled
-8. `CompetitionDeletedEvent` - Tournament deleted
-
-### Enrollment Events (4 events)
-9. `EnrollmentRequestedEvent` - Enrollment request
-10. `EnrollmentApprovedEvent` - Enrollment approved
-11. `EnrollmentCancelledEvent` - Enrollment cancelled
-12. `EnrollmentWithdrawnEvent` - Player withdrawn
-
-### Invitation Events (3 events) ⭐ v2.0.12
-13. `InvitationCreatedEvent` - Invitation sent
-14. `InvitationAcceptedEvent` - Invitation accepted
-15. `InvitationDeclinedEvent` - Invitation declined
-
-### Scoring Events (3 events) ⭐ Sprint 4
-16. `HoleScoreSubmittedEvent` - Hole score registered
-17. `ScorecardSubmittedEvent` - Scorecard delivered
-18. `MatchConcededEvent` - Match conceded
+Removed as unused (ADR-050): nothing ever read them. Side effects (notices, emails,
+activity feed) are explicit calls from the use cases.
 
 ---
 
@@ -501,7 +478,6 @@ tests/unit/modules/competition/
 ├── domain/value_objects/test_*.py (20 base + 9 R&M VOs + 3 scoring VOs)
 ├── domain/entities/test_*.py (3 R&M + 1 invitation + 1 hole_score + 1 match_scoring)
 ├── domain/services/test_*.py (2 base + 1 scoring_service)
-├── domain/events/test_scoring_events.py
 ├── application/dto/test_*.py (49 base + 12 R&M + 15 invitation + 15 scoring)
 ├── application/use_cases/test_*.py (84 base + 62 R&M + 43 invitation + 85 scoring)
 └── infrastructure/persistence/ (52 base + 14 scoring mappers)
@@ -608,13 +584,11 @@ REJECTED    CANCELLED
 
 **Reason:**
 - Prevent inconsistencies (e.g.: starting tournament without closing enrollments)
-- Complete traceability with Domain Events
 - Security (only creator can change states)
 
 **Implementation:**
 - CompetitionStatus enum with 6 states
 - Transition methods in entity (activate, close, start, complete, cancel)
-- Domain Events emitted on each transition
 
 ---
 
@@ -634,7 +608,7 @@ REJECTED    CANCELLED
 - **ADR-020:** Competition Module Domain Design
 - **ADR-005:** Repository Pattern
 - **ADR-006:** Unit of Work Pattern
-- **ADR-007:** Domain Events Pattern
+- **ADR-050:** Remove the Unused Domain Events (supersedes ADR-007)
 - **ADR-026:** Playing Handicap WHS Calculation
 - **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model ⭐ Sprint 2
 
@@ -652,13 +626,12 @@ REJECTED    CANCELLED
 3. Inject CompetitionUnitOfWork in constructor
 4. Implement logic in `execute()` method
 5. Use `async with self._uow:` for transactions
-6. Emit domain events if necessary
-7. Create unit + integration tests
+6. Create unit + integration tests
 
 ### Add New State Transition
 1. Create method in Competition entity (`def transition_name(self)`)
 2. Validate current state with `_ensure_state(CompetitionStatus.XXX)`
-3. Change state and emit Domain Event
+3. Change state
 4. Create Use Case wrapper (optional, recommended)
 5. Add endpoint in `competition_routes.py`
 6. Create valid/invalid transition tests
@@ -667,8 +640,7 @@ REJECTED    CANCELLED
 1. Always validate that competition.status == ACTIVE
 2. Verify no duplicate enrollment exists
 3. Use `custom_handicap` only if necessary (NULL uses official)
-4. Emit domain events for traceability
-5. Validate permissions (only creator/owner depending on action)
+4. Validate permissions (only creator/owner depending on action)
 
 ---
 

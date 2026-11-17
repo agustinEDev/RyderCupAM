@@ -109,7 +109,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         Context manager exit - maneja commit/rollback automáticamente.
 
         Clean Architecture: El Use Case no debe manejar transacciones explícitamente.
-        El UoW se encarga automáticamente de persistir cambios y publicar eventos.
+        El UoW se encarga automáticamente de persistir los cambios.
         """
         if exc_type:
             # Si hubo excepción, hacer rollback
@@ -127,10 +127,6 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
             except Exception:
                 await self.rollback()
                 raise
-
-            # Los eventos de dominio se publican automáticamente
-            # Nota: Para MVP, los eventos están registrados pero la publicación
-            # real se implementará cuando se necesiten event handlers
 
     async def commit(self) -> None:
         """Confirma la transacción; el alias repetido sale como error del dominio."""

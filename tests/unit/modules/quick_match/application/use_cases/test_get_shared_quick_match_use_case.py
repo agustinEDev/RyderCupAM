@@ -308,7 +308,7 @@ class TestNamesFollowTheActivityRule:
 
     async def test_a_deactivated_player_has_no_name(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
-        escena.carlos.deactivate(str(uuid4()))
+        escena.carlos.deactivate()
         await _save_user(escena.user_uow, escena.carlos)
 
         detalle = await escena.ver()
@@ -341,7 +341,7 @@ class TestWhoCannotViewIt:
 
     async def test_deactivated_friend_gives_no_access(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
-        escena.bea.deactivate(str(uuid4()))
+        escena.bea.deactivate()
         await _save_user(escena.user_uow, escena.bea)
 
         with pytest.raises(QuickMatchNotSharedError):

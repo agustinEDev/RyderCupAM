@@ -456,7 +456,7 @@ async def test_u14_cada_fallo_cuenta_en_el_techo_de_su_red_y_el_cupo_no(monkeypa
     e = Escena()
     await e.usuario()
     baja = await e.usuario(email=LUIS)
-    baja.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+    baja.deactivate()
     async with e.uow:
         await e.uow.users.save(baja)
 
@@ -526,7 +526,7 @@ async def test_u16_acertar_en_una_cuenta_desactivada_no_borra_los_fallos():
     """
     e = Escena()
     luis = await e.usuario(email=LUIS)
-    luis.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+    luis.deactivate()
     async with e.uow:
         await e.uow.users.save(luis)
     for _ in range(9):
@@ -679,9 +679,7 @@ async def test_u21_si_la_desactivan_a_mitad_del_login_no_hay_sesion():
     """
     e = Escena()
     ana = await e.usuario()
-    dispositivo = await _a_mitad_del_login(
-        e, lambda cuenta: cuenta.deactivate(deactivated_by_user_id=str(uuid4()))
-    )
+    dispositivo = await _a_mitad_del_login(e, lambda cuenta: cuenta.deactivate())
 
     with pytest.raises(AccountDeactivatedException):
         await e.entra()

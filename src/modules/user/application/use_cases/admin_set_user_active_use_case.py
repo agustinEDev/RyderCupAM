@@ -65,11 +65,11 @@ class AdminSetUserActiveUseCase:
 
             if is_active:
                 if not user.is_active:
-                    user.reactivate(reactivated_by_user_id=actor_user_id)
+                    user.reactivate()
                     # Lo que se colara (un login a la vez que la desactivación), fuera
                     reactivada = (await revoca_sus_sesiones(self._uow, user_id))[1]
             elif user.is_active:
-                user.deactivate(deactivated_by_user_id=actor_user_id)
+                user.deactivate()
                 revocados = await revoca_sus_sesiones(self._uow, user_id)
 
             await self._uow.users.save(user)

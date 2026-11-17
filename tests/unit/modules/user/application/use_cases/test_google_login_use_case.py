@@ -604,7 +604,7 @@ class TestGoogleLoginCuentaDesactivada:
         user = User.create_from_oauth(
             first_name="Baja", last_name="Google", email_str="oauth@example.com"
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
             await uow.oauth_accounts.save(
@@ -648,7 +648,7 @@ class TestGoogleLoginCuentaDesactivada:
         user = User.create_from_oauth(
             first_name="Baja", last_name="Google", email_str="oauth@example.com"
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
             await uow.oauth_accounts.save(
@@ -699,7 +699,7 @@ class TestGoogleLoginCuentaDesactivada:
             email_str="oauth@example.com",
             plain_password="SecureP@ssw0rd123!",
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
@@ -1219,7 +1219,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         from src.modules.user.domain.exceptions import AccountDeactivatedException
 
         cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
-        cuenta.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        cuenta.deactivate()
         async with uow:
             await uow.users.save(cuenta)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
@@ -1276,7 +1276,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         async def desactivada(user_id):
             otra = copy.deepcopy(uow.users._users[user_id])
-            otra.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+            otra.deactivate()
             uow.users._users[user_id] = otra
             return otra
 

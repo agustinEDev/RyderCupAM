@@ -11,7 +11,6 @@ from datetime import datetime
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
 from src.shared.domain.value_objects.gender import Gender
@@ -19,19 +18,6 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
-from ..events.quick_match_cancelled_event import QuickMatchCancelledEvent
-from ..events.quick_match_completed_event import QuickMatchCompletedEvent
-from ..events.quick_match_created_event import QuickMatchCreatedEvent
-from ..events.quick_match_hidden_event import QuickMatchHiddenEvent
-from ..events.quick_match_participant_added_event import QuickMatchParticipantAddedEvent
-from ..events.quick_match_participant_handicap_updated_event import (
-    QuickMatchParticipantHandicapUpdatedEvent,
-)
-from ..events.quick_match_participant_removed_event import QuickMatchParticipantRemovedEvent
-from ..events.quick_match_started_event import QuickMatchStartedEvent
-from ..events.quick_match_stats_excluded_event import QuickMatchStatsExcludedEvent
-from ..events.quick_match_stats_included_event import QuickMatchStatsIncludedEvent
-from ..events.quick_match_unhidden_event import QuickMatchUnhiddenEvent
 from ..exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
@@ -87,7 +73,6 @@ class QuickMatch:
         stats_excluded_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
         started_at: datetime | None = None,
     ):
         self._validate_format(match_format, scoring_format)
@@ -113,7 +98,6 @@ class QuickMatch:
         self._updated_at = updated_at or ahora_utc_sin_zona()
         # Cuándo empezó, para cerrarla sola; las de antes de guardarlo no lo tienen
         self._started_at = started_at
-        self._domain_events: list[DomainEvent] = domain_events or []
 
     @staticmethod
     def _validate_format(
@@ -204,23 +188,6 @@ class QuickMatch:
             updated_at=now,
         )
 
-        quick_match.add_domain_event(
-            QuickMatchCreatedEvent(
-                quick_match_id=str(quick_match._id),
-                creator_id=str(creator_id),
-                golf_course_id=str(golf_course_id),
-                match_format=match_format.value if match_format else None,
-                scoring_format=scoring_format.value if scoring_format else None,
-            )
-        )
-        quick_match.add_domain_event(
-            QuickMatchParticipantAddedEvent(
-                quick_match_id=str(quick_match._id),
-                participant_id=str(creator_participant.participant_id),
-                team=creator_team,
-            )
-        )
-
         return quick_match
 
     @classmethod
@@ -242,7 +209,7 @@ class QuickMatch:
         updated_at: datetime | None = None,
         started_at: datetime | None = None,
     ) -> "QuickMatch":
-        """Reconstruye una partida rapida desde la base de datos (sin domain events)."""
+        """Reconstruye una partida rapida desde la base de datos."""
         return cls(
             id=id,
             creator_id=creator_id,
@@ -504,14 +471,6 @@ class QuickMatch:
         self._participants = [*self._participants, participant]
         self._updated_at = now
 
-        self.add_domain_event(
-            QuickMatchParticipantAddedEvent(
-                quick_match_id=str(self._id),
-                participant_id=str(participant.participant_id),
-                team=team,
-            )
-        )
-
     def remove_participant(self, participant_id: ParticipantId) -> None:
         """Elimina un participante mientras la partida esta PENDING."""
         if not self._status.is_pending():
@@ -532,12 +491,6 @@ class QuickMatch:
         now = ahora_utc_sin_zona()
         self._participants = [p for p in self._participants if p.participant_id != participant_id]
         self._updated_at = now
-
-        self.add_domain_event(
-            QuickMatchParticipantRemovedEvent(
-                quick_match_id=str(self._id), participant_id=str(participant_id)
-            )
-        )
 
     def set_participant_handicap(
         self, participant_id: ParticipantId, handicap: float | None
@@ -568,14 +521,6 @@ class QuickMatch:
         ]
         self._updated_at = now
 
-        self.add_domain_event(
-            QuickMatchParticipantHandicapUpdatedEvent(
-                quick_match_id=str(self._id),
-                participant_id=str(participant_id),
-                handicap=handicap,
-            )
-        )
-
     def hide_for(self, participant_id: ParticipantId) -> None:
         """
         Oculta la partida del historial personal de un participante.
@@ -597,10 +542,6 @@ class QuickMatch:
         self._hidden_by_participant_ids = [*self._hidden_by_participant_ids, participant_id]
         self._updated_at = ahora_utc_sin_zona()
 
-        self.add_domain_event(
-            QuickMatchHiddenEvent(quick_match_id=str(self._id), participant_id=str(participant_id))
-        )
-
     def unhide_for(self, participant_id: ParticipantId) -> None:
         """Vuelve a mostrar la partida en el historial personal de un participante. Idempotente."""
         if not self.is_participant(participant_id):
@@ -615,12 +556,6 @@ class QuickMatch:
             pid for pid in self._hidden_by_participant_ids if pid != participant_id
         ]
         self._updated_at = ahora_utc_sin_zona()
-
-        self.add_domain_event(
-            QuickMatchUnhiddenEvent(
-                quick_match_id=str(self._id), participant_id=str(participant_id)
-            )
-        )
 
     def exclude_from_stats_for(self, participant_id: ParticipantId) -> None:
         """
@@ -655,12 +590,6 @@ class QuickMatch:
         ]
         self._updated_at = ahora_utc_sin_zona()
 
-        self.add_domain_event(
-            QuickMatchStatsExcludedEvent(
-                quick_match_id=str(self._id), participant_id=str(participant_id)
-            )
-        )
-
     def include_in_stats_for(self, participant_id: ParticipantId) -> None:
         """
         Contrario de exclude_from_stats_for. Idempotente.
@@ -682,12 +611,6 @@ class QuickMatch:
             pid for pid in self._stats_excluded_by_participant_ids if pid != participant_id
         ]
         self._updated_at = ahora_utc_sin_zona()
-
-        self.add_domain_event(
-            QuickMatchStatsIncludedEvent(
-                quick_match_id=str(self._id), participant_id=str(participant_id)
-            )
-        )
 
     def start(self, scorer_ids: list[ParticipantId]) -> None:
         """
@@ -717,8 +640,6 @@ class QuickMatch:
         self._scorer_ids = list(scorer_ids)
         self._started_at = now
         self._updated_at = now
-
-        self.add_domain_event(QuickMatchStartedEvent(quick_match_id=str(self._id)))
 
     def freeze_handicaps(self, profile_handicaps: dict[UserId, float | None]) -> None:
         """
@@ -773,8 +694,6 @@ class QuickMatch:
         self._status = QuickMatchStatus.COMPLETED
         self._updated_at = now
 
-        self.add_domain_event(QuickMatchCompletedEvent(quick_match_id=str(self._id)))
-
     def cancel(self) -> None:
         """Cancela la partida (PENDING/IN_PROGRESS -> CANCELLED)."""
         if not self._status.can_transition_to(QuickMatchStatus.CANCELLED):
@@ -785,25 +704,6 @@ class QuickMatch:
         now = ahora_utc_sin_zona()
         self._status = QuickMatchStatus.CANCELLED
         self._updated_at = now
-
-        self.add_domain_event(QuickMatchCancelledEvent(quick_match_id=str(self._id)))
-
-    # ===========================================
-    # DOMAIN EVENTS
-    # ===========================================
-
-    def add_domain_event(self, event: DomainEvent) -> None:
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        self._domain_events = []
 
     # ===========================================
     # METODOS ESPECIALES

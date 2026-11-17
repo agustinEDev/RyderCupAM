@@ -166,7 +166,7 @@ async def test_it_refuses_an_administrator_account_with_that_email():
         plain_password="ValidPassword123!",
         is_admin=True,
     )
-    admin.deactivate(deactivated_by_user_id=str(admin.id.value))
+    admin.deactivate()
     await uow.users.save(admin)
     use_case = EnsureSystemUserUseCase(uow)
 

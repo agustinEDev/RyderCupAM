@@ -68,10 +68,9 @@ class TestLogoutUserUseCase:
         # Arrange
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
-        token = "sample-jwt-token"
 
         # Act
-        result = await use_case.execute(request, user_id, token)
+        result = await use_case.execute(request, user_id)
 
         # Assert
         assert result is not None
@@ -91,32 +90,12 @@ class TestLogoutUserUseCase:
         non_existent_user_id = (
             "12345678-1234-5678-1234-567812345678"  # UUID válido pero inexistente
         )
-        token = "sample-jwt-token"
 
         # Act
-        result = await use_case.execute(request, non_existent_user_id, token)
+        result = await use_case.execute(request, non_existent_user_id)
 
         # Assert
         assert result is None
-
-    async def test_logout_without_token(self, use_case, existing_user):
-        """
-        Test: Logout sin token (token opcional)
-        Given: Un usuario existente
-        When: Se ejecuta logout sin proporcionar token
-        Then: Retorna confirmación exitosa (token es opcional en Fase 1)
-        """
-        # Arrange
-        request = LogoutRequestDTO()
-        user_id = str(existing_user.id.value)
-
-        # Act
-        result = await use_case.execute(request, user_id, token=None)
-
-        # Assert
-        assert result is not None
-        assert isinstance(result, LogoutResponseDTO)
-        assert result.message == "Logout exitoso"
 
     async def test_logout_response_structure(self, use_case, existing_user):
         """
@@ -128,10 +107,9 @@ class TestLogoutUserUseCase:
         # Arrange
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
-        token = "test-jwt-token"
 
         # Act
-        result = await use_case.execute(request, user_id, token)
+        result = await use_case.execute(request, user_id)
 
         # Assert
         assert result is not None
@@ -150,13 +128,38 @@ class TestLogoutUserUseCase:
         # Arrange
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
-        token = "test-jwt-token"
         before_logout = datetime.now()
 
         # Act
-        result = await use_case.execute(request, user_id, token)
+        result = await use_case.execute(request, user_id)
 
         # Assert
         after_logout = datetime.now()
         assert result is not None
         assert before_logout <= result.logged_out_at <= after_logout
+
+
+class TestLogoutNoTocaAlUsuario:
+    """Cerrar sesión solo escribe los tokens (ADR-050, 17 nov 2026)."""
+
+    async def test_logout_usuario_existente_no_reescribe_su_fila(
+        self, uow, use_case, existing_user, monkeypatch
+    ):
+        """
+        Given: Un usuario con sesión
+        When: Cierra sesión
+        Then: Su fila no se vuelve a guardar: nada del usuario cambia, y un guardado
+              entero podía pisar un cambio de contraseña hecho a la vez
+        """
+        guardados = []
+        original = uow.users.save
+
+        async def apunta(user):
+            guardados.append(user)
+            await original(user)
+
+        monkeypatch.setattr(uow.users, "save", apunta)
+
+        await use_case.execute(LogoutRequestDTO(), str(existing_user.id.value))
+
+        assert guardados == []

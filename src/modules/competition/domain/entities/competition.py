@@ -11,30 +11,11 @@ from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.modality import Modality
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 from ..entities.competition_golf_course import CompetitionGolfCourse
-from ..events.competition_activated_event import CompetitionActivatedEvent
-from ..events.competition_cancelled_event import CompetitionCancelledEvent
-from ..events.competition_completed_event import CompetitionCompletedEvent
-from ..events.competition_created_event import CompetitionCreatedEvent
-from ..events.competition_enrollments_closed_event import (
-    CompetitionEnrollmentsClosedEvent,
-)
-from ..events.competition_enrollments_reopened_event import (
-    CompetitionEnrollmentsReopenedEvent,
-)
-from ..events.competition_reverted_to_closed_event import (
-    CompetitionRevertedToClosedEvent,
-)
-from ..events.competition_reverted_to_in_progress_event import (
-    CompetitionRevertedToInProgressEvent,
-)
-from ..events.competition_started_event import CompetitionStartedEvent
-from ..events.competition_updated_event import CompetitionUpdatedEvent
 from ..policies.enrollment_deadline import closes_at, en_utc, has_passed
 from ..policies.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
@@ -166,7 +147,6 @@ class Competition:
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
@@ -213,7 +193,6 @@ class Competition:
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
-        self._domain_events: list[DomainEvent] = domain_events or []
         self._golf_courses: list[CompetitionGolfCourse] = []
         # El plazo de inscripcion (15 nov 2026): cuando se abrieron por ultima
         # vez, en UTC sin zona; si las cerro el plazo y no el organizador; y si
@@ -248,8 +227,6 @@ class Competition:
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
-
-        Crea la competición y emite el evento CompetitionCreatedEvent.
         """
         competition = cls(
             id=id,
@@ -273,14 +250,6 @@ class Competition:
             category_count=category_count,
             status=CompetitionStatus.DRAFT,
         )
-
-        # Emitir evento de creación
-        event = CompetitionCreatedEvent(
-            competition_id=str(competition._id),
-            creator_id=str(competition._creator_id),
-            name=str(competition._name),
-        )
-        competition._add_domain_event(event)
 
         return competition
 
@@ -762,9 +731,6 @@ class Competition:
             self._stroke_play.check_fits_in(self._days_of(dates))
         self._mover_fechas(dates)
         self._updated_at = datetime.now()
-        self._add_domain_event(
-            CompetitionUpdatedEvent(competition_id=str(self._id), name=str(self._name))
-        )
 
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
@@ -817,13 +783,6 @@ class Competition:
         # anunciando «abre 5 dias antes» de algo que ya abrio (BE #332)
         self._enrollment_opens_days_before = None
 
-        event = CompetitionActivatedEvent(
-            competition_id=str(self._id),
-            name=str(self._name),
-            start_date=self._dates.start_date.isoformat(),
-        )
-        self._add_domain_event(event)
-
     def close_enrollments(self, total_enrollments: int = 0, by_deadline: bool = False) -> None:
         """
         Cierra las inscripciones (ACTIVE → CLOSED).
@@ -845,11 +804,6 @@ class Competition:
         # Ya cerradas, el aviso de que no se podian cerrar deja de valer (C4)
         self._close_blocked_notified = False
 
-        event = CompetitionEnrollmentsClosedEvent(
-            competition_id=str(self._id), total_enrollments=total_enrollments
-        )
-        self._add_domain_event(event)
-
     def start(self) -> None:
         """
         Inicia el torneo (CLOSED → IN_PROGRESS).
@@ -865,9 +819,6 @@ class Competition:
         self._status = CompetitionStatus.IN_PROGRESS
         self._updated_at = datetime.now()
 
-        event = CompetitionStartedEvent(competition_id=str(self._id), name=str(self._name))
-        self._add_domain_event(event)
-
     def complete(self) -> None:
         """
         Finaliza el torneo (IN_PROGRESS → COMPLETED).
@@ -882,9 +833,6 @@ class Competition:
 
         self._status = CompetitionStatus.COMPLETED
         self._updated_at = datetime.now()
-
-        event = CompetitionCompletedEvent(competition_id=str(self._id), name=str(self._name))
-        self._add_domain_event(event)
 
     def cancel(self, reason: str | None = None) -> None:
         """
@@ -904,11 +852,6 @@ class Competition:
         self._status = CompetitionStatus.CANCELLED
         self._updated_at = datetime.now()
 
-        event = CompetitionCancelledEvent(
-            competition_id=str(self._id), name=str(self._name), reason=reason
-        )
-        self._add_domain_event(event)
-
     def revert_to_closed(self) -> None:
         """
         Revierte el torneo a CLOSED (IN_PROGRESS → CLOSED).
@@ -926,9 +869,6 @@ class Competition:
 
         self._status = CompetitionStatus.CLOSED
         self._updated_at = datetime.now()
-
-        event = CompetitionRevertedToClosedEvent(competition_id=str(self._id), name=str(self._name))
-        self._add_domain_event(event)
 
     def revert_to_in_progress(self) -> None:
         """
@@ -948,11 +888,6 @@ class Competition:
 
         self._status = CompetitionStatus.IN_PROGRESS
         self._updated_at = datetime.now()
-
-        event = CompetitionRevertedToInProgressEvent(
-            competition_id=str(self._id), name=str(self._name)
-        )
-        self._add_domain_event(event)
 
     # ===========================================
     # CAPITANES (BE #320)
@@ -1158,11 +1093,6 @@ class Competition:
             self._stroke_play = self._stroke_play.sin_reparto()
         self._updated_at = datetime.now()
 
-        event = CompetitionEnrollmentsReopenedEvent(
-            competition_id=str(self._id), name=str(self._name)
-        )
-        self._add_domain_event(event)
-
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
     # ===========================================
@@ -1252,9 +1182,6 @@ class Competition:
 
         self._updated_at = datetime.now()
 
-        event = CompetitionUpdatedEvent(competition_id=str(self._id), name=str(self._name))
-        self._add_domain_event(event)
-
     def _mover_fechas(self, dates: DateRange) -> None:
         """
         Mover las fechas ya no puede invalidar la apertura: son dias de
@@ -1267,30 +1194,6 @@ class Competition:
         if dates.start_date != self._dates.start_date:
             self._close_blocked_notified = False
         self._dates = dates
-
-    # ===========================================
-    # DOMAIN EVENTS
-    # ===========================================
-
-    def _ensure_domain_events(self) -> None:
-        """Asegura que _domain_events existe (para compatibilidad con SQLAlchemy)."""
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-
-    def _add_domain_event(self, event: DomainEvent) -> None:
-        """Añade un evento de dominio de forma segura."""
-        self._ensure_domain_events()
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        """Obtiene los eventos de dominio pendientes."""
-        self._ensure_domain_events()
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        """Limpia los eventos de dominio después de procesarlos."""
-        self._ensure_domain_events()
-        self._domain_events.clear()
 
     # ===========================================
     # GOLF COURSE MANAGEMENT

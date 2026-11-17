@@ -87,7 +87,7 @@ class TestSendFriendRequestUseCase:
         una que no existe, y sin guardar nada."""
         requester = await self._create_user(user_uow, "requester-d1@test.com")
         addressee = await self._create_user(user_uow, "desactivada@test.com")
-        addressee.deactivate(str(requester.id.value))
+        addressee.deactivate()
         async with user_uow:
             await user_uow.users.save(addressee)
         use_case = SendFriendRequestUseCase(uow, user_uow)
