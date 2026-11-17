@@ -72,17 +72,3 @@ class SQLAlchemyPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
-
-    async def count_by_user(self, user_id: UserId) -> int:
-        """
-        Cuenta el total de registros de historial para un usuario.
-
-        Args:
-            user_id: ID del usuario
-
-        Returns:
-            int: Número total de registros
-        """
-        stmt = select(PasswordHistory).where(password_history_table.c.user_id == str(user_id.value))
-        result = await self._session.execute(stmt)
-        return len(list(result.scalars().all()))
