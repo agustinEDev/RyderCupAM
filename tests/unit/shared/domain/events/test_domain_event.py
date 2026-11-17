@@ -16,6 +16,7 @@ from uuid import UUID
 import pytest
 
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 # Clase concreta para testing (no se puede testear clase abstracta directamente)
@@ -95,13 +96,13 @@ class TestDomainEvent:
     def test_events_have_recent_timestamp(self):
         """Los eventos tienen timestamp reciente (dentro de 1 segundo)."""
         # Arrange
-        before = datetime.now()
+        before = ahora_utc_sin_zona()
 
         # Act
         event = SampleEvent(user_id="user-123", action="created")
 
         # Assert
-        after = datetime.now()
+        after = ahora_utc_sin_zona()
         assert before <= event.occurred_on <= after
 
         # Timestamp debe estar muy cerca del momento actual

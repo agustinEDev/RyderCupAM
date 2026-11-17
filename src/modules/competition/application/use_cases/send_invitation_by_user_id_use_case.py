@@ -1,7 +1,7 @@
 """Caso de Uso: Enviar Invitacion por User ID."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from src.modules.competition.application.dto.invitation_dto import (
     InvitationResponseDTO,
@@ -56,6 +56,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.email_masking import mask_email as _mask_email
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,7 @@ class SendInvitationByUserIdUseCase:
             # Rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora), despues
             # de las plazas: una competicion llena con el freno agotado decia
             # «espera» cuando lo cierto es que ya no cabe nadie
-            one_hour_ago = datetime.now() - timedelta(hours=1)
+            one_hour_ago = ahora_utc_sin_zona() - timedelta(hours=1)
             recent_invitations = await self._uow.invitations.count_by_competition(
                 competition_id, since=one_hour_ago
             )

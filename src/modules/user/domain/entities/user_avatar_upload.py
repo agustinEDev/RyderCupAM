@@ -8,6 +8,8 @@ entre fotos ya subidas sin tener que volver a subirlas.
 
 from datetime import datetime
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+
 from ..value_objects.user_avatar_upload_id import UserAvatarUploadId
 from ..value_objects.user_id import UserId
 
@@ -39,7 +41,7 @@ class UserAvatarUpload:
         self._user_id = user_id
         self._image_data = image_data
         self._content_type = content_type
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     @property
     def id(self) -> UserAvatarUploadId:
@@ -71,7 +73,7 @@ class UserAvatarUpload:
             user_id=user_id,
             image_data=image_data,
             content_type=content_type,
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
     def __str__(self) -> str:

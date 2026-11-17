@@ -8,7 +8,7 @@ Quien SI la ve: su creador, y quien tiene una inscripcion en ella. Lo demas es
 de otros.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -35,6 +35,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
@@ -225,7 +226,7 @@ class TestWhatAStrangerSees:
     async def _invitar(self, uow, creada, organizador, *, user_id=None, email="x@test.com", **como):
         datos = {
             "status": InvitationStatus.PENDING,
-            "expires_at": datetime.now() + timedelta(days=7),
+            "expires_at": ahora_utc_sin_zona() + timedelta(days=7),
         }
         async with uow:
             await uow.invitations.add(
@@ -266,7 +267,7 @@ class TestWhatAStrangerSees:
             {"status": InvitationStatus.DECLINED},
             {"status": InvitationStatus.CANCELLED},
             {"status": InvitationStatus.EXPIRED},
-            {"expires_at": datetime.now() - timedelta(minutes=1)},
+            {"expires_at": ahora_utc_sin_zona() - timedelta(minutes=1)},
         ],
     )
     async def test_17_an_invitation_that_no_longer_counts_does_not(self, uow, como):

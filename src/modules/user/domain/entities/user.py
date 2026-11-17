@@ -10,6 +10,7 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.exceptions.verification_token_expired_error import (
     VerificationTokenExpiredError,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -208,8 +209,8 @@ class User:
         self._alias = alias
         self._handicap = handicap
         self._handicap_updated_at = handicap_updated_at
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
         self._email_verified = email_verified
         # Los dos enlaces, con su hash (fase 3, C3)
         self._verification_token = verification_token
@@ -346,7 +347,7 @@ class User:
     @property
     def pending_email(self) -> str | None:
         """El correo pendiente ahora (para la respuesta del perfil)."""
-        return self.pending_email_at(datetime.now())
+        return self.pending_email_at(ahora_utc_sin_zona())
 
     @property
     def reset_token_expires_at(self) -> datetime | None:
@@ -483,7 +484,7 @@ class User:
             return False
         self._terms_version = version
         self._terms_accepted_at = datetime.now(UTC)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return True
 
     def set_preset_avatar(self, preset_id: int) -> None:
@@ -501,7 +502,7 @@ class User:
         self._avatar_source = AvatarSource.PRESET
         self._avatar_preset_id = preset_id
         self._active_avatar_upload_id = None
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def set_uploaded_avatar(self, upload_id: UserAvatarUploadId) -> None:
         """
@@ -513,14 +514,14 @@ class User:
         self._avatar_source = AvatarSource.UPLOAD
         self._avatar_preset_id = None
         self._active_avatar_upload_id = upload_id
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def clear_avatar(self) -> None:
         """Quita el avatar activo (vuelve al placeholder por defecto). No borra el historial de subidas."""
         self._avatar_source = AvatarSource.NONE
         self._avatar_preset_id = None
         self._active_avatar_upload_id = None
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def get_full_name(self) -> str:
         """
@@ -609,7 +610,7 @@ class User:
         # Actualizar timestamps
         # handicap_updated_at se guarda en UTC (columna timezone-aware) para que el
         # frontend pueda convertirlo correctamente a la hora local del usuario.
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._handicap_updated_at = datetime.now(UTC)
         self._updated_at = now
 
@@ -654,8 +655,8 @@ class User:
             last_name=last_name,
             handicap=None,
             handicap_updated_at=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
             country_code=country_code,
             is_admin=is_admin,
             gender=gender,
@@ -702,8 +703,8 @@ class User:
             last_name=last_name,
             handicap=None,
             handicap_updated_at=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
             email_verified=email_verified,
             country_code=country_code,
             gender=gender,
@@ -721,7 +722,7 @@ class User:
             self._email_verified = True
             self._verification_token = None
             self._verification_token_expires_at = None
-            self._updated_at = datetime.now()
+            self._updated_at = ahora_utc_sin_zona()
 
     def claim_with_verified_oauth(self) -> bool:
         """
@@ -797,7 +798,7 @@ class User:
         if alias_changed:
             self._alias = new_alias
 
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # Cuánto vale el enlace que confirma un correo nuevo
     HORAS_PARA_CONFIRMAR_EL_CORREO = 24
@@ -825,7 +826,7 @@ class User:
         self._pending_email_expires_at = ahora + timedelta(
             hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
         )
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return token
 
     def pending_email_token_matches(self, token: str) -> bool:
@@ -864,7 +865,7 @@ class User:
         self._pending_email = None
         self._pending_email_token = None
         self._pending_email_expires_at = None
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def change_password(self, new_password: str | Password) -> None:
         """
@@ -879,7 +880,7 @@ class User:
             ValueError: Si el password no es válido
         """
         self._password = _como_password(new_password)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def generate_verification_token(self, ahora: datetime | None = None) -> str:
         """
@@ -895,7 +896,7 @@ class User:
         """
         token = secrets.token_urlsafe(32)
         self.set_verification_token(token, ahora=ahora)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return token
 
     def set_verification_token(self, token: str, ahora: datetime | None = None) -> None:
@@ -913,7 +914,7 @@ class User:
         """
         self._verification_token = hash_del_enlace(token)
         self._verification_token_expires_at = (
-            ahora or datetime.now()
+            ahora or ahora_utc_sin_zona()
         ) + VERIFICATION_TOKEN_LIFETIME
 
     def verify_email(self, token: str, ahora: datetime | None = None) -> bool:
@@ -944,14 +945,14 @@ class User:
         if caduca is None:
             # Sin caducidad no se da por bueno (no lo escribe ningún camino actual)
             raise ValueError("Token de verificación inválido")
-        if (ahora or datetime.now()) > caduca:
+        if (ahora or ahora_utc_sin_zona()) > caduca:
             raise VerificationTokenExpiredError()
 
         # Token válido - proceder con verificación
         self._email_verified = True
         self._verification_token = None
         self._verification_token_expires_at = None
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         return True
 
@@ -1021,7 +1022,7 @@ class User:
         token = secrets.token_urlsafe(32)
         self._password_reset_token = hash_del_enlace(token)
 
-        now = ahora or datetime.now()
+        now = ahora or ahora_utc_sin_zona()
         expires_at = now + PASSWORD_RESET_TOKEN_LIFETIME
         self._reset_token_expires_at = expires_at
         self._updated_at = now
@@ -1055,7 +1056,7 @@ class User:
         if not self.reset_token_expires_at:
             return False
 
-        return (ahora or datetime.now()) <= self.reset_token_expires_at
+        return (ahora or ahora_utc_sin_zona()) <= self.reset_token_expires_at
 
     def reset_password(
         self,
@@ -1111,7 +1112,7 @@ class User:
         self.reinicia_el_cupo_de_reset()
 
         # Actualizar timestamp
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._updated_at = now
 
     # === Account Lockout Methods ===
@@ -1136,7 +1137,7 @@ class User:
             «dia» o «respaldo» si este fallo bloquea, «aviso» si es el 25 de la
             hora, o None.
         """
-        now = ahora or datetime.now()
+        now = ahora or ahora_utc_sin_zona()
         self._updated_at = now
 
         inicio = self._failed_login_window_started_at
@@ -1187,7 +1188,7 @@ class User:
         """
         if self.locked_until is None:
             return False
-        return (ahora or datetime.now()) < self.locked_until
+        return (ahora or ahora_utc_sin_zona()) < self.locked_until
 
     def unlock(self) -> None:
         """
@@ -1218,7 +1219,7 @@ class User:
         if not self.is_locked():
             raise ValueError("La cuenta no está bloqueada")
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
 
         # Resetear estado de bloqueo
         self._failed_login_attempts = 0
@@ -1231,7 +1232,7 @@ class User:
     def set_is_admin(self, is_admin: bool) -> None:
         """Concede o revoca privilegios de administrador (solo desde el panel de admin)."""
         self._is_admin = is_admin
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # === Account Deactivation Methods (Admin) ===
 
@@ -1249,7 +1250,7 @@ class User:
         if not self._is_active:
             raise ValueError("Account is already deactivated")
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._is_active = False
         self._updated_at = now
 
@@ -1263,7 +1264,7 @@ class User:
         if self._is_active:
             raise ValueError("Account is already active")
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._is_active = True
         self._updated_at = now
 

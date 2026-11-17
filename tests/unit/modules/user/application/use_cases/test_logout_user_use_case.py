@@ -20,6 +20,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 @pytest.fixture
@@ -128,13 +129,13 @@ class TestLogoutUserUseCase:
         # Arrange
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
-        before_logout = datetime.now()
+        before_logout = ahora_utc_sin_zona()
 
         # Act
         result = await use_case.execute(request, user_id)
 
         # Assert
-        after_logout = datetime.now()
+        after_logout = ahora_utc_sin_zona()
         assert result is not None
         assert before_logout <= result.logged_out_at <= after_logout
 

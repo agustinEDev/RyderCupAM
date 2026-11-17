@@ -48,6 +48,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -257,11 +258,11 @@ async def test_b2_4_an_expired_or_wrong_token_costs_no_bcrypt():
     When: Se intenta restablecer
     Then: «enlace no válido» sin calcular ningún bcrypt
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     uow = InMemoryUnitOfWork()
     user, token = await _con_token(uow)
-    user._reset_token_expires_at = datetime.now() - timedelta(minutes=1)
+    user._reset_token_expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
     with (
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,

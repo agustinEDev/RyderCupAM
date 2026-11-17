@@ -18,7 +18,7 @@ El registro no dice si el correo ya tiene cuenta (fase 3, F-01; tabla aprobada).
   --  los correos van en segundo plano             | la respuesta no los espera
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -35,6 +35,7 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -187,13 +188,13 @@ async def test_b2_only_one_notice_every_24_hours_per_account():
     """
     uow, correo = InMemoryUnitOfWork(), _email_service()
     dueno = await _dueno(uow)
-    dueno.reserva_el_aviso_de_registro(datetime.now() - timedelta(hours=23))
+    dueno.reserva_el_aviso_de_registro(ahora_utc_sin_zona() - timedelta(hours=23))
 
     await _caso(uow, correo).execute(_alta())
     correo.send_register_attempt_notice.assert_not_awaited()
 
     # Pasa el día: el aviso apuntado, de hace 25 h
-    dueno._register_attempt_notice_at = datetime.now() - timedelta(hours=25)
+    dueno._register_attempt_notice_at = ahora_utc_sin_zona() - timedelta(hours=25)
     await _caso(uow, correo).execute(_alta())
     correo.send_register_attempt_notice.assert_awaited_once()
 

@@ -31,6 +31,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.utc_clock import utc_now
 
 # Tope del contador de novedades (tabla del 22 oct 2026, B). Mas alla, el
@@ -173,7 +174,7 @@ async def count_unseen(
         since=scope.last_seen_at,
         cap=UNSEEN_CAP,
         skip_private_enrollments=True,
-        open_invitations_at=datetime.now(),
+        open_invitations_at=ahora_utc_sin_zona(),
         # Ni lo de partidas rapidas que su autor tiene en la papelera, salvo
         # lo mio (22 oct 2026)
         hide_trashed_quick_matches_from=scope.viewer_id,

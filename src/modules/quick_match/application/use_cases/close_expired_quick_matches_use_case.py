@@ -17,7 +17,7 @@ no para las demás.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -36,13 +36,9 @@ from src.modules.quick_match.domain.services.quick_match_closing import (
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
-
-
-def ahora_en_utc() -> datetime:
-    """El reloj del cierre: ahora, en UTC sin zona como las fechas guardadas."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
@@ -62,7 +58,7 @@ class CloseExpiredQuickMatchesUseCase:
         uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         achievements: RoundAchievementsPublisherInterface | None = None,
-        reloj: Callable[[], datetime] = ahora_en_utc,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._uow = uow
         self._golf_course_uow = golf_course_uow

@@ -27,6 +27,7 @@ from src.modules.user.domain.services.rotacion_del_refresco import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 AHORA = datetime(2026, 11, 10, 12, 0, 0)
 
@@ -101,7 +102,7 @@ def test_d7_a_substitute_closed_another_way_means_the_session_is_closed(como):
     if como == "revocado":
         sustituto.revoke()
     elif como == "caducado":
-        sustituto._expires_at = datetime.now() - timedelta(seconds=1)
+        sustituto._expires_at = ahora_utc_sin_zona() - timedelta(seconds=1)
 
     resultado = paso_del_refresco(viejo, None if como == "ido" else sustituto, AHORA)
 

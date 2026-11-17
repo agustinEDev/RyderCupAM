@@ -16,7 +16,7 @@ Tabla aprobada por Agustín (la de caminos completa, en el informe):
   A7 un token de antes (sin datos de rotación) es vigente y se rota en su primer uso
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from itertools import count
 from unittest.mock import AsyncMock, Mock
 
@@ -42,6 +42,7 @@ from src.modules.user.domain.value_objects.device_fingerprint import DeviceFinge
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -71,7 +72,7 @@ class _Escena:
             user_id=self.usuario.id, token=ORIGINAL, device_id=self.dispositivo.id
         )
         # El login fue hace una hora
-        self.original._created_at = datetime.now() - timedelta(hours=1)
+        self.original._created_at = ahora_utc_sin_zona() - timedelta(hours=1)
         await self.uow.refresh_tokens.save(self.original)
         numeros = count(1)
         self.tokens = Mock()
@@ -127,16 +128,16 @@ class _Escena:
         """Mueve atrás la sustitución del token: ya pasó `tiempo` desde ella."""
         token = await self.token(jwt)
         assert token.replaced_at is not None
-        token._replaced_at = datetime.now() - tiempo
+        token._replaced_at = ahora_utc_sin_zona() - tiempo
 
     async def otra_sesion_nueva(self, dispositivo=None) -> RefreshToken:
         """Un login más nuevo y vivo (hace 10 s) en ese dispositivo."""
         nueva = RefreshToken.create(
             user_id=self.usuario.id,
-            token=f"otro-login-{datetime.now().timestamp()}",
+            token=f"otro-login-{ahora_utc_sin_zona().timestamp()}",
             device_id=(dispositivo or self.dispositivo).id,
         )
-        nueva._created_at = datetime.now() - timedelta(seconds=10)
+        nueva._created_at = ahora_utc_sin_zona() - timedelta(seconds=10)
         await self.uow.refresh_tokens.save(nueva)
         return nueva
 
@@ -176,7 +177,7 @@ async def test_a1_the_new_one_keeps_the_absolute_expiry_and_the_device():
           es del mismo dispositivo, y la cookie dura lo que le queda
     """
     e = await _escena()
-    e.original._expires_at = datetime.now() + timedelta(days=2)
+    e.original._expires_at = ahora_utc_sin_zona() + timedelta(days=2)
 
     respuesta = await e.refresca(ORIGINAL)
 

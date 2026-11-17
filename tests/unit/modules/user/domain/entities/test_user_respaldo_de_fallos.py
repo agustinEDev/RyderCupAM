@@ -34,6 +34,7 @@ from src.modules.user.domain.entities.user import (
     MAX_FAILED_ATTEMPTS_PER_DAY,
     User,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 LAS_DIEZ = datetime(2026, 11, 6, 10, 0)
 
@@ -138,7 +139,7 @@ def test_r5_el_desbloqueo_limpia_contador_ventana_y_bloqueo():
     """
     user = _usuario()
     # Ahora de verdad: el desbloqueo mira si sigue bloqueado con la hora del reloj
-    _falla(user, 50, datetime.now(), cada=timedelta(seconds=0))
+    _falla(user, 50, ahora_utc_sin_zona(), cada=timedelta(seconds=0))
     user.unlock()
 
     assert user.failed_login_attempts == 0
@@ -295,7 +296,7 @@ def test_r13_el_bloqueo_diario_cuenta_los_fallos_del_dia():
     """
 
     user = _usuario()
-    ahora = datetime.now() - timedelta(hours=4)
+    ahora = ahora_utc_sin_zona() - timedelta(hours=4)
     for hora in range(4):
         for i in range(49 if hora < 3 else 3):
             user.record_failed_login(ahora=ahora + timedelta(hours=hora, seconds=i))

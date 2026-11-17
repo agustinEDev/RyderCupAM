@@ -26,7 +26,7 @@ class MarkFeedAsSeenUseCase:
 
     **En UTC y sin zona**, como el `published_at` de los eventos con el que se
     compara. Antes usaba la hora local porque se comparaba con `occurred_at`,
-    que el dominio escribe con `datetime.now()`; desde que el aviso cuenta por
+    que el dominio escribe con `ahora_utc_sin_zona()`; desde que el aviso cuenta por
     publicacion, la hora local la desplazaria lo que separe al servidor de UTC.
 
     Y **nunca hacia atras**: si la marca guardada es posterior a la de ahora

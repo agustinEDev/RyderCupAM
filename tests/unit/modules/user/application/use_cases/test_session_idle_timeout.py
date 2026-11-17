@@ -16,7 +16,7 @@ dispositivos. Ahora lo decide el servidor, por dispositivo, al refrescar.
     R5  caducar por inactividad                          | queda en el registro de seguridad
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
@@ -36,12 +36,13 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.movil"
 
 
 def _dispositivo(user: User, usado_hace: timedelta) -> UserDevice:
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
     return UserDevice(
         id=UserDeviceId.generate(),
         user_id=user.id,
@@ -151,7 +152,7 @@ class TestRefrescarSegunElUso:
         await self._refresca(uow, token_service, user, dispositivo)
 
         guardado = await uow.user_devices.find_by_id(dispositivo.id)
-        assert guardado.is_idle(now=datetime.now() + timedelta(hours=2)) is False
+        assert guardado.is_idle(now=ahora_utc_sin_zona() + timedelta(hours=2)) is False
 
     async def test_r5_caducar_por_inactividad_queda_registrado(
         self, user, token_service, monkeypatch

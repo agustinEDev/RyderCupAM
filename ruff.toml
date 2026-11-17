@@ -47,6 +47,8 @@ select = [
     "ERA",    # eradicate (código comentado)
     "PL",     # pylint
     "RUF",    # ruff-specific rules
+    "DTZ005", # datetime.now() sin zona: da la hora LOCAL de la máquina (re-auditoría F-02)
+    "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
 ]
 
 # Reglas ignoradas (desactivadas)
@@ -82,6 +84,8 @@ unfixable = []
     "N806",     # non-lowercase-variable-in-function (test data naming)
     "ERA001",   # commented-out-code (example code in docstrings)
     "E402",     # module-level-import-not-at-top-of-file (setup imports)
+    "DTZ005",   # quedan tests con datetime.now(); pasan al reloj UTC en la siguiente tanda
+    "DTZ011",   # ídem con date.today()
 ]
 
 # Archivos de configuración pueden tener imports no ordenados

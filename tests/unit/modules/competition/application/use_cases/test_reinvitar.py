@@ -13,7 +13,7 @@ nadie la abriera seguía constando PENDING y bloqueaba la nueva con un 409.
 Por correo y por usuario.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -46,6 +46,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 from tests.unit.modules.competition.application.use_cases.test_avisos_de_actividad import (
     _Registro,
@@ -74,8 +75,8 @@ async def _escenario():
     ).execute(
         CreateCompetitionRequestDTO(
             name="Copa",
-            start_date=date.today() + timedelta(days=30),
-            end_date=date.today() + timedelta(days=31),
+            start_date=ahora_utc_sin_zona().date() + timedelta(days=30),
+            end_date=ahora_utc_sin_zona().date() + timedelta(days=31),
             main_country="ES",
             play_mode="SCRATCH",
             max_players=24,
@@ -139,7 +140,7 @@ async def test_r4_una_pendiente_ya_caducada_no_impide_invitar_otra_vez(manda):
         organizador,
         invitado,
         InvitationStatus.PENDING,
-        datetime.now() - timedelta(hours=1),
+        ahora_utc_sin_zona() - timedelta(hours=1),
     )
 
     nueva = await manda(uow, usuarios, competicion_id, organizador, invitado)
@@ -159,7 +160,7 @@ async def test_una_pendiente_vigente_sigue_siendo_duplicada(manda):
         organizador,
         invitado,
         InvitationStatus.PENDING,
-        datetime.now() + timedelta(days=3),
+        ahora_utc_sin_zona() + timedelta(days=3),
     )
 
     with pytest.raises(DuplicateInvitationViolation):
@@ -182,7 +183,7 @@ async def test_una_pendiente_vigente_sigue_siendo_duplicada(manda):
 async def test_r1_tras_una_cerrada_sale_la_nueva(manda, estado):
     uow, usuarios, organizador, invitado, competicion_id = await _escenario()
     await _anterior(
-        uow, competicion_id, organizador, invitado, estado, datetime.now() - timedelta(days=1)
+        uow, competicion_id, organizador, invitado, estado, ahora_utc_sin_zona() - timedelta(days=1)
     )
 
     nueva = await manda(uow, usuarios, competicion_id, organizador, invitado)
@@ -202,7 +203,7 @@ async def test_r4_y_el_aviso_de_la_caducada_se_retira(manda):
         organizador,
         invitado,
         InvitationStatus.PENDING,
-        datetime.now() - timedelta(hours=1),
+        ahora_utc_sin_zona() - timedelta(hours=1),
     )
     registro = _Registro()
 

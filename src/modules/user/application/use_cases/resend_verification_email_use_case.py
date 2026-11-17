@@ -15,7 +15,6 @@ respuesta no espera al proveedor.
 
 import logging
 import secrets
-from datetime import datetime
 
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.reenvio_de_verificacion_port import (
@@ -31,6 +30,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,6 @@ class ResendVerificationFromLinkUseCase(_Reenvio):
         if user is None or user.is_email_verified():
             return False
         caduca = user.verification_token_expires_at
-        if caduca is None or datetime.now() <= caduca:
+        if caduca is None or ahora_utc_sin_zona() <= caduca:
             return False
         return await self._envia(user, str(user.email.value))

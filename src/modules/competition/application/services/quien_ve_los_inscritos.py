@@ -27,6 +27,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class Alcance(Enum):
@@ -132,7 +133,7 @@ async def alcance_de(
         )
     if invitado is None:
         invitado = competition.id in await uow.invitations.competiciones_con_invitacion_pendiente(
-            quien, email, ahora or datetime.now()
+            quien, email, ahora or ahora_utc_sin_zona()
         )
     return alcance(
         competition,

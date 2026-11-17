@@ -20,6 +20,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (
     refresh_tokens_table,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 
@@ -144,7 +145,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
             )
-            .values(revoked=True, revoked_at=datetime.now())
+            .values(revoked=True, revoked_at=ahora_utc_sin_zona())
             .returning(refresh_tokens_table.c.replaced_at)
         )
         return await self._revoca_y_cuenta_las_vivas(stmt)
@@ -168,7 +169,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
                 refresh_tokens_table.c.replaced_at.is_(None),
-                refresh_tokens_table.c.expires_at > datetime.now(),
+                refresh_tokens_table.c.expires_at > ahora_utc_sin_zona(),
             )
         )
 
@@ -212,7 +213,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             )
             .values(
                 revoked=True,
-                revoked_at=datetime.now(),
+                revoked_at=ahora_utc_sin_zona(),
             )
             .returning(refresh_tokens_table.c.replaced_at)
         )

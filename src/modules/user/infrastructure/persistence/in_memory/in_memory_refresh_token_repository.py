@@ -13,6 +13,7 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.token_hash import hash_token
 
 
@@ -115,7 +116,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Número de tokens activos (no revocados, no expirados)
         """
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         return sum(
             1
             for token in self._tokens.values()

@@ -1,7 +1,5 @@
 """Caso de Uso: Editar un usuario (panel de administración)."""
 
-from datetime import datetime
-
 from src.modules.user.application.dto.admin_dto import (
     AdminUpdateUserRequestDTO,
     AdminUserSummaryDTO,
@@ -18,6 +16,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class AdminUpdateUserUseCase:
@@ -93,7 +92,9 @@ class AdminUpdateUserUseCase:
                     raise DuplicateEmailError(f"Email {new_email_str} is already in use")
                 # Pendiente hasta que el usuario lo confirme desde esa dirección, con su
                 # sesión: una errata del admin no da la cuenta a quien tenga ese correo
-                token_del_cambio = user.request_email_change(new_email_str, ahora=datetime.now())
+                token_del_cambio = user.request_email_change(
+                    new_email_str, ahora=ahora_utc_sin_zona()
+                )
 
             if request.handicap is not None:
                 user.update_handicap(request.handicap)

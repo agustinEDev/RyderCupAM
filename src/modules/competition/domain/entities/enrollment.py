@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.enrollment_id import EnrollmentId
@@ -79,8 +80,8 @@ class Enrollment:
         # Entró en la competición apuntándose a una lista de espera: si se queda
         # sin plaza y sin espera, sale (W2 y A4, 28 oct 2026)
         self._entered_waiting = entered_waiting
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
 
     @classmethod
     def request(
@@ -260,7 +261,7 @@ class Enrollment:
             )
 
         self._status = EnrollmentStatus.APPROVED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def reject(self) -> None:
         """Rechaza la inscripción (REQUESTED/INVITED → REJECTED)."""
@@ -270,7 +271,7 @@ class Enrollment:
             )
 
         self._status = EnrollmentStatus.REJECTED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def withdraw(self, reason: str | None = None) -> None:
         """Retira la inscripción voluntariamente (APPROVED → WITHDRAWN)."""
@@ -281,7 +282,7 @@ class Enrollment:
             )
 
         self._status = EnrollmentStatus.WITHDRAWN
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def cancel(self, reason: str | None = None) -> None:
         """Cancela la solicitud (REQUESTED/INVITED → CANCELLED)."""
@@ -292,7 +293,7 @@ class Enrollment:
             )
 
         self._status = EnrollmentStatus.CANCELLED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     @property
     def entered_waiting(self) -> bool:
@@ -308,7 +309,7 @@ class Enrollment:
         espera (decidido el 28 oct 2026).
         """
         self._entered_waiting = True
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def consigue_plaza(self) -> None:
         """
@@ -318,7 +319,7 @@ class Enrollment:
         """
         if self._entered_waiting:
             self._entered_waiting = False
-            self._updated_at = datetime.now()
+            self._updated_at = ahora_utc_sin_zona()
 
     def volver_a_entrar(
         self,
@@ -361,7 +362,7 @@ class Enrollment:
         self._tee_color = tee_color
         self._fixed_handicap = None
         self._fixed_category = None
-        self._created_at = datetime.now()
+        self._created_at = ahora_utc_sin_zona()
         self._updated_at = self._created_at
 
     # ===========================================
@@ -372,17 +373,17 @@ class Enrollment:
         """Establece un hándicap personalizado."""
         self._validate_custom_handicap(handicap)
         self._custom_handicap = handicap
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def remove_custom_handicap(self) -> None:
         """Elimina el hándicap personalizado."""
         self._custom_handicap = None
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def set_tee_color(self, tee_color: TeeColor) -> None:
         """Establece o cambia el color de barras del jugador."""
         self._tee_color = tee_color
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def set_name_preference(self, use_real_name: bool) -> None:
         """
@@ -394,7 +395,7 @@ class Enrollment:
         puede corregir en cualquier estado de la competición.
         """
         self._use_real_name = use_real_name
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # ===========================================
     # MÉTODOS ESPECIALES

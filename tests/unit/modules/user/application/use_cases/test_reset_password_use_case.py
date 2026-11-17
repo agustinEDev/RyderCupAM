@@ -16,7 +16,7 @@ Estructura:
 - TestResetPasswordSecurityFeatures: Tests de seguridad
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -31,6 +31,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Marcar todos los tests como asyncio
 pytestmark = pytest.mark.asyncio
@@ -258,7 +259,7 @@ class TestResetPasswordInvalidToken:
         old_password_hash = user.password.hashed_value
 
         # Simular expiración (hace 2 horas)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona() - timedelta(hours=2))
 
         async with uow:
             await uow.users.save(user)
@@ -423,7 +424,7 @@ class TestResetPasswordSecurityFeatures:
         )
         token = user.generate_password_reset_token()
         # Expirar el token
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona() - timedelta(hours=2))
         async with uow:
             await uow.users.save(user)
 

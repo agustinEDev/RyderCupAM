@@ -4,8 +4,6 @@ Caso de Uso: Listar Competitions con filtros.
 Permite obtener lista de competiciones con filtros opcionales.
 """
 
-from datetime import datetime
-
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
@@ -22,6 +20,7 @@ from src.modules.competition.domain.value_objects.competition_status import (
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Quien tiene una invitacion o una solicitud en marcha necesita poder mirar la
 # competicion antes de decidir. Quien fue rechazado, se retiro o cancelo, no:
@@ -225,7 +224,7 @@ class ListCompetitionsUseCase:
             ids = {i.competition_id for i in inscripciones}
             ids |= set(
                 await self._uow.invitations.competiciones_con_invitacion_pendiente(
-                    quien, viewer_email, datetime.now()
+                    quien, viewer_email, ahora_utc_sin_zona()
                 )
             )
             candidatas = []
@@ -268,7 +267,7 @@ class ListCompetitionsUseCase:
             inscripciones = await self._uow.enrollments.find_by_user(quien)
             suyas = {i.competition_id for i in inscripciones}
             suyas |= await self._uow.invitations.competiciones_con_invitacion_pendiente(
-                quien, viewer_email, datetime.now()
+                quien, viewer_email, ahora_utc_sin_zona()
             )
             return [c for c in todas if c.creator_id != quien and c.id not in suyas]
 
@@ -356,7 +355,7 @@ class ListCompetitionsUseCase:
         inscripciones = await self._uow.enrollments.find_by_user(quien)
         dentro_de = {e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER}
         dentro_de |= await self._uow.invitations.competiciones_con_invitacion_pendiente(
-            quien, viewer_email, datetime.now()
+            quien, viewer_email, ahora_utc_sin_zona()
         )
 
         visibles = {c.id for c in publicas}

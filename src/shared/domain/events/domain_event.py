@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+
 
 @dataclass(frozen=True)
 class DomainEvent:
@@ -40,7 +42,7 @@ class DomainEvent:
         """
         # Generar metadatos automáticamente usando nombres internos
         object.__setattr__(self, "_event_id", str(uuid.uuid4()))
-        object.__setattr__(self, "_occurred_on", datetime.now())
+        object.__setattr__(self, "_occurred_on", ahora_utc_sin_zona())
         object.__setattr__(self, "_event_version", 1)
 
         # Si la subclase no define aggregate_id, usar el primer campo
@@ -61,7 +63,7 @@ class DomainEvent:
     @property
     def occurred_on(self) -> datetime:
         """Timestamp de cuándo ocurrió el evento."""
-        return getattr(self, "_occurred_on", datetime.now())
+        return getattr(self, "_occurred_on", ahora_utc_sin_zona())
 
     @property
     def event_version(self) -> int:

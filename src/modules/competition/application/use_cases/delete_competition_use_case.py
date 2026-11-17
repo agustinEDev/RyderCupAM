@@ -7,8 +7,6 @@ haber un partido terminado ni un hoyo anotado. El calendario no cuenta.
 Solo el creador o un administrador pueden realizar esta accion.
 """
 
-from datetime import datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     DeleteCompetitionRequestDTO,
     DeleteCompetitionResponseDTO,
@@ -27,6 +25,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class CompetitionNotDeletableError(Exception):
@@ -139,7 +138,7 @@ class DeleteCompetitionUseCase:
             id=competition_id_value,
             name=competition_name,
             deleted=True,
-            deleted_at=datetime.now(),
+            deleted_at=ahora_utc_sin_zona(),
         )
 
     async def puede_borrar(
