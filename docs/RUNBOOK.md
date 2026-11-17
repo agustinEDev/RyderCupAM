@@ -318,3 +318,62 @@ lectura)»), solo lectura y con tiempos límite.
    denied for ... column X», el informe ha pasado a leer una columna nueva; se añade al
    script (pasos 3 y 5) y se vuelve a ejecutar. Nunca devolver la tabla entera: un
    `GRANT SELECT ON public.users` vuelve a dar el hash, el correo y el token de reseteo.
+
+## Restaurar producción (DB-03)
+
+Para cuando la base de Render se pierde o se corrompe. La copia diaria del Mac
+(`~/.local/bin/copia_pro.sh`, 03:30, en `~/Backups/rydercup-pro`) es `pg_dump -Fc
+--no-owner --no-privileges`: trae tablas, datos y la versión de Alembic, pero **ni dueños,
+ni permisos, ni usuarios, ni sus ajustes**. Restaurarla sin más deja a la API
+(`rydercup_app`), a la copia (`backup_ro`) y a n8n (`n8n_lectura`) sin poder leer nada.
+El orden importa.
+
+Ninguna contraseña va en la línea de órdenes: psql y pg_restore la piden en su aviso.
+
+1. **Parar las escrituras.** En Render, suspender el servicio de la API: lo que se
+   escriba mientras tanto se perdería al restaurar.
+2. **Elegir la copia.** La más reciente que esté bien: `pg_restore --list <copia>.dump |
+   grep -c 'TABLE DATA'` tiene que dar el número de tablas de siempre (38 a 17 nov 2026,
+   más las que hayan añadido las migraciones).
+3. **La base de destino.** Si la de Render sigue viva, usar la misma (pasos 4 en adelante
+   sobre ella). Si hay que crear otra: Postgres **15**, misma región; su usuario por
+   defecto será el nuevo dueño.
+4. **Restaurar como el dueño**, sin dueños ni permisos de la copia:
+   `pg_restore --no-owner --no-privileges --clean --if-exists -d "host=<host> port=5432
+   dbname=<base> user=<dueño> sslmode=require" <copia>.dump`. Con `--clean` borra lo que
+   haya antes de cargar; en una base nueva no hace falta. Tiene que acabar sin errores
+   (los avisos de «does not exist» del `--clean` en una base vacía no lo son).
+5. **Comprobar la versión del esquema.** `SELECT version_num FROM alembic_version;` tiene
+   que ser la de la release desplegada. Si es anterior, migrar AHORA, antes del paso 6:
+   `MIGRATIONS_DATABASE_URL=<la del dueño> alembic upgrade head` desde el repo en la
+   versión desplegada (los scripts del paso 6 dan permisos sobre columnas que una copia
+   vieja puede no tener, y pararían). Si es posterior, la API desplegada no entiende el
+   esquema: desplegar la release que corresponde.
+6. **Los usuarios y sus permisos**, en psql como el dueño y con `\set ON_ERROR_STOP on`:
+   - `\i scripts/db/rol_de_la_api.sql` (sección «Usuario de la API sin permisos de
+     estructura»). En una base nueva el usuario no existe y se crea: solo entonces,
+     `\password rydercup_app`. En la misma base de antes NO cambiar la contraseña: la
+     `DATABASE_URL` de Render sigue con la de siempre (si se cambia, cambiarla allí).
+   - En una base nueva, `n8n_lectura` tampoco existe y el script no lo crea: antes,
+     `CREATE ROLE n8n_lectura LOGIN;` y `\password n8n_lectura`, y poner esa contraseña
+     en la conexión de n8n. Después, `\i scripts/db/rol_de_n8n.sql` (sección «n8n solo
+     lee lo del informe»).
+   - `\i scripts/db/ajustes_de_la_base.sql`: tiempos límite de `rydercup_app`, sin
+     tablas temporales ni creación en `public` para nadie más.
+   - `backup_ro` (no tiene script): `GRANT CONNECT ON DATABASE <base> TO backup_ro;`,
+     `GRANT USAGE ON SCHEMA public TO backup_ro;`, `GRANT SELECT ON ALL TABLES IN SCHEMA
+     public TO backup_ro;`, `GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO
+     backup_ro;`, `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO
+     backup_ro;` y `ALTER ROLE backup_ro SET default_transaction_read_only = on;`. En una
+     base nueva, crearlo antes con `CREATE ROLE backup_ro LOGIN` y `\password backup_ro`.
+7. **Render.** Si la base es nueva: `DATABASE_URL` con `rydercup_app` y
+   `MIGRATIONS_DATABASE_URL` con el dueño, los dos al host nuevo; en el Llavero del Mac,
+   la URL de `backup_ro` (servicio `rydercup-pro-backup`, desde la app Terminal); y la
+   conexión de n8n. Reanudar la API.
+8. **Comprobar.** `curl https://api.rydercupfriends.com/health`, entrar en la app y ver un
+   torneo. Lanzar `~/.local/bin/copia_pro.sh` a mano: tiene que acabar bien. Ejecutar en
+   n8n solo el nodo «Datos de la app (solo lectura)».
+
+**Pendiente:** probarlo entero una vez contra una base de usar y tirar (la auditoría lo
+pide). La restauración de los datos ya se probó el 17 oct 2026 (86 146 filas idénticas);
+los pasos 6 y 7 no.
