@@ -67,6 +67,7 @@ async def autores_de(
             first_name=user.first_name,
             last_name=user.last_name,
             display_name=user.display_name,
+            alias=user.alias,
             avatar_source=user.avatar_source.value,
             avatar_preset_id=user.avatar_preset_id,
         )

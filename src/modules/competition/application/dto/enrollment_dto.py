@@ -53,6 +53,13 @@ class EnrolledUserDTO(BaseModel):
     handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
     country_code: str | None = Field(None, description="Código ISO del país del usuario")
     avatar_url: str | None = Field(None, description="URL del avatar del usuario (futuro)")
+    alias: str | None = Field(
+        None,
+        description=(
+            "El alias del jugador si tiene, para enseñar pequeño el nombre que no va "
+            "delante (SB-08). Null si no tiene."
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

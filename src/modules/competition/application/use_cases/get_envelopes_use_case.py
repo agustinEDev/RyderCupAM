@@ -113,7 +113,11 @@ class GetEnvelopesUseCase:
                 ),
             ]
             nombres = await PlayerNames.de_la_competicion(
-                list(dict.fromkeys(aparecen)), competition.id, self._desk.user_repository, self._uow
+                list(dict.fromkeys(aparecen)),
+                competition.id,
+                self._desk.user_repository,
+                self._uow,
+                competition.visibility,
             )
             handicaps = dict(await self._desk.handicaps_de(competition, mis_jugadores))
             programado = await self._desk.programado_para(ronda, competition)

@@ -7,8 +7,10 @@ El nombre de quien invita, como aparece en ESA competición (#710).
     Q2  inscrito, pidió su alias en ella            | el alias
     Q3  no inscrito (un admin que invita)           | el de siempre: alias
     Q4  ya no existe                                | «Unknown»
+    Q6  competición pública, con o sin alias        | el legal, siempre (SB-08)
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -21,6 +23,7 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -94,3 +97,25 @@ async def test_q5_una_consulta_por_competicion_no_por_invitacion():
     assert legales == {(competicion, jugadores[0])}
     assert lotes.await_count == 1
     uno_a_uno.assert_not_awaited()
+
+
+async def _publica(uow) -> CompetitionId:
+    """Una competición pública guardada en el repositorio."""
+    competicion = SimpleNamespace(id=CompetitionId(uuid4()), visibility=Visibility.PUBLIC)
+    uow.competitions.find_by_id = AsyncMock(return_value=competicion)
+    return competicion.id
+
+
+@pytest.mark.parametrize("alias_aqui", [True, False], ids=["pidio-alias", "sin-inscripcion"])
+async def test_q6_en_una_publica_sale_siempre_su_nombre_legal(alias_aqui):
+    """
+    Given: Una competición pública, y quien invita pidió su alias en ella o ni está inscrito
+    When: Se pide su nombre
+    Then: El legal (SB-08: en una pública el nombre real va siempre a la vista)
+    """
+    uow, jugador = InMemoryUnitOfWork(), UserId(uuid4())
+    competicion = await _publica(uow)
+    if alias_aqui:
+        await _inscrito(uow, competicion, jugador, alias_aqui=True)
+
+    assert await _nombre(uow, competicion, jugador) == "Agustin Estevez"

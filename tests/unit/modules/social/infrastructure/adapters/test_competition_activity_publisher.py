@@ -154,10 +154,24 @@ def avisos():
 
 
 class TestTraduccion:
-    @pytest.mark.parametrize("nombre_real", [True, False])
-    async def test_al_apuntarse_lleva_su_preferencia_de_nombre(self, avisos, nombre_real):
-        """El aviso, con el nombre que pidió para esa competición (29 oct 2026)."""
-        competicion = _competicion()
+    @pytest.mark.parametrize(
+        "visibility, nombre_real, esperado",
+        [
+            (Visibility.PRIVATE, True, True),
+            (Visibility.PRIVATE, False, False),
+            (Visibility.PUBLIC, True, True),
+            (Visibility.PUBLIC, False, True),
+        ],
+        ids=["privada-nombre", "privada-alias", "publica-nombre", "publica-alias"],
+    )
+    async def test_al_apuntarse_lleva_su_preferencia_de_nombre(
+        self, avisos, visibility, nombre_real, esperado
+    ):
+        """
+        El aviso, con el nombre que pidió para esa competición (29 oct 2026); en una
+        pública, el real siempre (SB-08).
+        """
+        competicion = _competicion(visibility=visibility)
         competicion.creator_id = UserId(uuid4())
         inscripcion = Enrollment(
             id=EnrollmentId.generate(),
@@ -172,7 +186,7 @@ class TestTraduccion:
 
         [(nombre, _, kwargs)] = avisos.llamadas
         assert nombre == "joined"
-        assert kwargs["use_real_name"] is nombre_real
+        assert kwargs["use_real_name"] is esperado
 
     async def test_g_las_salidas_se_releen_de_la_ronda(self, avisos):
         """
