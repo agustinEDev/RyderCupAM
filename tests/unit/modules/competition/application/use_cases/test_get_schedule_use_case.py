@@ -327,3 +327,59 @@ class TestGetScheduleUseCase:
         assert len(response.days[1].rounds) == 1
         assert response.days[1].rounds[0].session_type == "AFTERNOON"
         assert response.days[1].rounds[0].match_format == "FOURSOMES"
+
+    async def test_get_schedule_con_dos_rondas_en_el_mismo_campo_consulta_el_campo_una_vez(
+        self, uow: InMemoryUnitOfWork, competition
+    ):
+        """
+        Caracteriza la consulta de campos de la agenda (re-auditoría F-05).
+
+        Given: Dos rondas en el mismo campo y una tercera en un campo que no existe
+        When: Se solicita el schedule con repositorio de campos
+        Then: Cada campo se consulta una sola vez, la ronda lleva el nombre del suyo
+              y la del campo que no existe, ni nombre ni hora de apertura
+        """
+        campo_id = GolfCourseId(uuid4())
+        perdido_id = GolfCourseId(uuid4())
+        rondas = [
+            Round.create(
+                competition_id=competition.id,
+                golf_course_id=gc,
+                round_date=date(2026, 6, 1),
+                session_type=sesion,
+                match_format=MatchFormat.SINGLES,
+            )
+            for gc, sesion in (
+                (campo_id, SessionType.MORNING),
+                (campo_id, SessionType.AFTERNOON),
+                (perdido_id, SessionType.EVENING),
+            )
+        ]
+        async with uow:
+            for ronda in rondas:
+                await uow.rounds.add(ronda)
+
+        class _Campo:
+            name = "Real Club"
+            timezone = "Europe/Madrid"
+
+        class _Campos:
+            def __init__(self):
+                self.consultas: list[GolfCourseId] = []
+
+            async def find_by_id(self, golf_course_id):
+                self.consultas.append(golf_course_id)
+                return _Campo() if golf_course_id == campo_id else None
+
+        campos = _Campos()
+        response = await GetScheduleUseCase(uow=uow, golf_course_repo=campos).execute(
+            GetScheduleRequestDTO(competition_id=str(competition.id.value))
+        )
+
+        assert sorted(str(c) for c in campos.consultas) == sorted([str(campo_id), str(perdido_id)])
+        [dia] = response.days
+        assert [r.session_type for r in dia.rounds] == ["MORNING", "AFTERNOON", "EVENING"]
+        assert [r.golf_course_name for r in dia.rounds] == ["Real Club", "Real Club", None]
+        assert dia.rounds[0].scoring_opens_at is not None
+        assert dia.rounds[2].scoring_opens_at is None
+        assert response.tee_sheet_capacity is None

@@ -226,17 +226,7 @@ class PublishQuickMatchResultUseCase:
             {pid: hoyos.keys() for pid, hoyos in lectura.scores.items() if hoyos}
         )
         cuentan = [v for v in vueltas if v.participant.participant_id in cuentan_ids]
-        valores = [v.to_par if es_medal else v.points for v in cuentan]
-        # A igual valor, delante el de menos hándicap; solo con el mismo
-        # comparten puesto (tabla del 22 oct 2026, H)
-        indices = [lectura.handicaps.get(v.participant.participant_id) for v in cuentan]
-        puestos = dict(
-            zip(
-                (v.participant.participant_id for v in cuentan),
-                rank(valores, indices, higher_is_better=not es_medal),
-                strict=True,
-            )
-        )
+        puestos = self._puestos(lectura, cuentan, es_medal)
         # Uno solo que cuenta es como quien juega solo: sin puesto (D18, A5)
         hay_puesto = len(cuentan) > 1
         con_mejor_bruto = self._mejor_bruto(cuentan, puestos) if hay_puesto else set()
@@ -246,31 +236,69 @@ class PublishQuickMatchResultUseCase:
             user_id = vuelta.participant.user_id
             if user_id is None:
                 continue
-            pid = vuelta.participant.participant_id
-            puesto = puestos.get(pid)
-            payload: dict[str, Any] = {
-                "golf_course_id": str(match.golf_course_id.value),
-                "scoring_format": match.scoring_format.value if match.scoring_format else None,
-                "holes_played": vuelta.holes_played,
-                "gross_strokes": vuelta.gross,
-                # Solo los que cuentan: «2.º de 2»
-                "total_players": len(cuentan),
-                "position": puesto.position if puesto and hay_puesto else None,
-                "tied": puesto.tied if puesto and hay_puesto else False,
-                "unfinished": puesto is None,
-                # La etiqueta «mejor bruto del grupo», solo si no gano: quien
-                # gano ya tiene su titular. Si el 1.º tiene ese mismo bruto, nadie
-                # la lleva; si la comparten varios, todos, con la marca (D)
-                "best_gross_in_group": pid in con_mejor_bruto,
-                "best_gross_tied": pid in con_mejor_bruto and len(con_mejor_bruto) > 1,
-            }
-            if es_medal:
-                payload["net_strokes"] = vuelta.net
-                payload["to_par"] = vuelta.to_par
-            else:
-                payload["points"] = vuelta.points
+            payload = self._payload_de_clasificacion(
+                match,
+                vuelta,
+                puestos.get(vuelta.participant.participant_id),
+                total_players=len(cuentan),
+                hay_puesto=hay_puesto,
+                con_mejor_bruto=con_mejor_bruto,
+            )
             eventos.append(self._evento(match, user_id, payload))
         return eventos
+
+    @staticmethod
+    def _puestos(
+        lectura: _Lectura, cuentan: list[_Totales], es_medal: bool
+    ) -> dict[ParticipantId, Puesto]:
+        """
+        El puesto de cada uno que cuenta. A igual valor, delante el de menos
+        hándicap; solo con el mismo comparten puesto (tabla del 22 oct 2026, H).
+        """
+        valores = [v.to_par if es_medal else v.points for v in cuentan]
+        indices = [lectura.handicaps.get(v.participant.participant_id) for v in cuentan]
+        return dict(
+            zip(
+                (v.participant.participant_id for v in cuentan),
+                rank(valores, indices, higher_is_better=not es_medal),
+                strict=True,
+            )
+        )
+
+    @staticmethod
+    def _payload_de_clasificacion(
+        match: QuickMatch,
+        vuelta: _Totales,
+        puesto: Puesto | None,
+        *,
+        total_players: int,
+        hay_puesto: bool,
+        con_mejor_bruto: set[ParticipantId],
+    ) -> dict[str, Any]:
+        """Lo que cuenta el evento de la vuelta de un jugador en Stableford o Medal."""
+        pid = vuelta.participant.participant_id
+        payload: dict[str, Any] = {
+            "golf_course_id": str(match.golf_course_id.value),
+            "scoring_format": match.scoring_format.value if match.scoring_format else None,
+            "holes_played": vuelta.holes_played,
+            "gross_strokes": vuelta.gross,
+            # Solo los que cuentan: «2.º de 2»
+            "total_players": total_players,
+            "position": puesto.position if puesto and hay_puesto else None,
+            "tied": puesto.tied if puesto and hay_puesto else False,
+            "unfinished": puesto is None,
+            # La etiqueta «mejor bruto del grupo», solo si no gano: quien
+            # gano ya tiene su titular. Si el 1.º tiene ese mismo bruto, nadie
+            # la lleva; si la comparten varios, todos, con la marca (D)
+            "best_gross_in_group": pid in con_mejor_bruto,
+            "best_gross_tied": pid in con_mejor_bruto and len(con_mejor_bruto) > 1,
+        }
+        if match.scoring_format == ScoringFormat.MEDAL:
+            payload["net_strokes"] = vuelta.net
+            payload["to_par"] = vuelta.to_par
+        else:
+            payload["points"] = vuelta.points
+        return payload
 
     @staticmethod
     def _mejor_bruto(

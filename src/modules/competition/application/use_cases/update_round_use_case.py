@@ -121,31 +121,7 @@ class UpdateRoundUseCase:
             RoundNotModifiableError y los de la hoja de salidas
         """
         async with self._uow:
-            # 1. Buscar la ronda
-            round_id = RoundId(request.round_id)
-            round_entity = await self._uow.rounds.find_by_id(round_id)
-
-            if not round_entity:
-                raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
-
-            # 2. Buscar la competición
-            # Con la fila bloqueada: cambiar el formato tira los sobres de la
-            # sesion (FE #655), y hacerlo mientras un capitan entrega el suyo
-            # dejaria uno del formato viejo dentro
-            competition = await self._uow.competitions.find_by_id_for_update(
-                round_entity.competition_id
-            )
-
-            if not competition:
-                raise CompetitionNotFoundError("La competición asociada no existe")
-
-            # Releída tras el bloqueo: si mientras se esperaba otra petición
-            # generó sus partidos, se decide con eso y no con lo de antes
-            round_entity = await self._uow.rounds.find_by_id_for_update(round_id) or round_entity
-
-            # 3. Verificar creador
-            if not is_admin and not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
+            round_entity, competition = await self._ronda_y_competicion(request, user_id, is_admin)
 
             # La agenda se edita desde que la competición existe (BE #365): lo
             # que se protege es la sesión ya jugada, y eso lo mira la sesión. Las
@@ -155,37 +131,8 @@ class UpdateRoundUseCase:
             # 5. Verificar campo de golf si se cambia
             golf_course_id = self._campo_nuevo(competition, request)
 
-            # 6. Verificar sesión duplicada si se cambia fecha o tipo
-            # Dentro del torneo, como al crearla: con la agenda abierta desde el
-            # principio, mover una sesión fuera de las fechas ya no esperaba al
-            # cierre para ser posible (BE #365, CodeRabbit)
-            if request.round_date and not (
-                competition.dates.start_date <= request.round_date <= competition.dates.end_date
-            ):
-                raise DateOutOfRangeError(
-                    f"La fecha {request.round_date} está fuera del rango "
-                    f"({competition.dates.start_date} - {competition.dates.end_date})"
-                )
-
-            # Las sesiones del día de destino, una sola vez: para el duplicado y
-            # para el solape de una franja (#251)
-            dia = request.round_date or round_entity.round_date
-            del_dia = await self._uow.rounds.find_by_competition_and_date(
-                round_entity.competition_id, dia
-            )
-            if request.session_type or request.round_date:
-                check_date = dia
-                check_session = (
-                    SessionType(request.session_type)
-                    if request.session_type
-                    else round_entity.session_type
-                )
-                existing_rounds = del_dia
-                for existing in existing_rounds:
-                    if existing.id != round_entity.id and existing.session_type == check_session:
-                        raise DuplicateSessionError(
-                            f"Ya existe una sesión {check_session.value} en la fecha {check_date}"
-                        )
+            # 6. Verificar fecha y sesión duplicada si se cambia fecha o tipo
+            del_dia = await self._sesiones_del_dia(request, competition, round_entity)
 
             # 6b. Una franja solo cambia su hoja (no tiene formato), y no puede
             #     acabar solapada con otra de su jornada (#251)
@@ -205,36 +152,7 @@ class UpdateRoundUseCase:
             antes = de_las_partidas(round_entity, partidas)
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
-            session_type = SessionType(request.session_type) if request.session_type else None
-            match_format = MatchFormat(request.match_format) if request.match_format else None
-            handicap_mode = HandicapMode(request.handicap_mode) if request.handicap_mode else None
-
-            formato_anterior = round_entity.match_format
-            try:
-                round_entity.update_details(
-                    round_date=request.round_date,
-                    session_type=session_type,
-                    golf_course_id=golf_course_id,
-                    match_format=match_format,
-                    handicap_mode=handicap_mode,
-                    allowance_percentage=request.allowance_percentage,
-                    clear_allowance=request.clear_allowance,
-                )
-                if hoja is not None:
-                    round_entity.cambiar_hoja_de_salidas(hoja)
-            except ValueError as e:
-                raise RoundNotModifiableError(str(e)) from e
-
-            if formato_anterior is not None and formato_anterior != round_entity.match_format:
-                # Los sobres eran de otro formato: uno de parejas no vale para
-                # unos individuales —el capitan ya no podria ni corregirlo— y al
-                # reves revienta al generar los partidos. Se tiran, y los
-                # capitanes vuelven a entregar (FE #655)
-                await self._uow.envelopes.delete_by_round(round_entity.id)
-                # Y el motivo por el que no salieron los partidos era de ESOS
-                # sobres: si se queda, «Generar» se ofrece como reintento y, sin
-                # sobres, empareja por handicap (revision de la FE #711)
-                round_entity.clear_match_generation_block()
+            await self._actualizar(round_entity, request, golf_course_id, hoja)
 
             await self._recalcular_partidas(competition, round_entity, partidas, campo_anterior)
 
@@ -250,6 +168,126 @@ class UpdateRoundUseCase:
             status=round_entity.status.value,
             updated_at=round_entity.updated_at,
         )
+
+    async def _ronda_y_competicion(
+        self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool
+    ) -> tuple[Round, Competition]:
+        """
+        La ronda y su competición, bloqueadas, si quien pide es su creador o admin.
+
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError
+        """
+        # 1. Buscar la ronda
+        round_id = RoundId(request.round_id)
+        round_entity = await self._uow.rounds.find_by_id(round_id)
+
+        if not round_entity:
+            raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
+
+        # 2. Buscar la competición
+        # Con la fila bloqueada: cambiar el formato tira los sobres de la
+        # sesion (FE #655), y hacerlo mientras un capitan entrega el suyo
+        # dejaria uno del formato viejo dentro
+        competition = await self._uow.competitions.find_by_id_for_update(
+            round_entity.competition_id
+        )
+
+        if not competition:
+            raise CompetitionNotFoundError("La competición asociada no existe")
+
+        # Releída tras el bloqueo: si mientras se esperaba otra petición
+        # generó sus partidos, se decide con eso y no con lo de antes
+        round_entity = await self._uow.rounds.find_by_id_for_update(round_id) or round_entity
+
+        # 3. Verificar creador
+        if not is_admin and not competition.is_creator(user_id):
+            raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
+        return round_entity, competition
+
+    async def _sesiones_del_dia(
+        self, request: UpdateRoundRequestDTO, competition: Competition, round_entity: Round
+    ) -> list[Round]:
+        """
+        Las sesiones del día de destino, una sola vez: para el duplicado y para el
+        solape de una franja (#251).
+
+        Raises:
+            DateOutOfRangeError: Si la fecha nueva cae fuera del torneo
+            DuplicateSessionError: Si ese día ya hay otra sesión de ese tipo
+        """
+        # Dentro del torneo, como al crearla: con la agenda abierta desde el
+        # principio, mover una sesión fuera de las fechas ya no esperaba al
+        # cierre para ser posible (BE #365, CodeRabbit)
+        if request.round_date and not (
+            competition.dates.start_date <= request.round_date <= competition.dates.end_date
+        ):
+            raise DateOutOfRangeError(
+                f"La fecha {request.round_date} está fuera del rango "
+                f"({competition.dates.start_date} - {competition.dates.end_date})"
+            )
+
+        dia = request.round_date or round_entity.round_date
+        del_dia = await self._uow.rounds.find_by_competition_and_date(
+            round_entity.competition_id, dia
+        )
+        if request.session_type or request.round_date:
+            check_session = (
+                SessionType(request.session_type)
+                if request.session_type
+                else round_entity.session_type
+            )
+            for existing in del_dia:
+                if existing.id != round_entity.id and existing.session_type == check_session:
+                    raise DuplicateSessionError(
+                        f"Ya existe una sesión {check_session.value} en la fecha {dia}"
+                    )
+        return del_dia
+
+    async def _actualizar(
+        self,
+        round_entity: Round,
+        request: UpdateRoundRequestDTO,
+        golf_course_id: GolfCourseId | None,
+        hoja: HojaDeSalidas | None,
+    ) -> None:
+        """
+        Cambia la ronda (el dominio valida su estado) y, si cambia el formato,
+        tira sus sobres.
+
+        Raises:
+            RoundNotModifiableError: Si la sesión ya no se puede tocar
+        """
+        session_type = SessionType(request.session_type) if request.session_type else None
+        match_format = MatchFormat(request.match_format) if request.match_format else None
+        handicap_mode = HandicapMode(request.handicap_mode) if request.handicap_mode else None
+
+        formato_anterior = round_entity.match_format
+        try:
+            round_entity.update_details(
+                round_date=request.round_date,
+                session_type=session_type,
+                golf_course_id=golf_course_id,
+                match_format=match_format,
+                handicap_mode=handicap_mode,
+                allowance_percentage=request.allowance_percentage,
+                clear_allowance=request.clear_allowance,
+            )
+            if hoja is not None:
+                round_entity.cambiar_hoja_de_salidas(hoja)
+        except ValueError as e:
+            raise RoundNotModifiableError(str(e)) from e
+
+        if formato_anterior is not None and formato_anterior != round_entity.match_format:
+            # Los sobres eran de otro formato: uno de parejas no vale para
+            # unos individuales —el capitan ya no podria ni corregirlo— y al
+            # reves revienta al generar los partidos. Se tiran, y los
+            # capitanes vuelven a entregar (FE #655)
+            await self._uow.envelopes.delete_by_round(round_entity.id)
+            # Y el motivo por el que no salieron los partidos era de ESOS
+            # sobres: si se queda, «Generar» se ofrece como reintento y, sin
+            # sobres, empareja por handicap (revision de la FE #711)
+            round_entity.clear_match_generation_block()
 
     async def _partidas_que_caben(self, franja: Round, hoja: HojaDeSalidas | None) -> list[Partida]:
         """

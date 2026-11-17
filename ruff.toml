@@ -47,6 +47,7 @@ select = [
     "ERA",    # eradicate (código comentado)
     "PL",     # pylint
     "RUF",    # ruff-specific rules
+    "C901",   # complejidad ciclomática (mccabe), tope en [lint.mccabe] (re-auditoría F-05)
     "DTZ005", # datetime.now() sin zona: da la hora LOCAL de la máquina (re-auditoría F-02)
     "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
     "DTZ003", # datetime.utcnow(): obsoleto; el reloj de instante_utc
@@ -91,6 +92,10 @@ unfixable = []
     "E402",     # module-level-import-not-at-top-of-file (setup imports)
 ]
 
+# C901 pendiente (re-auditoría F-05): tests con un doble entero definido dentro
+"tests/unit/modules/user/domain/repositories/test_user_repository_interface.py" = ["C901"]  # C901 pendiente (re-auditoría F-05)
+"tests/unit/modules/user/domain/repositories/test_user_unit_of_work_interface.py" = ["C901"]  # C901 pendiente (re-auditoría F-05)
+
 # Archivos de configuración pueden tener imports no ordenados
 "alembic/env.py" = ["I", "ERA001"]
 
@@ -103,6 +108,11 @@ unfixable = []
 # Domain entities pueden tener imports locales para evitar circular imports
 "src/modules/golf_course/domain/entities/*.py" = ["PLC0415"]
 "src/modules/golf_course/infrastructure/api/v1/golf_course_routes.py" = ["PLC0415"]
+
+[lint.mccabe]
+# Freno a la complejidad (re-auditoría F-05). Las funciones que lo superen al
+# activarlo van en per-file-ignores con «# C901 pendiente (re-auditoría F-05)»
+max-complexity = 15
 
 [lint.isort]
 # Configuración de ordenamiento de imports (compatible con Black)

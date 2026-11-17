@@ -195,6 +195,23 @@ class TestElJugador:
 
         assert await e.plazas() == set()
 
+    async def test_coger_plaza_en_un_torneo_sin_stroke_play_lanza_error(self, e):
+        """
+        Caracteriza la guarda del tipo de torneo (re-auditoría F-05).
+
+        Given: Una franja de una competición sin configuración de stroke play
+        When: Un aprobado coge plaza
+        Then: PlazaEnFranjaError, y no se guarda ninguna plaza
+        """
+        await e.torneo()
+        jugador = await e.aprobado()
+        e.competicion._stroke_play = None
+
+        with pytest.raises(PlazaEnFranjaError, match="Stableford o un Medal"):
+            await e.coger(e.manana, jugador)
+
+        assert await e.plazas() == set()
+
 
 class TestElOrganizador:
     async def test_lo_coloca_con_las_inscripciones_cerradas(self, e):

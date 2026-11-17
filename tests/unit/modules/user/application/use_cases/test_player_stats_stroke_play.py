@@ -205,6 +205,42 @@ class TestStrokePlayCardsThatDoNotCount:
 
         assert (await _stats(world).execute(ana.id)).rounds_played == 0
 
+    async def test_collect_stroke_play_sin_ronda_leida_no_cuenta(self, world, monkeypatch):
+        """
+        Caracteriza el descarte de un grupo cuya ronda no aparece (re-auditoría F-05).
+
+        Given: Una tarjeta entregada de un torneo cerrado cuya ronda ya no se lee
+        When: Se piden las estadísticas
+        Then: Esa vuelta no cuenta
+        """
+        ana = await world.user()
+        await _jugada(world, ana)
+
+        async def _ninguna(_ids):
+            return []
+
+        monkeypatch.setattr(world.comp.rounds, "find_by_ids", _ninguna)
+
+        assert (await _stats(world).execute(ana.id)).rounds_played == 0
+
+    async def test_collect_stroke_play_sin_campo_leido_no_cuenta(self, world, monkeypatch):
+        """
+        Caracteriza el descarte de un grupo cuyo campo no aparece (re-auditoría F-05).
+
+        Given: Una tarjeta entregada de un torneo cerrado cuyo campo ya no se lee
+        When: Se piden las estadísticas
+        Then: Esa vuelta no cuenta
+        """
+        ana = await world.user()
+        await _jugada(world, ana)
+
+        async def _ninguno(_ids):
+            return []
+
+        monkeypatch.setattr(world.golf.golf_courses, "find_by_ids", _ninguno)
+
+        assert (await _stats(world).execute(ana.id)).rounds_played == 0
+
 
 class TestReadsInBulk:
     async def test_no_query_per_group(self, world, monkeypatch):

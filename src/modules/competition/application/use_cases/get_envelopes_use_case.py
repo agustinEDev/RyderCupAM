@@ -24,6 +24,7 @@ from src.modules.competition.application.services.envelope_desk import (
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.envelope import Envelope
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -90,30 +91,12 @@ class GetEnvelopesUseCase:
             # Abrir puede haber creado los partidos o apuntado por que no: la
             # sesion se vuelve a leer para contar lo que hay de verdad
             ronda = await self._uow.rounds.find_by_id(id_de_la_ronda) or ronda
-            sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
-            abiertos = bool(
-                sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed()
-            )
-
             mi_equipo = self._desk.equipo_de(competition, user_id)
-            mio = sobres.get(mi_equipo) if mi_equipo else None
-            rival = sobres.get("B" if mi_equipo == "A" else "A") if mi_equipo else None
-
             mis_jugadores = (
                 await self._desk.jugadores_de(competition, mi_equipo) if mi_equipo else []
             )
-            aparecen = [
-                *mis_jugadores,
-                *(
-                    uid
-                    for sobre in sobres.values()
-                    if not sobre.is_sealed()
-                    for fila in sobre.entries
-                    for uid in fila
-                ),
-            ]
             nombres = await PlayerNames.de_la_competicion(
-                list(dict.fromkeys(aparecen)),
+                _aparecen(mis_jugadores, sobres),
                 competition.id,
                 self._desk.user_repository,
                 self._uow,
@@ -123,37 +106,24 @@ class GetEnvelopesUseCase:
             programado = await self._desk.programado_para(ronda, competition)
             por_fila = Envelope.players_per_row_for(ronda.match_format)
             cuadran = await self._desk.los_equipos_cuadran(competition, por_fila)
+            # La regla vive en un solo sitio: aqui solo se pregunta
+            puede_abrirlos = self._desk.puede_abrirlos(
+                competition,
+                user_id,
+                sobres,
+                ronda=ronda,
+                is_admin=is_admin,
+                sin_plazo=self._desk.sin_plazo_que_vencer(programado),
+            )
 
-            vista = EnvelopesViewDTO(
-                round_id=ronda.id.value,
-                revealed=abiertos,
-                team_a_submitted=bool(sobre_a and sobre_a.is_submitted()),
-                team_b_submitted=bool(sobre_b and sobre_b.is_submitted()),
-                # Lo que rellena la aplicacion cuenta como «hay algo dentro»,
-                # pero NO como que el capitan entrego: sin esto la pantalla
-                # diria que entregaron los dos y seria mentira
-                team_a_automatic=bool(sobre_a and sobre_a.automatic),
-                team_b_automatic=bool(sobre_b and sobre_b.automatic),
-                mine=envelope_to_dto(mio) if mio and mio.is_submitted() else None,
-                # El del rival SOLO cuando ya estan abiertos
-                rival=envelope_to_dto(rival) if abiertos and rival else None,
-                rival_submitted=bool(rival and rival.is_submitted()),
-                rival_wants_early=bool(rival and rival.reveal_when_both_ready),
-                # La regla vive en un solo sitio: aqui solo se pregunta
+            vista = _vista(
+                ronda,
+                sobres,
+                mi_equipo,
                 players_per_row=por_fila,
                 teams_fit_format=cuadran,
-                can_reveal=self._desk.puede_abrirlos(
-                    competition,
-                    user_id,
-                    sobres,
-                    ronda=ronda,
-                    is_admin=is_admin,
-                    sin_plazo=self._desk.sin_plazo_que_vencer(programado),
-                ),
+                can_reveal=puede_abrirlos,
                 reveal_scheduled_at=programado,
-                matchups=(
-                    matchups_to_dto(sobre_a, sobre_b) if abiertos and sobre_a and sobre_b else []
-                ),
                 my_players=[
                     EnvelopePlayerDTO(
                         user_id=uid.value,
@@ -163,8 +133,80 @@ class GetEnvelopesUseCase:
                     for uid in mis_jugadores
                 ],
                 player_names={str(uid.value): nombre for uid, nombre in nombres.items()},
-                match_generation_block=block_to_dto(ronda.match_generation_block),
             )
         # Ya guardado: los avisos de los partidos que haya creado abrirlos (G2)
         await self._desk.avisar_salidas()
         return vista
+
+
+def _aparecen(mis_jugadores: list[UserId], sobres: dict[str, Envelope]) -> list[UserId]:
+    """Los que salen en la vista, sin repetir: los míos y los de los sobres abiertos."""
+    aparecen = [
+        *mis_jugadores,
+        *(
+            uid
+            for sobre in sobres.values()
+            if not sobre.is_sealed()
+            for fila in sobre.entries
+            for uid in fila
+        ),
+    ]
+    return list(dict.fromkeys(aparecen))
+
+
+def _vista(
+    ronda: Round,
+    sobres: dict[str, Envelope],
+    mi_equipo: str | None,
+    *,
+    players_per_row: int,
+    teams_fit_format: bool,
+    can_reveal: bool,
+    reveal_scheduled_at: datetime | None,
+    my_players: list[EnvelopePlayerDTO],
+    player_names: dict[str, str],
+) -> EnvelopesViewDTO:
+    """Lo que ve quien mira: del rival, su contenido solo cuando ya están abiertos."""
+    sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
+    abiertos = _abiertos(sobre_a, sobre_b)
+    mio = sobres.get(mi_equipo) if mi_equipo else None
+    rival = sobres.get("B" if mi_equipo == "A" else "A") if mi_equipo else None
+    return EnvelopesViewDTO(
+        round_id=ronda.id.value,
+        revealed=abiertos,
+        team_a_submitted=_entregado(sobre_a),
+        team_b_submitted=_entregado(sobre_b),
+        # Lo que rellena la aplicacion cuenta como «hay algo dentro»,
+        # pero NO como que el capitan entrego: sin esto la pantalla
+        # diria que entregaron los dos y seria mentira
+        team_a_automatic=bool(sobre_a and sobre_a.automatic),
+        team_b_automatic=bool(sobre_b and sobre_b.automatic),
+        mine=envelope_to_dto(mio) if mio and _entregado(mio) else None,
+        # El del rival SOLO cuando ya estan abiertos
+        rival=envelope_to_dto(rival) if abiertos and rival else None,
+        rival_submitted=_entregado(rival),
+        rival_wants_early=bool(rival and rival.reveal_when_both_ready),
+        players_per_row=players_per_row,
+        teams_fit_format=teams_fit_format,
+        can_reveal=can_reveal,
+        reveal_scheduled_at=reveal_scheduled_at,
+        matchups=_enfrentamientos(sobre_a, sobre_b) if abiertos else [],
+        my_players=my_players,
+        player_names=player_names,
+        match_generation_block=block_to_dto(ronda.match_generation_block),
+    )
+
+
+def _abiertos(sobre_a: Envelope | None, sobre_b: Envelope | None) -> bool:
+    """Si están los dos y ninguno sigue sellado."""
+    return bool(sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed())
+
+
+def _entregado(sobre: Envelope | None) -> bool:
+    """Si ese sobre existe y su capitán lo entregó."""
+    return bool(sobre and sobre.is_submitted())
+
+
+def _enfrentamientos(sobre_a: Envelope | None, sobre_b: Envelope | None) -> list[list[list[UUID]]]:
+    """Los cruces de los dos sobres, si están los dos."""
+    return matchups_to_dto(sobre_a, sobre_b) if sobre_a and sobre_b else []
