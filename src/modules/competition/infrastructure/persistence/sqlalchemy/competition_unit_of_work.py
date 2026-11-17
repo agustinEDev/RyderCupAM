@@ -196,8 +196,14 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             await self.rollback()
-        else:
+            return
+        # Si el commit falla (una restricción única), rollback: sin él la sesión quedaba
+        # inservible para lo siguiente de la misma petición (como la de usuarios, #752)
+        try:
             await self.commit()
+        except Exception:
+            await self.rollback()
+            raise
 
     async def commit(self) -> None:
         await self._session.commit()
