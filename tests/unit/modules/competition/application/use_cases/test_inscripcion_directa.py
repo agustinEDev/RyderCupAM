@@ -24,7 +24,7 @@ elige franja con hueco, o la espera de una llena, en el mismo paso.
     A2   «se ha apuntado» de amigos solo con plaza        | `enrolled` solo si no espera
 """
 
-from datetime import date, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import ClassVar
@@ -72,13 +72,14 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
 
-DENTRO_DE_UN_MES = date.today() + timedelta(days=30)
+DENTRO_DE_UN_MES = ahora_utc_sin_zona().date() + timedelta(days=30)
 
 
 class _Usuarios:
@@ -240,9 +241,8 @@ class _Escenario:
 
 
 def _ahora():
-    from datetime import UTC, datetime
 
-    return datetime.now(UTC)
+    return ahora_en_utc()
 
 
 @pytest.fixture
@@ -286,7 +286,10 @@ class TestSinFranjas:
     async def test_d10_un_borrador_al_que_ya_le_toca_abrir_se_abre_y_entra(self, e):
         await e.ryder(
             status=CompetitionStatus.DRAFT,
-            dates=DateRange(date.today() + timedelta(days=5), date.today() + timedelta(days=6)),
+            dates=DateRange(
+                ahora_utc_sin_zona().date() + timedelta(days=5),
+                ahora_utc_sin_zona().date() + timedelta(days=6),
+            ),
             enrollment_opens_days_before=10,
         )
 
@@ -300,7 +303,10 @@ class TestSinFranjas:
     async def test_d11_un_borrador_antes_de_su_hora_no_admite(self, e):
         await e.ryder(
             status=CompetitionStatus.DRAFT,
-            dates=DateRange(date.today() + timedelta(days=30), date.today() + timedelta(days=31)),
+            dates=DateRange(
+                ahora_utc_sin_zona().date() + timedelta(days=30),
+                ahora_utc_sin_zona().date() + timedelta(days=31),
+            ),
             enrollment_opens_days_before=10,
         )
 

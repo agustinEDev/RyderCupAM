@@ -8,14 +8,15 @@ un enlace de seguridad por un dominio ajeno enseña a fiarse de enlaces raros (A
 tras las revisiones). Por defecto, no: esta lista fija los únicos que pueden.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.email.envio_de_correo import CorreoSaliente
 
-FUTURO = datetime.now(UTC) + timedelta(days=7)
+FUTURO = ahora_en_utc() + timedelta(days=7)
 
 CORREOS = [
     ("verificacion", False, lambda s: s.send_verification_email("a@b.com", "Ana", "tok")),

@@ -33,7 +33,6 @@ from src.config.dependencies import (
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
-    ahora_en_utc,
 )
 from src.modules.competition.application.use_cases.close_enrollments_past_deadline_use_case import (
     ClosedByDeadline,
@@ -55,6 +54,7 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 logger = logging.getLogger(__name__)
 

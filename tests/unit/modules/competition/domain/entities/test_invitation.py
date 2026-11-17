@@ -1,6 +1,6 @@
 """Tests para Invitation Entity."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -9,12 +9,6 @@ from src.modules.competition.domain.entities.invitation import (
     INVITATION_EXPIRATION_DAYS,
     MAX_PERSONAL_MESSAGE_LENGTH,
     Invitation,
-)
-from src.modules.competition.domain.events.invitation_created_event import (
-    InvitationCreatedEvent,
-)
-from src.modules.competition.domain.events.invitation_declined_event import (
-    InvitationDeclinedEvent,
 )
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
@@ -27,6 +21,7 @@ from src.modules.competition.domain.value_objects.invitation_status import (
     InvitationStatus,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # ==========================================================================
 # Fixtures helpers
@@ -55,9 +50,9 @@ def _make_expired_invitation(**overrides):
         "inviter_id": UserId(uuid4()),
         "invitee_email": "expired@example.com",
         "status": InvitationStatus.PENDING,
-        "expires_at": datetime.now() - timedelta(days=1),
-        "created_at": datetime.now() - timedelta(days=8),
-        "updated_at": datetime.now() - timedelta(days=8),
+        "expires_at": ahora_utc_sin_zona() - timedelta(days=1),
+        "created_at": ahora_utc_sin_zona() - timedelta(days=8),
+        "updated_at": ahora_utc_sin_zona() - timedelta(days=8),
     }
     defaults.update(overrides)
     return Invitation.reconstruct(**defaults)
@@ -76,15 +71,15 @@ class TestInvitationCreate:
         assert invitation.status == InvitationStatus.PENDING
 
     def test_create_sets_expiration(self):
-        before = datetime.now()
+        before = ahora_utc_sin_zona()
         invitation = _make_invitation()
-        after = datetime.now()
+        after = ahora_utc_sin_zona()
         expected_min = before + timedelta(days=INVITATION_EXPIRATION_DAYS)
         expected_max = after + timedelta(days=INVITATION_EXPIRATION_DAYS)
         assert expected_min <= invitation.expires_at <= expected_max
 
     def test_create_sets_timestamps(self):
-        before = datetime.now()
+        before = ahora_utc_sin_zona()
         invitation = _make_invitation()
         assert invitation.created_at >= before
         assert invitation.updated_at >= before
@@ -105,25 +100,6 @@ class TestInvitationCreate:
     def test_create_without_personal_message(self):
         invitation = _make_invitation()
         assert invitation.personal_message is None
-
-    def test_create_emits_invitation_created_event(self):
-        invitation = _make_invitation()
-        events = invitation.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], InvitationCreatedEvent)
-
-    def test_create_event_has_correct_fields(self):
-        comp_id = CompetitionId(uuid4())
-        inviter_id = UserId(uuid4())
-        invitation = _make_invitation(
-            competition_id=comp_id,
-            inviter_id=inviter_id,
-            invitee_email="test@test.com",
-        )
-        event = invitation.get_domain_events()[0]
-        assert event.competition_id == str(comp_id)
-        assert event.inviter_id == str(inviter_id)
-        assert event.invitee_email == "test@test.com"
 
     def test_create_responded_at_is_none(self):
         invitation = _make_invitation()
@@ -165,7 +141,7 @@ class TestInvitationReconstruct:
         comp_id = CompetitionId(uuid4())
         inviter = UserId(uuid4())
         invitee = UserId(uuid4())
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
 
         invitation = Invitation.reconstruct(
             id=inv_id,
@@ -187,17 +163,6 @@ class TestInvitationReconstruct:
         assert invitation.invitee_user_id == invitee
         assert invitation.status == InvitationStatus.ACCEPTED
         assert invitation.personal_message == "Hello"
-
-    def test_reconstruct_does_not_emit_events(self):
-        invitation = Invitation.reconstruct(
-            id=InvitationId.generate(),
-            competition_id=CompetitionId(uuid4()),
-            inviter_id=UserId(uuid4()),
-            invitee_email="test@test.com",
-            status=InvitationStatus.PENDING,
-            expires_at=datetime.now() + timedelta(days=7),
-        )
-        assert invitation.get_domain_events() == []
 
 
 # ==========================================================================
@@ -255,7 +220,7 @@ class TestInvitationQueries:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.ACCEPTED,
-            expires_at=datetime.now() + timedelta(days=7),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
         )
         assert not invitation.is_pending()
 
@@ -304,7 +269,7 @@ class TestInvitationAccept:
 
     def test_accept_sets_responded_at(self):
         invitation = _make_invitation()
-        before = datetime.now()
+        before = ahora_utc_sin_zona()
         invitation.accept()
         assert invitation.responded_at is not None
         assert invitation.responded_at >= before
@@ -328,7 +293,7 @@ class TestInvitationAccept:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.ACCEPTED,
-            expires_at=datetime.now() + timedelta(days=7),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
         )
         with pytest.raises(InvalidInvitationStatusViolation):
             invitation.accept()
@@ -340,7 +305,7 @@ class TestInvitationAccept:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.DECLINED,
-            expires_at=datetime.now() + timedelta(days=7),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
         )
         with pytest.raises(InvalidInvitationStatusViolation):
             invitation.accept()
@@ -379,27 +344,6 @@ class TestInvitationDecline:
         invitation.decline()
         assert invitation.responded_at is not None
 
-    def test_decline_emits_declined_event(self):
-        invitation = _make_invitation()
-        invitation.clear_domain_events()
-        invitation.decline()
-        events = invitation.get_domain_events()
-        declined_events = [e for e in events if isinstance(e, InvitationDeclinedEvent)]
-        assert len(declined_events) == 1
-
-    def test_decline_event_has_correct_fields(self):
-        comp_id = CompetitionId(uuid4())
-        invitee_id = UserId(uuid4())
-        invitation = _make_invitation(
-            competition_id=comp_id,
-            invitee_user_id=invitee_id,
-        )
-        invitation.clear_domain_events()
-        invitation.decline()
-        event = invitation.get_domain_events()[0]
-        assert event.competition_id == str(comp_id)
-        assert event.invitee_user_id == str(invitee_id)
-
     def test_decline_expired_raises(self):
         invitation = _make_expired_invitation()
         with pytest.raises(InvitationExpiredViolation):
@@ -412,7 +356,7 @@ class TestInvitationDecline:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.DECLINED,
-            expires_at=datetime.now() + timedelta(days=7),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
         )
         with pytest.raises(InvalidInvitationStatusViolation):
             invitation.decline()
@@ -438,7 +382,7 @@ class TestInvitationCheckExpiration:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.ACCEPTED,
-            expires_at=datetime.now() - timedelta(days=1),
+            expires_at=ahora_utc_sin_zona() - timedelta(days=1),
         )
         invitation.check_expiration()
         assert invitation.status == InvitationStatus.ACCEPTED
@@ -450,32 +394,10 @@ class TestInvitationCheckExpiration:
             inviter_id=UserId(uuid4()),
             invitee_email="test@test.com",
             status=InvitationStatus.DECLINED,
-            expires_at=datetime.now() - timedelta(days=1),
+            expires_at=ahora_utc_sin_zona() - timedelta(days=1),
         )
         invitation.check_expiration()
         assert invitation.status == InvitationStatus.DECLINED
-
-
-# ==========================================================================
-# Domain Events Tests
-# ==========================================================================
-
-
-class TestInvitationDomainEvents:
-    """Tests para el manejo de domain events."""
-
-    def test_get_domain_events_returns_copy(self):
-        invitation = _make_invitation()
-        events1 = invitation.get_domain_events()
-        events2 = invitation.get_domain_events()
-        assert events1 == events2
-        assert events1 is not events2
-
-    def test_clear_domain_events(self):
-        invitation = _make_invitation()
-        assert len(invitation.get_domain_events()) > 0
-        invitation.clear_domain_events()
-        assert invitation.get_domain_events() == []
 
 
 # ==========================================================================
@@ -570,7 +492,7 @@ class TestEnEspera:
         """P1. Given ON_HOLD con el plazo de 7 días pasado / When se mira / Then sigue ON_HOLD."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
-        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+        invitacion._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
         invitacion.check_expiration()
 
@@ -580,7 +502,7 @@ class TestEnEspera:
         """P1. Given ON_HOLD con el plazo pasado / When se acepta / Then INVITATION_ON_HOLD."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
-        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+        invitacion._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
         with pytest.raises(InvitationOnHoldViolation):
             invitacion.accept()
@@ -591,7 +513,7 @@ class TestEnEspera:
         """P1. Given ON_HOLD con el plazo pasado / When se rechaza / Then DECLINED."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
-        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+        invitacion._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
         invitacion.decline()
 
@@ -601,19 +523,19 @@ class TestEnEspera:
         """P2. Given ON_HOLD con el plazo pasado / When vuelve / Then caduca en 7 días."""
         invitacion = _make_invitation()
         invitacion.put_on_hold()
-        invitacion._expires_at = datetime.now() - timedelta(days=3)
-        antes = datetime.now()
+        invitacion._expires_at = ahora_utc_sin_zona() - timedelta(days=3)
+        antes = ahora_utc_sin_zona()
 
         invitacion.resume()
 
         assert antes + timedelta(days=7) <= invitacion.expires_at
-        assert invitacion.expires_at <= datetime.now() + timedelta(days=7)
+        assert invitacion.expires_at <= ahora_utc_sin_zona() + timedelta(days=7)
         assert not invitacion.is_expired()
 
     def test_una_pendiente_sigue_caducando(self):
         """Given PENDING con el plazo pasado / When se mira / Then EXPIRED, como siempre."""
         invitacion = _make_invitation()
-        invitacion._expires_at = datetime.now() - timedelta(minutes=1)
+        invitacion._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
         invitacion.check_expiration()
 

@@ -1,6 +1,6 @@
 """Tests para GenerateMatchesUseCase."""
 
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -57,6 +57,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -1878,7 +1879,7 @@ class TestGenerateMatchesUseCase:
 
         async def mock_find_user(uid):
             return self._build_mock_user(
-                uid, 15.0, country_code="ES", handicap_updated_at=datetime.now(UTC)
+                uid, 15.0, country_code="ES", handicap_updated_at=ahora_en_utc()
             )
 
         user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)

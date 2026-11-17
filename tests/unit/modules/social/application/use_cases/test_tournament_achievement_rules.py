@@ -13,7 +13,7 @@ play:
 6. Reabrir y publicar se serializan con el candado del torneo.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -74,6 +74,7 @@ from src.modules.user.application.use_cases.get_player_stats_use_case import (
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.social.stroke_play_world import DIA, StrokePlayWorld, tarjeta
 
@@ -472,7 +473,7 @@ class TestOnlyWhatWasPlayedBefore:
         course = await world.course(ana)
         qm_uow = InMemoryQuickMatchUnitOfWork()
         await _partida_rapida(qm_uow, ana, course)
-        futuro = date.today() + timedelta(days=60)
+        futuro = ahora_utc_sin_zona().date() + timedelta(days=60)
         competition = await world.competition(ana, enrolled=[ana], start=futuro)
         ronda = await world.round(competition, course, futuro)
         await world.group(competition, ronda, {ana: tarjeta()})

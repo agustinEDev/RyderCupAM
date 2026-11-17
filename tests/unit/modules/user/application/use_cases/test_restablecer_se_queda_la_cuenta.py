@@ -37,6 +37,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -234,10 +235,9 @@ async def test_r5_any_reset_cancels_a_pending_email_change():
     When: Restablece la contraseña (quizá porque alguien entró en ella)
     Then: El pendiente se anula: quien lo pidiera ya no se la lleva
     """
-    from datetime import datetime
 
     uow, cuenta, _d, caso, token = await _escena(verificada=True)
-    cuenta.request_email_change("otro@example.com", ahora=datetime.now())
+    cuenta.request_email_change("otro@example.com", ahora=ahora_utc_sin_zona())
     async with uow:
         await uow.users.save(cuenta)
 
@@ -282,21 +282,6 @@ async def test_r6c_a_failing_notice_keeps_the_reset():
 
     async with uow:
         assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
-
-
-async def test_r2b_removing_the_google_on_a_reset_is_recorded():
-    """La desvinculación queda como evento, igual que al desvincular a mano (code-review)."""
-    from src.modules.user.domain.events.google_account_unlinked_event import (
-        GoogleAccountUnlinkedEvent,
-    )
-
-    uow, cuenta, _d, caso, token = await _escena(verificada=True)
-
-    await _restablece(caso, token)
-
-    async with uow:
-        guardada = await uow.users.find_by_id(cuenta.id)
-    assert any(isinstance(e, GoogleAccountUnlinkedEvent) for e in guardada.get_domain_events())
 
 
 # Restablecer la contraseña de una cuenta VERIFICADA quita su Google y no quedaba en el

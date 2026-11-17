@@ -16,7 +16,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class GetFeedUnseenCountUseCase:
@@ -33,7 +33,7 @@ class GetFeedUnseenCountUseCase:
         self,
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
-        reloj: Callable[[], datetime] = utc_now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._social_uow = social_uow
         self._user_uow = user_uow

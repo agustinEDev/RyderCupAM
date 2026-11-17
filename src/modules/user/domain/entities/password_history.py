@@ -6,9 +6,8 @@ Representa un registro de historial de contraseñas para prevenir reutilización
 
 from datetime import datetime
 
-from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
-from ..events.password_history_recorded_event import PasswordHistoryRecordedEvent
 from ..value_objects.password_history_id import PasswordHistoryId
 from ..value_objects.user_id import UserId
 
@@ -39,7 +38,6 @@ class PasswordHistory:
         user_id: UserId,
         password_hash: str,
         created_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
     ):
         """
         Inicializa un registro de historial de contraseñas.
@@ -49,13 +47,11 @@ class PasswordHistory:
             user_id: ID del usuario dueño del historial
             password_hash: Hash bcrypt de la contraseña
             created_at: Timestamp de creación (None para NOW())
-            domain_events: Eventos de dominio pendientes
         """
         self._id = id or PasswordHistoryId.generate()
         self._user_id = user_id
         self._password_hash = password_hash
-        self._created_at = created_at or datetime.now()
-        self._domain_events = domain_events or []
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     # ===========================================
     # PROPERTIES (Encapsulación — solo lectura)
@@ -78,16 +74,13 @@ class PasswordHistory:
         return self._created_at
 
     @classmethod
-    def create(
-        cls, user_id: UserId, password_hash: str, total_history_count: int = 1
-    ) -> "PasswordHistory":
+    def create(cls, user_id: UserId, password_hash: str) -> "PasswordHistory":
         """
         Factory method para crear un nuevo registro de historial.
 
         Args:
             user_id: ID del usuario
             password_hash: Hash bcrypt de la contraseña
-            total_history_count: Total de registros en historial después del cambio
 
         Returns:
             PasswordHistory: Nueva instancia con ID generado
@@ -97,7 +90,6 @@ class PasswordHistory:
             >>> history = PasswordHistory.create(
             ...     user_id=user_id,
             ...     password_hash="$2b$12$...",
-            ...     total_history_count=3
             ... )
             >>> history.id is not None
             True
@@ -106,17 +98,7 @@ class PasswordHistory:
             id=PasswordHistoryId.generate(),
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now(),
-        )
-
-        # Emitir evento de dominio
-        history._add_domain_event(
-            PasswordHistoryRecordedEvent(
-                user_id=str(user_id.value),
-                history_id=str(history.id.value),
-                recorded_at=history.created_at,
-                total_history_count=total_history_count,
-            )
+            created_at=ahora_utc_sin_zona(),
         )
 
         return history
@@ -136,35 +118,9 @@ class PasswordHistory:
             >>> history.is_older_than(365)
             True
         """
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         age = (now - self.created_at).days
         return age > days
-
-    # === Métodos para manejo de eventos de dominio ===
-
-    def _add_domain_event(self, event: DomainEvent) -> None:
-        """Agrega un evento de dominio a la colección interna."""
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        """Obtiene una copia de todos los eventos de dominio pendientes."""
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        """Limpia todos los eventos de dominio de la colección."""
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        self._domain_events.clear()
-
-    def has_domain_events(self) -> bool:
-        """Verifica si la entidad tiene eventos de dominio pendientes."""
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        return len(self._domain_events) > 0
 
     def __str__(self) -> str:
         """Representación string del historial (sin mostrar hash completo)."""

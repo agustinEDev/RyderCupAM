@@ -33,11 +33,11 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
 from src.modules.quick_match.application.use_cases.close_expired_quick_matches_use_case import (
     ClosedQuickMatches,
     CloseExpiredQuickMatchesUseCase,
-    ahora_en_utc,
 )
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class CierreDePartidasRapidas:
         self,
         fabrica: async_sessionmaker[AsyncSession],
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        reloj: Callable[[], datetime] = ahora_en_utc,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._fabrica = fabrica
         self._esperar = esperar

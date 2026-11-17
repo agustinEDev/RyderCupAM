@@ -1,6 +1,6 @@
 """Tests para AdminListUsersUseCase."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -14,6 +14,7 @@ from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -46,7 +47,6 @@ class TestAdminListUsersUseCase:
 
     async def test_the_list_shows_a_pending_email(self, uow):
         """El correo pendiente también en el listado, no solo al guardar (BE #753)."""
-        from datetime import datetime
 
         from src.modules.user.application.dto.admin_dto import AdminListUsersRequestDTO
         from src.modules.user.application.use_cases.admin_list_users_use_case import (
@@ -60,7 +60,7 @@ class TestAdminListUsersUseCase:
             email_str="ana@test.com",
             plain_password="SecureP@ssw0rd123",
         )
-        ana.request_email_change("nuevo@test.com", ahora=datetime.now())
+        ana.request_email_change("nuevo@test.com", ahora=ahora_utc_sin_zona())
         async with uow:
             await uow.users.save(ana)
 
@@ -102,7 +102,7 @@ class TestAdminListUsersUseCase:
     async def test_filters_by_is_active(self, uow):
         user = await self._create_user(uow, "Deactivated", "User", "gone@test.com")
         async with uow:
-            user.deactivate(deactivated_by_user_id="admin-id")
+            user.deactivate()
             await uow.users.save(user)
         await self._create_user(uow, "Active", "User", "active@test.com")
 
@@ -127,8 +127,8 @@ class TestAdminListUsersUseCase:
 
     async def test_last_login_at_is_max_last_used_at_across_devices(self, uow):
         user = await self._create_user(uow, "Con", "Dispositivos", "devices@test.com")
-        older = datetime.now() - timedelta(days=5)
-        newer = datetime.now() - timedelta(hours=1)
+        older = ahora_utc_sin_zona() - timedelta(days=5)
+        newer = ahora_utc_sin_zona() - timedelta(hours=1)
         async with uow:
             await uow.user_devices.save(
                 UserDevice.reconstitute(

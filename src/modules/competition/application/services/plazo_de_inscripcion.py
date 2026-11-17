@@ -12,17 +12,13 @@ ahora, que es lo que sabe la aplicación.
 """
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
-
-
-def ahora_en_utc() -> datetime:
-    """El reloj del plazo: ahora, con zona UTC."""
-    return datetime.now(UTC)
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class EnrollmentDeadlinePassedError(Exception):

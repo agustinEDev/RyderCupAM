@@ -5,7 +5,7 @@ Valida las funciones de autorización que determinan permisos de usuarios
 según el modelo de roles contextual del sistema.
 """
 
-from datetime import date, datetime
+from datetime import date
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -34,6 +34,7 @@ from src.modules.user.infrastructure.api.authorization import (
     require_admin,
     require_self_or_admin,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -53,9 +54,9 @@ def admin_user():
         display_name="Admin User",
         country_code="ES",
         handicap=15.0,
-        handicap_updated_at=datetime.now(),
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        handicap_updated_at=ahora_utc_sin_zona(),
+        created_at=ahora_utc_sin_zona(),
+        updated_at=ahora_utc_sin_zona(),
         email_verified=True,
         is_admin=True,  # ← Admin flag
     )
@@ -72,9 +73,9 @@ def creator_user():
         display_name="Creator User",
         country_code="ES",
         handicap=12.0,
-        handicap_updated_at=datetime.now(),
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        handicap_updated_at=ahora_utc_sin_zona(),
+        created_at=ahora_utc_sin_zona(),
+        updated_at=ahora_utc_sin_zona(),
         email_verified=True,
         is_admin=False,
     )
@@ -91,9 +92,9 @@ def regular_user():
         display_name="Regular User",
         country_code="ES",
         handicap=18.0,
-        handicap_updated_at=datetime.now(),
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        handicap_updated_at=ahora_utc_sin_zona(),
+        created_at=ahora_utc_sin_zona(),
+        updated_at=ahora_utc_sin_zona(),
         email_verified=True,
         is_admin=False,
     )

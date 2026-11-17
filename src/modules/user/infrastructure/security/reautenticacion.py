@@ -18,6 +18,7 @@ import jwt
 from fastapi import Response
 
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.security.cookie_handler import is_production
 
 COOKIE = "reauth_token"
@@ -31,7 +32,7 @@ _cerrojo = threading.Lock()
 
 def emite(user_id: str, dura: timedelta = DURACION) -> str:
     """Una marca nueva para ese usuario."""
-    ahora = datetime.now(UTC)
+    ahora = ahora_en_utc()
     datos = {
         "sub": user_id,
         "aud": _PROPOSITO,
@@ -66,7 +67,7 @@ def gasta_si_vale(token: str | None, user_id: str) -> bool:
     datos = _lee(token, user_id)
     if datos is None:
         return False
-    ahora = datetime.now(UTC)
+    ahora = ahora_en_utc()
     with _cerrojo:
         if datos["jti"] in _gastadas:
             return False

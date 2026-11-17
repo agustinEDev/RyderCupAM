@@ -8,7 +8,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class MarkFeedAsSeenUseCase:
@@ -26,7 +26,7 @@ class MarkFeedAsSeenUseCase:
 
     **En UTC y sin zona**, como el `published_at` de los eventos con el que se
     compara. Antes usaba la hora local porque se comparaba con `occurred_at`,
-    que el dominio escribe con `datetime.now()`; desde que el aviso cuenta por
+    que el dominio escribía con la hora local; desde que el aviso cuenta por
     publicacion, la hora local la desplazaria lo que separe al servidor de UTC.
 
     Y **nunca hacia atras**: si la marca guardada es posterior a la de ahora
@@ -39,7 +39,7 @@ class MarkFeedAsSeenUseCase:
         reloj: Callable[[], datetime] | None = None,
     ):
         self._user_uow = user_uow
-        self._reloj = reloj or utc_now
+        self._reloj = reloj or ahora_utc_sin_zona
 
     async def execute(self, user_id_raw: str) -> datetime | None:
         """Marca el feed como visto y devuelve la marca que queda guardada."""

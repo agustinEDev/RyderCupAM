@@ -47,9 +47,6 @@ from src.modules.competition.domain.entities.competition import (
     Competition,
     CompetitionStateError,
 )
-from src.modules.competition.domain.events.competition_enrollments_reopened_event import (
-    CompetitionEnrollmentsReopenedEvent,
-)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
@@ -61,13 +58,14 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
 # Se juega pasado mañana: el plazo es mañana a las 12:00 de Madrid
-HOY = datetime.now(UTC).date()
+HOY = ahora_en_utc().date()
 TORNEO = HOY + timedelta(days=2)
 MANANA = datetime.combine(TORNEO - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
 ANTES = MANANA - timedelta(days=5)
@@ -176,10 +174,6 @@ class TestMoverUnaCerradaPorElPlazo:
         assert movida.enrollment_opened_at == DESPUES.replace(tzinfo=None)
         assert await _plazo(DESPUES + timedelta(days=1)).le_toca_cerrarse(movida) is False
         assert await _plazo(DESPUES + timedelta(days=7)).le_toca_cerrarse(movida) is True
-        # Por el camino de reabrir de siempre
-        assert any(
-            isinstance(e, CompetitionEnrollmentsReopenedEvent) for e in movida.get_domain_events()
-        )
 
     async def test_con_el_plazo_nuevo_ya_pasado_cambian_las_fechas_y_sigue_cerrada(self):
         """R3. Given cerrada por el plazo / When se mueve pero su plazo nuevo ya pasó / Then CLOSED."""

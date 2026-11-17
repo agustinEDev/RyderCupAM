@@ -85,6 +85,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
@@ -92,7 +93,7 @@ from tests.unit.modules.competition.application.use_cases.helpers import USUARIO
 pytestmark = pytest.mark.asyncio
 
 # Se juega pasado mañana: el plazo es mañana a las 12:00 de Madrid
-HOY = datetime.now(UTC).date()
+HOY = ahora_en_utc().date()
 TORNEO = HOY + timedelta(days=2)
 PLAZO = datetime.combine(TORNEO - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
 ANTES = PLAZO - timedelta(days=5)
@@ -306,7 +307,7 @@ class TestInvitar:
         organizador = await _usuario(user_uow)
         invitado = await _usuario(user_uow)
         competition = await _competicion(uow, organizador.id, abierta=None)
-        plazo = PlazoDeInscripcion(_Zonas(), reloj=lambda: datetime.now(UTC))
+        plazo = PlazoDeInscripcion(_Zonas(), reloj=ahora_en_utc)
         # El torneo, hoy: su plazo ya ha pasado de verdad
         competition._dates = DateRange(HOY, HOY + timedelta(days=1))
 
@@ -506,7 +507,7 @@ class TestCrearTarde:
         """R2. Given creada hoy para un torneo de hoy / When alguien se apunta / Then entra."""
         # «Hoy» es el del campo (Madrid), con el mismo instante que el reloj del plazo:
         # con la fecha UTC fallaba cada noche entre las 00:00 y la 01:00/02:00 de Madrid (F-01)
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         hoy_en_madrid = ahora.astimezone(ZoneInfo("Europe/Madrid")).date()
         uow = CompetitionInMemoryUoW()
         creada = await CreateCompetitionUseCase(
@@ -629,9 +630,9 @@ class TestElServicio:
 
     async def test_el_reloj_por_defecto_es_el_de_ahora(self):
         """C2. Given sin reloj / Then el de ahora, en UTC."""
-        antes = datetime.now(UTC)
+        antes = ahora_en_utc()
 
         ahora = PlazoDeInscripcion(_Zonas()).ahora()
 
         assert ahora.tzinfo is not None
-        assert antes <= ahora <= datetime.now(UTC)
+        assert antes <= ahora <= ahora_en_utc()

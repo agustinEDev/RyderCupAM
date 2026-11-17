@@ -1,6 +1,6 @@
 """Tests para CloseEnrollmentsUseCase."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -28,6 +28,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
@@ -127,7 +128,7 @@ class TestCloseEnrollmentsUseCase:
         pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
         # Caducada sin que nadie la pasara a EXPIRED: caducada, no «sin plaza»
         caducada = invitacion(esta, "c@test.com")
-        caducada._expires_at = datetime.now() - timedelta(days=1)
+        caducada._expires_at = ahora_utc_sin_zona() - timedelta(days=1)
         aceptada = invitacion(esta, "a@test.com")
         aceptada.accept()
         de_otra = invitacion(otra, "o@test.com")
@@ -284,51 +285,6 @@ class TestCloseEnrollmentsUseCase:
             await close_use_case.execute(close_request, creator_id)
 
         assert "No se pueden cerrar inscripciones en estado CLOSED" in str(exc_info.value)
-
-    async def test_should_emit_domain_event_when_closed(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Verifica que se emite el evento CompetitionEnrollmentsClosedEvent.
-
-        Given: Una competición en estado ACTIVE
-        When: Se cierran las inscripciones correctamente
-        Then: Se emite el evento de dominio
-        """
-        # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(
-            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
-        )
-        create_request = CreateCompetitionRequestDTO(
-            name="Ryder Cup 2025",
-            start_date=date(2025, 6, 1),
-            end_date=date(2025, 6, 3),
-            main_country="ES",
-            play_mode="SCRATCH",
-        )
-        created = await create_use_case.execute(create_request, creator_id)
-
-        # Activar
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            await uow.competitions.update(competition)
-            await uow.commit()
-
-        # Act: Cerrar inscripciones
-        close_use_case = CloseEnrollmentsUseCase(uow)
-        close_request = CloseEnrollmentsRequestDTO(competition_id=created.id)
-        await close_use_case.execute(close_request, creator_id)
-
-        # Assert: Verificar eventos
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            events = competition.get_domain_events()
-
-            # Debe tener 3 eventos: Created, Activated, EnrollmentsClosed
-            assert len(events) == 3
-            assert events[2].__class__.__name__ == "CompetitionEnrollmentsClosedEvent"
-            assert events[2].competition_id == str(created.id)
-            assert events[2].total_enrollments == 1  # Solo el creador (auto-enrolled)
 
 
 # ==================== Con la fila bloqueada (#710, CodeRabbit en la #380) ====================

@@ -33,6 +33,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ class AvisoDeNuevoInicioDeSesion(IAvisoDeNuevoInicio):
         uow: UserUnitOfWorkInterface,
         email_service: IEmailService,
         paises: CountryRepositoryInterface,
-        reloj: Callable[[], datetime] = datetime.now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._uow = uow
         self._email_service = email_service

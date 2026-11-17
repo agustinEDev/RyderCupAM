@@ -15,7 +15,7 @@ Dispositivos fiables, fase 2: la lista y la limpieza (BE #737).
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi import status
@@ -23,6 +23,7 @@ from httpx import AsyncClient
 
 from main import app as fastapi_app
 from src.config.dependencies import get_db_session
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import sql_en_la_bd_de_test
 from tests.integration.api.v1.test_dispositivos_fiables import (
     SAFARI_IPHONE,
@@ -41,7 +42,7 @@ pytestmark = pytest.mark.asyncio
 async def _envejece_dispositivo(device_id: str, horas: float) -> None:
     await sql_en_la_bd_de_test(
         "update user_devices set last_used_at = :t where id = :id",
-        t=datetime.now() - timedelta(hours=horas),
+        t=ahora_utc_sin_zona() - timedelta(hours=horas),
         id=device_id,
     )
 
@@ -119,7 +120,7 @@ async def test_p1_to_p5_cleanup_removes_old_devices_and_expired_tokens_only(clie
     # Dos refrescos del dispositivo reciente: uno caducado hace 8 días, otro hace 6
     await sql_en_la_bd_de_test(
         "update refresh_tokens set expires_at = :t where device_id = :id",
-        t=datetime.now() - timedelta(days=8),
+        t=ahora_utc_sin_zona() - timedelta(days=8),
         id=reciente,
     )
     cuantos_antes = (
@@ -185,7 +186,7 @@ async def test_p4_a_token_expired_less_than_7_days_ago_stays(client: AsyncClient
     _, _, _, de_iphone, de_mac = await _dos_dispositivos(client, "p4")
     await sql_en_la_bd_de_test(
         "update refresh_tokens set expires_at = :t where device_id = :id",
-        t=datetime.now() - timedelta(days=6),
+        t=ahora_utc_sin_zona() - timedelta(days=6),
         id=de_iphone,
     )
 

@@ -136,7 +136,7 @@ async def test_s4_su_refresco_se_rechaza_por_cuenta_desactivada():
     Then: Rechazado con USER_INACTIVE
     """
     uow, ana, _d, jwts, _a, _caso = await _escena()
-    ana.deactivate(deactivated_by_user_id=ADMIN)
+    ana.deactivate()
     async with uow:
         await uow.users.save(ana)
     refresco = RefreshAccessTokenUseCase(
@@ -204,7 +204,7 @@ async def test_s8_el_refresco_de_una_desactivada_revoca_ese_token():
     Then: Rechazado, y ese token queda revocado: no volverá a valer al reactivarla
     """
     uow, ana, _d, jwts, _a, _caso = await _escena()
-    ana.deactivate(deactivated_by_user_id=ADMIN)
+    ana.deactivate()
     async with uow:
         await uow.users.save(ana)
 
@@ -228,7 +228,7 @@ async def test_s9_reactivar_revoca_lo_que_se_colara():
     Then: Ese token queda revocado: reactivar no devuelve ninguna sesión
     """
     uow, ana, _d, _jwts, _a, caso = await _escena()
-    ana.deactivate(deactivated_by_user_id=ADMIN)
+    ana.deactivate()
     async with uow:
         await uow.users.save(ana)
 

@@ -6,13 +6,14 @@ de inscripciones incluyendo autenticación, validaciones y persistencia.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     activate_competition,
@@ -68,7 +69,7 @@ class TestRequestEnrollment:
         # BE #332 la unica que sigue en DRAFT es la programada, y desde BE #318
         # una privada rechaza la solicitud con 403 antes de mirar el estado, asi
         # que con una privada este test no llegaria a probar lo que dice probar
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         comp = await create_competition(
             client,
             creator["cookies"],

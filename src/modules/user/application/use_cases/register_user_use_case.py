@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     RegisterUserRequestDTO,
@@ -30,6 +29,7 @@ from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -267,7 +267,7 @@ class RegisterUserUseCase:
         if ocupado is None or not ocupado.is_active or self._email_service is None:
             return None
         dueno = await self._uow.users.find_by_id_for_update(ocupado.id)
-        if dueno is None or not dueno.reserva_el_aviso_de_registro(datetime.now()):
+        if dueno is None or not dueno.reserva_el_aviso_de_registro(ahora_utc_sin_zona()):
             return None
         await self._uow.users.save(dueno)
         return str(dueno.email.value), dueno.first_name

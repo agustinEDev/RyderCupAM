@@ -5,18 +5,6 @@ from uuid import uuid4
 import pytest
 
 from src.modules.social.domain.entities.friendship import Friendship
-from src.modules.social.domain.events.friendship_accepted_event import (
-    FriendshipAcceptedEvent,
-)
-from src.modules.social.domain.events.friendship_blocked_event import (
-    FriendshipBlockedEvent,
-)
-from src.modules.social.domain.events.friendship_declined_event import (
-    FriendshipDeclinedEvent,
-)
-from src.modules.social.domain.events.friendship_requested_event import (
-    FriendshipRequestedEvent,
-)
 from src.modules.social.domain.exceptions.social_violations import (
     InvalidFriendshipStatusViolation,
     SelfFriendRequestViolation,
@@ -40,12 +28,6 @@ class TestFriendshipCreate:
     def test_create_sets_pending_status(self):
         friendship = _make_friendship()
         assert friendship.status == FriendshipStatus.PENDING
-
-    def test_create_emits_requested_event(self):
-        friendship = _make_friendship()
-        events = friendship.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], FriendshipRequestedEvent)
 
     def test_create_sets_timestamps(self):
         friendship = _make_friendship()
@@ -73,14 +55,6 @@ class TestFriendshipCreateBlocked:
         assert friendship.status == FriendshipStatus.BLOCKED
         assert friendship.blocked_by == blocker
 
-    def test_create_blocked_emits_blocked_event(self):
-        friendship = Friendship.create_blocked(
-            id=FriendshipId.generate(), blocker_id=UserId(uuid4()), blocked_id=UserId(uuid4())
-        )
-        events = friendship.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], FriendshipBlockedEvent)
-
     def test_create_blocked_with_same_blocker_and_blocked_raises(self):
         user_id = UserId(uuid4())
         with pytest.raises(SelfFriendRequestViolation):
@@ -95,14 +69,6 @@ class TestFriendshipAccept:
         friendship.accept()
         assert friendship.status == FriendshipStatus.ACCEPTED
         assert friendship.responded_at is not None
-
-    def test_accept_emits_accepted_event(self):
-        friendship = _make_friendship()
-        friendship.clear_domain_events()
-        friendship.accept()
-        events = friendship.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], FriendshipAcceptedEvent)
 
     def test_accept_when_already_accepted_raises(self):
         friendship = _make_friendship()
@@ -122,14 +88,6 @@ class TestFriendshipDecline:
         friendship = _make_friendship()
         friendship.decline()
         assert friendship.status == FriendshipStatus.DECLINED
-
-    def test_decline_emits_declined_event(self):
-        friendship = _make_friendship()
-        friendship.clear_domain_events()
-        friendship.decline()
-        events = friendship.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], FriendshipDeclinedEvent)
 
     def test_decline_when_accepted_raises(self):
         friendship = _make_friendship()
@@ -191,15 +149,6 @@ class TestFriendshipQueries:
 
 
 class TestFriendshipReconstruct:
-    def test_reconstruct_does_not_emit_events(self):
-        friendship = Friendship.reconstruct(
-            id=FriendshipId.generate(),
-            requester_id=UserId(uuid4()),
-            addressee_id=UserId(uuid4()),
-            status=FriendshipStatus.ACCEPTED,
-        )
-        assert friendship.get_domain_events() == []
-
     def test_equality_by_id(self):
         fid = FriendshipId.generate()
         a = Friendship.reconstruct(
@@ -225,7 +174,7 @@ class TestFechasEnUTC:
     @pytest.fixture
     def reloj(self, monkeypatch):
         monkeypatch.setattr(
-            "src.modules.social.domain.entities.friendship.utc_now",
+            "src.modules.social.domain.entities.friendship.ahora_utc_sin_zona",
             lambda: self.FIJO,
             raising=False,
         )

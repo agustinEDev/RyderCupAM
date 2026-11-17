@@ -91,7 +91,7 @@ class UpdateProfileUseCase:
                     if owner and owner.id != user.id:
                         raise AliasAlreadyTakenError(f"El alias '{request.alias}' ya está en uso.")
 
-                # Actualizar perfil (entity valida y emite eventos)
+                # Actualizar perfil (la entidad valida)
                 user.update_profile(
                     first_name=request.first_name,
                     last_name=request.last_name,

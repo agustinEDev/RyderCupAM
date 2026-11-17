@@ -29,7 +29,7 @@ de camino).
 | Los errores                                  | Todos son InvalidHoleSampleError         |
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -45,6 +45,7 @@ from src.modules.golf_course.domain.entities.hole_sample import (
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.gender import Gender
 
 M_PER_DEGREE = 6_371_000.0 * 3.141592653589793 / 180
@@ -89,7 +90,7 @@ def test_d1_sample_with_two_bends_is_created():
     THEN: Lleva sus puntos en orden, el id que puso el móvil y el día de hoy en UTC
     """
     sample_id = uuid4()
-    antes = datetime.now(UTC).date()
+    antes = ahora_en_utc().date()
 
     sample = _create(id=sample_id, hole_number=7, bends=[CODO, CODO_2])
 
@@ -98,7 +99,7 @@ def test_d1_sample_with_two_bends_is_created():
     assert sample.bends == (CODO, CODO_2)
     assert sample.green_center == GREEN
     assert sample.id == sample_id
-    assert antes <= sample.received_on <= datetime.now(UTC).date()
+    assert antes <= sample.received_on <= ahora_en_utc().date()
 
 
 def test_d1_only_the_day_is_kept():

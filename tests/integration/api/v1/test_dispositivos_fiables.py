@@ -28,6 +28,7 @@ from fastapi import status
 from httpx import AsyncClient
 
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -482,7 +483,7 @@ async def test_n_integration_fingerprint_without_cookie_notifies_with_cookie_doe
     Then: El primero avisa (la huella no distingue a otra persona); el del dueño, con su
           cookie, no (decidido el 6 nov 2026)
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from sqlalchemy import text
 
@@ -500,7 +501,7 @@ async def test_n_integration_fingerprint_without_cookie_notifies_with_cookie_doe
     async for sesion in app.dependency_overrides[get_db_session]():
         await sesion.execute(
             text("UPDATE user_devices SET new_login_notice_at = :antes WHERE id = :id"),
-            {"antes": datetime.now() - timedelta(hours=2), "id": primero},
+            {"antes": ahora_utc_sin_zona() - timedelta(hours=2), "id": primero},
         )
         await sesion.commit()
     mock_external_services.send_new_login_notification.reset_mock()

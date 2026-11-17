@@ -55,7 +55,6 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     - Gestiona transacciones atómicas para múltiples repositorios
     - Context manager con commit/rollback automático
     - Patrón AsyncContextManager (__aenter__ / __aexit__)
-    - Integración con Domain Events (preparado para publicación futura)
 
     Uso típico:
     ```python
@@ -144,10 +143,10 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
         Context manager exit - maneja commit/rollback automáticamente.
 
         Clean Architecture: El Use Case NO debe manejar transacciones explícitamente.
-        El UoW se encarga automáticamente de persistir cambios y publicar eventos.
+        El UoW se encarga automáticamente de persistir los cambios.
 
         Comportamiento:
-        - Si NO hubo excepción → commit() automático + publicar domain events
+        - Si NO hubo excepción → commit() automático
         - Si hubo excepción → rollback() automático
 
         Args:
@@ -162,11 +161,6 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             # Si todo fue exitoso, hacer commit automáticamente
             try:
                 await self.commit()
-
-                # Domain Events: Los eventos están registrados en las entidades
-                # Nota: Para MVP, los eventos están listos pero la publicación
-                # real a un event bus se implementará cuando se necesiten handlers
-                # (ej: enviar emails, actualizar vistas materializadas, etc.)
             except Exception:
                 # Si commit falla, hacer rollback para limpiar estado de transacción
                 await self.rollback()

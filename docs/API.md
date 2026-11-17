@@ -486,7 +486,6 @@ Returns a `UserRolesResponseDTO` object detailing the user's roles.
 - Only Spanish users (country_code=ES) can use RFEG
 - RFEG API: 5 calls/hour per user (rate limiting)
 - Handicap updates automatically + timestamp
-- Domain event `HandicapUpdatedEvent` emitted
 
 **📋 See complete module:** `docs/modules/user-management.md`
 

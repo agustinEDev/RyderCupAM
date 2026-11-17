@@ -1,6 +1,6 @@
 """Tests de dar el feed por visto (BE #176)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -24,6 +24,7 @@ from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -75,7 +76,7 @@ async def test_guarda_el_momento_de_la_llamada_y_no_una_fecha_del_pasado(user_uo
     lo que se publique mientras lee debe volver a contar como novedad.
     """
     user = await _create_user(user_uow)
-    antes = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=5)
+    antes = ahora_utc_sin_zona() - timedelta(seconds=5)
 
     visto_en = await MarkFeedAsSeenUseCase(user_uow).execute(str(user.id.value))
 
@@ -90,11 +91,11 @@ async def test_b8_se_guarda_en_utc_sin_zona(user_uow):
     servidor de UTC.
     """
     user = await _create_user(user_uow)
-    antes = datetime.now(UTC).replace(tzinfo=None)
+    antes = ahora_utc_sin_zona()
 
     visto_en = await MarkFeedAsSeenUseCase(user_uow).execute(str(user.id.value))
 
-    despues = datetime.now(UTC).replace(tzinfo=None)
+    despues = ahora_utc_sin_zona()
     assert visto_en.tzinfo is None
     assert antes <= visto_en <= despues
 

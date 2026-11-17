@@ -30,6 +30,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.user.application.use_cases._sesion_al_registrar import (
     uow_con_sesion_al_registrar,
 )
@@ -129,14 +130,14 @@ async def test_t8_un_dispositivo_revocado_y_ademas_inactivo_es_un_rechazo():
     Then: REFRESH_TOKEN_REVOKED (SESSION_REJECTED), no SESSION_IDLE: revocar no es
           el final normal de una sesión, aunque además estuviera inactiva
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     uow, _usuario, dispositivo, refresco = await _escena()
     token = await uow.refresh_tokens.find_by_token_hash(JWT)
     token.revoke()
     await uow.refresh_tokens.save(token)
     dispositivo.revoke()
-    dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+    dispositivo._last_used_at = ahora_utc_sin_zona() - timedelta(hours=25)
     await uow.user_devices.save(dispositivo)
 
     with pytest.raises(RefreshRejectedError) as rechazo:
@@ -194,7 +195,7 @@ async def test_g1_a_broken_security_log_does_not_change_the_rejection(monkeypatc
     When: Refresca
     Then: El mismo rechazo de siempre, no un 500 (#750 punto 2)
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from src.shared.infrastructure.logging import security_logger as modulo
 
@@ -206,7 +207,7 @@ async def test_g1_a_broken_security_log_does_not_change_the_rejection(monkeypatc
     if caso == "dispositivo revocado":
         dispositivo.revoke()
     else:
-        dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+        dispositivo._last_used_at = ahora_utc_sin_zona() - timedelta(hours=25)
     await uow.user_devices.save(dispositivo)
 
     with pytest.raises(RefreshRejectedError):

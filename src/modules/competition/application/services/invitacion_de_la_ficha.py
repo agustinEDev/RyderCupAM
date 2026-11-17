@@ -32,7 +32,7 @@ async def invitacion_pendiente(
     """
     La de quien mira, por su usuario o su correo; la más reciente. Quien organiza
     no la tiene, y ni se pregunta. Con el `uow` abierto; el reloj, el de
-    `Invitation.is_expired` (hora local sin zona).
+    `Invitation.is_expired` (UTC sin zona).
     """
     if competition.is_creator(quien):
         return None

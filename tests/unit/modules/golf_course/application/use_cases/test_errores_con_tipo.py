@@ -3,8 +3,8 @@ Los casos de uso de campos lanzan errores con tipo, con el texto de siempre (G10
 
 Antes lanzaban `ValueError` con un texto, y la ruta elegía el código HTTP leyendo
 ese texto («not found» → 404, «permission» → 403). Ahora el tipo dice qué pasó y
-el texto, que es el `detail` que ve el front, no cambia. Los tres heredan de
-ValueError, así que cualquier `except ValueError` los sigue capturando.
+el texto, que es el `detail` que ve el front, no cambia. El campo que no está y el
+permiso de editar los traduce el mapa de errores del módulo (F-04).
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -82,7 +82,7 @@ class TestCampoQueNoEsta:
         """Given ningún campo con ese id, When se pide verlo, Then GolfCourseMissingError con el texto de siempre."""
         caso = GetGolfCourseByIdUseCase(_uow())
         with pytest.raises(GolfCourseMissingError) as error:
-            await caso.execute(GetGolfCourseByIdRequestDTO(golf_course_id=CAMPO))
+            await caso.execute(GetGolfCourseByIdRequestDTO(golf_course_id=CAMPO, requester_id=OTRO))
         assert str(error.value) == f"Golf course not found: {CAMPO}"
 
     async def test_aprobar_un_campo_que_no_existe(self):
@@ -205,7 +205,12 @@ class TestPaisQueNoExiste:
         assert str(error.value) == "Country with code 'ZZ' not found"
 
 
-def test_los_tres_siguen_siendo_valueerror():
-    """Given los tres errores nuevos, When se miran sus bases, Then son ValueError: todo `except ValueError` los captura."""
-    for clase in (GolfCourseMissingError, CountryNotFoundError, GolfCourseEditForbiddenError):
-        assert issubclass(clase, ValueError)
+def test_solo_el_pais_que_no_existe_sigue_siendo_valueerror():
+    """
+    Given los errores con tipo, When se miran sus bases, Then el campo que no está y el
+    permiso de editar ya no son ValueError (los traduce el mapa del módulo, F-04) y el
+    país que no existe sí (su código depende de la ruta: 404 al editar, 400 al crear).
+    """
+    assert not issubclass(GolfCourseMissingError, ValueError)
+    assert not issubclass(GolfCourseEditForbiddenError, ValueError)
+    assert issubclass(CountryNotFoundError, ValueError)

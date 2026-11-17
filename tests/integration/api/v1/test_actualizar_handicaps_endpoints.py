@@ -3,11 +3,12 @@ El botón «Actualizar hándicaps» por la API (#251, decidido el 7 oct 2026).
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     add_one_session,
     create_authenticated_user,
@@ -42,7 +43,7 @@ async def _usuario(client: AsyncClient) -> dict:
 
 async def _cerrada(client: AsyncClient, tipo: str) -> tuple[dict, dict]:
     usuario = await _usuario(client)
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     datos = {
         "name": f"Act {uuid.uuid4().hex[:8]}",
         "start_date": start.isoformat(),

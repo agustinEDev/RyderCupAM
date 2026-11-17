@@ -8,11 +8,12 @@ Invitar solo con plazas, retirar una invitación y llenarse (BE #359).
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
 
 pytestmark = pytest.mark.asyncio
@@ -25,7 +26,7 @@ async def _jugador(client: AsyncClient, nombre: str) -> dict:
 
 
 async def _competicion(client: AsyncClient, creador: dict, plazas: int) -> dict:
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     return await create_competition(
         client,
         creador["cookies"],

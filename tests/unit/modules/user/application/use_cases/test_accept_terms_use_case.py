@@ -7,7 +7,6 @@ usuario dice si tiene aceptada la vigente y cuál es. B5: aceptar es idempotente
 B7: al cambiar la vigente, hay que volver a aceptar.
 """
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -41,6 +40,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 _REGISTRO = {
@@ -135,7 +135,7 @@ class TestRegistro:
         Then: El usuario guardado tiene la versión vigente y la fecha de ahora (UTC)
         """
         uow = InMemoryUnitOfWork()
-        antes = datetime.now(UTC)
+        antes = ahora_en_utc()
 
         respuesta = await RegisterUserUseCase(uow, _countries(), security_audit=auditoria).execute(
             RegisterUserRequestDTO(**_REGISTRO, accept_terms=True)
@@ -330,8 +330,8 @@ class TestUsuarioDTO:
             first_name="Ana",
             last_name="Lopez",
             display_name="Ana Lopez",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         assert dto.terms_accepted is False

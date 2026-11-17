@@ -34,7 +34,7 @@ async def test_search_excludes_deactivated_accounts():
     repository = InMemoryUserRepository()
     active = build_user("Alicia", "Buscable", "alicia@example.com")
     deactivated = build_user("Alberto", "Buscable", "alberto@example.com")
-    deactivated.deactivate(deactivated_by_user_id=str(active.id.value))
+    deactivated.deactivate()
     await repository.save(active)
     await repository.save(deactivated)
 
@@ -53,10 +53,9 @@ async def test_search_finds_a_reactivated_account():
     THEN: Aparece, porque el filtro mira el estado actual
     """
     repository = InMemoryUserRepository()
-    admin = build_user("Admin", "Gestor", "admin@example.com")
     user = build_user("Regreso", "Reactivado", "regreso@example.com")
-    user.deactivate(deactivated_by_user_id=str(admin.id.value))
-    user.reactivate(reactivated_by_user_id=str(admin.id.value))
+    user.deactivate()
+    user.reactivate()
     await repository.save(user)
 
     results = await repository.search_by_partial_name("Reactivado")
@@ -76,10 +75,9 @@ async def test_the_limit_counts_only_visible_accounts():
     que nadie debería ver.
     """
     repository = InMemoryUserRepository()
-    admin = build_user("Admin", "Gestor", "admin2@example.com")
     for index in range(3):
         hidden = build_user(f"Oculto{index}", "Compartido", f"oculto{index}@example.com")
-        hidden.deactivate(deactivated_by_user_id=str(admin.id.value))
+        hidden.deactivate()
         await repository.save(hidden)
     visible = build_user("Visible", "Compartido", "visible@example.com")
     await repository.save(visible)
@@ -136,7 +134,7 @@ async def test_search_by_alias_still_excludes_deactivated_accounts():
     active = build_user("Alicia", "Activa", "alicia2@example.com")
     deactivated = build_user("Alberto", "Inactivo", "alberto2@example.com")
     deactivated.update_profile(alias="Escondido")
-    deactivated.deactivate(deactivated_by_user_id=str(active.id.value))
+    deactivated.deactivate()
     await repository.save(active)
     await repository.save(deactivated)
 
@@ -229,7 +227,7 @@ async def test_f7_el_nombre_completo_solo_encuentra_cuentas_activas():
     repository = InMemoryUserRepository()
     baja = build_user("Pepe", "Gemelo", "pepe-baja@example.com")
     activa = build_user("Pepe", "Gemelo", "pepe@example.com")
-    baja.deactivate(deactivated_by_user_id=str(activa.id.value))
+    baja.deactivate()
     await repository.save(baja)
     await repository.save(activa)
 

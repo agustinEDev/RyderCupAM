@@ -12,7 +12,7 @@ Estructura:
 - TestValidateResetTokenInvalid: Tests para tokens inválidos/expirados
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -24,6 +24,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Marcar todos los tests como asyncio
 pytestmark = pytest.mark.asyncio
@@ -57,7 +58,6 @@ def _rebuild_user(user: User, **overrides) -> User:
         "locked_until": user.locked_until,
         "is_admin": user.is_admin,
         "gender": user.gender,
-        "domain_events": user.get_domain_events(),
     }
     fields.update(overrides)
     return User(**fields)
@@ -118,7 +118,9 @@ class TestValidateResetTokenValid:
         token = user.generate_password_reset_token()
 
         # Simular que el token fue generado hace 12 horas (aún válido)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() + timedelta(hours=12))
+        user = _rebuild_user(
+            user, reset_token_expires_at=ahora_utc_sin_zona() + timedelta(hours=12)
+        )
 
         async with uow:
             await uow.users.save(user)
@@ -178,7 +180,7 @@ class TestValidateResetTokenInvalid:
         token = user.generate_password_reset_token()
 
         # Simular expiración (hace 2 horas)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona() - timedelta(hours=2))
 
         async with uow:
             await uow.users.save(user)
@@ -215,7 +217,7 @@ class TestValidateResetTokenInvalid:
         token = user.generate_password_reset_token()
 
         # Establecer expiración exactamente ahora (boundary)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now())
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona())
 
         async with uow:
             await uow.users.save(user)

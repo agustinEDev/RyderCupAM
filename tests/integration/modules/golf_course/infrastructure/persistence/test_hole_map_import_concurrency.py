@@ -7,7 +7,7 @@ devolvería esa copia vieja (pendiente) en vez de la aprobada en la base de dato
 """
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
@@ -46,6 +46,7 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
     SQLAlchemyGolfCourseUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -69,7 +70,7 @@ def _hole(number: int) -> MappedHole:
 async def escenario(db_session):
     """Un campo aprobado con un mapa pendiente (hoyo 9), confirmado en la BD."""
     admin = UserId.generate()
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

@@ -5,7 +5,7 @@ apareciendo cerrada en las listas despues de su dia: anunciaba Â«abre el martesÂ
 y el miercoles seguia sin dejar apuntarse.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -24,6 +24,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 MADRID = "Europe/Madrid"
@@ -40,7 +41,7 @@ class FakeZona:
 
 
 def _competicion(dias: int | None, empieza_en: int, visibility=Visibility.PUBLIC) -> Competition:
-    empieza = date.today() + timedelta(days=empieza_en)
+    empieza = ahora_utc_sin_zona().date() + timedelta(days=empieza_en)
     return Competition.create(
         id=CompetitionId(uuid4()),
         creator_id=UserId(uuid4()),

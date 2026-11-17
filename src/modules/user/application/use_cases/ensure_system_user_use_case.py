@@ -94,9 +94,8 @@ class EnsureSystemUserUseCase:
             email_str=email_str,
             plain_password=_generate_unusable_password(),
         )
-        # Se desactiva a sí misma: no hay ningún admin detrás de esta alta,
-        # y la auditoría de la desactivación tiene que apuntar a algo.
-        system_user.deactivate(deactivated_by_user_id=str(system_user.id.value))
+        # Se desactiva a sí misma: no hay ningún admin detrás de esta alta.
+        system_user.deactivate()
 
         async with self._uow:
             # Otro proceso pudo crearla entretanto: entonces vale la suya

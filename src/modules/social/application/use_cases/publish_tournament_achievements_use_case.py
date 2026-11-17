@@ -58,7 +58,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import countable_holes
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ class PublishTournamentAchievementsUseCase:
             if marca is None or marca[0] != CompetitionStatus.COMPLETED:
                 return 0
 
-            calculado_en = utc_now()
+            calculado_en = ahora_utc_sin_zona()
             eventos, jugadores = await self._calcular(competition_id_raw)
             if eventos:
                 # Una fecha para toda la publicacion y el interruptor de ahora

@@ -37,7 +37,6 @@ tests/
 │
 └── integration/      # 🔗 Tests de Integración (119 tests - requieren entorno Docker)
     ├── api/          # -> Prueban los endpoints de FastAPI
-    ├── domain_events/ # -> Prueban el flujo completo de eventos
     └── modules/
         └── user/
             └── infrastructure/

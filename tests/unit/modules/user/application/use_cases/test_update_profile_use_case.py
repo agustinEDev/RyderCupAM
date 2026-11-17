@@ -156,8 +156,8 @@ class TestUpdateProfileUseCase:
         assert response.user.first_name == "John"
         assert response.user.last_name == "Doe"
 
-    async def test_update_emits_domain_event(self, uow, country_repository, existing_user):
-        """Debe emitir UserProfileUpdatedEvent cuando se actualiza."""
+    async def test_update_saves_the_new_name(self, uow, country_repository, existing_user):
+        """Debe guardar el nombre nuevo y dejar igual lo que no cambia."""
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)

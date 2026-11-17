@@ -152,8 +152,8 @@ class CreateCompetitionUseCase:
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
             #    (BE #332). Se abre llamando a `activate()` y no naciendo en
-            #    ACTIVE desde el factory porque abrir emite su evento: naciendo
-            #    activa, el estado se movia sin que nadie se enterase.
+            #    ACTIVE desde el factory para que pase por las reglas de abrir,
+            #    las mismas que cuando se abre después.
             #
             #    Va en la misma operacion, no en una segunda llamada desde la
             #    app: crear y activar por separado deja la competicion creada y

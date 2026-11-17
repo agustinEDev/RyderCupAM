@@ -10,7 +10,7 @@ Tabla aprobada el 10 nov 2026:
   D4 al verificar el correo, aparece
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -42,6 +42,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import (
     USUARIOS_CON_GENERO,
@@ -234,7 +235,7 @@ async def test_d3_sin_verificar_una_caducada_no_se_cierra_ni_lo_dice(comp_uow, u
     Then: 404 como inexistente, no el «ya no está pendiente»; y no se toca
     """
     invitada, invitacion, _ = await _escenario(comp_uow, user_uow, verificado=False)
-    invitacion._expires_at = datetime.now() - timedelta(days=1)
+    invitacion._expires_at = ahora_utc_sin_zona() - timedelta(days=1)
     async with comp_uow:
         await comp_uow.invitations.update(invitacion)
         await comp_uow.commit()

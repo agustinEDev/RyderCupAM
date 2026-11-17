@@ -8,7 +8,7 @@ cambian: una vez al día, solo España, y pedirle el hándicap al jugador cuando
 RFEG no lo da.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -23,6 +23,7 @@ from src.modules.user.domain.errors.handicap_errors import HandicapServiceUnavai
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 def _servicio(devuelve=None, lanza=None):
@@ -61,7 +62,7 @@ def _actualizado_hace(usuario: User, dias: int) -> User:
     campo a campo, y aquí basta con mover la fecha.
     """
     usuario.update_handicap(12.5)
-    usuario._handicap_updated_at = datetime.now(UTC) - timedelta(days=dias)
+    usuario._handicap_updated_at = ahora_en_utc() - timedelta(days=dias)
     return usuario
 
 

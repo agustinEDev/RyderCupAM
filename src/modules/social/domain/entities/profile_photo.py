@@ -5,6 +5,7 @@ from typing import Any
 
 from src.modules.social.domain.value_objects.profile_photo_id import ProfilePhotoId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Tope de fotos por perfil. A 375 KB cada una son ~7,3 MB por jugador: 200
 # jugadores ocupan 1,4 GB de los 10 GB contratados (BE #177).
@@ -53,7 +54,7 @@ class ProfilePhoto:
         self._image_data = image_data
         self._content_type = content_type
         self._caption = self._clean_caption(caption)
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     @classmethod
     def create(

@@ -22,7 +22,6 @@ Patrón: Use Case Pattern + Unit of Work + DTO Mapper
 """
 
 import logging
-from datetime import datetime
 
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
@@ -37,6 +36,7 @@ from src.modules.user.domain.services.descripcion_del_dispositivo import (
     ip_tapada,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ class ListUserDevicesUseCase:
             # 2. Los que tienen la sesión abierta de verdad (BE #737): activos, usados
             # en las últimas 24 h y con algún refresco vivo. Antes salían todos los
             # activos: en producción, 58 de 60 llevaban días con la sesión muerta
-            ahora = datetime.now()
+            ahora = ahora_utc_sin_zona()
             con_sesion = await self._uow.refresh_tokens.device_ids_with_live_tokens(user_id, ahora)
             devices = [
                 device

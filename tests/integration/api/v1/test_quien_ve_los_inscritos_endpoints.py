@@ -7,12 +7,13 @@ le han invitado.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import ClassVar
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -40,7 +41,7 @@ async def _verificado(client: AsyncClient, nombre: str) -> dict:
 
 
 async def _privada(client: AsyncClient, creador: dict) -> dict:
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     return await create_competition(
         client,
         creador["cookies"],

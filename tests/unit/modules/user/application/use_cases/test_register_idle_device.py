@@ -14,7 +14,7 @@ inactivo, sus tokens anteriores se revocan.
     C3  dispositivo activo                                 | sus tokens siguen valiendo
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -30,6 +30,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -39,7 +40,7 @@ IP = "10.0.0.7"
 
 async def _dispositivo_con_token(uow, user_id: UserId, usado_hace: timedelta) -> UserDevice:
     huella = DeviceFingerprint.create(user_agent=UA, ip_address=IP)
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
     dispositivo = UserDevice(
         id=UserDeviceId.generate(),
         user_id=user_id,

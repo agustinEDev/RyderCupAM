@@ -6,7 +6,7 @@ pasada, el registro y la corrección del hándicap fijado. Solo la RFEG y el
 correo son de mentira.
 """
 
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -57,6 +57,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -103,7 +104,7 @@ async def _medal_cerrado(sesion: AsyncSession, jugadores: list[User]) -> Competi
 
 async def _actualizacion(sesion: AsyncSession, torneo: CompetitionId) -> ActualizacionDeHandicaps:
     actualizacion = ActualizacionDeHandicaps.crear(
-        torneo, OrigenActualizacion.CIERRE, datetime.now(UTC)
+        torneo, OrigenActualizacion.CIERRE, ahora_en_utc()
     )
     await SQLAlchemyHandicapUpdateRepository(sesion).add(actualizacion)
     await sesion.commit()
@@ -177,7 +178,7 @@ async def test_si_la_rfeg_no_contesta_queda_incompleta_y_avisa(db_session):
 async def test_el_vigilante_lanza_la_programada_que_llega_a_su_hora(db_session):
     jugador = await _jugador(db_session, 8.0)
     torneo = await _medal_cerrado(db_session, [jugador])
-    ahora = datetime.now(UTC)
+    ahora = ahora_en_utc()
     await SQLAlchemyHandicapUpdateRepository(db_session).programar(torneo, ahora, ahora)
     await db_session.commit()
     fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
@@ -286,7 +287,7 @@ async def test_el_repositorio_no_pisa_un_actualizado(db_session, otro):
     torneo = await _medal_cerrado(db_session, [jugador])
     actualizacion = await _actualizacion(db_session, torneo)
     repo = SQLAlchemyHandicapUpdateRepository(db_session)
-    ahora = datetime.now(UTC)
+    ahora = ahora_en_utc()
     await repo.apuntar(actualizacion.id, jugador.id, ResultadoRefresco.ACTUALIZADO, ahora)
     await repo.apuntar(actualizacion.id, jugador.id, ResultadoRefresco(otro), ahora)
     await db_session.commit()

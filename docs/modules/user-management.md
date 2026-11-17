@@ -88,20 +88,13 @@ Module responsible for user management, including registration, JWT authenticati
 
 **📋 See implementation:** `src/modules/user/domain/value_objects/`
 
-### Domain Events
+### Security audit events
 
-**Implemented:**
-1. `UserCreatedEvent` - User registered
-2. `EmailVerifiedEvent` - Email verified
-3. `HandicapUpdatedEvent` - Handicap updated
-4. `LoginAttemptEvent` - Login attempt (success/failure) - Security
-5. `LogoutEvent` - Logout executed - Security
-6. `RefreshTokenUsedEvent` - Refresh token used - Security
-7. `RefreshTokenRevokedEvent` - Refresh token revoked - Security
-8. `PasswordChangedEvent` - Password changed - Security
-9. `EmailChangedEvent` - Email changed - Security
-10. `GoogleAccountLinkedEvent` - Google account linked ⭐ Sprint 3
-11. `GoogleAccountUnlinkedEvent` - Google account unlinked ⭐ Sprint 3
+The domain events of the entities were removed as unused (ADR-050). What remains are the
+security audit events that the security logger writes: login attempts, logout, refresh
+token use, revocation and reuse, password and email changes, account lock, deactivation,
+reactivation and deletion, Google link and unlink, password reset, access denied and rate
+limit.
 
 **📋 See security events:** `src/shared/domain/events/security_events.py`
 
@@ -419,9 +412,9 @@ pytest tests/unit/modules/user/ -n auto
 - **ADR-002:** Value Objects
 - **ADR-005:** Repository Pattern
 - **ADR-006:** Unit of Work Pattern
-- **ADR-007:** Domain Events Pattern
+- **ADR-050:** Remove the Unused Domain Events
 - **ADR-013:** External Services Pattern
-- **ADR-015:** Session Management Progressive Strategy
+- **ADR-039:** Session Lifetime per Device
 - **ADR-019:** Email Verification System
 
 ### Testing
@@ -439,8 +432,7 @@ pytest tests/unit/modules/user/ -n auto
 3. Inject dependencies (UoW, services) in constructor
 4. Implement logic in `execute()` method
 5. Use `async with self._uow:` for transactions
-6. Emit domain events if necessary
-7. Create unit + integration tests
+6. Create unit + integration tests
 
 ### Add New Value Object
 1. Create class in `domain/value_objects/`

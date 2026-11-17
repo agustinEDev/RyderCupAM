@@ -8,7 +8,7 @@ hora, la cuenta se bloquea 30 minutos para los dispositivos desconocidos.
   #   caso                                                | esperado
   ----|----------------------------------------------------|---------------------------------
   R1  49 fallos dentro de la hora                           | sin bloquear
-  R2  el fallo 50 dentro de la hora                         | bloqueada 30 min, con su evento
+  R2  el fallo 50 dentro de la hora                         | bloqueada 30 min
   R3  los fallos de hace más de una hora                    | no cuentan: la ventana vuelve a 0
   R4  el bloqueo, pasados 30 min                            | se acaba solo
   R5  el desbloqueo del administrador                       | limpia contador, ventana y bloqueo
@@ -19,7 +19,7 @@ hora, la cuenta se bloquea 30 minutos para los dispositivos desconocidos.
   R9  el fallo 25 de la hora                                | «aviso»: el dueño se entera sin bloquear
   R10 150 fallos en 24 h (sin llegar a 50 en ninguna hora)  | bloqueo de 24 h, «dia»
   R11 lo que devuelve cada fallo                            | None, «aviso», «respaldo» o «dia»
-  R13 el evento y el desbloqueo de un bloqueo de 24 h       | cuentan los fallos del día (150), no
+  R13 la auditoría de un bloqueo de 24 h                    | cuentan los fallos del día (150), no
                                                             |   los de la hora
 """
 
@@ -34,7 +34,7 @@ from src.modules.user.domain.entities.user import (
     MAX_FAILED_ATTEMPTS_PER_DAY,
     User,
 )
-from src.modules.user.domain.events.account_locked_event import AccountLockedEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 LAS_DIEZ = datetime(2026, 11, 6, 10, 0)
 
@@ -81,7 +81,7 @@ def test_r2_el_fallo_50_bloquea_30_minutos():
     """
     Given: Un usuario con 49 fallos en la última hora
     When: Falla otra vez
-    Then: Queda bloqueado 30 minutos desde ese fallo, y lo dice un evento
+    Then: Queda bloqueado 30 minutos desde ese fallo
     """
     user = _usuario()
     _falla(user, 50, LAS_DIEZ)
@@ -89,7 +89,6 @@ def test_r2_el_fallo_50_bloquea_30_minutos():
 
     assert user.locked_until == ultimo + timedelta(minutes=30)
     assert user.is_locked(ahora=ultimo + timedelta(minutes=29))
-    assert any(isinstance(e, AccountLockedEvent) for e in user.get_domain_events())
 
 
 def test_r3_los_fallos_de_hace_mas_de_una_hora_no_cuentan():
@@ -140,8 +139,8 @@ def test_r5_el_desbloqueo_limpia_contador_ventana_y_bloqueo():
     """
     user = _usuario()
     # Ahora de verdad: el desbloqueo mira si sigue bloqueado con la hora del reloj
-    _falla(user, 50, datetime.now(), cada=timedelta(seconds=0))
-    user.unlock(unlocked_by_user_id="admin")
+    _falla(user, 50, ahora_utc_sin_zona(), cada=timedelta(seconds=0))
+    user.unlock()
 
     assert user.failed_login_attempts == 0
     assert user.locked_until is None
@@ -293,18 +292,16 @@ def test_r13_el_bloqueo_diario_cuenta_los_fallos_del_dia():
     """
     Given: Un ataque lento que llega a 150 en el día con 3 en la última hora
     When: Se bloquea 24 horas y un administrador lo desbloquea
-    Then: El evento del bloqueo y el del desbloqueo dicen 150, no 3
+    Then: Para la auditoría cuentan 150 fallos, no 3, también al desbloquear
     """
-    from src.modules.user.domain.events.account_unlocked_event import AccountUnlockedEvent
 
     user = _usuario()
-    ahora = datetime.now() - timedelta(hours=4)
+    ahora = ahora_utc_sin_zona() - timedelta(hours=4)
     for hora in range(4):
         for i in range(49 if hora < 3 else 3):
             user.record_failed_login(ahora=ahora + timedelta(hours=hora, seconds=i))
 
-    bloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountLockedEvent)][-1]
-    assert bloqueo.failed_attempts == 150
-    user.unlock(unlocked_by_user_id="admin")
-    desbloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountUnlockedEvent)][-1]
-    assert desbloqueo.previous_failed_attempts == 150
+    assert user.is_locked()
+    assert user.failed_login_attempts_for_audit == 150
+    user.unlock()
+    assert not user.is_locked()

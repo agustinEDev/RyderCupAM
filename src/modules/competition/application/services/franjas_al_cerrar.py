@@ -72,7 +72,7 @@ class FranjasAlCerrar:
             if not inscripcion.entered_waiting:
                 sin.append(inscripcion.user_id)
                 continue
-            inscripcion.withdraw("no_place")
+            inscripcion.withdraw()
             await self._uow.enrollments.update(inscripcion)
             fuera.append(inscripcion)
         if sin:

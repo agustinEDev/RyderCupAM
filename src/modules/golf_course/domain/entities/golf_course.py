@@ -7,17 +7,14 @@ Ver ADR-032 para detalles del workflow de aprobación.
 
 from collections import defaultdict
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
-from ..events.golf_course_approved_event import GolfCourseApprovedEvent
-from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
-from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.course_location import CourseLocation
 from ..value_objects.course_provenance import CourseProvenance
@@ -114,7 +111,6 @@ class GolfCourse:
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
         timezone: str | None = None,
-        domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
         Constructor privado. Usar create() o reconstruct().
@@ -137,7 +133,6 @@ class GolfCourse:
             provenance: De dónde salen los datos (manual por defecto)
             physical_holes: Hoyos que tiene el campo sobre el terreno (9 o 18).
                 None si no consta
-            domain_events: Eventos de dominio (opcional)
         """
         self._id = id
         self._name = name
@@ -152,7 +147,6 @@ class GolfCourse:
         self._updated_at = updated_at
         self._original_golf_course_id = original_golf_course_id
         self._is_pending_update = is_pending_update
-        self._domain_events: list[DomainEvent] = domain_events or []
 
         # La ubicación se guarda desglosada en escalares, no como Value Object
         # compuesto: es opcional, y `composite()` no admite NULL (falla en el
@@ -334,7 +328,7 @@ class GolfCourse:
         if not (3 <= len(name) <= 200):  # noqa: PLR2004
             raise ValueError("Course name must be between 3 and 200 characters")
 
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = ahora_utc_sin_zona()
         golf_course_id = GolfCourseId.generate()
 
         golf_course = cls(
@@ -353,15 +347,6 @@ class GolfCourse:
             provenance=provenance,
             physical_holes=physical_holes,
             timezone=timezone,
-        )
-
-        # Registrar evento de creación
-        golf_course._record_event(
-            GolfCourseRequestedEvent(
-                golf_course_id=str(golf_course_id),
-                golf_course_name=name,
-                creator_id=str(creator_id),
-            )
         )
 
         return golf_course
@@ -429,16 +414,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.APPROVED
         self._rejection_reason = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
-
-        # Registrar evento de aprobación
-        self._record_event(
-            GolfCourseApprovedEvent(
-                golf_course_id=str(self._id),
-                golf_course_name=self._name,
-                creator_id=str(self._creator_id),
-            )
-        )
+        self._updated_at = ahora_utc_sin_zona()
 
     def reject(self, reason: str) -> None:
         """
@@ -463,17 +439,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.REJECTED
         self._rejection_reason = reason
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
-
-        # Registrar evento de rechazo
-        self._record_event(
-            GolfCourseRejectedEvent(
-                golf_course_id=str(self._id),
-                golf_course_name=self._name,
-                creator_id=str(self._creator_id),
-                rejection_reason=reason,
-            )
-        )
+        self._updated_at = ahora_utc_sin_zona()
 
     def update(
         self,
@@ -572,7 +538,7 @@ class GolfCourse:
         for hole in holes:
             self._holes.append(replace(hole))
 
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
         # Reconciliar tarjetas antes de validar: si las salidas llegan sin la
         # suya, heredan la del campo
@@ -699,7 +665,7 @@ class GolfCourse:
         Usado cuando un creator edita un campo APPROVED y se crea un clone.
         """
         self._is_pending_update = True
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def clear_pending_update(self) -> None:
         """
@@ -708,7 +674,7 @@ class GolfCourse:
         Usado cuando el admin aprueba o rechaza el clone.
         """
         self._is_pending_update = False
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def apply_changes_from_clone(self, clone: "GolfCourse") -> None:
         """
@@ -757,7 +723,7 @@ class GolfCourse:
         for hole in clone.reference_card:
             self._holes.append(replace(hole))
 
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
         # Quitar marca de pending update
         self._is_pending_update = False
@@ -875,27 +841,6 @@ class GolfCourse:
                     f"{min_rating} and {max_rating}, got {tee.course_rating} "
                     f"on tee {tee.display_name}"
                 )
-
-    # Domain Events Management
-
-    def _record_event(self, event: DomainEvent) -> None:
-        """Registra un evento de dominio."""
-        self._domain_events.append(event)
-
-    def pull_domain_events(self) -> list[DomainEvent]:
-        """
-        Retorna y limpia los eventos de dominio.
-
-        Returns:
-            Lista de eventos de dominio
-        """
-        events = self._domain_events.copy()
-        self._domain_events.clear()
-        return events
-
-    def clear_domain_events(self) -> None:
-        """Limpia los eventos de dominio sin retornarlos."""
-        self._domain_events.clear()
 
     # Properties
 

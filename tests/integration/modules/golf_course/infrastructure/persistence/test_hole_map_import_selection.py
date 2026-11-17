@@ -4,8 +4,6 @@ Integration tests: qué campos recorre el comando de importar mapas de OSM (BE #
 Solo campos aprobados y con coordenadas, del país pedido o el campo pedido.
 """
 
-from datetime import UTC, datetime
-
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
@@ -21,6 +19,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
     GolfCourseRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -33,7 +32,7 @@ SITIO = CourseLocation(latitude=36.2858, longitude=-5.3247)
 @pytest_asyncio.fixture
 async def creator_id(db_session) -> UserId:
     uid = UserId.generate()
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

@@ -11,6 +11,7 @@ from src.modules.competition.domain.value_objects.match_status import MatchStatu
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 
@@ -177,7 +178,6 @@ class TestMatchPlayerQueries:
 
 class TestMatchScoringReconstruct:
     def test_reconstruct_with_scoring_fields(self):
-        from datetime import datetime
 
         a = _make_player()
         b = _make_player()
@@ -186,7 +186,7 @@ class TestMatchScoringReconstruct:
                 scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
             ),
         ]
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         match = Match.reconstruct(
             id=Match.create(
                 round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]

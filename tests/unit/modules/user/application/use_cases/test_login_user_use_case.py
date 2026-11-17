@@ -53,7 +53,6 @@ def _rebuild_user(user: User, **overrides) -> User:
         "is_admin": user.is_admin,
         "is_active": user.is_active,
         "gender": user.gender,
-        "domain_events": user.get_domain_events(),
     }
     fields.update(overrides)
     return User(**fields)

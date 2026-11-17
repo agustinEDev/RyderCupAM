@@ -7,39 +7,6 @@ import pytest
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
-from src.modules.quick_match.domain.events.quick_match_cancelled_event import (
-    QuickMatchCancelledEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_completed_event import (
-    QuickMatchCompletedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_created_event import (
-    QuickMatchCreatedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_hidden_event import (
-    QuickMatchHiddenEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_participant_added_event import (
-    QuickMatchParticipantAddedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_participant_handicap_updated_event import (
-    QuickMatchParticipantHandicapUpdatedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_participant_removed_event import (
-    QuickMatchParticipantRemovedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_started_event import (
-    QuickMatchStartedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_stats_excluded_event import (
-    QuickMatchStatsExcludedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_stats_included_event import (
-    QuickMatchStatsIncludedEvent,
-)
-from src.modules.quick_match.domain.events.quick_match_unhidden_event import (
-    QuickMatchUnhiddenEvent,
-)
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
@@ -112,12 +79,6 @@ class TestQuickMatchCreate:
         qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
         assert qm.participants[0].team == "A"
 
-    def test_create_emits_created_and_participant_added_events(self):
-        qm = _make_quick_match()
-        events = qm.get_domain_events()
-        assert any(isinstance(e, QuickMatchCreatedEvent) for e in events)
-        assert any(isinstance(e, QuickMatchParticipantAddedEvent) for e in events)
-
 
 class TestQuickMatchName:
     def test_create_without_name_defaults_to_none(self):
@@ -148,15 +109,11 @@ class TestQuickMatchName:
 class TestQuickMatchAddParticipant:
     def test_add_registered_participant_singles_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.clear_domain_events()
         other = _registered()
         qm.add_participant(other)
 
         assert qm.is_participant(other.participant_id)
         assert qm.is_roster_complete()
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchParticipantAddedEvent)
 
     def test_add_guest_participant_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -253,14 +210,10 @@ class TestQuickMatchRemoveParticipant:
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         other = _registered()
         qm.add_participant(other)
-        qm.clear_domain_events()
 
         qm.remove_participant(other.participant_id)
 
         assert not qm.is_participant(other.participant_id)
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchParticipantRemovedEvent)
 
     def test_remove_creator_raises(self):
         qm = _make_quick_match()
@@ -301,14 +254,10 @@ class TestQuickMatchStatsExclusion:
 
     def test_exclude_from_stats_succeeds_on_a_completed_match(self):
         qm, _ = _completed_quick_match()
-        qm.clear_domain_events()
 
         qm.exclude_from_stats_for(qm.creator_participant_id)
 
         assert qm.is_stats_excluded_for(qm.creator_participant_id)
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchStatsExcludedEvent)
 
     def test_exclude_from_stats_does_not_hide_the_match(self):
         """Lo que distingue esta marca de ocultar: la partida se sigue viendo."""
@@ -347,24 +296,18 @@ class TestQuickMatchStatsExclusion:
     def test_exclude_from_stats_is_idempotent(self):
         qm, _ = _completed_quick_match()
         qm.exclude_from_stats_for(qm.creator_participant_id)
-        qm.clear_domain_events()
 
         qm.exclude_from_stats_for(qm.creator_participant_id)
 
         assert qm.is_stats_excluded_for(qm.creator_participant_id)
-        assert qm.get_domain_events() == []
 
     def test_include_in_stats_reverses_the_exclusion(self):
         qm, _ = _completed_quick_match()
         qm.exclude_from_stats_for(qm.creator_participant_id)
-        qm.clear_domain_events()
 
         qm.include_in_stats_for(qm.creator_participant_id)
 
         assert not qm.is_stats_excluded_for(qm.creator_participant_id)
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchStatsIncludedEvent)
 
     def test_include_in_stats_does_not_require_a_completed_match(self):
         """
@@ -398,12 +341,10 @@ class TestQuickMatchStatsExclusion:
 
     def test_include_in_stats_is_idempotent(self):
         qm, _ = _completed_quick_match()
-        qm.clear_domain_events()
 
         qm.include_in_stats_for(qm.creator_participant_id)
 
         assert not qm.is_stats_excluded_for(qm.creator_participant_id)
-        assert qm.get_domain_events() == []
 
     def test_hiding_and_excluding_are_independent_marks(self):
         """La prueba de que se han separado de verdad."""
@@ -418,14 +359,10 @@ class TestQuickMatchStatsExclusion:
 class TestQuickMatchHideForHistory:
     def test_hide_for_creator_succeeds(self):
         qm = _make_quick_match()
-        qm.clear_domain_events()
 
         qm.hide_for(qm.creator_participant_id)
 
         assert qm.is_hidden_for(qm.creator_participant_id)
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchHiddenEvent)
 
     def test_hide_for_non_creator_participant_succeeds(self):
         """Cualquier participante puede ocultar la partida, no solo el creador."""
@@ -446,12 +383,10 @@ class TestQuickMatchHideForHistory:
     def test_hide_for_is_idempotent(self):
         qm = _make_quick_match()
         qm.hide_for(qm.creator_participant_id)
-        qm.clear_domain_events()
 
         qm.hide_for(qm.creator_participant_id)
 
         assert qm.is_hidden_for(qm.creator_participant_id)
-        assert qm.get_domain_events() == []
 
     def test_hide_does_not_require_pending_status(self):
         """A diferencia de add/remove_participant, ocultar no depende del estado."""
@@ -467,14 +402,10 @@ class TestQuickMatchHideForHistory:
     def test_unhide_for_reverses_hide(self):
         qm = _make_quick_match()
         qm.hide_for(qm.creator_participant_id)
-        qm.clear_domain_events()
 
         qm.unhide_for(qm.creator_participant_id)
 
         assert not qm.is_hidden_for(qm.creator_participant_id)
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchUnhiddenEvent)
 
     def test_unhide_for_non_participant_raises(self):
         qm = _make_quick_match()
@@ -483,12 +414,10 @@ class TestQuickMatchHideForHistory:
 
     def test_unhide_for_is_idempotent(self):
         qm = _make_quick_match()
-        qm.clear_domain_events()
 
         qm.unhide_for(qm.creator_participant_id)
 
         assert not qm.is_hidden_for(qm.creator_participant_id)
-        assert qm.get_domain_events() == []
 
     def test_hiding_does_not_affect_other_participants(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -507,15 +436,11 @@ class TestQuickMatchSetParticipantHandicap:
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         other = _registered()
         qm.add_participant(other)
-        qm.clear_domain_events()
 
         qm.set_participant_handicap(other.participant_id, 12.3)
 
         updated = qm.find_participant(other.participant_id)
         assert updated.custom_handicap == 12.3
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchParticipantHandicapUpdatedEvent)
 
     def test_set_guest_participant_handicap_sets_manual_handicap(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -573,15 +498,11 @@ class TestQuickMatchStart:
     def test_start_with_complete_roster_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         qm.add_participant(_registered())
-        qm.clear_domain_events()
 
         qm.start([qm.creator_participant_id])
 
         assert qm.status == QuickMatchStatus.IN_PROGRESS
         assert qm.scorer_ids == [qm.creator_participant_id]
-        events = qm.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], QuickMatchStartedEvent)
 
     def test_start_notes_when_it_started(self):
         """Para cerrarla sola al acabar el día siguiente (Agustín, 23 oct 2026)."""
@@ -675,13 +596,10 @@ class TestQuickMatchComplete:
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         qm.add_participant(_registered())
         qm.start([qm.creator_participant_id])
-        qm.clear_domain_events()
 
         qm.complete()
 
         assert qm.status == QuickMatchStatus.COMPLETED
-        events = qm.get_domain_events()
-        assert isinstance(events[0], QuickMatchCompletedEvent)
 
     def test_complete_from_pending_raises(self):
         qm = _make_quick_match()
@@ -692,10 +610,8 @@ class TestQuickMatchComplete:
 class TestQuickMatchCancel:
     def test_cancel_from_pending_succeeds(self):
         qm = _make_quick_match()
-        qm.clear_domain_events()
         qm.cancel()
         assert qm.status == QuickMatchStatus.CANCELLED
-        assert isinstance(qm.get_domain_events()[0], QuickMatchCancelledEvent)
 
     def test_cancel_from_in_progress_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -727,17 +643,6 @@ class TestQuickMatchQueries:
         registered = qm.registered_participants()
         assert guest not in registered
         assert len(registered) == 1
-
-    def test_reconstruct_does_not_emit_events(self):
-        qm = QuickMatch.reconstruct(
-            id=QuickMatchId.generate(),
-            creator_id=UserId(uuid4()),
-            golf_course_id=GolfCourseId(uuid4()),
-            match_format=MatchFormat.SINGLES,
-            status=QuickMatchStatus.PENDING,
-            participants=[],
-        )
-        assert qm.get_domain_events() == []
 
 
 class TestQuickMatchFormatExclusivity:

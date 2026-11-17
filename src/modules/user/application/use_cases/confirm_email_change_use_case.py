@@ -26,6 +26,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class ConfirmEmailChangeUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        reloj: Callable[[], datetime] = datetime.now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
         *,
         security_audit: ISecurityAuditLogger,
         email_service: IEmailService,

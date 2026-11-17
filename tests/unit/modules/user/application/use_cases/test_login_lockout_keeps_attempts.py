@@ -33,7 +33,6 @@ releído. El bcrypt va antes y fuera de esa transacción: no la alarga 200 ms.
   —  N intentos a la vez de verdad               | test de integración, aparte
 """
 
-from datetime import datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -49,6 +48,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -90,7 +90,7 @@ def _releido_con(uow, usuario, intentos, registro=None):
     """Lo que devuelve la relectura bloqueada: otra copia, que otro ya cambió."""
     # Con su hora abierta: el respaldo cuenta los fallos de la última hora (BE #732)
     copia = _rebuild_user(
-        usuario, failed_login_attempts=intentos, failed_login_window_started_at=datetime.now()
+        usuario, failed_login_attempts=intentos, failed_login_window_started_at=ahora_utc_sin_zona()
     )
     pedidos = []
 
@@ -206,7 +206,7 @@ async def test_login_success_on_account_locked_meanwhile_raises_locked(escena):
         copia = _rebuild_user(
             usuario,
             failed_login_attempts=MAX_FAILED_ATTEMPTS - 1,
-            failed_login_window_started_at=datetime.now(),
+            failed_login_window_started_at=ahora_utc_sin_zona(),
         )
         copia.record_failed_login()
         return copia
@@ -244,12 +244,11 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     bloqueada = _rebuild_user(
         usuario,
         failed_login_attempts=MAX_FAILED_ATTEMPTS - 1,
-        failed_login_window_started_at=datetime.now(),
+        failed_login_window_started_at=ahora_utc_sin_zona(),
     )
     bloqueada.record_failed_login()
     hasta = bloqueada.locked_until
     fallos = bloqueada.failed_login_attempts
-    eventos = len(bloqueada.get_domain_events())
 
     async def releida(_user_id):
         """Ayudante del test: releida."""
@@ -262,7 +261,6 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
 
     assert bloqueada.failed_login_attempts == fallos
     assert bloqueada.locked_until == hasta
-    assert len(bloqueada.get_domain_events()) == eventos
 
 
 async def test_login_success_rereads_before_the_device_and_saves_nothing_there(escena):

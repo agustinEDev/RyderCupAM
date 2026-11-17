@@ -6,8 +6,6 @@ terminado ni se haya cancelado (BE #368).
 Solo el creador puede realizar esta acción.
 """
 
-from datetime import datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseRequestDTO,
     AddGolfCourseResponseDTO,
@@ -28,6 +26,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class GolfCourseNotFoundError(Exception):
@@ -186,5 +185,5 @@ class AddGolfCourseToCompetitionUseCase:
             display_order=assigned_association.display_order
             if assigned_association
             else len(competition.golf_courses),
-            added_at=datetime.now(),
+            added_at=ahora_utc_sin_zona(),
         )

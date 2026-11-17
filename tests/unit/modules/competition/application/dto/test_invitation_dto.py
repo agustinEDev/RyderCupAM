@@ -1,6 +1,5 @@
 """Tests para Invitation DTOs."""
 
-from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -14,6 +13,7 @@ from src.modules.competition.application.dto.invitation_dto import (
     SendInvitationByEmailRequestDTO,
     SendInvitationByUserIdRequestDTO,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestSendInvitationByUserIdRequestDTO:
@@ -109,7 +109,7 @@ class TestInvitationResponseDTO:
     """Tests para InvitationResponseDTO."""
 
     def test_full_creation(self):
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         uid = uuid4()
         dto = InvitationResponseDTO(
             id=uuid4(),
@@ -131,7 +131,7 @@ class TestInvitationResponseDTO:
         assert dto.invitee_user_id == uid
 
     def test_minimal_creation(self):
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         dto = InvitationResponseDTO(
             id=uuid4(),
             competition_id=uuid4(),
@@ -154,7 +154,7 @@ class TestRespondInvitationResponseDTO:
     """Tests para RespondInvitationResponseDTO."""
 
     def test_with_enrollment_id(self):
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         eid = uuid4()
         dto = RespondInvitationResponseDTO(
             id=uuid4(),
@@ -172,7 +172,7 @@ class TestRespondInvitationResponseDTO:
         assert dto.enrollment_id == eid
 
     def test_without_enrollment_id(self):
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         dto = RespondInvitationResponseDTO(
             id=uuid4(),
             competition_id=uuid4(),
@@ -202,7 +202,7 @@ class TestPaginatedInvitationResponseDTO:
         assert dto.total_count == 0
 
     def test_with_invitations(self):
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         inv_dto = InvitationResponseDTO(
             id=uuid4(),
             competition_id=uuid4(),

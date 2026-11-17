@@ -9,7 +9,7 @@ Decidido con Agustín:
   quedan sin plaza (`NO_ROOM`), como al cerrar la inscripción (#710).
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -65,6 +65,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
@@ -258,7 +259,7 @@ class TestRetirar:
             invitee_email=str(invitado.email),
             invitee_user_id=invitado.id,
             status=InvitationStatus.PENDING,
-            expires_at=datetime.now() - timedelta(days=1),
+            expires_at=ahora_utc_sin_zona() - timedelta(days=1),
         )
         async with comp_uow:
             await comp_uow.invitations.add(caducada)

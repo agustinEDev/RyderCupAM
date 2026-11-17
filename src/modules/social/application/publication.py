@@ -7,7 +7,7 @@ from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 async def stamp_for_publication(
@@ -40,7 +40,7 @@ async def stamp_for_publication(
     if not eventos:
         return []
 
-    publicado = utc_now() if published_at is None else utc_naive(published_at)
+    publicado = ahora_utc_sin_zona() if published_at is None else utc_naive(published_at)
     async with user_uow:
         usuarios = {
             u.id: u for u in await user_uow.users.find_by_ids(list({e.user_id for e in eventos}))

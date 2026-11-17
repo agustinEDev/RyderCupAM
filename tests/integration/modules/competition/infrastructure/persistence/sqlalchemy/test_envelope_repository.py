@@ -8,7 +8,7 @@ todo el dato, y que no puede haber dos sobres del mismo equipo para la misma
 sesión.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.round_reposit
     SQLAlchemyRoundRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -45,7 +46,7 @@ AHORA = datetime(2030, 6, 1, 10, 0, 0)
 
 async def _insert_user(db_session, user_id: UserId) -> None:
     """Fila mínima de usuario: la clave ajena del sobre la exige."""
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

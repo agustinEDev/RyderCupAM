@@ -1,7 +1,7 @@
 """Caso de Uso: Registrar score de un hoyo."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.dto.scoring_dto import (
     ScoringViewResponseDTO,
@@ -52,6 +52,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 
@@ -73,7 +74,7 @@ class SubmitHoleScoreUseCase:
         self._gc_repo = golf_course_repo
         # El reloj del SERVIDOR decide si la anotacion ya abrio (BE #305), nunca
         # una hora que mande el cliente. Inyectable solo para poder probarlo
-        self._now = now or (lambda: datetime.now(UTC))
+        self._now = now or ahora_en_utc
         # Los avisos de Actividad (BE-2); sin el, no se avisa. Si el golpe
         # arranca la competicion, las solicitudes que cierra se avisan al final
         self._actividad = AvisosDeActividad(actividad)

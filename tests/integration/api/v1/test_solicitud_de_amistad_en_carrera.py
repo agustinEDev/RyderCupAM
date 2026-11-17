@@ -12,7 +12,6 @@ otra sesión, como haría la petición de A que gana.
 """
 
 import uuid
-from datetime import datetime
 
 import pytest
 import pytest_asyncio
@@ -30,6 +29,7 @@ from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_wor
     SQLAlchemySocialUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import create_authenticated_user, set_auth_cookies, sql_en_la_bd_de_test
 
 
@@ -87,7 +87,7 @@ def _gana_a_mitad(
                 addressee_id=addressee_id,
                 status=status,
                 blocked_by=blocked_by,
-                ahora=datetime.now(),
+                ahora=ahora_utc_sin_zona(),
             )
         return encontrada
 
@@ -96,7 +96,7 @@ def _gana_a_mitad(
 
 async def _confirma_la_fila_de_a(id_a: str, id_b: str) -> None:
     """La fila que deja la petición de A que gana: su solicitud, ya confirmada."""
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
     await sql_en_la_bd_de_test(
         "INSERT INTO friendships (id, requester_id, addressee_id, status, blocked_by, "
         "responded_at, created_at, updated_at) VALUES (:id, :requester_id, "

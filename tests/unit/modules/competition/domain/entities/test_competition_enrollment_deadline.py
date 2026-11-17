@@ -27,6 +27,7 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 MADRID = "Europe/Madrid"
@@ -145,7 +146,7 @@ class TestQuienLaCerro:
         """C3. Given ACTIVE / When se cierra por el plazo / Then queda dicho."""
         competition = _abierta()
 
-        competition.close_enrollments(total_enrollments=3, by_deadline=True)
+        competition.close_enrollments(by_deadline=True)
 
         assert competition.status is CompetitionStatus.CLOSED
         assert competition.enrollment_closed_by_deadline is True
@@ -154,7 +155,7 @@ class TestQuienLaCerro:
         """C3. Given ACTIVE / When la cierra el organizador / Then no lo dice."""
         competition = _abierta()
 
-        competition.close_enrollments(total_enrollments=3)
+        competition.close_enrollments()
 
         assert competition.enrollment_closed_by_deadline is False
 
@@ -278,22 +279,22 @@ class TestAbiertaDespuesDelPlazo:
 
     def test_sin_reloj_usa_el_de_ahora(self):
         """R2. Given un torneo de ayer abierto sin pasar reloj / Then cuenta como abierta tarde."""
-        ayer = datetime.now(UTC).date() - timedelta(days=1)
+        ayer = ahora_en_utc().date() - timedelta(days=1)
         competition = _crear(inicio=ayer)
 
         competition.activate()
 
-        assert competition.due_to_close(MADRID, datetime.now(UTC)) is False
+        assert competition.due_to_close(MADRID, ahora_en_utc()) is False
 
     def test_reabrir_sin_reloj_usa_el_de_ahora(self):
         """R1. Given un torneo de ayer reabierto sin pasar reloj / Then cuenta como tarde."""
-        ayer = datetime.now(UTC).date() - timedelta(days=1)
+        ayer = ahora_en_utc().date() - timedelta(days=1)
         competition = _abierta(cuando=datetime(2020, 1, 1, tzinfo=UTC), inicio=ayer)
         competition.close_enrollments()
 
         competition.reopen_enrollments()
 
-        assert competition.due_to_close(MADRID, datetime.now(UTC)) is False
+        assert competition.due_to_close(MADRID, ahora_en_utc()) is False
 
 
 class TestMoverElTorneo:

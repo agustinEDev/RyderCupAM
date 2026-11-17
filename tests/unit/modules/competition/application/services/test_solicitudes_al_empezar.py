@@ -61,9 +61,6 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
-from src.modules.competition.domain.events.enrollment_requested_event import (
-    EnrollmentRequestedEvent,
-)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
@@ -277,7 +274,7 @@ async def test_el_organizador_las_ve_pendientes_hasta_que_empieza():
 
 
 async def test_se_rechazan_sin_aviso():
-    """Sin correo ni notificación: ningún evento más que el de haberla pedido."""
+    """Sin correo ni notificación: solo cambia su estado."""
     uow, comp_id, creator_id = await _abierta()
     solicitud = await _cerrada_con_una_solicitud(uow, comp_id, creator_id)
 
@@ -286,7 +283,6 @@ async def test_se_rechazan_sin_aviso():
     async with uow:
         guardada = await uow.enrollments.find_by_id(solicitud.id)
     assert guardada.status == EnrollmentStatus.REJECTED
-    assert [type(e) for e in guardada.get_domain_events()] == [EnrollmentRequestedEvent]
 
 
 async def test_solo_toca_las_solicitudes_pendientes_de_esa_competicion():

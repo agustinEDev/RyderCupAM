@@ -48,6 +48,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -257,11 +258,11 @@ async def test_b2_4_an_expired_or_wrong_token_costs_no_bcrypt():
     When: Se intenta restablecer
     Then: «enlace no válido» sin calcular ningún bcrypt
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     uow = InMemoryUnitOfWork()
     user, token = await _con_token(uow)
-    user._reset_token_expires_at = datetime.now() - timedelta(minutes=1)
+    user._reset_token_expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
 
     with (
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
@@ -349,9 +350,7 @@ async def test_b2_3_a_reused_password_is_reported_before_hashing_it():
     vieja = Password.from_plain_text(NUEVA)
     async with uow:
         await uow.password_history.save(
-            PasswordHistory.create(
-                user_id=user.id, password_hash=vieja.hashed_value, total_history_count=1
-            )
+            PasswordHistory.create(user_id=user.id, password_hash=vieja.hashed_value)
         )
 
     with (
@@ -385,7 +384,6 @@ async def test_b2_6_a_weak_new_password_skips_the_history_bcrypts():
                 PasswordHistory.create(
                     user_id=user.id,
                     password_hash=Password.from_plain_text(clave).hashed_value,
-                    total_history_count=1,
                 )
             )
 

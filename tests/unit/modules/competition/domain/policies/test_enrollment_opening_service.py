@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from src.modules.competition.domain.policies.enrollment_opening_service import (
     EnrollmentOpeningService,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestOpensAt:
@@ -78,13 +79,14 @@ class TestIsDue:
     """`is_due` lo decide el reloj del servidor, nunca el del movil."""
 
     def test_ya_paso_la_hora(self):
-        ayer = date.today()
-        assert EnrollmentOpeningService.is_due(ayer, 1, "Europe/Madrid") is True
+        # Empieza hoy y abre un día antes: ya tocaba
+        hoy = ahora_utc_sin_zona().date()
+        assert EnrollmentOpeningService.is_due(hoy, 1, "Europe/Madrid") is True
 
     def test_todavia_no_toca(self):
         # Con timedelta y no `replace(year=...)`: el 29 de febrero de un bisiesto
         # ese replace revienta con «day is out of range for month»
-        dentro_de_un_mes = date.today() + timedelta(days=30)
+        dentro_de_un_mes = ahora_utc_sin_zona().date() + timedelta(days=30)
         assert EnrollmentOpeningService.is_due(dentro_de_un_mes, 1, "Europe/Madrid") is False
 
     def test_sin_dias_nunca_toca(self):

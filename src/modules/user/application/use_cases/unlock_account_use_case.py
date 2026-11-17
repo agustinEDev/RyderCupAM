@@ -96,7 +96,7 @@ class UnlockAccountUseCase:
             # nada, y se borran solo después de guardar
             habia_en_redes = self._freno.tiene_bloqueos(email) if email else False
             try:
-                user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
+                user.unlock()
             except ValueError:
                 # El respaldo estaba limpio: error solo si tampoco había ninguna red
                 if not habia_en_redes:

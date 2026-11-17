@@ -23,7 +23,7 @@ las 12:00), y abierta hace diez días.
 """
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -31,8 +31,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.config.cierre_de_inscripciones import CierreDeInscripciones
-from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     add_one_session,
@@ -97,7 +97,7 @@ async def _pasado_el_plazo(competicion: dict, dias: int = 1) -> None:
         "enrollment_opened_at = :abierta WHERE id = :id",
         hoy=hoy,
         fin=hoy + timedelta(days=dias),
-        abierta=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
+        abierta=ahora_utc_sin_zona() - timedelta(days=10),
         id=competicion["id"],
     )
 

@@ -13,8 +13,6 @@ quedar en el feed es siempre lo del ULTIMO cierre:
 - Publicar dos veces el mismo cierre no toca lo que ya estaba igual.
 """
 
-from datetime import datetime
-
 import pytest
 
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -54,6 +52,7 @@ from src.modules.user.application.use_cases.get_player_stats_use_case import (
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.social.stroke_play_world import MOMENTO, StrokePlayWorld, tarjeta
 
 pytestmark = pytest.mark.asyncio
@@ -188,7 +187,7 @@ class TestReopenedWhileComputing:
         ana, competition, _ = await _torneo_con_birdie(world)
 
         async def editar():
-            competition._updated_at = datetime.now()
+            competition._updated_at = ahora_utc_sin_zona()
             await world.save_competition(competition)
 
         await _publisher(world, social_uow, editar).execute(str(competition.id.value))

@@ -5,8 +5,6 @@ Permite cambiar el orden de visualización de los campos de golf asociados a una
 Solo el creador puede realizar esta acción.
 """
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     ReorderGolfCoursesRequestDTO,
     ReorderGolfCoursesResponseDTO,
@@ -23,6 +21,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class InvalidReorderError(Exception):
@@ -92,5 +91,5 @@ class ReorderGolfCoursesUseCase:
         return ReorderGolfCoursesResponseDTO(
             competition_id=request.competition_id,
             golf_course_count=len(new_order),
-            reordered_at=datetime.now(UTC),
+            reordered_at=ahora_en_utc(),
         )

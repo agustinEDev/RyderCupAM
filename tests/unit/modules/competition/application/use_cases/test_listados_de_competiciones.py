@@ -7,7 +7,7 @@ inscripciones e invitaciones con la unidad de trabajo. Ahora lo hace
 `ListCompetitionsUseCase`, con las mismas reglas (L1-L7).
 """
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -32,6 +32,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
@@ -57,7 +58,7 @@ def _competicion(
     empieza_en: int = 30,
 ) -> Competition:
     """Una competición en el estado pedido (DRAFT, ACTIVE o CLOSED)."""
-    empieza = date.today() + timedelta(days=empieza_en)
+    empieza = ahora_utc_sin_zona().date() + timedelta(days=empieza_en)
     competicion = Competition.create(
         id=CompetitionId(uuid4()),
         creator_id=creador,
@@ -98,7 +99,7 @@ async def _bd(*competiciones, inscripciones=(), invitaciones=()) -> InMemoryUnit
                     invitee_email="yo@t.com",
                     invitee_user_id=YO,
                     status=InvitationStatus.PENDING,
-                    expires_at=datetime.now() + timedelta(days=7),
+                    expires_at=ahora_utc_sin_zona() + timedelta(days=7),
                 )
             )
         await uow.commit()

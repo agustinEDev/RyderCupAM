@@ -452,7 +452,7 @@ class TestVerMas:
         yo = await _usuario(user_uow)
         el = await _usuario(user_uow)
         await _amigos(social_uow, yo, el)
-        el.deactivate(deactivated_by_user_id=str(el.id.value))
+        el.deactivate()
         async with user_uow:
             await user_uow.users.save(el)
 

@@ -47,6 +47,13 @@ select = [
     "ERA",    # eradicate (código comentado)
     "PL",     # pylint
     "RUF",    # ruff-specific rules
+    "DTZ005", # datetime.now() sin zona: da la hora LOCAL de la máquina (re-auditoría F-02)
+    "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
+    "DTZ003", # datetime.utcnow(): obsoleto; el reloj de instante_utc
+    "DTZ006", # fromtimestamp() sin zona: hora local
+    "DTZ002", # datetime.today(): hora local
+    "DTZ007", # strptime() sin zona en el formato
+    "DTZ012", # date.fromtimestamp(): fecha local
 ]
 
 # Reglas ignoradas (desactivadas)

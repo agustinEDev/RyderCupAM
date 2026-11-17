@@ -19,9 +19,10 @@ calcular y el torneo **no se abre solo**. No se adivina: abrir a deshora anuncia
 una cosa y hace otra.
 """
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class EnrollmentOpeningService:
@@ -79,4 +80,4 @@ class EnrollmentOpeningService:
         abre = EnrollmentOpeningService.opens_at(start_date, days_before, timezone)
         if abre is None:
             return False
-        return abre <= datetime.now(UTC)
+        return abre <= ahora_en_utc()

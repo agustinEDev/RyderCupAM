@@ -11,6 +11,7 @@ from src.modules.golf_course.application.mappers.golf_course_mapper import GolfC
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 
@@ -23,8 +24,6 @@ class GetGolfCourseByIdUseCase:
         - Creator (owner): puede ver sus campos (cualquier estado)
         - Players: solo pueden ver campos APPROVED
 
-    Nota: La validación de permisos se hace en la capa API (endpoint).
-
     Args:
         request: DTO con golf_course_id
 
@@ -32,7 +31,8 @@ class GetGolfCourseByIdUseCase:
         GetGolfCourseByIdResponseDTO con el campo encontrado
 
     Raises:
-        GolfCourseMissingError: Si el campo no existe
+        GolfCourseMissingError: Si el campo no existe, o si no está aprobado y quien
+            lo pide no es admin ni quien lo propuso
     """
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
@@ -59,7 +59,17 @@ class GetGolfCourseByIdUseCase:
             if not golf_course:
                 raise GolfCourseMissingError(f"Golf course not found: {request.golf_course_id}")
 
-            # 2. Mapear a Response DTO
+            # 2. Uno sin aprobar solo lo ven un admin y quien lo propuso. A los demás se
+            # les responde como si no existiera: un 403 les diría que hay un campo
+            # pendiente con ese id (OWASP A01, 17 nov 2026)
+            if (
+                golf_course.approval_status != ApprovalStatus.APPROVED
+                and not request.requester_is_admin
+                and str(golf_course.creator_id) != request.requester_id
+            ):
+                raise GolfCourseMissingError(f"Golf course not found: {request.golf_course_id}")
+
+            # 3. Mapear a Response DTO
             response_dto = GolfCourseMapper.to_response_dto(golf_course)
 
             return GetGolfCourseByIdResponseDTO(golf_course=response_dto)

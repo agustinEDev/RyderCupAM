@@ -11,6 +11,7 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 
@@ -114,8 +115,8 @@ class TestRoundStatusTransitions:
             status=RoundStatus.SCHEDULED,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         with pytest.raises(ValueError, match="Expected PENDING_TEAMS"):
@@ -133,8 +134,8 @@ class TestRoundStatusTransitions:
             status=RoundStatus.PENDING_MATCHES,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         round.mark_matches_generated()
@@ -152,8 +153,8 @@ class TestRoundStatusTransitions:
             status=status or RoundStatus.SCHEDULED,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
     def test_reopen_for_regeneration_from_scheduled(self):
@@ -229,8 +230,8 @@ class TestRoundStatusTransitions:
             status=RoundStatus.SCHEDULED,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         round.start()
@@ -249,8 +250,8 @@ class TestRoundStatusTransitions:
             status=RoundStatus.IN_PROGRESS,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         round.complete()
@@ -294,8 +295,8 @@ class TestRoundUpdateDetails:
             status=RoundStatus.SCHEDULED,
             handicap_mode=HandicapMode.MATCH_PLAY,
             allowance_percentage=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         with pytest.raises(ValueError, match="Cannot modify"):
@@ -338,7 +339,7 @@ class TestRoundEquality:
     def test_rounds_with_same_id_are_equal(self):
         """Rounds con mismo ID son iguales."""
         round_id = RoundId.generate()
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
 
         round1 = Round.reconstruct(
             id=round_id,

@@ -7,7 +7,6 @@ Este archivo contiene tests que verifican:
 - Revocación de dispositivos
 - Reconstrucción desde BD (reconstitute)
 - Validación de invariantes
-- Eventos de dominio
 """
 
 from datetime import datetime
@@ -15,10 +14,6 @@ from datetime import datetime
 import pytest
 
 from src.modules.user.domain.entities.user_device import UserDevice
-from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
-from src.modules.user.domain.events.new_device_detected_event import (
-    NewDeviceDetectedEvent,
-)
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -89,29 +84,6 @@ class TestUserDeviceCreation:
 
         # Assert
         assert device.created_at == device.last_used_at
-
-    def test_create_emits_new_device_detected_event(self):
-        """
-        Test: create() emite NewDeviceDetectedEvent
-        Given: Creación de dispositivo nuevo
-        When: Se crea UserDevice
-        Then: Se emite evento NewDeviceDetectedEvent
-        """
-        # Arrange
-        user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0", "192.168.1.100")
-
-        # Act
-        device = UserDevice.create(user_id, fingerprint)
-
-        # Assert
-        assert len(device.domain_events()) == 1
-        event = device.domain_events()[0]
-        assert isinstance(event, NewDeviceDetectedEvent)
-        assert event.user_id == user_id
-        assert event.device_name == fingerprint.device_name
-        assert event.ip_address == fingerprint.ip_address
-        assert event.user_agent == fingerprint.user_agent
 
 
 class TestUserDeviceUpdateLastUsed:
@@ -189,29 +161,6 @@ class TestUserDeviceRevoke:
 
         # Assert
         assert device.is_active is False
-
-    def test_revoke_emits_device_revoked_event(self):
-        """
-        Test: revoke() emite DeviceRevokedEvent
-        Given: Dispositivo activo
-        When: Se revoca
-        Then: Se emite evento DeviceRevokedEvent
-        """
-        # Arrange
-        user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0", "192.168.1.2")
-        device = UserDevice.create(user_id, fingerprint)
-        device.clear_domain_events()  # Limpiar evento de creación
-
-        # Act
-        device.revoke()
-
-        # Assert
-        assert len(device.domain_events()) == 1
-        event = device.domain_events()[0]
-        assert isinstance(event, DeviceRevokedEvent)
-        assert event.user_id == user_id
-        assert event.device_id == device.id
 
     def test_revoke_already_revoked_device_raises_error(self):
         """
@@ -305,34 +254,6 @@ class TestUserDeviceReconstitute:
 
         # Assert
         assert device.is_active is False
-
-    def test_reconstitute_does_not_emit_events(self):
-        """
-        Test: reconstitute() NO emite eventos de dominio
-        Given: Reconstrucción desde BD
-        When: Se llama a reconstitute()
-        Then: No se emiten eventos (es estado pasado, no nuevo)
-        """
-        # Arrange
-        device_id = UserDeviceId.generate()
-        user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0", "192.168.1.1")
-
-        # Act
-        device = UserDevice.reconstitute(
-            id=device_id,
-            user_id=user_id,
-            device_name=fingerprint.device_name,
-            user_agent=fingerprint.user_agent,
-            ip_address=fingerprint.ip_address,
-            fingerprint_hash=fingerprint.fingerprint_hash,
-            is_active=True,
-            last_used_at=datetime.now(),
-            created_at=datetime.now(),
-        )
-
-        # Assert
-        assert len(device.domain_events()) == 0
 
 
 class TestUserDeviceBusinessRules:

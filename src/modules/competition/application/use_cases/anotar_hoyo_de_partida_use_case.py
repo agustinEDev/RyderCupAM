@@ -19,7 +19,7 @@ Decidido con Agustín (decisión 11 de la #251 y P1-P4, P10, P11 el 9 oct 2026):
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
@@ -65,6 +65,7 @@ from src.modules.competition.domain.value_objects.estado_partida import EstadoPa
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class NoEsDeLaPartidaError(Exception):
@@ -160,7 +161,7 @@ class AnotarHoyoDePartidaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow

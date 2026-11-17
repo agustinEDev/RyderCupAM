@@ -5,7 +5,6 @@ Tests unitarios para el caso de uso de login/registro con Google OAuth.
 Verifica los 3 flujos: OAuth existente, auto-link, auto-register.
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -31,6 +30,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
@@ -62,7 +62,6 @@ def _rebuild_user(user: User, **overrides) -> User:
         "locked_until": user.locked_until,
         "is_admin": user.is_admin,
         "gender": user.gender,
-        "domain_events": user.get_domain_events(),
     }
     fields.update(overrides)
     return User(**fields)
@@ -345,7 +344,7 @@ class TestGoogleLoginUseCaseLockout:
 
         user = _rebuild_user(
             user,
-            locked_until=datetime.now() + timedelta(minutes=30),
+            locked_until=ahora_utc_sin_zona() + timedelta(minutes=30),
             failed_login_attempts=10,
         )
 
@@ -605,7 +604,7 @@ class TestGoogleLoginCuentaDesactivada:
         user = User.create_from_oauth(
             first_name="Baja", last_name="Google", email_str="oauth@example.com"
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
             await uow.oauth_accounts.save(
@@ -649,7 +648,7 @@ class TestGoogleLoginCuentaDesactivada:
         user = User.create_from_oauth(
             first_name="Baja", last_name="Google", email_str="oauth@example.com"
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
             await uow.oauth_accounts.save(
@@ -700,7 +699,7 @@ class TestGoogleLoginCuentaDesactivada:
             email_str="oauth@example.com",
             plain_password="SecureP@ssw0rd123!",
         )
-        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        user.deactivate()
         async with uow:
             await uow.users.save(user)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
@@ -1220,7 +1219,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         from src.modules.user.domain.exceptions import AccountDeactivatedException
 
         cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
-        cuenta.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        cuenta.deactivate()
         async with uow:
             await uow.users.save(cuenta)
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
@@ -1277,7 +1276,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         async def desactivada(user_id):
             otra = copy.deepcopy(uow.users._users[user_id])
-            otra.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+            otra.deactivate()
             uow.users._users[user_id] = otra
             return otra
 

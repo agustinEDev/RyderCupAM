@@ -6,13 +6,14 @@ rechazaban, y que los dos «no» nuevos llegan como 400 y no como 500.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     approve_golf_course,
@@ -61,7 +62,7 @@ async def _abierta_con_campo(client: AsyncClient, sufijo: str):
     user = await create_authenticated_user(
         client, f"agenda-{sufijo}@test.com", "P@ssw0rd123!", "Orga", "Agenda"
     )
-    empieza = date.today() + timedelta(days=30)
+    empieza = ahora_utc_sin_zona().date() + timedelta(days=30)
     comp = await create_competition(
         client,
         user["cookies"],

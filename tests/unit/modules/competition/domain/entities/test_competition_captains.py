@@ -20,9 +20,6 @@ from src.modules.competition.domain.entities.competition import (
     CompetitionStateError,
     TeamsNotAssignedError,
 )
-from src.modules.competition.domain.events.competition_enrollments_closed_event import (
-    CompetitionEnrollmentsClosedEvent,
-)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
@@ -44,7 +41,7 @@ INSCRITOS = [ANA, BEA, CARLA] + [UserId.generate() for _ in range(9)]
 
 
 def _competicion(estado: CompetitionStatus) -> Competition:
-    """Una competición en ese estado, sin eventos pendientes."""
+    """Una competición en ese estado."""
     competicion = Competition(
         id=CompetitionId.generate(),
         creator_id=UserId.generate(),
@@ -56,17 +53,7 @@ def _competicion(estado: CompetitionStatus) -> Competition:
         play_mode=PlayMode.HANDICAP,
         status=estado,
     )
-    competicion.clear_domain_events()
     return competicion
-
-
-def _cierres(competicion: Competition) -> list:
-    """Los eventos de cierre de inscripciones que tiene pendientes."""
-    return [
-        e
-        for e in competicion.get_domain_events()
-        if isinstance(e, CompetitionEnrollmentsClosedEvent)
-    ]
 
 
 class TestNameCaptains:
@@ -79,24 +66,20 @@ class TestNameCaptains:
         assert competicion.ryder_cup.team_a_captain_id == ANA
         assert competicion.ryder_cup.team_b_captain_id == BEA
         assert competicion.status == CompetitionStatus.CLOSED
-        # El mismo evento que cerrar a mano: quien escuche el cierre, se entera
-        assert [e.total_enrollments for e in _cierres(competicion)] == [12]
 
     def test_ya_cerrada_se_pueden_cambiar_sin_volver_a_cerrar(self):
         """
         Given: capitanes nombrados, que la cerraron
         When: se cambia la capitana del A
-        Then: cambia, sigue CLOSED y no sale un segundo evento de cierre
+        Then: cambia y sigue CLOSED
         """
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
-        competicion.clear_domain_events()
 
         competicion.name_captains(CARLA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
         assert competicion.ryder_cup.team_a_captain_id == CARLA
         assert competicion.status == CompetitionStatus.CLOSED
-        assert _cierres(competicion) == []
 
     @pytest.mark.parametrize("estado", [CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED])
     def test_con_los_equipos_repartidos_ya_no_se_cambian(self, estado):

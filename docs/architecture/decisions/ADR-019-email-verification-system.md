@@ -87,6 +87,6 @@ We need to verify that user emails are real and belong to the person registering
 
 ## References
 
-- [ADR-007: Domain Events Pattern](./ADR-007-domain-events-pattern.md)
+- [ADR-050: Remove the Unused Domain Events](./ADR-050-remove-unused-domain-events.md)
 - [ADR-013: External Services Pattern](./ADR-013-external-services-pattern.md)
 - [Mailgun API Documentation](https://documentation.mailgun.com/en/latest/api-sending.html)

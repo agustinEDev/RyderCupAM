@@ -48,15 +48,3 @@ class InMemoryPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
 
         # Limitar a N registros
         return user_history[:limit]
-
-    async def count_by_user(self, user_id: UserId) -> int:
-        """
-        Cuenta el total de registros de un usuario.
-
-        Args:
-            user_id: ID del usuario
-
-        Returns:
-            Número total de registros
-        """
-        return len([h for h in self._history.values() if h.user_id == user_id])

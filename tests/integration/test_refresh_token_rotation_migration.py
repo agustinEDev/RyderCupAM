@@ -9,10 +9,11 @@ La migración de la rotación del refresh token (F-02, caso A7) sobre tokens de 
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import create_engine, inspect, text
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.integration.test_activity_events_published_at_migration import (
     _alembic,
     base_desechable,  # noqa: F401
@@ -43,7 +44,7 @@ def _token_de_antes(url: str) -> str:
                 "id": token_id,
                 "u": user_id,
                 "h": uuid.uuid4().hex * 2,
-                "e": datetime.now() + timedelta(days=3),
+                "e": ahora_utc_sin_zona() + timedelta(days=3),
             },
         )
     engine.dispose()

@@ -15,12 +15,13 @@ Rotación del refresh token con detección de robo (F-02), con la BD real.
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient, Response
 
 from src.modules.user.domain.value_objects.token_hash import TokenHash
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import create_authenticated_user, set_auth_cookies, sql_en_la_bd_de_test
 
 pytestmark = pytest.mark.asyncio
@@ -128,10 +129,10 @@ async def test_a1_a_session_with_two_days_left_gets_a_two_day_cookie(client: Asy
     Then: La cookie nueva dura 2 días, no 7: la caducidad absoluta no se alarga
     """
     _, cookies = await _sesion(client, "a1b")
-    # Como las guarda la app: hora local sin zona
+    # Como las guarda la app: UTC sin zona
     await sql_en_la_bd_de_test(
         "UPDATE refresh_tokens SET expires_at = :c WHERE token_hash = :h",
-        c=datetime.now() + timedelta(days=2),
+        c=ahora_utc_sin_zona() + timedelta(days=2),
         h=TokenHash.from_token(cookies["refresh_token"]).value,
     )
 

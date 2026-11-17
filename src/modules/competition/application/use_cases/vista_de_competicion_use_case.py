@@ -7,8 +7,6 @@ pendiente de quien mira y hasta dónde ve los inscritos. Ahora se pide aquí, y 
 ruta no toca la unidad de trabajo (fase 5 del plan de calidad).
 """
 
-from datetime import datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     CompetitionResponseDTO,
     MyPendingInvitationDTO,
@@ -32,6 +30,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class VistaDeCompeticionUseCase:
@@ -89,7 +88,7 @@ class VistaDeCompeticionUseCase:
                 competition, quien, self._uow, self._user_uow, is_admin=es_admin
             )
             pendiente = await invitacion_pendiente(
-                self._uow, competition, quien, email, datetime.now()
+                self._uow, competition, quien, email, ahora_utc_sin_zona()
             )
             if pendiente is not None and se_le_ofrece_aceptar(
                 competition, pendiente, inscrito=dto.user_enrollment_status is not None

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class ActivityEvent:
@@ -61,7 +61,7 @@ class ActivityEvent:
         self._payload = dict(payload or {})
         self._source_match_id = source_match_id
         # En UTC y sin zona, como el resto de fechas que se guardan
-        self._published_at = published_at or utc_now()
+        self._published_at = published_at or ahora_utc_sin_zona()
         # Con la publicación apagada el logro se guarda igual, pero solo para
         # su autor: encenderla después no lo destapa
         self._visible_to_friends = visible_to_friends

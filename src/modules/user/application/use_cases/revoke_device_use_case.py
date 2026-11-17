@@ -13,7 +13,7 @@ Responsabilidades:
 Llamado desde:
 - DELETE /api/v1/users/me/devices/{device_id} (endpoint protegido)
 
-Patrón: Use Case Pattern + Unit of Work + Domain Events
+Patrón: Use Case Pattern + Unit of Work
 """
 
 import logging

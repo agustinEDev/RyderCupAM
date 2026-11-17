@@ -477,7 +477,7 @@ class TestSendInvitationByUserIdUseCase:
 
         async with comp_uow:
             competition = await comp_uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.cancel("se queda sin jugadores")
+            competition.cancel()
             await comp_uow.competitions.update(competition)
             await comp_uow.commit()
 

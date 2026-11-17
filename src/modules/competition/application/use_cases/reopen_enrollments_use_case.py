@@ -6,7 +6,7 @@ Solo el creador puede realizar esta acción.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.dto.competition_dto import (
     ReopenEnrollmentsRequestDTO,
@@ -33,6 +33,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class ReopenEnrollmentsUseCase:
@@ -59,7 +60,7 @@ class ReopenEnrollmentsUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
         correos: IInvitationEmailService | None = None,
         user_uow: UserUnitOfWorkInterface | None = None,

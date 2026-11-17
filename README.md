@@ -272,7 +272,6 @@ src/
 
 ### Design Patterns
 - **Repository + Unit of Work** - Data access abstraction
-- **Domain Events** - Inter-aggregate communication
 - **Value Objects** - Encapsulated validation logic
 - **Port/Adapter (Hexagonal)** - External service interfaces
 - **Dependency Injection** - FastAPI Depends()
@@ -283,7 +282,7 @@ src/
 - **Dependency Inversion** - Domain never imports Infrastructure
 - **Testability** - 90%+ coverage on business logic
 - **Immutability** - Value Objects are immutable
-- **Event-Driven** - Domain events for side effects
+- **Explicit side effects** - Use cases call the port that does it (ADR-050)
 
 ---
 

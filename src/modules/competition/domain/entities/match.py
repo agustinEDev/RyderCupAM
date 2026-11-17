@@ -6,7 +6,7 @@ Representa un partido individual dentro de una sesión de competición.
 
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
@@ -19,6 +19,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -122,7 +123,7 @@ class Match:
 
         handicap_diff, strokes_given_to_team = cls._ventaja(team_a_players, team_b_players)
 
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = ahora_utc_sin_zona()
         return cls(
             id=MatchId.generate(),
             round_id=round_id,
@@ -222,7 +223,7 @@ class Match:
         if not self._status.can_start():
             raise ValueError(f"Cannot start match from status {self._status}. Expected SCHEDULED")
         self._status = MatchStatus.IN_PROGRESS
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def complete(self, result: dict[str, Any]) -> None:
         """
@@ -240,7 +241,7 @@ class Match:
             )
         self._result = result
         self._status = MatchStatus.COMPLETED
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def declare_walkover(self, winning_team: str, reason: str | None = None) -> None:
         """
@@ -266,7 +267,7 @@ class Match:
             "reason": reason,
         }
         self._status = MatchStatus.WALKOVER
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def concede(self, conceding_team: str, reason: str | None = None) -> None:
         """
@@ -292,7 +293,7 @@ class Match:
             "reason": reason,
         }
         self._status = MatchStatus.CONCEDED
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def set_marker_assignments(self, assignments: list[MarkerAssignment]) -> None:
         """
@@ -304,7 +305,7 @@ class Match:
                 f"Cannot set marker assignments in status {self._status}. Expected SCHEDULED"
             )
         self._marker_assignments = tuple(assignments)
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def submit_scorecard(self, user_id: UserId, match_format: MatchFormat) -> None:
         """
@@ -330,19 +331,19 @@ class Match:
             raise ValueError(f"User {user_id} has already submitted their scorecard")
 
         self._scorecard_submitted_by = (*self._scorecard_submitted_by, user_id)
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def mark_decided(self, result: dict[str, Any]) -> None:
         """Marca el partido como matematicamente decidido."""
         self._is_decided = True
         self._decided_result = result
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def clear_decided(self) -> None:
         """Deja de estar decidido: se corrigio un hoyo anterior a la decision."""
         self._is_decided = False
         self._decided_result = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def withdraw_player(self, user_id: UserId, match_format: MatchFormat) -> None:
         """
@@ -378,7 +379,7 @@ class Match:
             raise WithdrawalViolation("LAST_OF_SIDE", "Cannot withdraw the last player of a side")
         self._sin_tarjetas_entregadas()
         self._withdrawn_player_ids = (*self._withdrawn_player_ids, user_id)
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def reinstate_player(self, user_id: UserId, hoyos_cerrados: Collection[int]) -> None:
         """
@@ -408,7 +409,7 @@ class Match:
         self._withdrawn_player_ids = tuple(
             uid for uid in self._withdrawn_player_ids if uid != user_id
         )
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def _sin_tarjetas_entregadas(self) -> None:
         """Con una tarjeta entregada, lo validado ya no se mueve (W4)."""
@@ -453,7 +454,7 @@ class Match:
         self._team_a_players = tuple(completar(p) for p in self._team_a_players)
         self._team_b_players = tuple(completar(p) for p in self._team_b_players)
         if cambiados:
-            self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+            self._updated_at = ahora_utc_sin_zona()
         return cambiados
 
     # ==================== Query Methods ====================

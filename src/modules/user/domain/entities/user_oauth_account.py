@@ -6,9 +6,8 @@ Representa una cuenta OAuth vinculada a un usuario del sistema.
 
 from datetime import datetime
 
-from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
-from ..events.google_account_linked_event import GoogleAccountLinkedEvent
 from ..value_objects.oauth_account_id import OAuthAccountId
 from ..value_objects.oauth_provider import OAuthProvider
 from ..value_objects.user_id import UserId
@@ -38,15 +37,13 @@ class UserOAuthAccount:
         provider_user_id: str,
         provider_email: str,
         created_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
     ):
         self._id = id or OAuthAccountId.generate()
         self._user_id = user_id
         self._provider = provider
         self._provider_user_id = provider_user_id
         self._provider_email = provider_email
-        self._created_at = created_at or datetime.now()
-        self._domain_events = domain_events or []
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     # === Read-only Properties ===
 
@@ -92,7 +89,7 @@ class UserOAuthAccount:
             provider_email: Email del usuario en el proveedor
 
         Returns:
-            UserOAuthAccount con evento GoogleAccountLinkedEvent emitido
+            UserOAuthAccount nueva
         """
         account = cls(
             id=OAuthAccountId.generate(),
@@ -100,41 +97,10 @@ class UserOAuthAccount:
             provider=provider,
             provider_user_id=provider_user_id,
             provider_email=provider_email,
-            created_at=datetime.now(),
-        )
-
-        account._add_domain_event(
-            GoogleAccountLinkedEvent(
-                user_id=str(user_id.value),
-                provider=provider.value,
-                provider_email=provider_email,
-                linked_at=account._created_at,
-            )
+            created_at=ahora_utc_sin_zona(),
         )
 
         return account
-
-    # === Domain Events ===
-
-    def _add_domain_event(self, event: DomainEvent) -> None:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        self._domain_events.clear()
-
-    def has_domain_events(self) -> bool:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        return len(self._domain_events) > 0
 
     def __str__(self) -> str:
         return (

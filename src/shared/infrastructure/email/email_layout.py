@@ -24,7 +24,8 @@ colarse en él, se escriba el correo que se escriba.
 
 import html as _html
 from dataclasses import dataclass
-from datetime import UTC, datetime
+
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 VERDE = "#15803d"
 VERDE_OSCURO = "#14532d"
@@ -205,7 +206,7 @@ def correo(
             puede ser el único camino
     """
     logo = _html.escape(f"{web}/images/rcf-monogram-white.png", quote=True)
-    anio = datetime.now(UTC).year
+    anio = ahora_en_utc().year
     secundarios = "".join(_boton(b, principal=False) for b in otros_botones or [])
     respaldo = _respaldo(boton.enlace) if con_respaldo else ""
     return f"""<!DOCTYPE html>

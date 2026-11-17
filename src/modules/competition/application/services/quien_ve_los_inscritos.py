@@ -27,6 +27,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class Alcance(Enum):
@@ -121,8 +122,8 @@ async def alcance_de(
     Con los `aprobados` que ya haya leído quien llama, no se vuelven a pedir;
     lo mismo si ya sabe si tiene una invitación pendiente (`invitado`).
 
-    El reloj de la invitación es el suyo (`Invitation.is_expired`, hora local
-    sin zona): con otro, se vería caducada aquí y viva al aceptarla.
+    El reloj de la invitación es el suyo (`Invitation.is_expired`, UTC sin zona):
+    con otro, se vería caducada aquí y viva al aceptarla.
     """
     if es_admin or competition.is_creator(quien):
         return Alcance.TODO
@@ -132,7 +133,7 @@ async def alcance_de(
         )
     if invitado is None:
         invitado = competition.id in await uow.invitations.competiciones_con_invitacion_pendiente(
-            quien, email, ahora or datetime.now()
+            quien, email, ahora or ahora_utc_sin_zona()
         )
     return alcance(
         competition,

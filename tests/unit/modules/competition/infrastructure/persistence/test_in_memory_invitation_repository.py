@@ -1,6 +1,6 @@
 """Tests para InMemoryInvitationRepository."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -15,6 +15,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_invi
     InMemoryInvitationRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -34,9 +35,9 @@ def _make_invitation(
         invitee_email=invitee_email,
         invitee_user_id=invitee_user_id,
         status=status,
-        expires_at=datetime.now() + timedelta(days=7),
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        expires_at=ahora_utc_sin_zona() + timedelta(days=7),
+        created_at=ahora_utc_sin_zona(),
+        updated_at=ahora_utc_sin_zona(),
     )
 
 
@@ -265,9 +266,9 @@ class TestInMemoryInvitationRepositoryCounting:
             inviter_id=UserId(uuid4()),
             invitee_email="recent@test.com",
             status=InvitationStatus.PENDING,
-            expires_at=datetime.now() + timedelta(days=7),
-            created_at=datetime.now() - timedelta(minutes=30),
-            updated_at=datetime.now(),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
+            created_at=ahora_utc_sin_zona() - timedelta(minutes=30),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         # Invitacion antigua (hace 2 horas)
@@ -277,9 +278,9 @@ class TestInMemoryInvitationRepositoryCounting:
             inviter_id=UserId(uuid4()),
             invitee_email="old@test.com",
             status=InvitationStatus.PENDING,
-            expires_at=datetime.now() + timedelta(days=7),
-            created_at=datetime.now() - timedelta(hours=2),
-            updated_at=datetime.now(),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
+            created_at=ahora_utc_sin_zona() - timedelta(hours=2),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         await repo.add(recent)
@@ -290,6 +291,6 @@ class TestInMemoryInvitationRepositoryCounting:
         assert count_all == 2
 
         # Con filtro ultima hora: solo 1
-        one_hour_ago = datetime.now() - timedelta(hours=1)
+        one_hour_ago = ahora_utc_sin_zona() - timedelta(hours=1)
         count_recent = await repo.count_by_competition(comp_id, since=one_hour_ago)
         assert count_recent == 1

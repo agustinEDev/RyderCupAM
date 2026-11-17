@@ -20,9 +20,6 @@ from src.modules.competition.application.use_cases.reopen_enrollments_use_case i
     ReopenEnrollmentsUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
-from src.modules.competition.domain.events.competition_enrollments_reopened_event import (
-    CompetitionEnrollmentsReopenedEvent,
-)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -176,27 +173,3 @@ class TestReopenEnrollmentsUseCase:
 
         with pytest.raises(CompetitionStateError):
             await use_case.execute(request, creator_id)
-
-    async def test_should_emit_domain_event_when_reopened(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Given: Una competición en estado CLOSED
-        When: Se reabren inscripciones correctamente
-        Then: Se emite CompetitionEnrollmentsReopenedEvent
-        """
-        created = await self._create_closed_competition(uow, creator_id)
-
-        use_case = ReopenEnrollmentsUseCase(uow)
-        request = ReopenEnrollmentsRequestDTO(competition_id=created.id)
-        await use_case.execute(request, creator_id)
-
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            events = competition.get_domain_events()
-
-            reopened_events = [
-                e for e in events if isinstance(e, CompetitionEnrollmentsReopenedEvent)
-            ]
-            assert len(reopened_events) == 1
-            assert reopened_events[0].competition_id == str(created.id)

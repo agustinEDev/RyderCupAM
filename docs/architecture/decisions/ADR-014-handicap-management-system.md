@@ -87,7 +87,7 @@ Implement **Handicap as Value Object** + **Domain Events** + **External Service 
 ## References
 
 - [ADR-002: Value Objects](./ADR-002-value-objects.md)
-- [ADR-007: Domain Events](./ADR-007-domain-events-pattern.md)
+- [ADR-050: Remove the Unused Domain Events](./ADR-050-remove-unused-domain-events.md)
 - [ADR-013: External Services](./ADR-013-external-services-pattern.md)
 - [RFEG Handicaps](https://www.rfegolf.es/Handicaps.aspx)
 - [Design Document](../design-document.md) - See Metrics section for implementation details

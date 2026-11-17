@@ -12,7 +12,7 @@ BE #635): sin la zona, `new Date()` del navegador las tomaba como hora local.
 
 from datetime import UTC, datetime, timedelta, timezone
 
-from src.shared.domain.services.instante_utc import en_utc
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona, en_utc
 
 
 def test_i1_sin_zona_es_utc():
@@ -68,3 +68,33 @@ def test_i4_la_partida_rapida_fecha_en_utc_aunque_el_servidor_este_en_otra_zona(
         else:
             os.environ["TZ"] = zona_original
         time.tzset()
+
+
+def test_ahora_utc_sin_zona_da_la_hora_actual_en_utc_y_sin_zona():
+    """
+    Given: El reloj compartido
+    When: Se pide la hora
+    Then: Es la de ahora en UTC y sin zona, como se guardan y se comparan las fechas
+          (un reloj con zona aquí haría fallar con TypeError las comparaciones)
+    """
+    antes = datetime.now(UTC).replace(tzinfo=None)
+
+    ahora = ahora_utc_sin_zona()
+
+    despues = datetime.now(UTC).replace(tzinfo=None)
+    assert ahora.tzinfo is None
+    assert antes <= ahora <= despues
+
+
+def test_ahora_en_utc_da_la_hora_actual_con_la_zona_utc():
+    """
+    Given: El reloj con zona
+    When: Se pide la hora
+    Then: Lleva la zona UTC y es la de ahora
+    """
+    antes = datetime.now(UTC)
+
+    ahora = ahora_en_utc()
+
+    assert ahora.tzinfo is UTC
+    assert antes <= ahora <= datetime.now(UTC)

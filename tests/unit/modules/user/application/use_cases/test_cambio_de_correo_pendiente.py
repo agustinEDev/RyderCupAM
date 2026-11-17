@@ -18,7 +18,7 @@ El cambio de correo, pendiente hasta confirmarlo desde la dirección nueva (#749
   E7d caducado, ocupado o con otro token: sin aviso
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -43,6 +43,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -144,7 +145,7 @@ async def test_e3_a_late_confirmation_cancels_the_change_and_saves_it():
     caso = ConfirmEmailChangeUseCase(
         uow,
         email_service=AsyncMock(),
-        reloj=lambda: datetime.now() + timedelta(hours=25),
+        reloj=lambda: ahora_utc_sin_zona() + timedelta(hours=25),
         security_audit=SecurityAuditLogger(),
     )
 

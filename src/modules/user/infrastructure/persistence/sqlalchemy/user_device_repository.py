@@ -100,8 +100,6 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
             device: UserDevice a persistir
 
         Note:
-            - Los eventos de dominio del dispositivo NO se procesan aquí
-            - Esa responsabilidad es del UoW en commit()
             - El mapper convierte automáticamente DeviceFingerprint → columnas
         """
         self._session.add(device)
@@ -290,7 +288,6 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
 
         Note:
             - NO hace commit (responsabilidad del UoW)
-            - Lanza eventos de dominio (DeviceRevokedEvent)
             - El save() se hace implícitamente al estar en la sesión
         """
         device = await self.find_by_id(device_id)

@@ -19,7 +19,6 @@ Post-Conditions:
 """
 
 import logging
-from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
@@ -56,7 +55,6 @@ class ResetPasswordUseCase:
     - Invalidar token (uso único)
     - Revocar TODAS las sesiones activas del usuario
     - Enviar email de confirmación
-    - Registrar evento de dominio para auditoría
 
     Security (OWASP A01, A02, A07):
     - Usuario no autenticado (endpoint público)
@@ -175,7 +173,6 @@ class ResetPasswordUseCase:
             4. Invalida token (uso único)
             5. Revoca TODOS los refresh tokens del usuario
             6. Envía email de confirmación
-            7. Registra evento de dominio (PasswordResetCompletedEvent)
 
         Example:
             >>> request = ResetPasswordRequestDTO(
@@ -272,8 +269,6 @@ class ResetPasswordUseCase:
                 user.reset_password(
                     token=request.token,
                     new_password=nueva,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                 )
             except ValueError as e:
                 # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
@@ -293,12 +288,10 @@ class ResetPasswordUseCase:
 
             # Guardar el nuevo hash en el historial de contraseñas, revocar las
             # sesiones y guardar el usuario, en la MISMA transacción
-            total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
             password_history = PasswordHistory.create(
                 user_id=user.id,
                 # `nueva` es la que acaba de quedar puesta (`user.password is nueva`)
                 password_hash=nueva.hashed_value,
-                total_history_count=total_history_count,
             )
             await self._uow.password_history.save(password_history)
 
@@ -314,9 +307,6 @@ class ResetPasswordUseCase:
                 # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
                 # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
                 _d, _t, google_quitado = await cierra_lo_que_no_se_probo(self._uow, user.id)
-                if google_quitado:
-                    # Que quede como al desvincularlo a mano (code-review)
-                    user.record_google_unlinked(provider="google", unlinked_at=datetime.now())
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en

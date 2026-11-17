@@ -17,6 +17,7 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 MADRID = "Europe/Madrid"
@@ -24,7 +25,7 @@ MADRID = "Europe/Madrid"
 
 def _crear(days_before: int | None = None, start: date | None = None) -> Competition:
     """Una competición recién creada, con o sin apertura programada."""
-    comienzo = start or (date.today() + timedelta(days=30))
+    comienzo = start or (ahora_utc_sin_zona().date() + timedelta(days=30))
     return Competition.create(
         id=CompetitionId(uuid4()),
         creator_id=UserId(uuid4()),
@@ -68,13 +69,13 @@ class TestCuandoLeToca:
     """`due_to_open` mira el calendario del campo, no el del servidor."""
 
     def test_todavia_no_le_toca(self):
-        competition = _crear(5, start=date.today() + timedelta(days=30))
+        competition = _crear(5, start=ahora_utc_sin_zona().date() + timedelta(days=30))
 
         assert competition.due_to_open(MADRID) is False
 
     def test_ya_le_toca(self):
         """El torneo empieza en tres dias y abria cinco antes: hace dos que paso."""
-        competition = _crear(5, start=date.today() + timedelta(days=3))
+        competition = _crear(5, start=ahora_utc_sin_zona().date() + timedelta(days=3))
 
         assert competition.due_to_open(MADRID) is True
 
@@ -85,19 +86,19 @@ class TestCuandoLeToca:
         de uso (BE #332)—, asi que esta competicion esta en borrador y sin
         programar, que es justo el caso.
         """
-        competition = _crear(start=date.today() + timedelta(days=1))
+        competition = _crear(start=ahora_utc_sin_zona().date() + timedelta(days=1))
 
         assert competition.status == CompetitionStatus.DRAFT
         assert competition.due_to_open(MADRID) is False
 
     def test_sin_zona_espera_en_vez_de_adivinar(self):
-        competition = _crear(5, start=date.today() + timedelta(days=3))
+        competition = _crear(5, start=ahora_utc_sin_zona().date() + timedelta(days=3))
 
         assert competition.due_to_open(None) is False
 
     def test_solo_un_borrador_se_abre_solo(self):
         """Una cancelada no resucita porque pase su hora."""
-        competition = _crear(5, start=date.today() + timedelta(days=3))
+        competition = _crear(5, start=ahora_utc_sin_zona().date() + timedelta(days=3))
         competition.cancel()
 
         assert competition.due_to_open(MADRID) is False
@@ -108,10 +109,10 @@ class TestCuandoLeToca:
         Antes el instante se guardaba, asi que adelantar el torneo dejaba la
         apertura donde estaba y habia que acordarse de cambiarla.
         """
-        competition = _crear(5, start=date.today() + timedelta(days=30))
+        competition = _crear(5, start=ahora_utc_sin_zona().date() + timedelta(days=30))
         assert competition.due_to_open(MADRID) is False
 
-        cerca = date.today() + timedelta(days=3)
+        cerca = ahora_utc_sin_zona().date() + timedelta(days=3)
         competition.update_info(dates=DateRange(cerca, cerca + timedelta(days=2)))
 
         assert competition.due_to_open(MADRID) is True
