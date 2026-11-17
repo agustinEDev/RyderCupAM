@@ -231,10 +231,10 @@ class TestCanResetPassword:
 
     def test_can_reset_password_at_exact_expiration_boundary(self, sample_user_data):
         """
-        Test: Validar token exactamente en el momento de expiración
-        Given: Usuario con token que expira justo ahora
-        When: Se valida el token en el momento exacto de expiración
-        Then: Retorna False (expiración estricta)
+        Test: El límite de la caducidad, con la hora fijada
+        Given: Usuario con token que caduca a una hora conocida
+        When: Se valida justo en ese instante y un microsegundo después
+        Then: En el instante aún vale (la caducidad incluye su último instante); después, no
         """
         # Arrange
         user = User.create(
@@ -245,14 +245,12 @@ class TestCanResetPassword:
         )
         token = user.generate_password_reset_token()
 
-        # Establecer expiración exactamente ahora (boundary)
-        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona())
+        caduca = ahora_utc_sin_zona()
+        user = _rebuild_user(user, reset_token_expires_at=caduca)
 
-        # Act
-        result = user.can_reset_password(token)
-
-        # Assert
-        assert result is False
+        # Act / Assert: con la hora fijada, sin volver a leer el reloj
+        assert user.can_reset_password(token, ahora=caduca) is True
+        assert user.can_reset_password(token, ahora=caduca + timedelta(microseconds=1)) is False
 
 
 class TestResetPassword:

@@ -6,7 +6,7 @@ sin depender de su orden (/code-review: un mutante que solo miraba el primero so
 según el orden de los UUID).
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -23,6 +23,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_reposito
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -60,14 +61,14 @@ async def test_any_of_the_browser_devices_counts_whatever_the_order(db_session, 
     )
     await db_session.commit()
     orden = [con_sesion.id, sin_sesion.id] if vivo_primero else [sin_sesion.id, con_sesion.id]
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
 
     assert await repo.hay_uno_vivo_mas_nuevo(orden, ahora - timedelta(minutes=5), ahora) is True
 
 
 async def test_no_devices_means_no_newer_session(db_session):
     """Sin dispositivos no hay nada que mirar: no (y sin consulta inválida)."""
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
     repo = SQLAlchemyRefreshTokenRepository(db_session)
 
     assert await repo.hay_uno_vivo_mas_nuevo([], ahora - timedelta(minutes=5), ahora) is False
