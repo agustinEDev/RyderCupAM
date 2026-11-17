@@ -33,6 +33,13 @@ class FriendshipResponseDTO(BaseModel):
     responded_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    # El nombre real y el alias de cada lado, para enseñar el alias delante y el nombre
+    # pequeño debajo: el alias es un apodo, no un dato oculto (SB-08, 17 nov 2026).
+    # Los rellenan la lista de amigos y la de solicitudes; el resto, None
+    requester_real_name: str | None = None
+    requester_alias: str | None = None
+    addressee_real_name: str | None = None
+    addressee_alias: str | None = None
 
 
 class FriendResponseDTO(FriendshipResponseDTO):

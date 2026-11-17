@@ -75,4 +75,8 @@ class ListFriendsUseCase:
             updated_at=friendship.updated_at,
             requester_handicap=handicap(requester),
             addressee_handicap=handicap(addressee),
+            requester_real_name=requester.get_full_name() if requester else None,
+            requester_alias=requester.alias if requester else None,
+            addressee_real_name=addressee.get_full_name() if addressee else None,
+            addressee_alias=addressee.alias if addressee else None,
         )
