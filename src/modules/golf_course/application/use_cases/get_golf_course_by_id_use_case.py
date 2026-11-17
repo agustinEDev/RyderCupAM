@@ -6,10 +6,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     GetGolfCourseByIdRequestDTO,
     GetGolfCourseByIdResponseDTO,
 )
-from src.modules.golf_course.application.exceptions import (
-    GolfCourseMissingError,
-    GolfCourseViewForbiddenError,
-)
+from src.modules.golf_course.application.exceptions import GolfCourseMissingError
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -34,9 +31,8 @@ class GetGolfCourseByIdUseCase:
         GetGolfCourseByIdResponseDTO con el campo encontrado
 
     Raises:
-        GolfCourseMissingError: Si el campo no existe
-        GolfCourseViewForbiddenError: Si no está aprobado y quien lo pide no es
-            admin ni quien lo propuso
+        GolfCourseMissingError: Si el campo no existe, o si no está aprobado y quien
+            lo pide no es admin ni quien lo propuso
     """
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
@@ -63,15 +59,15 @@ class GetGolfCourseByIdUseCase:
             if not golf_course:
                 raise GolfCourseMissingError(f"Golf course not found: {request.golf_course_id}")
 
-            # 2. Uno sin aprobar solo lo ven un admin y quien lo propuso
+            # 2. Uno sin aprobar solo lo ven un admin y quien lo propuso. A los demás se
+            # les responde como si no existiera: un 403 les diría que hay un campo
+            # pendiente con ese id (OWASP A01, 17 nov 2026)
             if (
                 golf_course.approval_status != ApprovalStatus.APPROVED
                 and not request.requester_is_admin
                 and str(golf_course.creator_id) != request.requester_id
             ):
-                raise GolfCourseViewForbiddenError(
-                    "You don't have permission to view this golf course"
-                )
+                raise GolfCourseMissingError(f"Golf course not found: {request.golf_course_id}")
 
             # 3. Mapear a Response DTO
             response_dto = GolfCourseMapper.to_response_dto(golf_course)

@@ -12,13 +12,11 @@ from fastapi import status
 from src.modules.golf_course.application.exceptions import (
     GolfCourseEditForbiddenError,
     GolfCourseMissingError,
-    GolfCourseViewForbiddenError,
 )
 
 CODIGOS: dict[type[Exception], int] = {
     # 403: quien pide no puede hacerlo
     GolfCourseEditForbiddenError: status.HTTP_403_FORBIDDEN,
-    GolfCourseViewForbiddenError: status.HTTP_403_FORBIDDEN,
     # 404: no existe
     GolfCourseMissingError: status.HTTP_404_NOT_FOUND,
 }

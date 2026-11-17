@@ -174,8 +174,7 @@ async def get_golf_course_by_id(
     **Responses**:
     - 200: Campo encontrado
     - 401: No autenticado
-    - 403: Sin permisos (campo no aprobado y no eres admin/creator)
-    - 404: Campo no encontrado
+    - 404: Campo no encontrado, o no aprobado y no eres admin ni quien lo propuso
     """
     try:
         request_dto = GetGolfCourseByIdRequestDTO(

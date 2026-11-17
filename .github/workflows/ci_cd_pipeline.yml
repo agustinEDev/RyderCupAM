@@ -114,9 +114,12 @@ jobs:
         run: |
           echo "Running unit tests on Python ${{ matrix.python-version }}..."
           # El JUnit XML solo lo lee la tarjeta del resumen (no cambia qué pasa o falla).
-          # Cobertura con ramas y un suelo: si baja del 88 % falla (re-auditoría F-10;
-          # el 17 nov 2026 estaba en el 89 %). Subirlo cuando suba la cobertura.
-          pytest tests/unit/ -v --cov=src --cov-branch --cov-fail-under=88 \
+          # Cobertura con ramas y un suelo en la 3.12: si baja del 88 % falla (re-auditoría
+          # F-10; el 17 nov 2026 estaba en el 89 %). Subirlo cuando suba la cobertura. En la
+          # 3.14 no: mide las ramas de otra forma (sys.monitoring) y daría otro total
+          SUELO=""
+          if [ "${{ matrix.python-version }}" = "3.12" ]; then SUELO="--cov-fail-under=88"; fi
+          pytest tests/unit/ -v --cov=src --cov-branch $SUELO \
             --cov-report=xml --cov-report=term-missing --cov-report=html \
             --junitxml="$RUNNER_TEMP/junit.xml"
 
@@ -230,9 +233,18 @@ jobs:
         run: |
           echo "Running integration tests (with database)..."
           # Mide también la cobertura de esta suite, la que llega a la infraestructura
-          # (repositorios, rutas). Solo se informa: no tiene suelo (re-auditoría F-10)
+          # (repositorios, rutas). Se guarda como artefacto; aún sin suelo (re-auditoría F-10)
           pytest tests/integration/ -v --maxfail=5 --junitxml="$RUNNER_TEMP/junit.xml" \
-            --cov=src --cov-branch --cov-report=term:skip-covered
+            --cov=src --cov-branch --cov-report=xml:coverage-integration.xml
+
+      - name: Upload Integration Coverage Report (XML)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coverage-integration-xml
+          path: coverage-integration.xml
+          retention-days: 7
+          if-no-files-found: ignore
 
       # Tarjeta en el resumen de la ejecución: qué hace el job y qué ha salido
       - name: Summary card

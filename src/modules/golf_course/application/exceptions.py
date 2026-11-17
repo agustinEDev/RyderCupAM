@@ -44,7 +44,3 @@ class CountryNotFoundError(ValueError):
 
 class GolfCourseEditForbiddenError(Exception):
     """Quien edita el campo no es su creador ni admin (403)."""
-
-
-class GolfCourseViewForbiddenError(Exception):
-    """El campo no está aprobado y quien lo pide no es admin ni quien lo propuso (403)."""
