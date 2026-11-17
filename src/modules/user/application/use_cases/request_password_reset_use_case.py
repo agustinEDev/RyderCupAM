@@ -38,7 +38,6 @@ class RequestPasswordResetUseCase:
     - Buscar usuario por email (sin revelar si existe)
     - Generar token de reseteo con expiración de 1 hora (se guarda su hash)
     - Enviar email con enlace de reseteo
-    - Registrar evento de dominio para auditoría
     - Aplicar timing attack prevention
 
     Security (OWASP A01, A07):

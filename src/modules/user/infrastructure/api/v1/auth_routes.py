@@ -394,9 +394,7 @@ async def logout_user(
        - Previene renovación de access tokens después del logout
        - OWASP A01: Broken Access Control
 
-    3. **Domain Event** (Existente):
-       - Registra el evento de logout en el dominio
-       - Auditoría y trazabilidad
+    3. **Log de seguridad**: registra el logout (auditoría y trazabilidad)
 
     Security Improvements (OWASP A01/A07):
     - delete_auth_cookie(): Elimina access token del navegador

@@ -39,14 +39,14 @@ Infrastructure (FastAPI, SQLAlchemy, RFEG)
     ↓
 Application (Use Cases, DTOs, Handlers)
     ↓
-Domain (Entities, VOs, Events, Repos)
+Domain (Entities, VOs, Repos)
 ```
 
 **Rule**: Dependencies point inward.
 
-**Patterns**: Repository, UoW, Domain Events, Value Objects, External Services.
+**Patterns**: Repository, UoW, Value Objects, External Services (domain events removed, ADR-050).
 
-> ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
+> ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
 
 ---
 
@@ -151,16 +151,14 @@ Domain (Entities, VOs, Events, Repos)
 **Domain**:
 - Entities: `User`, `UserOAuthAccount` ⭐ Sprint 3
 - VOs: `UserId`, `Email`, `Password`, `Handicap`, `OAuthAccountId`, `OAuthProvider` ⭐ Sprint 3
-- Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`, `GoogleAccountLinkedEvent`, `GoogleAccountUnlinkedEvent` ⭐ Sprint 3
 - Repos: `UserRepositoryInterface`, `UserOAuthAccountRepositoryInterface` ⭐ Sprint 3
 - Services: `HandicapService` (interface)
-- Email Verification: Fields `email_verified`, `verification_token`, event `EmailVerifiedEvent`
+- Email Verification: Fields `email_verified`, `verification_token`
 
 **Application**:
 - Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`, `GoogleLogin`, `LinkGoogleAccount`, `UnlinkGoogleAccount` ⭐ Sprint 3
 - DTOs: Request/Response (including OAuth DTOs) ⭐ Sprint 3
 - Ports: `IGoogleOAuthService` ⭐ Sprint 3
-- Handlers: `UserRegisteredEventHandler`
 - Email Verification: `VerifyEmailUseCase`, integrated in registration
 
 **Infrastructure**:
@@ -170,7 +168,7 @@ Domain (Entities, VOs, Events, Repos)
 - Email Verification: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 **Email Verification**:
-- Domain: Fields `email_verified`, `verification_token`, event `EmailVerifiedEvent`
+- Domain: Fields `email_verified`, `verification_token`
 - Application: Use case `VerifyEmailUseCase`, integrated in registration
 - Infrastructure: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
@@ -181,7 +179,6 @@ Domain (Entities, VOs, Events, Repos)
 **Domain**:
 - Entities: `Competition`, `Enrollment`, `Country`
 - VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `PlayMode`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
-- Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `CompetitionRevertedToClosed`, `CompetitionEnrollmentsReopened`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
 - Repos: `CompetitionRepositoryInterface`, `EnrollmentRepositoryInterface`, `CountryRepositoryInterface`
 
 **Application**:
@@ -258,9 +255,8 @@ Client → API → UseCase → User.create() → UoW.save() → commit()
 2. `User.create()` builds the user
 3. UoW saves + commits
 4. The use case sends the verification email itself (no domain events, ADR-050)
-5. Handlers process (email, audit)
 
-> ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
+> ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
 
 ### 2. Update Handicap (RFEG)
 
@@ -447,7 +443,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Foundation**: [001](architecture/decisions/ADR-001-clean-architecture.md), [004](architecture/decisions/ADR-004-tech-stack.md)
 
-**Patterns**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
+**Patterns**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
 
 **Infrastructure**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
@@ -502,21 +498,11 @@ API → UseCase → HandicapService.search(name) → RFEG
 - **Password** (23 tests) - Bcrypt hashed password
 - **Handicap** (20 tests) - Range -10.0 to 54.0 (RFEG/EGA)
 
-### Implemented Domain Events (59 tests)
-
-- **UserRegisteredEvent** (9 tests) - User registered
-- **HandicapUpdatedEvent** (16 tests) - Handicap updated with delta
-- **UserLoggedOutEvent** (7 tests) - User logged out (audit)
-- **UserLoggedInEvent** (7 tests) - User logged in (complete audit)
-- **UserProfileUpdatedEvent** (7 tests) - User profile updated
-- **UserEmailChangedEvent** (7 tests) - Email changed
-- **UserPasswordChangedEvent** (6 tests) - Password changed
-
 ### Implemented Use Cases (68 tests)
 
 **User Module (9 use cases)**:
 - `RegisterUserUseCase` (5 tests) - User registration
-- `LoginUserUseCase` (5 tests) - JWT authentication + events
+- `LoginUserUseCase` (5 tests) - JWT authentication
 - `LogoutUserUseCase` (5 tests) - Logout with complete audit
 - `UpdateProfileUseCase` (7 tests) - Update name/surname without password
 - `UpdateSecurityUseCase` (9 tests) - Update email/password with verification
