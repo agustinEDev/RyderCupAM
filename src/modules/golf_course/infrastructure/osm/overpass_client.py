@@ -99,6 +99,33 @@ def _points(geometry: Any) -> tuple[Point, ...]:
     return tuple(points)
 
 
+def _tags(element: Any) -> dict[str, Any] | None:
+    """Las etiquetas de un elemento con id entero, o None si no se entiende."""
+    if not isinstance(element, dict) or not isinstance(element.get("id"), int):
+        return None
+    tags = element.get("tags") or {}
+    if not isinstance(tags, dict):
+        return None
+    return tags
+
+
+def _course_relation(element: dict[str, Any], tags: dict[str, Any]) -> OsmRelation | None:
+    """Un campo dibujado como multipolígono, si tiene algún anillo exterior."""
+    members = [m for m in element.get("members") or [] if isinstance(m, dict)]
+    outer = tuple(
+        # Sin rol (multipolígonos antiguos) se toma como exterior
+        p
+        for m in members
+        if m.get("role") in ("outer", "") and (p := _points(m.get("geometry")))
+    )
+    inner = tuple(
+        p for m in members if m.get("role") == "inner" and (p := _points(m.get("geometry")))
+    )
+    if not outer:
+        return None
+    return OsmRelation(id=element["id"], tags=tags, outer=outer, inner=inner)
+
+
 def parse_area(payload: Any) -> OsmArea:
     """
     Traduce la respuesta de Overpass; ignora lo que no se usa o no se entiende.
@@ -118,27 +145,14 @@ def parse_area(payload: Any) -> OsmArea:
     holes: list[OsmWay] = []
     greens: list[OsmWay] = []
     for element in payload["elements"]:
-        if not isinstance(element, dict) or not isinstance(element.get("id"), int):
-            continue
-        tags = element.get("tags") or {}
-        if not isinstance(tags, dict):
+        tags = _tags(element)
+        if tags is None:
             continue
         kind = element.get("type")
         if kind == "relation" and tags.get("leisure") == "golf_course":
-            members = [m for m in element.get("members") or [] if isinstance(m, dict)]
-            outer = tuple(
-                # Sin rol (multipolígonos antiguos) se toma como exterior
-                p
-                for m in members
-                if m.get("role") in ("outer", "") and (p := _points(m.get("geometry")))
-            )
-            inner = tuple(
-                p for m in members if m.get("role") == "inner" and (p := _points(m.get("geometry")))
-            )
-            if outer:
-                course_relations.append(
-                    OsmRelation(id=element["id"], tags=tags, outer=outer, inner=inner)
-                )
+            relation = _course_relation(element, tags)
+            if relation is not None:
+                course_relations.append(relation)
             continue
         if kind != "way":
             continue

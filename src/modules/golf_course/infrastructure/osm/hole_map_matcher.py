@@ -217,6 +217,56 @@ def _green_position(
     )
 
 
+_Candidate = tuple[OsmWay, list[tuple[float, float]]]
+
+
+def _hole_candidates(
+    area: OsmArea,
+    proj: _Projection,
+    inside: Polygon,
+    by_number: dict[int, CardHole],
+    physical_holes: int,
+    discarded: Counter[DiscardReason],
+) -> dict[int, list[_Candidate]]:
+    """Los hoyos de OSM dentro del campo, por número; cuenta en `discarded` los que no valen."""
+    candidates: dict[int, list[_Candidate]] = {}
+    for way in area.holes:
+        line = [proj.xy(p) for p in way.points]
+        if not inside.contains(LineString(line).interpolate(0.5, normalized=True)):
+            continue
+        number = _hole_number(way, by_number, physical_holes)
+        if isinstance(number, DiscardReason):
+            discarded[number] += 1
+            continue
+        candidates.setdefault(number, []).append((way, line))
+    return candidates
+
+
+def _hole_number(
+    way: OsmWay, by_number: dict[int, CardHole], physical_holes: int
+) -> int | DiscardReason:
+    """El número de ese hoyo de OSM si vale para nuestra tarjeta; si no, por qué no."""
+    number = _int_tag(way, "ref")
+    if number is None or not MIN_HOLE_NUMBER <= number <= MAX_HOLE_NUMBER:
+        return DiscardReason.NO_NUMBER
+    if number > physical_holes or number not in by_number:
+        return DiscardReason.BEYOND_COURSE
+    par = _int_tag(way, "par")
+    if par is not None and par != by_number[number].par:
+        return DiscardReason.PAR_MISMATCH
+    return number
+
+
+def _unambiguous(options: list[_Candidate], stroke_index: int) -> list[tuple[float, float]] | None:
+    """La línea del hoyo; con varios dibujos, el de su hándicap si es uno solo."""
+    chosen_ones = options
+    if len(options) > 1:
+        chosen_ones = [o for o in options if _int_tag(o[0], "handicap") == stroke_index]
+        if len(chosen_ones) != 1:
+            return None
+    return chosen_ones[0][1]
+
+
 def match_hole_map(
     area: OsmArea,
     *,
@@ -241,35 +291,14 @@ def match_hole_map(
     ]
 
     discarded: Counter[DiscardReason] = Counter()
-    candidates: dict[int, list[tuple[OsmWay, list[tuple[float, float]]]]] = {}
-    for way in area.holes:
-        line = [proj.xy(p) for p in way.points]
-        if not inside.contains(LineString(line).interpolate(0.5, normalized=True)):
-            continue
-        number = _int_tag(way, "ref")
-        if number is None or not MIN_HOLE_NUMBER <= number <= MAX_HOLE_NUMBER:
-            discarded[DiscardReason.NO_NUMBER] += 1
-            continue
-        if number > physical_holes or number not in by_number:
-            discarded[DiscardReason.BEYOND_COURSE] += 1
-            continue
-        par = _int_tag(way, "par")
-        if par is not None and par != by_number[number].par:
-            discarded[DiscardReason.PAR_MISMATCH] += 1
-            continue
-        candidates.setdefault(number, []).append((way, line))
+    candidates = _hole_candidates(area, proj, inside, by_number, physical_holes, discarded)
 
     holes: list[MappedHole] = []
     for number, options in sorted(candidates.items()):
-        chosen_ones = options
-        if len(options) > 1:
-            chosen_ones = [
-                o for o in options if _int_tag(o[0], "handicap") == by_number[number].stroke_index
-            ]
-            if len(chosen_ones) != 1:
-                discarded[DiscardReason.AMBIGUOUS] += 1
-                continue
-        _, line = chosen_ones[0]
+        line = _unambiguous(options, by_number[number].stroke_index)
+        if line is None:
+            discarded[DiscardReason.AMBIGUOUS] += 1
+            continue
         holes.append(_mapped_hole(number, line, greens, proj))
 
     return OsmHoleMapCandidate(

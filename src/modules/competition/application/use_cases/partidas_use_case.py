@@ -277,7 +277,6 @@ class GenerarPartidasUseCase(_ConLaFranja):
             await self._uow.partidas.reemplazar_franja(abierta.franja.id, partidas)
             vista = await self._vista(abierta, partidas)
             despues = de_las_partidas(abierta.franja, partidas)
-            await self._uow.commit()
         # Regenerar con los mismos grupos no avisa a nadie (G3)
         await self._actividad.salidas_cambiadas(
             abierta.competicion, abierta.franja.id, antes, despues
@@ -356,7 +355,6 @@ class MoverJugadorUseCase(_ConLaFranja):
             quedan = [p for p in abierta.partidas if p not in cambios.borrar] + cambios.crear
             vista = await self._vista(abierta, quedan, plazas)
             despues = de_las_partidas(abierta.franja, quedan)
-            await self._uow.commit()
         # Solo a quien le cambia algo: los de las partidas tocadas y los que suben (G3)
         await self._actividad.salidas_cambiadas(
             abierta.competicion, abierta.franja.id, antes, despues
@@ -385,7 +383,6 @@ class ReordenarPartidasUseCase(_ConLaFranja):
             await self._uow.partidas.guardar(cambiadas)
             vista = await self._vista(abierta, abierta.partidas)
             despues = de_las_partidas(abierta.franja, abierta.partidas)
-            await self._uow.commit()
         # Solo a quien le cambia la hora (G3)
         await self._actividad.salidas_cambiadas(
             abierta.competicion, abierta.franja.id, antes, despues
@@ -433,7 +430,6 @@ class CambiarMarcadoresUseCase(_ConLaFranja):
             partida.cambiar_marcadores(marcadores)
             await self._uow.partidas.guardar([partida])
             vista = await self._vista(abierta, abierta.partidas)
-            await self._uow.commit()
         return vista
 
 
@@ -449,7 +445,6 @@ class BorrarPartidasUseCase(_ConLaFranja):
             abierta = await self._abrir(RoundId(round_id), quien, is_admin)
             antes = de_las_partidas(abierta.franja, abierta.partidas)
             await self._uow.partidas.borrar(abierta.partidas)
-            await self._uow.commit()
         # Sin partidas no hay salida: se retiran los avisos de la franja (G4)
         await self._actividad.salidas_cambiadas(abierta.competicion, abierta.franja.id, antes, {})
 

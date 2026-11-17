@@ -74,7 +74,10 @@ def test_el_proveedor_usa_la_zona_del_primer_campo():
 )
 def test_cada_puerta_lleva_el_plazo(construir):
     """C2. Given el proveedor de la API / When construye el caso de uso / Then lleva el plazo."""
-    assert construir()._plazo is PLAZO
+    caso = construir()
+    # Las invitaciones lo llevan en su servicio común (re-auditoría F-09)
+    envio = getattr(caso, "_envio", None)
+    assert (envio._plazo if envio is not None else caso._plazo) is PLAZO
 
 
 def test_apuntarse_reutiliza_la_zona_del_plazo():

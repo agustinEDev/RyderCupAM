@@ -2,11 +2,18 @@
 
 from collections.abc import Collection
 
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
+from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -92,39 +99,10 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
             hoyos_partido = await uow.hole_scores.played_holes([p.id for p in partidos])
             hoyos_grupo = await uow.golpes_de_partida.hoyos_jugados([g.id for g in grupos])
 
-            # (jugador, ronda, origen, tipo, quienes jugaron, hoyos)
-            vueltas = []
-            for partido in partidos:
-                jugadores = [p.user_id for p in (*partido.team_a_players, *partido.team_b_players)]
-                for user_id in buscados.intersection(jugadores):
-                    jugados = hoyos_partido.get((partido.id, user_id), 0)
-                    if jugados:
-                        vueltas.append(
-                            (
-                                user_id,
-                                partido.round_id,
-                                str(partido.id.value),
-                                "MATCH",
-                                jugadores,
-                                jugados,
-                            )
-                        )
-            for grupo in grupos:
-                for user_id in buscados.intersection(grupo.user_ids):
-                    if grupo.estados_de_tarjeta.get(user_id) == EstadoDeTarjeta.NO_PRESENTADO:
-                        continue
-                    jugados = hoyos_grupo.get((grupo.id, user_id), 0)
-                    if jugados:
-                        vueltas.append(
-                            (
-                                user_id,
-                                grupo.round_id,
-                                str(grupo.id.value),
-                                "TEE_GROUP",
-                                grupo.user_ids,
-                                jugados,
-                            )
-                        )
+            vueltas = [
+                *_vueltas_de_partidos(partidos, buscados, hoyos_partido),
+                *_vueltas_de_grupos(grupos, buscados, hoyos_grupo),
+            ]
             if not vueltas:
                 return []
             rondas = {
@@ -146,25 +124,74 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                 )
             }
 
-        resultado = []
-        for user_id, round_id, origen, tipo, jugadores, jugados in vueltas:
-            ronda = rondas.get(round_id)
-            if ronda is None or ronda.competition_id not in cerrados:
-                continue
-            campo = campos.get(ronda.golf_course_id)
-            resultado.append(
-                PlayedRound(
-                    user_id=user_id,
-                    golf_course_id=str(ronda.golf_course_id.value),
-                    instant=round_instant(
-                        ronda.round_date, ronda.session_type, campo.timezone if campo else None
-                    ),
-                    source_id=origen,
-                    holes_played=jugados,
-                    competition_id=str(ronda.competition_id.value),
-                    kind=tipo,
-                    player_ids=tuple(sorted({str(u.value) for u in jugadores})),
-                    round_date=ronda.round_date,
+        return [
+            _vuelta_jugada(vuelta, ronda, campos.get(ronda.golf_course_id))
+            for vuelta in vueltas
+            if (ronda := rondas.get(vuelta[1])) is not None and ronda.competition_id in cerrados
+        ]
+
+
+# (jugador, ronda, origen, tipo, quienes jugaron, hoyos)
+_Vuelta = tuple[UserId, RoundId, str, str, list[UserId], int]
+
+
+def _vueltas_de_partidos(
+    partidos: list[Match],
+    buscados: set[UserId],
+    hoyos: dict[tuple[MatchId, UserId], int],
+) -> list[_Vuelta]:
+    """Las vueltas de los buscados en partidos de la Ryder, con algún hoyo suyo."""
+    vueltas: list[_Vuelta] = []
+    for partido in partidos:
+        jugadores = [p.user_id for p in (*partido.team_a_players, *partido.team_b_players)]
+        for user_id in buscados.intersection(jugadores):
+            jugados = hoyos.get((partido.id, user_id), 0)
+            if jugados:
+                vueltas.append(
+                    (user_id, partido.round_id, str(partido.id.value), "MATCH", jugadores, jugados)
                 )
-            )
-        return resultado
+    return vueltas
+
+
+def _vueltas_de_grupos(
+    grupos: list[Partida],
+    buscados: set[UserId],
+    hoyos: dict[tuple[PartidaId, UserId], int],
+) -> list[_Vuelta]:
+    """Las de grupos de stroke play: el no presentado no pisó el campo."""
+    vueltas: list[_Vuelta] = []
+    for grupo in grupos:
+        for user_id in buscados.intersection(grupo.user_ids):
+            if grupo.estados_de_tarjeta.get(user_id) == EstadoDeTarjeta.NO_PRESENTADO:
+                continue
+            jugados = hoyos.get((grupo.id, user_id), 0)
+            if jugados:
+                vueltas.append(
+                    (
+                        user_id,
+                        grupo.round_id,
+                        str(grupo.id.value),
+                        "TEE_GROUP",
+                        grupo.user_ids,
+                        jugados,
+                    )
+                )
+    return vueltas
+
+
+def _vuelta_jugada(vuelta: _Vuelta, ronda: Round, campo: GolfCourse | None) -> PlayedRound:
+    """Una vuelta de torneo cerrado, a la hora de su sesión en el huso de su campo."""
+    user_id, _round_id, origen, tipo, jugadores, jugados = vuelta
+    return PlayedRound(
+        user_id=user_id,
+        golf_course_id=str(ronda.golf_course_id.value),
+        instant=round_instant(
+            ronda.round_date, ronda.session_type, campo.timezone if campo else None
+        ),
+        source_id=origen,
+        holes_played=jugados,
+        competition_id=str(ronda.competition_id.value),
+        kind=tipo,
+        player_ids=tuple(sorted({str(u.value) for u in jugadores})),
+        round_date=ronda.round_date,
+    )

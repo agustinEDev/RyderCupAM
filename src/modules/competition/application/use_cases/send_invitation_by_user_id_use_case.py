@@ -1,17 +1,12 @@
 """Caso de Uso: Enviar Invitacion por User ID."""
 
 import logging
-from datetime import timedelta
 
 from src.modules.competition.application.dto.invitation_dto import (
     InvitationResponseDTO,
     SendInvitationByUserIdRequestDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    InviteeNotFoundError,
-    NotCompetitionCreatorError,
-)
+from src.modules.competition.application.exceptions import InviteeNotFoundError
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
@@ -19,44 +14,26 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
     IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.cupo_de_la_competicion import (
-    exigir_sitio,
-)
-from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
-from src.modules.competition.application.services.equipos_formados import (
-    exigir_que_se_pueda_invitar,
-)
-from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
-from src.modules.competition.application.services.lo_que_ve_el_organizador import (
-    lo_que_ve_el_organizador,
-)
-from src.modules.competition.application.services.nombre_de_quien_invita import (
-    nombre_de_quien_invita,
-    quieren_su_nombre_legal,
+from src.modules.competition.application.services.envio_de_invitaciones import (
+    Destinatario,
+    EnvioDeInvitaciones,
+    Peticion,
 )
 from src.modules.competition.application.services.plazo_de_inscripcion import (
     PlazoDeInscripcion,
-    exigir_el_plazo,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
-    DuplicateInvitationViolation,
     SelfInvitationViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.email_masking import mask_email as _mask_email
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -73,23 +50,13 @@ class SendInvitationByUserIdUseCase:
         plazo: PlazoDeInscripcion | None = None,
     ):
         self._uow = uow
-        # Pasado el plazo de inscripción no se invita (C2, 15 nov 2026); sin él, no se mira
-        self._plazo = plazo
         self._user_uow = user_uow
-        self._email_service = email_service
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
-
-    async def _avisar(
-        self, competition: Competition, invitation: Invitation, caducada: Invitation | None
-    ) -> None:
-        """
-        Ya guardada: si tiene cuenta, le sale en Actividad (BE-2); y la que
-        caducó sin abrirse y dio paso a esta pierde su aviso (CodeRabbit).
-        """
-        await self._actividad.invited(competition, invitation)
-        if caducada is not None:
-            await self._actividad.invitations_closed([caducada])
+        # Lo común con invitar por correo (re-auditoría F-09)
+        self._envio = EnvioDeInvitaciones(
+            uow, user_uow, email_service, self._actividad, plazo, logger
+        )
 
     async def execute(
         self, request: SendInvitationByUserIdRequestDTO, is_admin: bool = False
@@ -108,39 +75,10 @@ class SendInvitationByUserIdUseCase:
             Las del organizador, el estado, el cupo, el freno por hora y la
             pendiente duplicada (una pendiente ya caducada no cuenta)
         """
-        async with self._uow:
-            competition_id = CompetitionId(request.competition_id)
-            inviter_id = UserId(request.inviter_id)
-            invitee_user_id = UserId(request.invitee_user_id)
+        inviter_id = UserId(request.inviter_id)
+        invitee_user_id = UserId(request.invitee_user_id)
 
-            # 1. Buscar competition
-            # Con la fila bloqueada (BE #359): una inscripcion que llena la ultima
-            # plaza entre comprobar el cupo y guardar dejaba una pendiente nueva en
-            # un torneo lleno. Mismo orden que las inscripciones
-            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
-            if not competition:
-                raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
-
-            # 2. Verificar creator/admin
-            if not is_admin and not competition.is_creator(inviter_id):
-                raise NotCompetitionCreatorError(
-                    "Only the competition creator can send invitations."
-                )
-
-            # 3. Una programada a la que ya le tocaba se abre a su hora, no ahora:
-            #    abrirla tarde no la exime del plazo (F7, 16 nov 2026)
-            await EnrollmentOpener.abrir_las_que_toquen(
-                [competition], self._uow, self._plazo.zonas if self._plazo else None
-            )
-            # Validar estado de competicion
-            CompetitionPolicy.can_send_invitation(competition.status)
-            # Pasado el plazo, aunque siga abierta, no (C2). Una programada se abrió
-            # justo antes a su hora, así que tampoco: invitar no la exime (O3)
-            await exigir_el_plazo(self._plazo, competition)
-            # Con los equipos formados, solo si al aceptarla se pueden deshacer (sin
-            # partidos), y nunca con la sala de draft abierta (B3, 15 nov 2026)
-            await exigir_que_se_pueda_invitar(self._uow, competition)
-
+        async def destinatario_de(competition: Competition) -> Destinatario:
             # 4. Buscar invitee user
             async with self._user_uow:
                 invitee_user = await self._user_uow.users.find_by_id(invitee_user_id)
@@ -155,120 +93,30 @@ class SendInvitationByUserIdUseCase:
 
             # 6. Verificar no enrollment activo
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
-                invitee_user_id, competition_id
+                invitee_user_id, competition.id
             )
             if existing_enrollment and existing_enrollment.is_approved():
                 raise AlreadyEnrolledInvitationViolation(
                     f"User {request.invitee_user_id} is already enrolled in competition "
                     f"{request.competition_id}."
                 )
-
-            # Solo mientras queden plazas (BE #359): libres = max_players menos
-            # aprobadas. Antes se invitaba a un torneo lleno y quien llegaba tarde
-            # se enteraba al aceptar, sin haber hecho nada mal. Las pendientes no
-            # ocupan plaza: cuando una acepta y llena la ultima, las demas se quedan
-            # sin plaza (ver RespondToInvitationUseCase)
-            # Con franjas, el cupo es de sus plazas: aquí no se mira (28 oct 2026)
-            await exigir_sitio(self._uow, competition)
-
-            # Rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora), despues
-            # de las plazas: una competicion llena con el freno agotado decia
-            # «espera» cuando lo cierto es que ya no cabe nadie
-            one_hour_ago = ahora_utc_sin_zona() - timedelta(hours=1)
-            recent_invitations = await self._uow.invitations.count_by_competition(
-                competition_id, since=one_hour_ago
-            )
-            CompetitionPolicy.validate_invitation_rate(
-                recent_invitations, competition.max_players, competition_id
+            # Al organizador, el nombre de quien eligió, nunca su correo (B-01); el
+            # correo de la invitación va a su cuenta tal cual está
+            return Destinatario(
+                correo=invitee_email,
+                correo_de_la_pendiente=invitee_email,
+                user_id=invitee_user_id,
+                nombre=invitee_name,
+                por_correo=False,
+                correo_del_aviso=invitee_email,
             )
 
-            # Y el de quien invita, sumando todas sus competiciones (auditoría de la
-            # fase 6, B-03)
-            del_organizador = await self._uow.invitations.count_by_inviter(
-                inviter_id, since=one_hour_ago
-            )
-            CompetitionPolicy.validate_user_invitation_rate(del_organizador)
-
-            # 7. Verificar no invitation PENDING duplicada
-            # Una pendiente que ya caducó sin que nadie la abriera no impide
-            # invitar otra vez (release social 2)
-            existing_invitation, caducada = await pendiente_vigente(
-                self._uow, invitee_email, competition_id
-            )
-            if existing_invitation:
-                raise DuplicateInvitationViolation(
-                    # Sin el correo del elegido: el mensaje sale en el 409 (revisor de B-01)
-                    f"A pending invitation already exists in competition {request.competition_id}."
-                )
-
-            # 8. Crear invitation
-            invitation = Invitation.create(
-                id=InvitationId.generate(),
-                competition_id=competition_id,
+        return await self._envio.enviar(
+            Peticion(
+                competition_ref=request.competition_id,
                 inviter_id=inviter_id,
-                invitee_email=invitee_email,
-                invitee_user_id=invitee_user_id,
                 personal_message=request.personal_message,
-            )
-
-            # 9. Persistir
-            await self._uow.invitations.add(invitation)
-
-            # 10. Y con la primera invitacion se abren las inscripciones (BE #319),
-            # si todavía no le tocaba abrirse (una a la que ya le tocaba se abrió
-            # arriba a su hora: invitar no la exime del plazo, O3). Aqui y no antes:
-            # abrir y fallar luego dejaria el torneo abierto sin nadie invitado
-            if CompetitionPolicy.invitation_opens_enrollment(competition.status):
-                competition.activate()
-                await self._uow.competitions.update(competition)
-
-            # El nombre que usa en ESTA competición (#710), también en el correo
-            legal = bool(await quieren_su_nombre_legal(self._uow, [(competition_id, inviter_id)]))
-
-        # Ya guardada: si tiene cuenta, le sale en Actividad (BE-2)
-        await self._avisar(competition, invitation, caducada)
-
-        # 10. Retornar DTO enriquecido
-        # Obtener inviter_name
-        async with self._user_uow:
-            # Tambien en el correo: es un aviso de que alguien te ha invitado, y
-            # a ese alguien lo reconoces por como aparece en la competicion
-            inviter_user = await self._user_uow.users.find_by_id(inviter_id)
-            inviter_name = nombre_de_quien_invita(inviter_user, legal)
-
-        # 11. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
-        if self._email_service:
-            try:
-                await self._email_service.send_invitation_email(
-                    to_email=invitee_email,
-                    invitee_name=invitee_name,
-                    inviter_name=inviter_name,
-                    competition_name=str(competition.name),
-                    personal_message=invitation.personal_message,
-                    expires_at=invitation.expires_at,
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to send invitation email to %s: %s",
-                    _mask_email(invitee_email),
-                    str(e),
-                )
-
-        # Al organizador, el nombre de quien eligió, nunca su correo (B-01)
-        quien = lo_que_ve_el_organizador(invitation, invitee_name)
-        return InvitationResponseDTO(
-            id=invitation.id.value,
-            competition_id=invitation.competition_id.value,
-            competition_name=str(competition.name),
-            inviter_id=invitation.inviter_id.value,
-            inviter_name=inviter_name,
-            invitee_email=quien.email,
-            invitee_user_id=quien.user_id.value if quien.user_id else None,
-            invitee_name=quien.nombre,
-            status=invitation.status.value,
-            personal_message=invitation.personal_message,
-            expires_at=invitation.expires_at,
-            responded_at=invitation.responded_at,
-            created_at=invitation.created_at,
-            updated_at=invitation.updated_at,
+                is_admin=is_admin,
+            ),
+            destinatario_de,
         )

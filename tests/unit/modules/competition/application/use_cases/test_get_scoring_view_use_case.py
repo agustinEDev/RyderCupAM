@@ -13,6 +13,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    MatchNotFoundError,
+    RoundNotFoundError,
+)
 from src.modules.competition.application.use_cases.get_scoring_view_use_case import (
     GetScoringViewUseCase,
 )
@@ -20,6 +25,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.visibility import Visibility
@@ -486,3 +492,46 @@ class TestElPartidoConcedido:
 
         assert view.is_decided is False
         assert view.decided_result is None
+
+
+class TestLoQueNoExiste:
+    """Caracteriza los errores de lectura de la vista (re-auditoría F-05)."""
+
+    async def test_execute_partido_inexistente_lanza_match_not_found(self, uow, user_repo):
+        """
+        Given: Un ID de partido que no existe
+        When: Se pide la vista
+        Then: MatchNotFoundError con el ID en el mensaje
+        """
+        fake_id = str(MatchId.generate())
+
+        with pytest.raises(MatchNotFoundError, match=fake_id):
+            await GetScoringViewUseCase(uow, user_repo, ScoringService()).execute(fake_id)
+
+    async def test_execute_sin_ronda_lanza_round_not_found(self, uow, user_repo):
+        """
+        Given: Un partido cuya ronda ya no existe
+        When: Se pide la vista
+        Then: RoundNotFoundError
+        """
+        match, _y, _r, gc_repo = await _setup(uow, None)
+        uow._rounds._rounds.clear()
+
+        with pytest.raises(RoundNotFoundError):
+            await GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo).execute(
+                str(match.id)
+            )
+
+    async def test_execute_sin_competicion_lanza_competition_not_found(self, uow, user_repo):
+        """
+        Given: Un partido cuya competición ya no existe
+        When: Se pide la vista
+        Then: CompetitionNotFoundError
+        """
+        match, _y, _r, gc_repo = await _setup(uow, None)
+        uow._competitions._competitions.clear()
+
+        with pytest.raises(CompetitionNotFoundError):
+            await GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo).execute(
+                str(match.id)
+            )
