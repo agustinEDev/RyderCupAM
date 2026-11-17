@@ -78,7 +78,7 @@ class CancelEnrollmentUseCase:
                 raise NotOwnerError("Solo puedes cancelar tu propia inscripción")
 
             # 3. Cancelar (la entidad valida el estado)
-            enrollment.cancel(request.reason)
+            enrollment.cancel()
 
             # 4. Persistir cambios
             await self._uow.enrollments.update(enrollment)

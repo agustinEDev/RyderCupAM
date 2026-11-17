@@ -784,7 +784,7 @@ class Competition:
         # anunciando «abre 5 dias antes» de algo que ya abrio (BE #332)
         self._enrollment_opens_days_before = None
 
-    def close_enrollments(self, total_enrollments: int = 0, by_deadline: bool = False) -> None:
+    def close_enrollments(self, by_deadline: bool = False) -> None:
         """
         Cierra las inscripciones (ACTIVE → CLOSED).
 
@@ -835,7 +835,7 @@ class Competition:
         self._status = CompetitionStatus.COMPLETED
         self._updated_at = ahora_utc_sin_zona()
 
-    def cancel(self, reason: str | None = None) -> None:
+    def cancel(self) -> None:
         """
         Cancela el torneo (cualquier estado → CANCELLED).
 
@@ -945,7 +945,7 @@ class Competition:
 
         self._ryder_cup = ryder_cup.with_captains(team_a, team_b)
         if self._status == CompetitionStatus.ACTIVE:
-            self.close_enrollments(total_enrollments=len(approved_player_ids))
+            self.close_enrollments()
         else:
             self._updated_at = ahora_utc_sin_zona()
 

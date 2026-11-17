@@ -273,7 +273,7 @@ class Enrollment:
         self._status = EnrollmentStatus.REJECTED
         self._updated_at = ahora_utc_sin_zona()
 
-    def withdraw(self, reason: str | None = None) -> None:
+    def withdraw(self) -> None:
         """Retira la inscripción voluntariamente (APPROVED → WITHDRAWN)."""
         if not self._status.can_transition_to(EnrollmentStatus.WITHDRAWN):
             raise EnrollmentStateError(
@@ -284,7 +284,7 @@ class Enrollment:
         self._status = EnrollmentStatus.WITHDRAWN
         self._updated_at = ahora_utc_sin_zona()
 
-    def cancel(self, reason: str | None = None) -> None:
+    def cancel(self) -> None:
         """Cancela la solicitud (REQUESTED/INVITED → CANCELLED)."""
         if not self._status.can_transition_to(EnrollmentStatus.CANCELLED):
             raise EnrollmentStateError(

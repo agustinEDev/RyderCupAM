@@ -132,7 +132,7 @@ class StrokePlayWorld:
             team_assignment=TeamAssignment.MANUAL if tipo.has_teams else None,
         )
         competition.activate()
-        competition.close_enrollments(total_enrollments=len(enrolled or []))
+        competition.close_enrollments()
         competition.start()
         if completed:
             competition.complete()

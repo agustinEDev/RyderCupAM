@@ -171,7 +171,7 @@ class DeleteRoundUseCase:
                 or not inscripcion.entered_waiting
             ):
                 continue
-            inscripcion.withdraw("tee_window_removed")
+            inscripcion.withdraw()
             await self._uow.enrollments.update(inscripcion)
             fuera.append(inscripcion)
         return fuera

@@ -205,7 +205,7 @@ async def _completed_tournament(
     )
     if complete:
         competition.activate()
-        competition.close_enrollments(total_enrollments=2)
+        competition.close_enrollments()
         competition.start()
         competition.complete()
 

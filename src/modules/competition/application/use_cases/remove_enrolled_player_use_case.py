@@ -158,7 +158,7 @@ class RemoveEnrolledPlayerUseCase:
             await exigir_sin_draft_abierto(self._uow, competition.id)
 
             # La entidad valida el estado: solo un aprobado
-            enrollment.withdraw("removed_by_organizer")
+            enrollment.withdraw()
             asignadas: list[tuple[Round, UserId]] = []
             fotos = await sacar_de_la_competicion(
                 self._uow,

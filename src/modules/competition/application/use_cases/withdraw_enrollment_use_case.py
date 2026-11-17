@@ -130,7 +130,7 @@ class WithdrawEnrollmentUseCase:
                 await exigir_sin_equipos_formados(self._uow, competition.id)
 
             # 4. Withdraw (la entidad valida el estado)
-            enrollment.withdraw(request.reason)
+            enrollment.withdraw()
 
             # Sale de todo: partidas y franjas, y la capitanía si la tenía sin
             # equipos formados (release social 2; con equipos ya no llega aquí)

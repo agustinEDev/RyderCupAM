@@ -186,7 +186,7 @@ class CloseEnrollmentsUseCase:
         # Con la fila bloqueada: el aviso de «no se puede cerrar» se apunta con
         # ella bloqueada al publicarlo, así que aquí se ve si lo hay (D4, D7)
         estaba_avisada = competition.close_blocked_notified
-        competition.close_enrollments(total_enrollments=total_enrollments, by_deadline=por_el_plazo)
+        competition.close_enrollments(by_deadline=por_el_plazo)
 
         # 4c. Al cerrar desde ABIERTA se pregunta a la RFEG por todos, en segundo
         #     plano: una actualización nueva, y la anterior a medias se corta (#251)

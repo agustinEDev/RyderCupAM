@@ -161,7 +161,7 @@ class DejarDeEsperarUseCase:
             e.user_id == jugador for e in await self._uow.esperas.de_la_competicion(competition_id)
         ):
             return False
-        inscripcion.withdraw("left_the_waiting_list")
+        inscripcion.withdraw()
         await self._uow.enrollments.update(inscripcion)
         return True
 
