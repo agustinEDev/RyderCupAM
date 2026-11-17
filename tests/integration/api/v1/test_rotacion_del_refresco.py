@@ -129,7 +129,7 @@ async def test_a1_a_session_with_two_days_left_gets_a_two_day_cookie(client: Asy
     Then: La cookie nueva dura 2 días, no 7: la caducidad absoluta no se alarga
     """
     _, cookies = await _sesion(client, "a1b")
-    # Como las guarda la app: hora local sin zona
+    # Como las guarda la app: UTC sin zona
     await sql_en_la_bd_de_test(
         "UPDATE refresh_tokens SET expires_at = :c WHERE token_hash = :h",
         c=ahora_utc_sin_zona() + timedelta(days=2),

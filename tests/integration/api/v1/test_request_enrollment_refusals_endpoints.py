@@ -47,7 +47,7 @@ def _hoy() -> date:
     """
     Hoy en el campo, con el reloj de la API (sin zona del campo, la de por defecto).
 
-    No `ahora_utc_sin_zona().date()`, que es la del sistema: el CI va en UTC, y entre las 00:00 y las
+    No `date.today()`, que es la del sistema: el CI va en UTC, y entre las 00:00 y las
     01:00 de Madrid (las 02:00 en verano) eran dos días distintos y los casos del mismo
     día fallaban (el CI de BE #888, a las 00:53).
     """
