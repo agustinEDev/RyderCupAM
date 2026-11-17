@@ -271,8 +271,6 @@ class ResetPasswordUseCase:
                 user.reset_password(
                     token=request.token,
                     new_password=nueva,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                 )
             except ValueError as e:
                 # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)

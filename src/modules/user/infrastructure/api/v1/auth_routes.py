@@ -445,7 +445,7 @@ async def logout_user(
     # el que mande el cliente (auditoría de la fase 6, B-05)
     logout_request.device_id = getattr(request.state, "dispositivo_actual", None)
 
-    logout_response = await use_case.execute(logout_request, user_id, token)
+    logout_response = await use_case.execute(logout_request, user_id)
 
     if not logout_response:
         raise HTTPException(

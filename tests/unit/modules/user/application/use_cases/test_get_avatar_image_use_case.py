@@ -189,7 +189,7 @@ class TestAvatarConBloqueoOCuentaDesactivada:
         Then: None
         """
         dueno, yo = await self._escena(uow)
-        dueno.deactivate(deactivated_by_user_id=str(yo.id.value))
+        dueno.deactivate()
         await uow.users.save(dueno)
         use_case = GetAvatarImageUseCase(uow, FakeAvatarPresetProvider(), Bloqueos())
 
@@ -230,7 +230,7 @@ class TestAvatarConBloqueoOCuentaDesactivada:
               tiempo no dice si la cuenta existe (BE #793)
         """
         dueno, yo = await self._escena(uow)
-        dueno.deactivate(deactivated_by_user_id=str(yo.id.value))
+        dueno.deactivate()
         await uow.users.save(dueno)
         nadie = UserId.generate()
         bloqueos = Bloqueos()

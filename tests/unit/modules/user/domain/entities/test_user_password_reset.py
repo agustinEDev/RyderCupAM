@@ -72,11 +72,9 @@ class TestGeneratePasswordResetToken:
             email_str=sample_user_data["email"],
             plain_password="CurrentPassword123!",
         )
-        ip_address = "192.168.1.100"
-        user_agent = "Mozilla/5.0 (Test Browser)"
 
         # Act
-        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
+        token = user.generate_password_reset_token()
 
         # Assert
         # 1. Verificar que se generó un token no vacío
@@ -118,11 +116,11 @@ class TestGeneratePasswordResetToken:
         )
 
         # Generar primer token
-        first_token = user.generate_password_reset_token(ip_address="1.1.1.1")
+        first_token = user.generate_password_reset_token()
         first_expiration = user.reset_token_expires_at
 
         # Act: Generar segundo token (simular solicitud duplicada)
-        second_token = user.generate_password_reset_token(ip_address="2.2.2.2")
+        second_token = user.generate_password_reset_token()
 
         # Assert
         # 1. Los tokens son diferentes
@@ -134,28 +132,6 @@ class TestGeneratePasswordResetToken:
         # 3. La expiración se actualizó
         assert user.reset_token_expires_at != first_expiration
         assert user.reset_token_expires_at > first_expiration
-
-    def test_generate_password_reset_token_without_ip_and_user_agent(self, sample_user_data):
-        """
-        Test: Generar token sin IP ni User-Agent (parámetros opcionales)
-        Given: Usuario existente
-        When: Se llama a generate_password_reset_token() sin parámetros opcionales
-        Then: El token se genera correctamente con ip_address=None y user_agent=None
-        """
-        # Arrange
-        user = User.create(
-            first_name=sample_user_data["name"],
-            last_name=sample_user_data["surname"],
-            email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!",
-        )
-
-        # Act
-        token = user.generate_password_reset_token()
-
-        # Assert
-        assert token is not None
-        assert user.password_reset_token == hash_del_enlace(token)
 
 
 class TestCanResetPassword:
@@ -296,16 +272,11 @@ class TestResetPassword:
             plain_password="OldPassword123!",
         )
         old_password_hash = user.password.hashed_value
-        token = user.generate_password_reset_token(ip_address="10.0.0.1")
+        token = user.generate_password_reset_token()
 
         # Act
         new_password = "NewSecurePassword456!"
-        user.reset_password(
-            token=token,
-            new_password=new_password,
-            ip_address="10.0.0.1",
-            user_agent="Mozilla/5.0",
-        )
+        user.reset_password(token=token, new_password=new_password)
 
         # Assert
         # 1. La contraseña cambió (hash diferente)
@@ -417,28 +388,6 @@ class TestResetPassword:
             InvalidResetTokenError, match="No hay ninguna solicitud de reseteo de contraseña activa"
         ):
             user.reset_password(token=token, new_password="AnotherPassword789!")
-
-    def test_reset_password_without_ip_and_user_agent(self, sample_user_data):
-        """
-        Test: Resetear contraseña sin IP ni User-Agent (parámetros opcionales)
-        Given: Usuario con token válido
-        When: Se resetea sin proporcionar ip_address ni user_agent
-        Then: El reseteo funciona correctamente con valores None
-        """
-        # Arrange
-        user = User.create(
-            first_name=sample_user_data["name"],
-            last_name=sample_user_data["surname"],
-            email_str=sample_user_data["email"],
-            plain_password="OldPassword123!",
-        )
-        token = user.generate_password_reset_token()
-
-        # Act
-        user.reset_password(token=token, new_password="NewPassword456!")
-
-        # Assert
-        assert user.password_reset_token is None
 
     def test_reset_password_updates_timestamp(self, sample_user_data):
         """

@@ -175,25 +175,25 @@ class TestUserAccountDeactivation:
 
     def test_deactivate_sets_is_active_false(self):
         user = self._make_user()
-        user.deactivate(deactivated_by_user_id="admin-id")
+        user.deactivate()
         assert user.is_active is False
 
     def test_deactivate_raises_if_already_deactivated(self):
         user = self._make_user()
-        user.deactivate(deactivated_by_user_id="admin-id")
+        user.deactivate()
         with pytest.raises(ValueError, match="already deactivated"):
-            user.deactivate(deactivated_by_user_id="admin-id")
+            user.deactivate()
 
     def test_reactivate_sets_is_active_true(self):
         user = self._make_user()
-        user.deactivate(deactivated_by_user_id="admin-id")
-        user.reactivate(reactivated_by_user_id="admin-id")
+        user.deactivate()
+        user.reactivate()
         assert user.is_active is True
 
     def test_reactivate_raises_if_already_active(self):
         user = self._make_user()
         with pytest.raises(ValueError, match="already active"):
-            user.reactivate(reactivated_by_user_id="admin-id")
+            user.reactivate()
 
 
 class TestUserValidation:

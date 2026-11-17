@@ -51,16 +51,13 @@ class LogoutUserUseCase:
         self._security_audit = security_audit
         self._uow = uow
 
-    async def execute(
-        self, request: LogoutRequestDTO, user_id: str, token: str | None = None
-    ) -> LogoutResponseDTO | None:
+    async def execute(self, request: LogoutRequestDTO, user_id: str) -> LogoutResponseDTO | None:
         """
         Ejecuta el caso de uso de logout.
 
         Args:
             request: DTO de logout con contexto de seguridad (IP, User-Agent)
             user_id: ID del usuario obtenido del token JWT
-            token: Token JWT original (actualmente no usado)
 
         Returns:
             LogoutResponseDTO con confirmación y timestamp
@@ -76,7 +73,7 @@ class LogoutUserUseCase:
             ...     ip_address="192.168.1.1",
             ...     user_agent="Mozilla/5.0..."
             ... )
-            >>> response = await use_case.execute(request, "user-123", "jwt-token")
+            >>> response = await use_case.execute(request, "user-123")
             >>> print(response.message)  # "Logout exitoso"
         """
         # Obtener security logger

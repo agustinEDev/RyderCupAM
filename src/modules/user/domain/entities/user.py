@@ -1005,12 +1005,7 @@ class User:
 
     # === Password Reset Methods ===
 
-    def generate_password_reset_token(
-        self,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-        ahora: datetime | None = None,
-    ) -> str:
+    def generate_password_reset_token(self, ahora: datetime | None = None) -> str:
         """
         Genera el enlace de restablecer la contraseña: vale una hora (fase 3, C2).
 
@@ -1018,8 +1013,6 @@ class User:
         que deja de valer.
 
         Args:
-            ip_address: IP desde donde se solicitó el reseteo (para auditoría)
-            user_agent: User agent del navegador (para detección de anomalías)
             ahora: La hora de referencia (por defecto, la de ahora)
 
         Returns:
@@ -1068,8 +1061,6 @@ class User:
         self,
         token: str,
         new_password: str | Password,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> None:
         """
         Resetea la contraseña del usuario usando un token válido.
@@ -1083,8 +1074,6 @@ class User:
             token: Token de reseteo generado previamente
             new_password: Nueva contraseña en texto plano (será hasheada), o ya
                 calculada con `Password.from_plain_text` (BE #283). Otra, ValueError
-            ip_address: IP desde donde se hizo el reseteo (para auditoría)
-            user_agent: User agent del navegador (para detección de anomalías)
 
         Raises:
             ValueError: Si el token es inválido, expirado, o la contraseña no cumple la política
@@ -1104,7 +1093,6 @@ class User:
             >>> user.reset_password(
             ...     token="abc123...",
             ...     new_password="NewSecure123!",
-            ...     ip_address="192.168.1.1"
             ... )
             >>> # Password cambiado, sesiones invalidadas, token eliminado
         """
@@ -1201,16 +1189,13 @@ class User:
             return False
         return (ahora or datetime.now()) < self.locked_until
 
-    def unlock(self, unlocked_by_user_id: str) -> None:
+    def unlock(self) -> None:
         """
         Desbloquea manualmente la cuenta (solo Admin).
 
         Este método:
         1. Resetea el contador de intentos fallidos a 0
         2. Elimina el timestamp de bloqueo (locked_until = None)
-
-        Args:
-            unlocked_by_user_id: ID del admin que realizó el desbloqueo
 
         Raises:
             ValueError: Si la cuenta no está bloqueada
@@ -1223,7 +1208,7 @@ class User:
         Ejemplo:
             >>> user.is_locked()
             True
-            >>> user.unlock(unlocked_by_user_id="admin-uuid-123")
+            >>> user.unlock()
             >>> user.is_locked()
             False
             >>> user.failed_login_attempts
@@ -1250,16 +1235,13 @@ class User:
 
     # === Account Deactivation Methods (Admin) ===
 
-    def deactivate(self, deactivated_by_user_id: str) -> None:
+    def deactivate(self) -> None:
         """
         Desactiva la cuenta del usuario (solo Admin, desde el panel de administración).
 
         Una cuenta desactivada no puede iniciar sesión (ver LoginUserUseCase),
         pero conserva todos sus datos (torneos, partidas, amistades) intactos.
         Es una acción reversible mediante reactivate().
-
-        Args:
-            deactivated_by_user_id: ID del admin que realiza la desactivación
 
         Raises:
             ValueError: Si la cuenta ya está desactivada
@@ -1271,12 +1253,9 @@ class User:
         self._is_active = False
         self._updated_at = now
 
-    def reactivate(self, reactivated_by_user_id: str) -> None:
+    def reactivate(self) -> None:
         """
         Reactiva una cuenta previamente desactivada por un admin.
-
-        Args:
-            reactivated_by_user_id: ID del admin que realiza la reactivación
 
         Raises:
             ValueError: Si la cuenta ya está activa

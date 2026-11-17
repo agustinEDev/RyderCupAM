@@ -121,7 +121,7 @@ async def test_search_by_partial_name_excludes_deactivated_accounts(db_session):
         email_str="alberto.buscable@example.com",
         plain_password="ValidPassword123!",
     )
-    deactivated.deactivate(deactivated_by_user_id=str(active.id.value))
+    deactivated.deactivate()
 
     await repository.save(active)
     await repository.save(deactivated)
@@ -155,8 +155,8 @@ async def test_search_by_partial_name_finds_a_reactivated_account(db_session):
         email_str="regreso.reactivado@example.com",
         plain_password="ValidPassword123!",
     )
-    user.deactivate(deactivated_by_user_id=str(admin.id.value))
-    user.reactivate(reactivated_by_user_id=str(admin.id.value))
+    user.deactivate()
+    user.reactivate()
 
     await repository.save(admin)
     await repository.save(user)
@@ -317,7 +317,7 @@ async def test_search_by_alias_does_not_resurface_deactivated_accounts(db_sessio
         plain_password="ValidPassword123!",
     )
     hidden.update_profile(alias="Escondido")
-    hidden.deactivate(deactivated_by_user_id=str(active.id.value))
+    hidden.deactivate()
     await repository.save(active)
     await repository.save(hidden)
     await db_session.commit()

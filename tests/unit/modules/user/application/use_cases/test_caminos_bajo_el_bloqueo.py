@@ -158,7 +158,7 @@ async def test_a3_deactivated_mid_google_login_gets_403_and_no_session():
     ana = await _ana(uow, con_google=True)
 
     async def la_desactivan(otra):
-        otra.deactivate(deactivated_by_user_id=ADMIN)
+        otra.deactivate()
 
     registro, dispositivo = _registro_que_a_la_vez(uow, ana, la_desactivan)
 

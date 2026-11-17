@@ -98,7 +98,7 @@ async def _dueno(uow, verificada=True, activa=True) -> User:
     if verificada:
         dueno.confirm_email_ownership()
     if not activa:
-        dueno.deactivate("admin-id")
+        dueno.deactivate()
     async with uow:
         await uow.users.save(dueno)
     return dueno

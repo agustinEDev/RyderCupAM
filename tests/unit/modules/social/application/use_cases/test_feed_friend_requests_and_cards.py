@@ -520,7 +520,7 @@ class TestPrivacidadDeLosNombrados:
     async def test_3_una_cuenta_desactivada_no_viene_en_los_autores(self, social_uow, user_uow):
         yo = await _user(user_uow)
         eva = await _user(user_uow, "Eva")
-        eva.deactivate(str(uuid4()))
+        eva.deactivate()
         async with user_uow:
             await user_uow.users.save(eva)
         await self._resultado(social_uow, yo, [self._con_cuenta(eva)])

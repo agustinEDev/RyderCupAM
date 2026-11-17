@@ -58,7 +58,7 @@ async def _create_user(user_uow, handicap: float | None = None, active: bool = T
     if handicap is not None:
         user.update_handicap(handicap)
     if not active:
-        user.deactivate(deactivated_by_user_id=str(user.id.value))
+        user.deactivate()
     async with user_uow:
         await user_uow.users.save(user)
     return user
