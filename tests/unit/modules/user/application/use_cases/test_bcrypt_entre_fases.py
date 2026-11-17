@@ -349,9 +349,7 @@ async def test_b2_3_a_reused_password_is_reported_before_hashing_it():
     vieja = Password.from_plain_text(NUEVA)
     async with uow:
         await uow.password_history.save(
-            PasswordHistory.create(
-                user_id=user.id, password_hash=vieja.hashed_value, total_history_count=1
-            )
+            PasswordHistory.create(user_id=user.id, password_hash=vieja.hashed_value)
         )
 
     with (
@@ -385,7 +383,6 @@ async def test_b2_6_a_weak_new_password_skips_the_history_bcrypts():
                 PasswordHistory.create(
                     user_id=user.id,
                     password_hash=Password.from_plain_text(clave).hashed_value,
-                    total_history_count=1,
                 )
             )
 

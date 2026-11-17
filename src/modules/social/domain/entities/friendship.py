@@ -7,13 +7,8 @@ Esta entidad gestiona el ciclo de vida de una solicitud/relacion de amistad.
 from datetime import datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.utc_clock import utc_now
 
-from ..events.friendship_accepted_event import FriendshipAcceptedEvent
-from ..events.friendship_blocked_event import FriendshipBlockedEvent
-from ..events.friendship_declined_event import FriendshipDeclinedEvent
-from ..events.friendship_requested_event import FriendshipRequestedEvent
 from ..exceptions.social_violations import (
     InvalidFriendshipStatusViolation,
     SelfFriendRequestViolation,
@@ -47,7 +42,6 @@ class Friendship:
         responded_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
         second_blocked_at: datetime | None = None,
     ):
         self._id = id
@@ -58,7 +52,6 @@ class Friendship:
         self._responded_at = responded_at
         self._created_at = created_at or utc_now()
         self._updated_at = updated_at or utc_now()
-        self._domain_events: list[DomainEvent] = domain_events or []
         # Bloqueo de los dos (SB-02): cuándo bloqueó el participante que NO es
         # `blocked_by`, que ya le había bloqueado a él. None: solo bloquea uno
         self._second_blocked_at = second_blocked_at
@@ -87,13 +80,6 @@ class Friendship:
             created_at=now,
             updated_at=now,
         )
-
-        event = FriendshipRequestedEvent(
-            friendship_id=str(friendship._id),
-            requester_id=str(friendship._requester_id),
-            addressee_id=str(friendship._addressee_id),
-        )
-        friendship.add_domain_event(event)
 
         return friendship
 
@@ -126,13 +112,6 @@ class Friendship:
             updated_at=now,
         )
 
-        event = FriendshipBlockedEvent(
-            friendship_id=str(friendship._id),
-            blocker_id=str(blocker_id),
-            blocked_id=str(blocked_id),
-        )
-        friendship.add_domain_event(event)
-
         return friendship
 
     @classmethod
@@ -148,7 +127,7 @@ class Friendship:
         updated_at: datetime | None = None,
         second_blocked_at: datetime | None = None,
     ) -> "Friendship":
-        """Reconstruye una amistad desde la base de datos (sin domain events)."""
+        """Reconstruye una amistad desde la base de datos."""
         return cls(
             id=id,
             requester_id=requester_id,
@@ -275,13 +254,6 @@ class Friendship:
         self._responded_at = now
         self._updated_at = now
 
-        event = FriendshipAcceptedEvent(
-            friendship_id=str(self._id),
-            requester_id=str(self._requester_id),
-            addressee_id=str(self._addressee_id),
-        )
-        self.add_domain_event(event)
-
     def decline(self) -> None:
         """Rechaza la solicitud de amistad (PENDING -> DECLINED)."""
         if not self._status.can_transition_to(FriendshipStatus.DECLINED):
@@ -293,13 +265,6 @@ class Friendship:
         self._status = FriendshipStatus.DECLINED
         self._responded_at = now
         self._updated_at = now
-
-        event = FriendshipDeclinedEvent(
-            friendship_id=str(self._id),
-            requester_id=str(self._requester_id),
-            addressee_id=str(self._addressee_id),
-        )
-        self.add_domain_event(event)
 
     def block(self, blocker_id: UserId) -> None:
         """
@@ -322,13 +287,6 @@ class Friendship:
         self._blocked_by = blocker_id
         self._responded_at = now
         self._updated_at = now
-
-        event = FriendshipBlockedEvent(
-            friendship_id=str(self._id),
-            blocker_id=str(blocker_id),
-            blocked_id=str(self.other_user_id(blocker_id)),
-        )
-        self.add_domain_event(event)
 
     def _bloquea_tambien(self, blocker_id: UserId) -> None:
         """El bloqueo de `blocker_id` sobre una fila que ya estaba bloqueada."""
@@ -366,24 +324,6 @@ class Friendship:
             self._created_at = self._updated_at = self._responded_at = self._second_blocked_at
         self._second_blocked_at = None
         return False
-
-    # ===========================================
-    # DOMAIN EVENTS
-    # ===========================================
-
-    def add_domain_event(self, event: DomainEvent) -> None:
-        """Registra un evento de dominio en la entidad."""
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        self._domain_events = []
 
     # ===========================================
     # METODOS ESPECIALES

@@ -249,7 +249,6 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     bloqueada.record_failed_login()
     hasta = bloqueada.locked_until
     fallos = bloqueada.failed_login_attempts
-    eventos = len(bloqueada.get_domain_events())
 
     async def releida(_user_id):
         """Ayudante del test: releida."""
@@ -262,7 +261,6 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
 
     assert bloqueada.failed_login_attempts == fallos
     assert bloqueada.locked_until == hasta
-    assert len(bloqueada.get_domain_events()) == eventos
 
 
 async def test_login_success_rereads_before_the_device_and_saves_nothing_there(escena):

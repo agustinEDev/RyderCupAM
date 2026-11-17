@@ -11,8 +11,6 @@ Este archivo contiene tests que verifican:
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.account_deactivated_event import AccountDeactivatedEvent
-from src.modules.user.domain.events.account_reactivated_event import AccountReactivatedEvent
 from src.modules.user.domain.value_objects.email import InvalidEmailError
 from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 
@@ -186,17 +184,6 @@ class TestUserAccountDeactivation:
         with pytest.raises(ValueError, match="already deactivated"):
             user.deactivate(deactivated_by_user_id="admin-id")
 
-    def test_deactivate_emits_account_deactivated_event(self):
-        user = self._make_user()
-        user.clear_domain_events()
-        user.deactivate(deactivated_by_user_id="admin-id")
-
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], AccountDeactivatedEvent)
-        assert events[0].user_id == str(user.id.value)
-        assert events[0].deactivated_by_user_id == "admin-id"
-
     def test_reactivate_sets_is_active_true(self):
         user = self._make_user()
         user.deactivate(deactivated_by_user_id="admin-id")
@@ -207,17 +194,6 @@ class TestUserAccountDeactivation:
         user = self._make_user()
         with pytest.raises(ValueError, match="already active"):
             user.reactivate(reactivated_by_user_id="admin-id")
-
-    def test_reactivate_emits_account_reactivated_event(self):
-        user = self._make_user()
-        user.deactivate(deactivated_by_user_id="admin-id")
-        user.clear_domain_events()
-        user.reactivate(reactivated_by_user_id="admin-id")
-
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], AccountReactivatedEvent)
-        assert events[0].reactivated_by_user_id == "admin-id"
 
 
 class TestUserValidation:
@@ -476,150 +452,6 @@ class TestUserIntegration:
             )
 
 
-class TestUserEntityEventCollection:
-    """Tests para la colección de eventos de dominio en la entidad User"""
-
-    def test_new_user_has_no_domain_events_initially(self):
-        """
-        Test: Usuario nuevo no tiene eventos de dominio inicialmente
-        Given: Se crea una instancia nueva de User
-        When: Se verifica si tiene eventos
-        Then: No debe tener eventos de dominio
-        """
-        # Arrange & Act
-        user = User.create(
-            first_name="Test",
-            last_name="User",
-            email_str="test@test.com",
-            plain_password="ValidPassword123!",
-        )
-        # Limpiamos el evento de creación para este test específico
-        user.clear_domain_events()
-
-        # Assert
-        assert user.has_domain_events() is False
-        assert len(user.get_domain_events()) == 0
-
-    def test_create_user_generates_user_registered_event(self):
-        """
-        Test: Crear usuario con factory method genera evento UserRegistered
-        Given: Datos válidos para crear usuario
-        When: Se usa User.create()
-        Then: Debe generar evento UserRegisteredEvent
-        """
-        # Arrange
-        first_name = "Juan"
-        last_name = "Pérez"
-        email = "juan.perez@test.com"
-        password = "SecurePass123!"
-
-        # Act
-        user = User.create(first_name, last_name, email, password)
-
-        # Assert
-        assert user.has_domain_events() is True
-        events = user.get_domain_events()
-        assert len(events) == 1
-
-        # Verificar que es el evento correcto
-        from src.modules.user.domain.events.user_registered_event import (
-            UserRegisteredEvent,
-        )
-
-        event = events[0]
-        assert isinstance(event, UserRegisteredEvent)
-        assert event.user_id == str(user.id.value)
-        assert event.email == email
-        assert event.first_name == first_name
-        assert event.last_name == last_name
-
-    def test_clear_domain_events_removes_all_events(self):
-        """
-        Test: clear_domain_events elimina todos los eventos
-        Given: Usuario con eventos de dominio
-        When: Se llama a clear_domain_events()
-        Then: No debe tener eventos de dominio
-        """
-        # Arrange
-        user = User.create("Ana", "García", "ana@test.com", "T3stP@ssw0rd!")
-        assert user.has_domain_events() is True
-
-        # Act
-        user.clear_domain_events()
-
-        # Assert
-        assert user.has_domain_events() is False
-        assert len(user.get_domain_events()) == 0
-
-    def test_get_domain_events_returns_copy(self):
-        """
-        Test: get_domain_events retorna una copia, no la lista original
-        Given: Usuario con eventos de dominio
-        When: Se obtiene la lista de eventos y se modifica
-        Then: La lista interna no debe cambiar
-        """
-        # Arrange
-        user = User.create("Luis", "Martín", "luis@test.com", "T3stP@ssw0rd!")
-        original_count = len(user.get_domain_events())
-
-        # Act
-        events = user.get_domain_events()
-        events.clear()  # Modificamos la copia
-
-        # Assert
-        assert len(user.get_domain_events()) == original_count  # Original no cambió
-        assert user.has_domain_events() is True
-
-    def test_add_domain_event_method(self):
-        """
-        Test: _add_domain_event agrega eventos correctamente
-        Given: Usuario sin eventos
-        When: Se agrega un evento manualmente
-        Then: Debe tener el evento agregado
-        """
-        # Arrange
-        user = User.create(
-            first_name="Test",
-            last_name="User",
-            email_str="test@test.com",
-            plain_password="ValidPassword123!",
-        )
-        user.clear_domain_events()  # Limpiar evento de creación
-        from src.modules.user.domain.events.user_registered_event import (
-            UserRegisteredEvent,
-        )
-
-        # Act
-        event = UserRegisteredEvent(
-            user_id="test-id-123",
-            email="test@test.com",
-            first_name="Test",
-            last_name="User",
-        )
-        user._add_domain_event(event)
-
-        # Assert
-        assert user.has_domain_events() is True
-        assert len(user.get_domain_events()) == 1
-        assert user.get_domain_events()[0] == event
-
-    def test_user_created_event_has_correct_aggregate_id(self):
-        """
-        Test: Evento generado tiene el aggregate_id correcto
-        Given: Se crea un usuario
-        When: Se verifica el evento generado
-        Then: El aggregate_id debe coincidir con el ID del usuario
-        """
-        # Arrange & Act
-        user = User.create("Pedro", "López", "pedro@test.com", "T3stP@ssw0rd!")
-
-        # Assert
-        events = user.get_domain_events()
-        event = events[0]
-        assert event.aggregate_id == str(user.id.value)
-        assert event.aggregate_id == event.user_id
-
-
 class TestUserUpdateHandicap:
     """Tests para el método update_handicap() de User."""
 
@@ -631,64 +463,23 @@ class TestUserUpdateHandicap:
 
         assert user.handicap.value == pytest.approx(15.5)
 
-    def test_update_handicap_emits_domain_event(self):
-        """Test: Actualizar hándicap emite un evento de dominio."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
-        user.clear_domain_events()  # Limpiar evento de creación
-
-        user.update_handicap(15.5)
-
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert events[0].__class__.__name__ == "HandicapUpdatedEvent"
-
-    def test_update_handicap_event_contains_correct_data(self):
-        """Test: El evento de actualización contiene los datos correctos."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
-        user.clear_domain_events()
-
-        user.update_handicap(15.5)
-
-        event = user.get_domain_events()[0]
-        assert event.user_id == str(user.id.value)
-        assert event.old_handicap is None
-        assert event.new_handicap == pytest.approx(15.5)
-
     def test_update_handicap_from_existing_value(self):
         """Test: Actualizar hándicap cuando ya tiene un valor previo."""
         user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.update_handicap(15.5)
-        user.clear_domain_events()
 
         user.update_handicap(20.0)
 
-        event = user.get_domain_events()[0]
-        assert event.old_handicap == pytest.approx(15.5)
-        assert event.new_handicap == pytest.approx(20.0)
+        assert user.handicap.value == pytest.approx(20.0)
 
     def test_update_handicap_to_none(self):
         """Test: Actualizar hándicap a None (eliminar hándicap)."""
         user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.update_handicap(15.5)
-        user.clear_domain_events()
 
         user.update_handicap(None)
 
         assert user.handicap is None
-        event = user.get_domain_events()[0]
-        assert event.old_handicap == pytest.approx(15.5)
-        assert event.new_handicap is None
-
-    def test_update_handicap_does_not_emit_event_if_same_value(self):
-        """Test: No emite evento si el valor no cambia."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
-        user.update_handicap(15.5)
-        user.clear_domain_events()
-
-        user.update_handicap(15.5)
-
-        events = user.get_domain_events()
-        assert len(events) == 0
 
     def test_update_handicap_with_invalid_value_raises_error(self):
         """Test: Actualizar con valor inválido lanza ValueError."""
@@ -898,38 +689,6 @@ class TestUserEmailVerification:
         # Assert
         assert user.updated_at > original_updated_at
 
-    def test_verify_email_emits_domain_event(self):
-        """
-        Test: Verificación emite evento de dominio
-        Given: Un usuario con token de verificación
-        When: Se verifica el email exitosamente
-        Then: Se emite un EmailVerifiedEvent
-        """
-        # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
-        token = user.generate_verification_token()
-        user.clear_domain_events()  # Limpiar eventos anteriores
-
-        # Act
-        user.verify_email(token)
-
-        # Assert
-        events = user.get_domain_events()
-        assert len(events) > 0
-
-        # Verificar que hay un EmailVerifiedEvent
-        from src.modules.user.domain.events.email_verified_event import (
-            EmailVerifiedEvent,
-        )
-
-        email_verified_events = [e for e in events if isinstance(e, EmailVerifiedEvent)]
-        assert len(email_verified_events) == 1
-
-        event = email_verified_events[0]
-        assert event.user_id == str(user.id.value)
-        assert event.email == str(user.email.value)
-        assert event.verified_at is not None
-
     def test_is_email_verified_returns_false_initially(self):
         """
         Test: Email no verificado inicialmente
@@ -989,10 +748,8 @@ class TestUserAlias:
             email_str="agustin@example.com",
             plain_password="DefaultPassword123!",
         )
-        user.clear_domain_events()
         if alias is not None:
             user.update_profile(alias=alias)
-            user.clear_domain_events()
         return user
 
     def test_new_user_has_no_alias(self):
@@ -1067,53 +824,21 @@ class TestUserAlias:
         assert user.alias == "Chuchi"
         assert user.display_name == "Chuchi"
 
-    def test_setting_the_same_alias_emits_no_event(self):
+    def test_setting_the_same_alias_changes_nothing(self):
         """
         Test: Repetir el alias que ya se tiene no es un cambio
 
         Given: Un usuario con alias "Chuchi"
         When: Se manda el mismo alias
-        Then: No se emite evento
+        Then: No cambia nada, ni la fecha de actualización
         """
         user = self._user("Chuchi")
+        antes = user.updated_at
 
         user.update_profile(alias="Chuchi")
 
-        assert user.get_domain_events() == []
-
-    def test_alias_change_travels_in_the_profile_updated_event(self):
-        """
-        Test: El evento de perfil lleva el cambio de alias
-
-        Given: Un usuario con alias "Chuchi"
-        When: Lo cambia a "Chuchito"
-        Then: El evento lleva el anterior y el nuevo
-        """
-        user = self._user("Chuchi")
-
-        user.update_profile(alias="Chuchito")
-
-        event = user.get_domain_events()[0]
-        assert event.old_alias == "Chuchi"
-        assert event.new_alias == "Chuchito"
-        assert event.has_alias_change is True
-        assert event.to_dict()["profile_changes"]["alias"]["changed"] is True
-
-    def test_clearing_the_alias_travels_in_the_event(self):
-        """
-        Test: Quitar el alias también es un cambio que viaja en el evento
-
-        Given: Un usuario con alias
-        When: Lo borra
-        Then: El evento lleva el anterior y None como nuevo
-        """
-        user = self._user("Chuchi")
-
-        user.update_profile(alias="")
-
-        event = user.get_domain_events()[0]
-        assert event.old_alias == "Chuchi"
-        assert event.new_alias is None
+        assert user.alias == "Chuchi"
+        assert user.updated_at == antes
 
     def test_alias_alone_is_enough_to_update_the_profile(self):
         """
@@ -1159,10 +884,8 @@ class TestUserDisplayNameForCompetition:
             email_str="agustin@example.com",
             plain_password="DefaultPassword123!",
         )
-        user.clear_domain_events()
         if alias is not None:
             user.update_profile(alias=alias)
-            user.clear_domain_events()
         return user
 
     def test_without_the_preference_it_is_the_same_as_display_name(self):

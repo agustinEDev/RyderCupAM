@@ -1,8 +1,8 @@
 """
-Tests de integración para verificar que los eventos de login se registran correctamente.
+Tests de integración: cuándo guarda el LoginUserUseCase al usuario.
 
-Verifica que el LoginUserUseCase registra eventos UserLoggedInEvent cuando
-se ejecuta con éxito un login.
+Con éxito, una vez; sin usuario, nunca; con la contraseña mala, una vez para
+contar el intento fallido (Account Lockout v1.13.0).
 """
 
 from unittest.mock import AsyncMock
@@ -13,7 +13,6 @@ from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEvent
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -25,15 +24,12 @@ from tests.unit.modules.user.application.use_cases._registro_falso import (
 
 
 @pytest.mark.asyncio
-class TestLoginUserUseCaseEventIntegration:
-    """Tests de integración para eventos en LoginUserUseCase."""
+class TestLoginUserUseCaseGuardado:
+    """Tests de integración: cuándo guarda el LoginUserUseCase al usuario."""
 
-    async def test_login_successful_registers_user_logged_in_event(self):
+    async def test_login_successful_saves_user_once(self):
         """
-                Test: Login exitoso registra un evento UserLoggedInEvent.
-
-                Verifica que cuando un usuario hace login exitoso, se registra
-        correctamente un evento de dominio UserLoggedInEvent.
+        Test: Login exitoso guarda al usuario una vez.
         """
         # Arrange
         user_id = UserId.generate()
@@ -82,33 +78,13 @@ class TestLoginUserUseCaseEventIntegration:
         assert response is not None
         assert response.access_token is not None
 
-        # Verificar que el usuario tiene eventos de dominio
-        assert user.has_domain_events()
-
-        # Obtener eventos de dominio
-        events = user.get_domain_events()
-
-        # Verificar que hay al menos un evento UserLoggedInEvent
-        login_events = [e for e in events if isinstance(e, UserLoggedInEvent)]
-        assert len(login_events) == 1
-
-        # Verificar el contenido del evento
-        login_event = login_events[0]
-        assert login_event.user_id == str(user_id.value)
-        assert login_event.logged_in_at is not None
-        assert login_event.login_method == "email"
-
-        # Verificar que se llamó save para persistir el evento. Una vez: acertar ya no
-        # pone el respaldo a cero (BE #732), así que no hay otro guardado antes
+        # Una vez: acertar ya no pone el respaldo a cero (BE #732), así que no hay otro guardado antes
         mock_uow.users.save.assert_called_with(user)
         assert mock_uow.users.save.call_count == 1
 
-    async def test_login_failed_does_not_register_event(self):
+    async def test_login_unknown_user_does_not_save(self):
         """
-        Test: Login fallido no registra eventos.
-
-        Verifica que cuando un login falla (usuario no existe o password
-        incorrecto), no se registran eventos de dominio.
+        Test: Login de un usuario que no existe no guarda nada.
         """
         # Arrange - Usuario no existe
         mock_uow = AsyncMock()
@@ -137,16 +113,13 @@ class TestLoginUserUseCaseEventIntegration:
         # Assert
         assert response is None
 
-        # Verificar que no se llamó save (no hay usuario para persistir eventos)
+        # Verificar que no se llamó save (no hay usuario que guardar)
         mock_uow.users.save.assert_not_called()
 
-    async def test_login_wrong_password_does_not_register_event(self):
+    async def test_login_wrong_password_saves_failed_attempt(self):
         """
-        Test: Login con password incorrecto no registra eventos de login exitoso.
-
-        Verifica que cuando existe el usuario pero el password es incorrecto,
-        no se registran eventos de login exitoso (pero SÍ se guarda para
-        incrementar el contador de intentos fallidos - Account Lockout v1.13.0).
+        Test: Login con password incorrecto guarda al usuario para incrementar
+        el contador de intentos fallidos (Account Lockout v1.13.0).
         """
         # Arrange
         user_id = UserId.generate()
@@ -191,9 +164,6 @@ class TestLoginUserUseCaseEventIntegration:
 
         # Assert
         assert response is None
-
-        # Verificar que el usuario NO tiene eventos de dominio (no hay LoginSuccessEvent)
-        assert not user.has_domain_events()
 
         # Account Lockout (v1.13.0): SÍ se llama save para incrementar failed_login_attempts
         mock_uow.users.save.assert_called_once_with(user)

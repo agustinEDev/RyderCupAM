@@ -17,12 +17,6 @@ from datetime import datetime, timedelta
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.password_reset_completed_event import (
-    PasswordResetCompletedEvent,
-)
-from src.modules.user.domain.events.password_reset_requested_event import (
-    PasswordResetRequestedEvent,
-)
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 
@@ -55,7 +49,6 @@ def _rebuild_user(user: User, **overrides) -> User:
         "locked_until": user.locked_until,
         "is_admin": user.is_admin,
         "gender": user.gender,
-        "domain_events": user.get_domain_events(),
     }
     fields.update(overrides)
     return User(**fields)
@@ -109,18 +102,6 @@ class TestGeneratePasswordResetToken:
         # 5. Verificar que se actualizó updated_at
         assert user.updated_at is not None
 
-        # 6. Verificar que se emitió el evento PasswordResetRequestedEvent
-        events = user.get_domain_events()
-        assert len(events) == 2  # UserRegisteredEvent + PasswordResetRequestedEvent
-        # El último evento debe ser PasswordResetRequestedEvent
-        event = events[-1]
-        assert isinstance(event, PasswordResetRequestedEvent)
-        assert event.user_id == str(user.id.value)
-        assert event.email == str(user.email.value)
-        assert event.ip_address == ip_address
-        assert event.user_agent == user_agent
-        assert event.reset_token_expires_at == user.reset_token_expires_at
-
     def test_generate_password_reset_token_overwrites_previous_token(self, sample_user_data):
         """
         Test: Generar nuevo token sobrescribe el anterior
@@ -139,7 +120,6 @@ class TestGeneratePasswordResetToken:
         # Generar primer token
         first_token = user.generate_password_reset_token(ip_address="1.1.1.1")
         first_expiration = user.reset_token_expires_at
-        user.clear_domain_events()  # Limpiar eventos
 
         # Act: Generar segundo token (simular solicitud duplicada)
         second_token = user.generate_password_reset_token(ip_address="2.2.2.2")
@@ -154,12 +134,6 @@ class TestGeneratePasswordResetToken:
         # 3. La expiración se actualizó
         assert user.reset_token_expires_at != first_expiration
         assert user.reset_token_expires_at > first_expiration
-
-        # 4. Se emitió un nuevo evento
-        events = user.get_domain_events()
-        # Solo debemos tener el segundo evento ya que limpiamos después del primero
-        assert len(events) == 1
-        assert isinstance(events[0], PasswordResetRequestedEvent)
 
     def test_generate_password_reset_token_without_ip_and_user_agent(self, sample_user_data):
         """
@@ -182,14 +156,6 @@ class TestGeneratePasswordResetToken:
         # Assert
         assert token is not None
         assert user.password_reset_token == hash_del_enlace(token)
-
-        # Verificar evento con campos opcionales en None
-        events = user.get_domain_events()
-        # Último evento es PasswordResetRequestedEvent
-        event = events[-1]
-        assert isinstance(event, PasswordResetRequestedEvent)
-        assert event.ip_address is None
-        assert event.user_agent is None
 
 
 class TestCanResetPassword:
@@ -331,7 +297,6 @@ class TestResetPassword:
         )
         old_password_hash = user.password.hashed_value
         token = user.generate_password_reset_token(ip_address="10.0.0.1")
-        user.clear_domain_events()  # Limpiar evento de generación
 
         # Act
         new_password = "NewSecurePassword456!"
@@ -352,16 +317,6 @@ class TestResetPassword:
         # 3. El token se invalidó (uso único)
         assert user.password_reset_token is None
         assert user.reset_token_expires_at is None
-
-        # 4. Se emitió PasswordResetCompletedEvent
-        events = user.get_domain_events()
-        assert len(events) == 1
-        event = events[0]
-        assert isinstance(event, PasswordResetCompletedEvent)
-        assert event.user_id == str(user.id.value)
-        assert event.email == str(user.email.value)
-        assert event.ip_address == "10.0.0.1"
-        assert event.user_agent == "Mozilla/5.0"
 
     def test_reset_password_raises_error_with_invalid_token(self, sample_user_data):
         """
@@ -478,20 +433,12 @@ class TestResetPassword:
             plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
-        user.clear_domain_events()
 
         # Act
         user.reset_password(token=token, new_password="NewPassword456!")
 
         # Assert
         assert user.password_reset_token is None
-
-        # Verificar evento con campos opcionales en None
-        events = user.get_domain_events()
-        event = events[0]
-        assert isinstance(event, PasswordResetCompletedEvent)
-        assert event.ip_address is None
-        assert event.user_agent is None
 
     def test_reset_password_updates_timestamp(self, sample_user_data):
         """

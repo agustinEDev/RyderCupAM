@@ -8,7 +8,6 @@ Responsabilidades:
 - Crear nuevos dispositivos con validación completa
 - Gestionar ciclo de vida del dispositivo (activo/revocado)
 - Actualizar información de último uso
-- Disparar eventos de dominio (NewDeviceDetected, DeviceRevoked)
 - Mantener invariantes del dominio (consistencia)
 
 Reglas de Negocio:
@@ -21,14 +20,9 @@ Reglas de Negocio:
 
 from datetime import datetime, timedelta
 
-from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
-from src.modules.user.domain.events.new_device_detected_event import (
-    NewDeviceDetectedEvent,
-)
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 
 # Tiempo sin usar la app tras el que la sesión de ESE dispositivo deja de valer
 # (BE #376). OWASP A07 pide invalidar por inactividad, y el servidor es quien
@@ -51,7 +45,6 @@ class UserDevice:
         _is_active (bool): Estado del dispositivo (True=activo, False=revocado)
         _last_used_at (datetime): Última vez que se usó el dispositivo
         _created_at (datetime): Timestamp de creación del registro
-        _domain_events (List[DomainEvent]): Lista de eventos pendientes
 
     Properties (públicos):
         id, user_id, fingerprint, device_name, fingerprint_hash,
@@ -114,7 +107,6 @@ class UserDevice:
         # La app instalada (PWA) y el país de la última conexión (BE #737)
         self._installed_app = installed_app
         self._country_code = country_code
-        self._domain_events: list[DomainEvent] = []
 
     @staticmethod
     def create(
@@ -133,7 +125,6 @@ class UserDevice:
         1. Genera un ID único
         2. Marca el dispositivo como activo
         3. Establece timestamps (created_at, last_used_at)
-        4. Dispara el evento NewDeviceDetectedEvent
 
         Args:
             user_id: ID del usuario propietario del dispositivo
@@ -151,8 +142,6 @@ class UserDevice:
             >>> device = UserDevice.create(user_id, fingerprint)
             >>> device.is_active
             True
-            >>> len(device.domain_events())
-            1  # NewDeviceDetectedEvent
         """
         # Validaciones
         if not isinstance(user_id, UserId):
@@ -176,15 +165,6 @@ class UserDevice:
             country_code=country_code,
         )
 
-        # Disparar evento de dominio
-        event = NewDeviceDetectedEvent(
-            user_id=user_id,
-            device_name=fingerprint.device_name,
-            ip_address=fingerprint.ip_address,
-            user_agent=fingerprint.user_agent,
-        )
-        device._add_domain_event(event)
-
         return device
 
     @staticmethod
@@ -204,7 +184,6 @@ class UserDevice:
         """
         Factory method para reconstruir un dispositivo desde la base de datos.
 
-        Este método NO dispara eventos (la entidad ya existía).
         Se usa cuando el repository lee dispositivos de la BD.
 
         Args:
@@ -234,7 +213,6 @@ class UserDevice:
             installed_app=installed_app,
             country_code=country_code,
         )
-        # NO disparar eventos (ya existía)
         return device
 
     def revoke(self) -> None:
@@ -247,8 +225,6 @@ class UserDevice:
         Un dispositivo revocado NO puede reactivarse. Si el usuario vuelve
         a usar ese dispositivo, se creará un nuevo registro.
 
-        Dispara el evento DeviceRevokedEvent.
-
         Raises:
             ValueError: Si el dispositivo ya estaba revocado
 
@@ -259,22 +235,11 @@ class UserDevice:
             >>> device.revoke()
             >>> device.is_active
             False
-            >>> len(device.domain_events())
-            2  # NewDeviceDetected + DeviceRevoked
         """
         if not self._is_active:
             raise RuntimeError("Device already revoked")
 
         self._is_active = False
-
-        # Disparar evento de dominio
-        event = DeviceRevokedEvent(
-            user_id=self._user_id,
-            device_id=self._id,
-            device_name=self._device_name,
-            revoked_by_user=True,  # Manual por usuario (API endpoint)
-        )
-        self._add_domain_event(event)
 
     def is_idle(self, now: datetime | None = None) -> bool:
         """Si lleva más de `SESSION_IDLE_TIMEOUT` sin usarse (BE #376)."""
@@ -393,38 +358,9 @@ class UserDevice:
             '192.168.1.200'
 
         Note:
-            - No dispara eventos de dominio (es solo audit)
             - La IP se almacena tal cual se recibe (no se normaliza)
         """
         self._ip_address = ip_address
-
-    def _add_domain_event(self, event: DomainEvent) -> None:
-        """
-        Registra un evento de dominio pendiente.
-
-        Los eventos se procesan después de persistir la entidad.
-
-        Args:
-            event: Evento de dominio a registrar
-        """
-        self._domain_events.append(event)
-
-    def domain_events(self) -> list[DomainEvent]:
-        """
-        Obtiene la lista de eventos de dominio pendientes.
-
-        Returns:
-            List[DomainEvent]: Lista de eventos (copia)
-        """
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        """
-        Limpia la lista de eventos de dominio.
-
-        Se llama después de procesar los eventos.
-        """
-        self._domain_events.clear()
 
     # ==========================================================================
     # PROPERTIES (Encapsulación - solo lectura)

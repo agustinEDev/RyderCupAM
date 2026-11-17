@@ -27,7 +27,7 @@ def test_change_password_with_a_ready_password_does_not_hash_again():
     """
     Given: Un usuario y una contraseña nueva ya calculada
     When: La cambia
-    Then: Queda la nueva, sin bcrypt dentro del dominio, y con su evento
+    Then: Queda la nueva, sin bcrypt dentro del dominio
     """
     user = _usuario()
     nueva = Password.from_plain_text(NUEVA)
@@ -37,7 +37,6 @@ def test_change_password_with_a_ready_password_does_not_hash_again():
 
     assert user.password is nueva
     assert user.verify_password(NUEVA)
-    assert any(type(e).__name__ == "UserPasswordChangedEvent" for e in user.get_domain_events())
 
 
 def test_reset_password_with_a_ready_password_checks_the_token_first():

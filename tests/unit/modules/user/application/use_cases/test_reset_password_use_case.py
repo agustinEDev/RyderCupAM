@@ -64,7 +64,6 @@ def _rebuild_user(user: User, **overrides) -> User:
         "locked_until": user.locked_until,
         "is_admin": user.is_admin,
         "gender": user.gender,
-        "domain_events": user.get_domain_events(),
     }
     fields.update(overrides)
     return User(**fields)

@@ -4,16 +4,12 @@ Tests unitarios para la entidad UserOAuthAccount.
 Este archivo contiene tests que verifican:
 - Creación de cuentas OAuth vinculadas
 - Factory method create()
-- Domain events
 - Validaciones
 """
 
 from datetime import datetime
 
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
-from src.modules.user.domain.events.google_account_linked_event import (
-    GoogleAccountLinkedEvent,
-)
 from src.modules.user.domain.value_objects.oauth_account_id import OAuthAccountId
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -50,33 +46,6 @@ class TestUserOAuthAccountCreation:
         assert account.provider_email == provider_email
         assert isinstance(account.id, OAuthAccountId)
         assert isinstance(account.created_at, datetime)
-
-    def test_create_emits_google_account_linked_event(self):
-        """
-        Test: create() emite GoogleAccountLinkedEvent
-        Given: Parámetros válidos para crear cuenta OAuth
-        When: Se llama a create()
-        Then: Emite un evento GoogleAccountLinkedEvent
-        """
-        # Arrange
-        user_id = UserId.generate()
-        provider_email = "john.doe@gmail.com"
-
-        # Act
-        account = UserOAuthAccount.create(
-            user_id=user_id,
-            provider=OAuthProvider.GOOGLE,
-            provider_user_id="abc123",
-            provider_email=provider_email,
-        )
-
-        # Assert
-        events = account.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], GoogleAccountLinkedEvent)
-        assert events[0].user_id == str(user_id.value)
-        assert events[0].provider == "google"
-        assert events[0].provider_email == provider_email
 
     def test_create_generates_unique_id(self):
         """
@@ -149,53 +118,6 @@ class TestUserOAuthAccountCreation:
         # Assert
         after = datetime.now()
         assert before <= account.created_at <= after
-
-
-class TestUserOAuthAccountDomainEvents:
-    """Tests para manejo de domain events"""
-
-    def test_domain_events_clear(self):
-        """
-        Test: clear_domain_events() elimina todos los eventos
-        Given: UserOAuthAccount con eventos
-        When: Se llama a clear_domain_events()
-        Then: get_domain_events() retorna lista vacía
-        """
-        # Arrange
-        user_id = UserId.generate()
-        account = UserOAuthAccount.create(
-            user_id=user_id,
-            provider=OAuthProvider.GOOGLE,
-            provider_user_id="clear_test",
-            provider_email="clear@gmail.com",
-        )
-        assert account.has_domain_events()
-
-        # Act
-        account.clear_domain_events()
-
-        # Assert
-        assert not account.has_domain_events()
-        assert len(account.get_domain_events()) == 0
-
-    def test_has_domain_events_when_created(self):
-        """
-        Test: has_domain_events() retorna True después de create()
-        Given: UserOAuthAccount recién creado
-        When: Se verifica has_domain_events()
-        Then: Retorna True
-        """
-        # Arrange & Act
-        user_id = UserId.generate()
-        account = UserOAuthAccount.create(
-            user_id=user_id,
-            provider=OAuthProvider.GOOGLE,
-            provider_user_id="events_test",
-            provider_email="events@gmail.com",
-        )
-
-        # Assert
-        assert account.has_domain_events() is True
 
 
 class TestUserOAuthAccountStringRepresentation:

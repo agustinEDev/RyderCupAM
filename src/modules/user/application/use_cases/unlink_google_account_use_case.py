@@ -4,8 +4,6 @@ Unlink Google Account Use Case - Application Layer
 Caso de uso para desvincular una cuenta de Google de un usuario autenticado.
 """
 
-from datetime import datetime
-
 from src.modules.user.application.dto.oauth_dto import (
     UnlinkGoogleAccountRequestDTO,
     UnlinkGoogleAccountResponseDTO,
@@ -94,12 +92,8 @@ class UnlinkGoogleAccountUseCase:
                     "Set a password first."
                 )
 
-            # Eliminar OAuth account y emitir evento atómicamente
+            # Eliminar OAuth account y guardar el usuario atómicamente
             await self._uow.oauth_accounts.delete(oauth_account)
-            user.record_google_unlinked(
-                provider=OAuthProvider.GOOGLE.value,
-                unlinked_at=datetime.now(),
-            )
             await self._uow.users.save(user)
 
         # Ya guardado, al log con la red: sin él, quitar el Google de otro con una sesión
