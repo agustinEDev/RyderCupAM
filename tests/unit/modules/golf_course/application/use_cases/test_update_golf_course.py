@@ -13,6 +13,10 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     TeeDTO,
     UpdateGolfCourseRequestDTO,
 )
+from src.modules.golf_course.application.exceptions import (
+    GolfCourseEditForbiddenError,
+    GolfCourseMissingError,
+)
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,
 )
@@ -284,7 +288,7 @@ class TestUpdateGolfCourseUseCase:
         use_case = UpdateGolfCourseUseCase(mock_uow)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(GolfCourseMissingError, match="not found"):
             await use_case.execute(
                 golf_course_id=golf_course_id,
                 request=valid_update_dto,
@@ -311,7 +315,7 @@ class TestUpdateGolfCourseUseCase:
         use_case = UpdateGolfCourseUseCase(mock_uow)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="does not have permission"):
+        with pytest.raises(GolfCourseEditForbiddenError, match="does not have permission"):
             await use_case.execute(
                 golf_course_id=golf_course_id,
                 request=valid_update_dto,

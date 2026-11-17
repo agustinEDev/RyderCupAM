@@ -9,6 +9,9 @@ from src.modules.competition.infrastructure.api.codigos_de_error import (
     CODIGOS as CODIGOS_DE_COMPETICION,
     CON_SU_CODIGO as CON_SU_CODIGO_DE_COMPETICION,
 )
+from src.modules.golf_course.infrastructure.api.codigos_de_error import (
+    CODIGOS as CODIGOS_DE_CAMPOS,
+)
 from src.modules.quick_match.infrastructure.api.codigos_de_error import (
     CODIGOS as CODIGOS_DE_PARTIDA_RAPIDA,
 )
@@ -22,6 +25,7 @@ from src.shared.infrastructure.http.codigos_de_error_compartidos import CODIGOS_
 _MAPAS = (
     CODIGOS_COMPARTIDOS,
     CODIGOS_DE_COMPETICION,
+    CODIGOS_DE_CAMPOS,
     CODIGOS_DE_PARTIDA_RAPIDA,
     CODIGOS_DE_SOCIAL,
     CODIGOS_DE_USUARIO,

@@ -50,8 +50,6 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
 )
 from src.modules.golf_course.application.exceptions import (
     CountryNotFoundError,
-    GolfCourseEditForbiddenError,
-    GolfCourseMissingError,
 )
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
@@ -83,7 +81,6 @@ from src.modules.golf_course.application.use_cases.request_golf_course_use_case 
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,
 )
-from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
@@ -155,12 +152,6 @@ async def request_golf_course(
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in request_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 @router.get("/{golf_course_id}")
@@ -187,39 +178,17 @@ async def get_golf_course_by_id(
     - 404: Campo no encontrado
     """
     try:
-        request_dto = GetGolfCourseByIdRequestDTO(golf_course_id=str(golf_course_id))
+        request_dto = GetGolfCourseByIdRequestDTO(
+            golf_course_id=str(golf_course_id),
+            requester_id=str(current_user.id),
+            requester_is_admin=current_user.is_admin,
+        )
         response = await use_case.execute(request_dto)
-
-        golf_course = response.golf_course
-
-        # Authorization: Verificar acceso según approval_status
-        if golf_course.approval_status != ApprovalStatus.APPROVED.value:
-            # Solo Admin o Creator pueden ver campos no aprobados
-            is_admin = current_user.is_admin
-            is_creator = str(golf_course.creator_id) == str(current_user.id)
-
-            if not (is_admin or is_creator):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have permission to view this golf course",
-                )
-
-        return golf_course
-
-    except HTTPException:
-        # Re-raise HTTPException as-is (403, 404, etc.) from None
-        raise
-    except GolfCourseMissingError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in get_golf_course_by_id: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
+
+    return response.golf_course
 
 
 @router.get("")
@@ -269,64 +238,54 @@ async def list_golf_courses(
     - 401: No autenticado
     - 403: Sin permisos para ver estados no-aprobados
     """
-    try:
-        # Validar approval_status si se proporciona
-        valid_statuses = ["APPROVED", "PENDING_APPROVAL", "REJECTED"]
-        if approval_status is not None and approval_status not in valid_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid approval_status. Must be one of: {', '.join(valid_statuses)}",
-            )
-
-        # Por defecto, listar solo aprobados (público)
-        if approval_status is None or approval_status == "APPROVED":
-            try:
-                request_dto = ListApprovedGolfCoursesRequestDTO(
-                    country_code=country_code,
-                    name=name,
-                    limit=limit,
-                    offset=offset,
-                    latitude=lat,
-                    longitude=lon,
-                    radius_km=radius_km,
-                )
-            except ValueError as error:
-                # Media coordenada, o un radio sin desde dónde medirlo: es un
-                # error del cliente, no un 500
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=_first_error_message(error),
-                ) from None
-
-            response = await approved_use_case.execute(request_dto)
-            return {
-                "golf_courses": response.golf_courses,
-                "count": response.count,
-                "total": response.total,
-            }
-
-        # Otros estados válidos requieren permisos de Admin
-        if not current_user.is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins can view golf courses with non-approved status",
-            )
-
-        # TODO: Implementar filtros adicionales cuando se requieran
-        # Por ahora, solo soportamos APPROVED
+    # Validar approval_status si se proporciona
+    valid_statuses = ["APPROVED", "PENDING_APPROVAL", "REJECTED"]
+    if approval_status is not None and approval_status not in valid_statuses:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only approval_status=APPROVED is currently supported",
+            detail=f"Invalid approval_status. Must be one of: {', '.join(valid_statuses)}",
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in list_golf_courses: {e}", exc_info=True)
+    # Por defecto, listar solo aprobados (público)
+    if approval_status is None or approval_status == "APPROVED":
+        try:
+            request_dto = ListApprovedGolfCoursesRequestDTO(
+                country_code=country_code,
+                name=name,
+                limit=limit,
+                offset=offset,
+                latitude=lat,
+                longitude=lon,
+                radius_km=radius_km,
+            )
+        except ValueError as error:
+            # Media coordenada, o un radio sin desde dónde medirlo: es un
+            # error del cliente, no un 500
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_first_error_message(error),
+            ) from None
+
+        response = await approved_use_case.execute(request_dto)
+        return {
+            "golf_courses": response.golf_courses,
+            "count": response.count,
+            "total": response.total,
+        }
+
+    # Otros estados válidos requieren permisos de Admin
+    if not current_user.is_admin:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can view golf courses with non-approved status",
+        )
+
+    # TODO: Implementar filtros adicionales cuando se requieran
+    # Por ahora, solo soportamos APPROVED
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Only approval_status=APPROVED is currently supported",
+    )
 
 
 @router.put("/{golf_course_id}")
@@ -384,19 +343,12 @@ async def update_golf_course(
 
         return response
 
-    except (GolfCourseMissingError, CountryNotFoundError) as e:
+    except CountryNotFoundError as e:
+        # Al editar, el país que no existe es un 404 (al crear, un 400)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except GolfCourseEditForbiddenError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error in update_golf_course: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in update_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 # ============================================================================
@@ -457,12 +409,6 @@ async def create_direct_golf_course(
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in create_direct_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 @router.get("/admin/pending", tags=["admin"])
@@ -490,17 +436,9 @@ async def list_pending_golf_courses(
             detail="Only admins can access this endpoint",
         )
 
-    try:
-        request_dto = ListPendingGolfCoursesRequestDTO()
-        response = await use_case.execute(request_dto)
-        return {"golf_courses": response.golf_courses}
-
-    except Exception as e:
-        logger.error(f"Unexpected error in list_pending_golf_courses: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
+    request_dto = ListPendingGolfCoursesRequestDTO()
+    response = await use_case.execute(request_dto)
+    return {"golf_courses": response.golf_courses}
 
 
 @router.put("/admin/{golf_course_id}/approve", tags=["admin"])
@@ -544,17 +482,9 @@ async def approve_golf_course(
             "golf_course": response.golf_course,
         }
 
-    except GolfCourseMissingError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in approve_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 @router.put("/admin/{golf_course_id}/reject", tags=["admin"])
@@ -602,17 +532,9 @@ async def reject_golf_course(
             "golf_course": response.golf_course,
         }
 
-    except GolfCourseMissingError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in reject_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 @router.put("/admin/{clone_id}/approve-update", tags=["admin"])
@@ -665,17 +587,9 @@ async def approve_update_golf_course(
             "applied_changes_from": response.applied_changes_from,
         }
 
-    except GolfCourseMissingError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in approve_update_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
 
 
 @router.put("/admin/{clone_id}/reject-update", tags=["admin"])
@@ -727,14 +641,6 @@ async def reject_update_golf_course(
             "rejected_clone_id": response.rejected_clone_id,
         }
 
-    except GolfCourseMissingError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except Exception as e:
-        logger.error(f"Unexpected error in reject_update_golf_course: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from None
