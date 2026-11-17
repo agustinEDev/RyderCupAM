@@ -6,7 +6,7 @@ porque el stroke play lo necesita también al fijar la categoría de cada jugado
 día, y sin bloquear nunca lo que se está haciendo.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +15,7 @@ from src.modules.competition.application.services.refresco_rfeg import RefrescoR
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     ResultadoRefresco,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 def _jugador(pais: str | None = "ES", actualizado: datetime | None = None):
@@ -51,7 +52,7 @@ class TestRefrescoRfeg:
         repo.save.assert_awaited_once_with(jugador)
 
     async def test_si_lo_refresco_ayer_tambien(self):
-        jugador = _jugador(actualizado=datetime.now(UTC) - timedelta(days=1))
+        jugador = _jugador(actualizado=ahora_en_utc() - timedelta(days=1))
         servicio = _servicio()
 
         await RefrescoRfeg(servicio, _repositorio()).si_toca(jugador)
@@ -69,9 +70,7 @@ class TestRefrescoRfeg:
     async def test_si_ya_se_refresco_hoy_no_se_pregunta_otra_vez(self):
         servicio = _servicio()
 
-        await RefrescoRfeg(servicio, _repositorio()).si_toca(
-            _jugador(actualizado=datetime.now(UTC))
-        )
+        await RefrescoRfeg(servicio, _repositorio()).si_toca(_jugador(actualizado=ahora_en_utc()))
 
         servicio.search_handicap.assert_not_awaited()
 
@@ -111,7 +110,7 @@ class TestConsultarElDiaDeJuego:
     """A las 3:00 se pregunta siempre, y se dice qué pasó (BE #502)."""
 
     async def test_se_pregunta_aunque_ya_se_refrescara_hoy(self):
-        jugador = _jugador(actualizado=datetime.now(UTC))
+        jugador = _jugador(actualizado=ahora_en_utc())
         servicio, repo = _servicio(12.3), _repositorio()
 
         resultado = await RefrescoRfeg(servicio, repo).consultar(jugador)

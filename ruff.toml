@@ -51,6 +51,9 @@ select = [
     "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
     "DTZ003", # datetime.utcnow(): obsoleto; el reloj de instante_utc
     "DTZ006", # fromtimestamp() sin zona: hora local
+    "DTZ002", # datetime.today(): hora local
+    "DTZ007", # strptime() sin zona en el formato
+    "DTZ012", # date.fromtimestamp(): fecha local
 ]
 
 # Reglas ignoradas (desactivadas)
@@ -87,10 +90,6 @@ unfixable = []
     "ERA001",   # commented-out-code (example code in docstrings)
     "E402",     # module-level-import-not-at-top-of-file (setup imports)
 ]
-
-# Los tests unitarios aún usan datetime.now() y date.today(): pasan al reloj UTC en la
-# siguiente tanda (re-auditoría F-02). Los de integración ya no
-"tests/unit/**/*.py" = ["DTZ005", "DTZ011", "DTZ003", "DTZ006"]
 
 # Archivos de configuración pueden tener imports no ordenados
 "alembic/env.py" = ["I", "ERA001"]

@@ -11,7 +11,6 @@ Google) o al restablecer la contraseña.
                                                  |   test_registro_y_enlaces)
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,6 +28,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 pytestmark = pytest.mark.asyncio
@@ -38,8 +38,8 @@ NUEVA = "N3wS3cur3P@ss!"
 
 def _gasta_el_cupo(user: User) -> None:
     for _ in range(10):
-        user.cuenta_un_correo_de_reset(datetime.now())
-    assert user.cuenta_un_correo_de_reset(datetime.now()) is False
+        user.cuenta_un_correo_de_reset(ahora_utc_sin_zona())
+    assert user.cuenta_un_correo_de_reset(ahora_utc_sin_zona()) is False
 
 
 def test_m2_the_entity_resets_the_quota():
@@ -55,7 +55,7 @@ def test_m2_the_entity_resets_the_quota():
 
     assert user.password_reset_emails_in_window == 0
     assert user.password_reset_window_started_at is None
-    assert user.cuenta_un_correo_de_reset(datetime.now()) is True
+    assert user.cuenta_un_correo_de_reset(ahora_utc_sin_zona()) is True
 
 
 async def test_m2_resetting_the_password_resets_the_quota():

@@ -1,6 +1,6 @@
 """Tests de ActivityEvent (BE #175)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -8,6 +8,7 @@ import pytest
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 @pytest.fixture
@@ -137,7 +138,7 @@ class TestPublicacion:
         Given un evento creado sin `published_at` / When se crea / Then lleva
         el momento actual en UTC y sin zona, como el resto de fechas guardadas.
         """
-        antes = datetime.now(UTC).replace(tzinfo=None)
+        antes = ahora_utc_sin_zona()
 
         evento = ActivityEvent.create(
             user_id=user_id,
@@ -146,7 +147,7 @@ class TestPublicacion:
             source_match_id="match-1",
         )
 
-        despues = datetime.now(UTC).replace(tzinfo=None)
+        despues = ahora_utc_sin_zona()
         assert evento.published_at.tzinfo is None
         assert antes <= evento.published_at <= despues
 

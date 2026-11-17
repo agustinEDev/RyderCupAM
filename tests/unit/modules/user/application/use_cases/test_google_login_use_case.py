@@ -5,7 +5,6 @@ Tests unitarios para el caso de uso de login/registro con Google OAuth.
 Verifica los 3 flujos: OAuth existente, auto-link, auto-register.
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -31,6 +30,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
@@ -344,7 +344,7 @@ class TestGoogleLoginUseCaseLockout:
 
         user = _rebuild_user(
             user,
-            locked_until=datetime.now() + timedelta(minutes=30),
+            locked_until=ahora_utc_sin_zona() + timedelta(minutes=30),
             failed_login_attempts=10,
         )
 

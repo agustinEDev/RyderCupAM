@@ -21,6 +21,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import (
     USUARIOS_CON_GENERO,
     UsuariosConGenero,
@@ -324,7 +325,7 @@ class TestComoNaceLaCompeticion:
         return UserId(uuid4())
 
     def _peticion(self, dias: int | None = None) -> CreateCompetitionRequestDTO:
-        manana = date.today() + timedelta(days=30)
+        manana = ahora_utc_sin_zona().date() + timedelta(days=30)
         return CreateCompetitionRequestDTO(
             name="Ryder Cup 2026",
             start_date=manana,

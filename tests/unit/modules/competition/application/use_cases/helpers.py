@@ -29,6 +29,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -217,7 +218,7 @@ async def plaza_para_todos(uow: InMemoryUnitOfWork, competition_id) -> None:
     primer día, para no mover la primera salida de los tests que la miran.
     Coloca directamente, sin las reglas: es montaje, no lo que se prueba.
     """
-    from datetime import UTC, datetime, time
+    from datetime import time
 
     from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
     from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
@@ -245,7 +246,7 @@ async def plaza_para_todos(uow: InMemoryUnitOfWork, competition_id) -> None:
         await uow.rounds.add(franja)
         for user_id in sin:
             await uow.plazas.add(
-                PlazaEnFranja.crear(competition_id, franja.id, user_id, datetime.now(UTC))
+                PlazaEnFranja.crear(competition_id, franja.id, user_id, ahora_en_utc())
             )
 
 

@@ -25,7 +25,7 @@ ya no inscribe a mano (B1).
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -72,6 +72,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     set_competition_status,
@@ -117,7 +118,7 @@ async def _caducada(comp_uow, competicion_id, creador, invitado) -> Invitation:
         invitee_email=str(invitado.email),
         invitee_user_id=invitado.id,
         status=InvitationStatus.PENDING,
-        expires_at=datetime.now() - timedelta(days=1),
+        expires_at=ahora_utc_sin_zona() - timedelta(days=1),
     )
     async with comp_uow:
         await comp_uow.invitations.add(caducada)

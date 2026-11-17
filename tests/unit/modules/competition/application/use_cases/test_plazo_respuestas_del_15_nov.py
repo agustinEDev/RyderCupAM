@@ -58,13 +58,14 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
 # Se juega pasado mañana: el plazo es mañana a las 12:00 de Madrid
-HOY = datetime.now(UTC).date()
+HOY = ahora_en_utc().date()
 TORNEO = HOY + timedelta(days=2)
 MANANA = datetime.combine(TORNEO - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
 ANTES = MANANA - timedelta(days=5)

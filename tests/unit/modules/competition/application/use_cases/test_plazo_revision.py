@@ -84,6 +84,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -91,7 +92,7 @@ from tests.unit.modules.competition.application.use_cases.helpers import USUARIO
 
 pytestmark = pytest.mark.asyncio
 
-HOY = datetime.now(UTC).date()
+HOY = ahora_en_utc().date()
 TORNEO = HOY + timedelta(days=2)
 MANANA = datetime.combine(TORNEO - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
 ANTES = MANANA - timedelta(days=5)
@@ -226,7 +227,7 @@ class TestO1LasSesionesSeMuevenConElTorneo:
         jugador = UserId.generate()
         async with uow:
             await uow.plazas.add(
-                PlazaEnFranja.crear(competition.id, franja.id, jugador, datetime.now(UTC))
+                PlazaEnFranja.crear(competition.id, franja.id, jugador, ahora_en_utc())
             )
 
         await _mover(uow).execute(competition.id, _fechas(7), competition.creator_id)
@@ -681,7 +682,7 @@ class TestF7LaProgramadaSeAbreASuHora:
             uow, abierta=None, dias=14, inicio=HOY + timedelta(days=60)
         )
         competition._creator_id = organizador.id
-        antes = datetime.now(UTC).replace(tzinfo=None)
+        antes = ahora_utc_sin_zona()
 
         await SendInvitationByUserIdUseCase(uow, user_uow, plazo=_plazo(DESPUES)).execute(
             SendInvitationByUserIdRequestDTO(
@@ -698,7 +699,7 @@ class TestF7LaProgramadaSeAbreASuHora:
         """O3 (16 nov). Given programada que ya debía estar abierta / When se activa / Then ahora."""
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow, abierta=None, dias=5)
-        antes = datetime.now(UTC).replace(tzinfo=None)
+        antes = ahora_utc_sin_zona()
 
         respuesta = await ActivateCompetitionUseCase(uow).execute(
             ActivateCompetitionRequestDTO(competition_id=competition.id.value),
@@ -714,7 +715,7 @@ class TestF7LaProgramadaSeAbreASuHora:
         competition = await _competicion(
             uow, abierta=None, dias=14, inicio=HOY + timedelta(days=60)
         )
-        antes = datetime.now(UTC).replace(tzinfo=None)
+        antes = ahora_utc_sin_zona()
 
         await ActivateCompetitionUseCase(uow).execute(
             ActivateCompetitionRequestDTO(competition_id=competition.id.value),

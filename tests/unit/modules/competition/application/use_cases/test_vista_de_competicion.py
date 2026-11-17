@@ -7,7 +7,7 @@ pendiente de quien mira y hasta dónde ve los inscritos. Ahora lo hace este caso
 uso; la respuesta es la misma (V1-V6).
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -27,12 +27,13 @@ from src.modules.competition.domain.value_objects.invitacion_pendiente import (
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
 YO = UserId(uuid4())
 CREADOR = UserId(uuid4())
-PENDIENTE = InvitacionPendiente(InvitationId.generate(), datetime.now() + timedelta(days=3))
+PENDIENTE = InvitacionPendiente(InvitationId.generate(), ahora_utc_sin_zona() + timedelta(days=3))
 
 
 def _competicion(estado=CompetitionStatus.ACTIVE):

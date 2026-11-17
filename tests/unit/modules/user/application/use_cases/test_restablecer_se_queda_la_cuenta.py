@@ -37,6 +37,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -234,10 +235,9 @@ async def test_r5_any_reset_cancels_a_pending_email_change():
     When: Restablece la contraseña (quizá porque alguien entró en ella)
     Then: El pendiente se anula: quien lo pidiera ya no se la lleva
     """
-    from datetime import datetime
 
     uow, cuenta, _d, caso, token = await _escena(verificada=True)
-    cuenta.request_email_change("otro@example.com", ahora=datetime.now())
+    cuenta.request_email_change("otro@example.com", ahora=ahora_utc_sin_zona())
     async with uow:
         await uow.users.save(cuenta)
 

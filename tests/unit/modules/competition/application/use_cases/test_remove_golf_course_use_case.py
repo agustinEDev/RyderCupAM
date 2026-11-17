@@ -9,7 +9,7 @@ Verifica que:
 - Se recalcula display_order tras la eliminación
 """
 
-from datetime import date, datetime
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -50,6 +50,7 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
     InMemoryGolfCourseUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -261,8 +262,8 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
                     status=RoundStatus.SCHEDULED,
                     handicap_mode=None,
                     allowance_percentage=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
+                    created_at=ahora_utc_sin_zona(),
+                    updated_at=ahora_utc_sin_zona(),
                 )
             )
             await competition_uow.commit()

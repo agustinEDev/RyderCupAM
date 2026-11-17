@@ -13,6 +13,7 @@ from src.modules.user.application.dto.oauth_dto import (
     UnlinkGoogleAccountResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestGoogleLoginRequestDTO:
@@ -63,7 +64,6 @@ class TestGoogleLoginResponseDTO:
 
     @pytest.fixture
     def user_response(self):
-        from datetime import datetime
 
         return UserResponseDTO(
             id="550e8400-e29b-41d4-a716-446655440000",
@@ -72,8 +72,8 @@ class TestGoogleLoginResponseDTO:
             last_name="Doe",
             display_name="John Doe",
             email_verified=True,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
     def test_valid_response(self, user_response):

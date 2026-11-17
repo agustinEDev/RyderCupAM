@@ -7,7 +7,7 @@ filas de una vez, y un campo marcado como federado sin fecha de importación o
 con un identificador repetido pasaría inadvertido.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
@@ -25,6 +25,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
     GolfCourseRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -38,7 +39,7 @@ RFEG_PROVENANCE = CourseProvenance(
 
 async def _insert_test_user(db_session, user_id: UserId) -> None:
     """Insert a minimal user row so golf_courses.creator_id FK is satisfied."""
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

@@ -19,7 +19,7 @@ organizador aún puede tocarlas; mirar nunca falla por eso.
 | Mis partidas, sin ninguna                                | []                                |
 """
 
-from datetime import datetime, time, timedelta
+from datetime import time, timedelta
 
 import pytest
 
@@ -42,6 +42,7 @@ from src.modules.competition.domain.value_objects.session_type import SessionTyp
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.test_generar_partidas_use_case import (
     A_LA_PRIMERA_SALIDA,
@@ -161,7 +162,7 @@ async def test_before_generating_invited_by_email_to_a_private_one_sees_friends(
                 inviter_id=escenario.creador,
                 invitee_email="yo@test.com",
                 status=InvitationStatus.PENDING,
-                expires_at=datetime.now() + timedelta(days=7),
+                expires_at=ahora_utc_sin_zona() + timedelta(days=7),
             )
         )
     amigos = _Amigos({yo: {amiga}})

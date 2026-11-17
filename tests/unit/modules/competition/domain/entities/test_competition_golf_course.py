@@ -20,6 +20,7 @@ from src.modules.competition.domain.value_objects.competition_golf_course_id imp
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestCompetitionGolfCourseCreation:
@@ -206,7 +207,7 @@ class TestCompetitionGolfCourseEquality:
             competition_id=competition_id,
             golf_course_id=golf_course_id,
             display_order=1,
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
         cgc2 = CompetitionGolfCourse.reconstruct(
@@ -214,7 +215,7 @@ class TestCompetitionGolfCourseEquality:
             competition_id=competition_id,
             golf_course_id=golf_course_id,
             display_order=99,  # Diferente display_order, pero mismo ID
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
         # Act & Assert

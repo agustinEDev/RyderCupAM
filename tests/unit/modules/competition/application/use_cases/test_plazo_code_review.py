@@ -78,6 +78,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -86,7 +87,7 @@ from tests.unit.modules.competition.application.use_cases.helpers import USUARIO
 pytestmark = pytest.mark.asyncio
 
 MADRID = ZoneInfo("Europe/Madrid")
-HOY = datetime.now(UTC).date()
+HOY = ahora_en_utc().date()
 TORNEO = HOY + timedelta(days=2)
 MANANA = datetime.combine(TORNEO - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
 ANTES = MANANA - timedelta(days=5)
@@ -170,7 +171,7 @@ class TestO3ActivarAMano:
         """
         uow = InMemoryUnitOfWork()
         competition = await _competicion(uow, abierta=None, dias=5, inicio=HOY)
-        antes = datetime.now(UTC).replace(tzinfo=None)
+        antes = ahora_utc_sin_zona()
 
         await ActivateCompetitionUseCase(uow).execute(
             ActivateCompetitionRequestDTO(competition_id=competition.id.value),
@@ -179,7 +180,7 @@ class TestO3ActivarAMano:
 
         assert competition.status is CompetitionStatus.ACTIVE
         assert competition.enrollment_opened_at >= antes
-        plazo = PlazoDeInscripcion(_Zonas(), reloj=lambda: datetime.now(UTC))
+        plazo = PlazoDeInscripcion(_Zonas(), reloj=ahora_en_utc)
         assert await plazo.vencido(competition) is False
 
 

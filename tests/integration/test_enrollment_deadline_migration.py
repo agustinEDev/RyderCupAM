@@ -11,10 +11,11 @@ La migración del plazo de inscripción (15 nov 2026) sobre competiciones de ant
 """
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy import create_engine, text
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.integration.test_activity_events_published_at_migration import (
     _alembic,
     base_desechable,  # noqa: F401
@@ -89,7 +90,7 @@ def test_the_old_competitions_get_their_deadline_columns(base_desechable):  # no
     assert filas[abierta].dias is None
     assert filas[abierta].abierta is not None
     # En UTC, y de ahora (con margen: el reloj de la base no es el de los tests)
-    ahora = datetime.now(UTC).replace(tzinfo=None)
+    ahora = ahora_utc_sin_zona()
     assert abs(filas[abierta].abierta - ahora) < timedelta(minutes=5)
     assert filas[a_un_dia].abierta is None
     assert filas[cerrada].abierta is None

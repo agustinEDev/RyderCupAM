@@ -7,7 +7,7 @@ sesión cuenta por usuario, y el usuario sale de un JWT cuya firma se verifica: 
 token inventado no elige contador, cae en el de red.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import jwt
@@ -26,6 +26,7 @@ from src.config.rate_limit import (
     record_failed_login,
 )
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.security.jwt_handler import (
     create_access_token,
     create_refresh_token,
@@ -123,13 +124,13 @@ def test_expired_token_keys_on_the_network():
     When: Se calcula la clave
     Then: Cae en la de red
     """
-    # A mano y en UTC: create_access_token usa datetime.now() sin zona, y fuera de
-    # UTC un "-1 s" no está caducado
+    # A mano y ya caducado: un token con `exp` en el pasado, sin depender de cómo lo
+    # construye create_access_token
     expired = jwt.encode(
         {
             "sub": str(uuid4()),
             "type": "access",
-            "exp": datetime.now(UTC) - timedelta(seconds=1),
+            "exp": ahora_en_utc() - timedelta(seconds=1),
         },
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,

@@ -67,6 +67,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -331,7 +332,6 @@ class TestSeRellenaSola:
 
     async def test_rellenar_se_salta_a_quien_ya_juega_ese_dia_aunque_siga_en_la_lista(self, e):
         """Protección de la pieza: aunque alguien siga en la lista con plaza ese día."""
-        from datetime import UTC, datetime
 
         from src.modules.competition.application.services.esperas_de_la_competicion import (
             EsperasDeLaCompeticion,
@@ -343,7 +343,7 @@ class TestSeRellenaSola:
         primero, segundo = await e.aprobado(), await e.aprobado()
         await e.esperar(e.manana, primero)
         await e.esperar(e.manana, segundo)
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         async with e.uow:
             # Plaza puesta a mano, sin pasar por quien lo saca de las listas
             await e.uow.plazas.add(

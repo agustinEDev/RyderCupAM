@@ -13,6 +13,7 @@ from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestTeamAssignmentCreate:
@@ -238,7 +239,7 @@ class TestTeamAssignmentEquality:
     def test_assignments_with_same_id_are_equal(self):
         """Asignaciones con mismo ID son iguales."""
         assignment_id = TeamAssignmentId.generate()
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
 
         assignment1 = TeamAssignment.reconstruct(
             id=assignment_id,

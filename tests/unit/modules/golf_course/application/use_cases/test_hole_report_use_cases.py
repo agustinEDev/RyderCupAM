@@ -36,7 +36,7 @@ reportes y el admin puede descartar uno.
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -98,6 +98,7 @@ from src.modules.golf_course.infrastructure.services.in_memory_recent_hole_sampl
     InMemoryRecentHoleSampleSenders,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -266,7 +267,7 @@ async def test_a1_a3_a_report_on_a_hole_with_a_line_is_stored(line):
     assert report.tee == SALIDA
     assert report.bends == (_north(150),)
     assert report.green_center == GREEN
-    assert report.received_on == datetime.now(UTC).date()
+    assert report.received_on == ahora_en_utc().date()
 
 
 @pytest.mark.parametrize("line", ["none", "green-only", "osm-pending"])
@@ -646,6 +647,6 @@ async def test_g1_g2_the_review_brings_each_hole_reports_in_arrival_order():
     assert primero.tee == _p(SALIDA)
     assert primero.bends == []
     assert primero.green_center == _p(GREEN)
-    assert primero.received_on == datetime.now(UTC).date()
+    assert primero.received_on == ahora_en_utc().date()
     assert (segundo.id, segundo.bends) == (otro, [_p(_north(150))])
     assert review.holes[1].reports == []
