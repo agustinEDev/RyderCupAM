@@ -1,6 +1,7 @@
 """Mapper para convertir entidades Competition a DTOs de presentación."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
@@ -123,22 +124,25 @@ class CompetitionDTOMapper:
         creator_dto = None
         if user_uow:
             # Si el organizador juega, su elección de nombre, como la de cualquier
-            # inscrito: si no, una tarjeta y la lista le darían dos nombres
-            inscripcion_del_creador = (
-                user_enrollment
-                if is_creator
-                else await uow.enrollments.find_by_user_and_competition(
-                    competition.creator_id, competition.id
+            # inscrito: si no, una tarjeta y la lista le darían dos nombres. Se lee
+            # solo si hace falta (ver `_get_creator_dto`): la ficha tiene tope de
+            # consultas
+            async def eligio_su_nombre() -> bool:
+                inscripcion = (
+                    user_enrollment
+                    if is_creator
+                    else await uow.enrollments.find_by_user_and_competition(
+                        competition.creator_id, competition.id
+                    )
                 )
-            )
+                return inscripcion.use_real_name if inscripcion else False
+
             creator_dto = await CompetitionDTOMapper._get_creator_dto(
                 competition.creator_id,
                 user_uow,
                 competition.visibility,
                 ve_el_nombre_legal=is_creator or is_admin,
-                eligio_su_nombre=(
-                    inscripcion_del_creador.use_real_name if inscripcion_del_creador else False
-                ),
+                eligio_su_nombre=eligio_su_nombre,
             )
 
         # La tarjeta de «Mis competiciones» (FE #846)
@@ -351,7 +355,7 @@ class CompetitionDTOMapper:
         visibility: Visibility,
         *,
         ve_el_nombre_legal: bool,
-        eligio_su_nombre: bool = False,
+        eligio_su_nombre: Callable[[], Awaitable[bool]] | None = None,
     ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición. Sin su correo:
@@ -371,7 +375,16 @@ class CompetitionDTOMapper:
             logger.warning("Creator with id %s not found", creator_id.value)
             return None
 
-        nombre_real = visibility.shows_real_name(eligio_su_nombre)
+        # Su inscripción solo importa en una privada y si tiene alias: si no, el nombre
+        # que se enseña es el mismo elija lo que elija, y no se lee
+        eligio = (
+            await eligio_su_nombre()
+            if eligio_su_nombre is not None
+            and visibility is Visibility.PRIVATE
+            and creator.alias is not None
+            else False
+        )
+        nombre_real = visibility.shows_real_name(eligio)
         legal = nombre_real or ve_el_nombre_legal or creator.alias is None
         return CreatorDTO(
             id=creator.id.value,

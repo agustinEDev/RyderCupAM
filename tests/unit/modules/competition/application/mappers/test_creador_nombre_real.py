@@ -115,8 +115,30 @@ async def test_private_organizer_who_plays_follows_his_own_choice():
         user_uow,
         Visibility.PRIVATE,
         ve_el_nombre_legal=False,
-        eligio_su_nombre=True,
+        eligio_su_nombre=AsyncMock(return_value=True),
     )
 
     assert dto.display_name == "Orga Niza"
     assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
+
+
+async def test_the_organizer_enrolment_is_not_read_when_it_cannot_change_the_name():
+    """
+    Given: Una pública, o una privada con un organizador sin alias
+    When: Se arma el organizador
+    Then: No se lee su inscripción: el nombre sería el mismo (la ficha tiene tope de
+          consultas)
+    """
+    for visibility, alias in ((Visibility.PUBLIC, "Trinx"), (Visibility.PRIVATE, None)):
+        creador, user_uow = _uow_con(alias)
+        lectura = AsyncMock(return_value=True)
+
+        await CompetitionDTOMapper._get_creator_dto(
+            creador.id,
+            user_uow,
+            visibility,
+            ve_el_nombre_legal=False,
+            eligio_su_nombre=lectura,
+        )
+
+        lectura.assert_not_awaited()
