@@ -11,12 +11,38 @@ from unittest.mock import patch
 
 import pytest
 
-from src.modules.user.application.handlers.user_registered_event_handler import (
-    UserRegisteredEventHandler,
-)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+from src.shared.domain.events.event_handler import EventHandler
 from src.shared.infrastructure.events.in_memory_event_bus import InMemoryEventBus
+
+
+class UserRegisteredEventHandler(EventHandler[UserRegisteredEvent]):
+    """
+    Un manejador de prueba para el bus: hace los tres pasos que estos tests esperan.
+
+    El de producción no estaba conectado a nada y escribía en el log el nombre y el
+    correo; se borró (re-auditoría del 16 nov 2026, SB-07). Lo que se prueba aquí es el
+    bus de eventos, así que basta con uno propio sin datos personales.
+    """
+
+    @property
+    def event_type(self) -> type[UserRegisteredEvent]:
+        return UserRegisteredEvent
+
+    async def handle(self, event: UserRegisteredEvent) -> None:
+        await self._send_welcome_email(event)
+        await self._log_registration(event)
+        await self._notify_external_systems(event)
+
+    async def _send_welcome_email(self, event: UserRegisteredEvent) -> None:
+        pass
+
+    async def _log_registration(self, event: UserRegisteredEvent) -> None:
+        pass
+
+    async def _notify_external_systems(self, event: UserRegisteredEvent) -> None:
+        pass
 
 
 class TestDomainEventsIntegration:

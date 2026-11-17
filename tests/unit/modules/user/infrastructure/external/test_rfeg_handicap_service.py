@@ -632,3 +632,61 @@ class TestRFEGHandicapServiceCabeceras:
         """R4: lo que ya funcionaba se queda igual."""
         cabeceras = await self._cabeceras_enviadas(mock_client_class)
         assert cabeceras["Accept"] == "application/json"
+
+
+class TestRFEGHandicapServiceSinDatosPersonalesEnElLog:
+    """
+    Los avisos de una respuesta rara dicen QUÉ forma tenía, no de quién era (SB-07).
+
+    El log va a Render y a las migas de Sentry: un nombre o un hándicap de la
+    federación no tiene que acabar ahí. Para saber que el formato cambió basta el tipo.
+    """
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_un_handicap_ilegible_no_deja_el_nombre_ni_el_valor(
+        self, mock_client_class, caplog
+    ):
+        """
+        Given: La RFEG devuelve al jugador buscado con un hándicap que no es un número
+        When: Se busca su hándicap
+        Then: Queda un aviso, sin su nombre ni el valor recibido
+        """
+        mock_client_class.return_value = cliente_que_devuelve(
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "SECRETO-15,4"}),
+        )
+
+        with caplog.at_level("WARNING"):
+            await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+        assert caplog.records, "el formato raro tiene que dejar rastro"
+        texto = caplog.text.upper()
+        assert "ESTÉVEZ" not in texto
+        assert "SECRETO" not in texto
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_un_resultado_mal_formado_no_deja_su_contenido(self, mock_client_class, caplog):
+        """
+        Given: Resultados que no son objetos, uno con el nombre de alguien dentro
+        When: Se busca un hándicap
+        Then: Quedan avisos, sin el contenido de esos resultados
+        """
+        mock_client_class.return_value = cliente_que_devuelve(
+            respuesta_cruda(
+                {
+                    "data": {
+                        "hits": [
+                            "PEPE PÉREZ 12,3",
+                            {"document": "MARÍA LÓPEZ 8,1"},
+                        ]
+                    }
+                }
+            ),
+        )
+
+        with caplog.at_level("WARNING"):
+            await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+        assert len(caplog.records) >= 2
+        texto = caplog.text.upper()
+        assert "PÉREZ" not in texto
+        assert "LÓPEZ" not in texto
