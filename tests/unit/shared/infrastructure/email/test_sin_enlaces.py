@@ -23,6 +23,23 @@ from src.shared.infrastructure.email.sin_enlaces import desarma_enlaces
         ("PREMIO.COM", "PREMIO[.]COM"),
         ("escribe a gana@premio.net", "escribe a gana@premio[.]net"),
         ("sub.dominio.premio.io/ruta?x=1", "sub[.]dominio[.]premio[.]io/ruta?x=1"),
+        # Puntos que se parecen a un punto: los clientes los tratan como tal
+        ("premio\u3002com", "premio[.]com"),
+        ("premio\uff0ecom/regalo", "premio[.]com/regalo"),
+        ("premio\uff61com", "premio[.]com"),
+        # Caracteres invisibles dentro del dominio: fuera
+        ("premio\u200b.com", "premio[.]com"),
+        ("premio.c\u00adom", "premio[.]com"),
+        # Una IP también lleva a un servidor
+        ("en 203.0.113.7/regalo", "en 203[.]0[.]113[.]7/regalo"),
+        ("http://203.0.113.7", "http[:]//203[.]0[.]113[.]7"),
+        # Dominios internacionales y en punycode
+        ("Gana en пример.рф", "Gana en пример[.]рф"),
+        ("premio.xn--p1ai/ya", "premio[.]xn--p1ai/ya"),
+        # Esquemas sin «//»: llamadas y mensajes de pago
+        ("Llama ya: tel:+34600000000", "Llama ya: tel[:]+34600000000"),
+        ("sms:+34600000000?body=x", "sms[:]+34600000000?body=x"),
+        ("mailto:gana@premio.com", "mailto[:]gana@premio[.]com"),
     ],
 )
 def test_links_and_domains_cannot_be_clicked(texto, esperado):

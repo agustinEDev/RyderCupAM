@@ -883,3 +883,13 @@ class TestTheUserTextCarriesNoLinks:
 
         assert all(enlace.startswith(WEB) for enlace in _botones(cuerpo))
         assert _botones(cuerpo)
+
+    @pytest.mark.asyncio
+    async def test_a_friend_request_disarms_the_requester_name(self, correo):
+        """El nombre de quien pide amistad lo escribe él: tampoco sale como enlace."""
+        await correo.send_friend_request_email("a@b.com", "Ana", "Pablo de premio.com")
+        _, asunto, texto, cuerpo = _enviado(correo)
+
+        for parte in (asunto, texto, cuerpo):
+            assert "premio.com" not in parte
+        assert "premio[.]com" in cuerpo
