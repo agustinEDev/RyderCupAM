@@ -33,6 +33,9 @@ from src.shared.infrastructure.email.sin_enlaces import desarma_enlaces
         # Una IP también lleva a un servidor
         ("en 203.0.113.7/regalo", "en 203[.]0[.]113[.]7/regalo"),
         ("http://203.0.113.7", "http[:]//203[.]0[.]113[.]7"),
+        ("Entra en 203.0.113.7.", "Entra en 203[.]0[.]113[.]7."),
+        # Un acento escrito aparte, que se junta con su letra antes de buscar
+        ("cafe\u0301.fr", "caf\u00e9[.]fr"),
         # Dominios internacionales y en punycode
         ("Gana en пример.рф", "Gana en пример[.]рф"),
         ("premio.xn--p1ai/ya", "premio[.]xn--p1ai/ya"),

@@ -23,6 +23,7 @@ sin tope.
 """
 
 import re
+import unicodedata
 
 # Puntos de otros alfabetos que los detectores de enlaces leen como un punto (UTS-46)
 _PUNTOS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
@@ -38,7 +39,8 @@ _DOMINIO = re.compile(
     re.IGNORECASE,
 )
 # Una dirección IPv4: también lleva a un servidor, sin dominio
-_IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+# Al final de una frase puede seguir un punto: lo que no puede seguir es otro número
+_IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)")
 # Un esquema con «//» (https://, ftp://…) o de los que abren algo sin él
 _ESQUEMA = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*)://")
 _ESQUEMA_SIN_BARRAS = re.compile(r"(?i)\b(tel|sms|mailto|callto|whatsapp):(?!//)")
@@ -57,7 +59,9 @@ def desarma_enlaces(texto: str) -> str:
     """
     if not texto:
         return texto
-    limpio = _INVISIBLES.sub("", texto.translate(_PUNTOS))
+    # NFC primero: un dominio con el acento aparte («e» + U+0301) no casaba (CodeRabbit)
+    limpio = unicodedata.normalize("NFC", texto)
+    limpio = _INVISIBLES.sub("", limpio.translate(_PUNTOS))
     limpio = _ESQUEMA.sub(lambda m: f"{m.group(1)}[:]//", limpio)
     limpio = _ESQUEMA_SIN_BARRAS.sub(lambda m: f"{m.group(1)}[:]", limpio)
     limpio = _IP.sub(lambda m: m.group(0).replace(".", "[.]"), limpio)
