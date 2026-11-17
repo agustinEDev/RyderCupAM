@@ -22,9 +22,10 @@ punto a más de 3 km del campo (si el campo tiene ubicación).
 """
 
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from uuid import UUID
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 
 from ..value_objects.geo_point import GeoPoint
@@ -75,11 +76,6 @@ def play_line_problem(
     ):
         return f"Every point must be within {MAX_DISTANCE_FROM_COURSE_M:.0f} m of the course"
     return None
-
-
-def _today() -> date:
-    """El día de hoy en UTC: de la llegada no se guarda más."""
-    return datetime.now(UTC).date()
 
 
 class HoleSample:
@@ -181,7 +177,7 @@ class HoleSample:
             tee=tee,
             bends=bends,
             green_center=green_center,
-            received_on=_today(),
+            received_on=ahora_utc_sin_zona().date(),
         )
         sample._ensure_tee_to_green()
         sample._ensure_near(course_location)

@@ -16,9 +16,11 @@ ningún punto a más de 3 km del campo (si el campo tiene ubicación).
 """
 
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
+
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 from ..value_objects.geo_point import GeoPoint
 from ..value_objects.golf_course_id import GolfCourseId
@@ -38,11 +40,6 @@ class HoleReportReason(StrEnum):
 
 class InvalidHoleReportError(ValueError):
     """El reporte no vale: motivo, hoyo, puntos, codos o distancias."""
-
-
-def _today() -> date:
-    """El día de hoy en UTC: de la llegada no se guarda más."""
-    return datetime.now(UTC).date()
 
 
 class HoleReport:
@@ -133,7 +130,7 @@ class HoleReport:
             tee=tee,
             bends=bends,
             green_center=green_center,
-            received_on=_today(),
+            received_on=ahora_utc_sin_zona().date(),
         )
         problem = play_line_problem(
             report.tee, report.green_center, report.play_line, course_location

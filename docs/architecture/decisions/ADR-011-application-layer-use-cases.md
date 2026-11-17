@@ -88,7 +88,7 @@ except ValueError as e:
 
 - [ADR-001: Clean Architecture](./ADR-001-clean-architecture.md)
 - [ADR-006: Unit of Work](./ADR-006-unit-of-work-pattern.md)
-- [ADR-007: Domain Events](./ADR-007-domain-events-pattern.md)
+- [ADR-050: Remove the Unused Domain Events](./ADR-050-remove-unused-domain-events.md)
 - [ADR-012: Composition Root](./ADR-012-composition-root.md)
 - [ADR-013: External Services Pattern](./ADR-013-external-services-pattern.md)
 - [ADR-014: Handicap Management System](./ADR-014-handicap-management-system.md)
