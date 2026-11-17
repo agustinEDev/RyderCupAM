@@ -4,7 +4,7 @@ anotación y clasificaciones.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, TypeVar
 
 from fastapi import Depends
@@ -156,6 +156,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
 )
@@ -377,7 +378,7 @@ def get_generar_partidas_use_case(
         jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         actividad=actividad,
     )
 
@@ -395,7 +396,7 @@ def get_mover_jugador_de_partida_use_case(
         jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         actividad=actividad,
     )
 
@@ -415,7 +416,7 @@ def _de_las_partidas(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         **extra,
     )
 

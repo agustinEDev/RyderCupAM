@@ -7,13 +7,14 @@ Implementa autenticación basada en tokens con algoritmo HS256.
 
 import time
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import jwt
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from src.config.csrf_config import generate_csrf_token
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class JWTTokenService:
@@ -45,9 +46,9 @@ class JWTTokenService:
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now(UTC) + expires_delta
+            expire = ahora_en_utc() + expires_delta
         else:
-            expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = ahora_en_utc() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
         # Cuándo se emitió, con fracciones de segundo: el dispositivo rechaza lo emitido
         # antes de cerrar sus sesiones (auditoría de la fase 6, B-05)
@@ -82,9 +83,9 @@ class JWTTokenService:
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now(UTC) + expires_delta
+            expire = ahora_en_utc() + expires_delta
         else:
-            expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            expire = ahora_en_utc() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         # Agregar jti (JWT ID) único para garantizar unicidad del token
         # Esto previene colisiones de hash cuando se generan múltiples tokens al mismo tiempo

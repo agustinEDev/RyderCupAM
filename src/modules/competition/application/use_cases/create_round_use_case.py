@@ -1,7 +1,7 @@
 """Caso de Uso: Crear Ronda/Sesión de competición."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundRequestDTO,
@@ -31,6 +31,7 @@ from src.modules.competition.domain.value_objects.handicap_mode import HandicapM
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 
@@ -63,7 +64,7 @@ class CreateRoundUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         """
         Args:

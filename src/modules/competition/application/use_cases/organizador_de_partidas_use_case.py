@@ -25,7 +25,7 @@ Solo el organizador o un admin, con la partida bloqueada.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -84,6 +84,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 async def _del_organizador(
@@ -128,7 +129,7 @@ class CorregirHoyoDePartidaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
@@ -217,7 +218,7 @@ class BorrarHoyoDePartidaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._zonas = zonas
@@ -273,7 +274,7 @@ class ReabrirTarjetaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._zonas = zonas
@@ -309,7 +310,7 @@ class MarcarNoPresentadoUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
@@ -365,7 +366,7 @@ class RetirarJugadorUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._zonas = zonas
@@ -395,7 +396,7 @@ class ValidarLoAnotadoUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._zonas = zonas
@@ -439,7 +440,7 @@ class CerrarFranjaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._zonas = zonas

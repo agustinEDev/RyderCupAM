@@ -63,6 +63,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class EnvelopeDesk:
         self._uow = uow
         self._generador = generador
         self._user_repo = user_repository
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock or (ahora_en_utc)
         self._timezone = timezone_service
 
     @property

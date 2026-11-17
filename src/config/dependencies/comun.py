@@ -9,7 +9,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyCookie
@@ -132,6 +132,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import 
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
@@ -671,7 +672,7 @@ def get_reloj_del_servidor() -> Callable[[], datetime]:
     una dependencia para que los tests de la API puedan ponerlo en el día del
     torneo.
     """
-    return lambda: datetime.now(UTC)
+    return ahora_en_utc
 
 
 def get_invitation_email_service() -> IInvitationEmailService:
