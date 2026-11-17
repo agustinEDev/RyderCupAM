@@ -49,6 +49,8 @@ select = [
     "RUF",    # ruff-specific rules
     "DTZ005", # datetime.now() sin zona: da la hora LOCAL de la máquina (re-auditoría F-02)
     "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
+    "DTZ003", # datetime.utcnow(): obsoleto; el reloj de instante_utc
+    "DTZ006", # fromtimestamp() sin zona: hora local
 ]
 
 # Reglas ignoradas (desactivadas)
@@ -86,6 +88,8 @@ unfixable = []
     "E402",     # module-level-import-not-at-top-of-file (setup imports)
     "DTZ005",   # quedan tests con datetime.now(); pasan al reloj UTC en la siguiente tanda
     "DTZ011",   # ídem con date.today()
+    "DTZ003",
+    "DTZ006",
 ]
 
 # Archivos de configuración pueden tener imports no ordenados

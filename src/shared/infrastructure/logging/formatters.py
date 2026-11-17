@@ -17,7 +17,7 @@ Cada registro sale en una línea JSON:
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 # Atributos que todo LogRecord trae de serie: no son datos del evento.
@@ -56,7 +56,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Formatea el registro como JSON compacto."""
         log_entry: dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created).strftime(_FORMATO_DE_FECHA),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).strftime(_FORMATO_DE_FECHA),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

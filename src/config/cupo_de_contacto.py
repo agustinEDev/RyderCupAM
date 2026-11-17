@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from src.modules.support.application.ports.cupo_de_contacto_port import ICupoDeContacto
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 MENSAJES_POR_DIA = 20
 UN_DIA = timedelta(hours=24)
@@ -20,7 +21,7 @@ UN_DIA = timedelta(hours=24)
 class CupoDeContactoEnMemoria(ICupoDeContacto):
     """Los mensajes enviados en las últimas 24 horas."""
 
-    def __init__(self, reloj: Callable[[], datetime] = datetime.now):
+    def __init__(self, reloj: Callable[[], datetime] = ahora_utc_sin_zona):
         """El tope, vacío, con su reloj."""
         self._reloj = reloj
         self._enviados: deque[datetime] = deque()
