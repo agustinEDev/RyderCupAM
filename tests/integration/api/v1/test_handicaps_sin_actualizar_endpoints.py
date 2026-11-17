@@ -16,7 +16,7 @@ GET /api/v1/competitions/me/handicaps-not-updated, contra Postgres.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -33,7 +33,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_upda
     SQLAlchemyHandicapUpdateRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -88,7 +88,7 @@ async def _cerrada_con_un_no_encontrado(client: AsyncClient) -> tuple[dict, dict
 
     fabrica = app.dependency_overrides[get_fabrica_de_sesiones]()
     # La RFEG contesta después de que se pusiera su hándicap
-    momento = datetime.now(UTC)
+    momento = ahora_en_utc()
     actualizacion = ActualizacionDeHandicaps.crear(
         CompetitionId(uuid.UUID(competicion["id"])), OrigenActualizacion.CIERRE, momento
     )

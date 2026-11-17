@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.email.email_service import EmailService
 
 WEB = "https://www.rydercupfriends.com"
@@ -61,14 +62,14 @@ async def _todos_los_correos(servicio):
     servicio._send_email.reset_mock()
 
     await servicio.send_invitation_email(
-        "a@b.com", "Ana", "Pablo", "Copa", None, datetime.now(UTC) + timedelta(days=7)
+        "a@b.com", "Ana", "Pablo", "Copa", None, ahora_en_utc() + timedelta(days=7)
     )
     htmls["invitacion"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
 
     # Sin cuenta y con mensaje: el botón secundario de registrarse y la cita
     await servicio.send_invitation_email(
-        "a@b.com", None, "Pablo", "Copa", "¡Vente!", datetime.now(UTC) + timedelta(days=7)
+        "a@b.com", None, "Pablo", "Copa", "¡Vente!", ahora_en_utc() + timedelta(days=7)
     )
     htmls["invitacion_sin_cuenta"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
@@ -128,7 +129,7 @@ class TestEveryEmailWearsTheAppsBranding:
 
     @pytest.mark.asyncio
     async def test_the_footer_says_the_current_year(self, correo):
-        anio = str(datetime.now(UTC).year)
+        anio = str(ahora_en_utc().year)
         for nombre, cuerpo in (await _todos_los_correos(correo)).items():
             assert f"© {anio} RyderCupFriends" in cuerpo, nombre
             assert "2025" not in cuerpo or anio == "2025", nombre

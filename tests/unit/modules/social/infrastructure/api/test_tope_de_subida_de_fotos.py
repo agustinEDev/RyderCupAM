@@ -9,7 +9,6 @@ endpoint lee por trozos y corta en cuanto se pasa del tope.
 """
 
 from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -20,6 +19,7 @@ from src.modules.social.application.dto.profile_photo_dto import ProfilePhotoDTO
 from src.modules.social.application.use_cases.upload_profile_photo_use_case import (
     MAX_UPLOAD_BYTES,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,7 +49,7 @@ class _CasoDeUsoQueApunta:
             id="foto",
             user_id=user_id_raw,
             caption=caption,
-            created_at=datetime.now(UTC),
+            created_at=ahora_en_utc(),
             url="/foto",
         )
 

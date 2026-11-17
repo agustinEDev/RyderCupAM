@@ -10,7 +10,7 @@ lo que la sesión tenía en memoria, que es de lo que depende no elegir dos vece
 en el mismo turno.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.draft_reposit
     SQLAlchemyDraftRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -44,7 +45,7 @@ AHORA = datetime(2030, 6, 1, 10, 0, 0)
 
 async def _insert_user(db_session, user_id: UserId) -> None:
     """Fila mínima de usuario: las claves ajenas de la sala la exigen."""
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

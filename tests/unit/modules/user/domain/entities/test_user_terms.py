@@ -6,12 +6,13 @@ quien no tiene aceptada ESA versión no ha aceptado los Términos, aunque
 aceptara una anterior. Cambiarla obliga a todos a aceptar de nuevo.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects import terms_of_service
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 def _usuario() -> User:
@@ -84,11 +85,11 @@ class TestAceptar:
         Then: Guarda esa versión y la fecha de ahora, en UTC
         """
         user = _usuario()
-        antes = datetime.now(UTC)
+        antes = ahora_en_utc()
 
         cambiado = user.accept_terms(terms_of_service.current_terms_version())
 
-        despues = datetime.now(UTC)
+        despues = ahora_en_utc()
         assert cambiado is True
         assert user.terms_version == terms_of_service.current_terms_version()
         assert user.terms_accepted_at is not None

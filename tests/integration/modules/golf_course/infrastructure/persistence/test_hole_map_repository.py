@@ -6,7 +6,7 @@ que sale de PostgreSQL exactamente como entró (puntos, línea, contorno, oríge
 y revisión), que cada campo tiene un solo mapa y que se va con su campo.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
@@ -35,6 +35,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.hole_map_re
     HoleMapRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -64,7 +65,7 @@ GREEN_DE_JUGADOR = GreenPosition(
 
 
 async def _insert_user(db_session, user_id: UserId) -> None:
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

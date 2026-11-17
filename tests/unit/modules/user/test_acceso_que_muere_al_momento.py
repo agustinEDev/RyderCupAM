@@ -42,6 +42,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 pytestmark = pytest.mark.asyncio
@@ -258,12 +259,11 @@ class TestElDispositivo:
         assert movil.admite_el_acceso(time.time())
 
     async def test_after_signing_out_only_later_tokens(self):
-        from datetime import UTC, datetime
 
         uow = InMemoryUnitOfWork()
         ana = await _persona(uow)
         movil = await _dispositivo(uow, ana, "Movil/1.0")
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         movil.cierra_las_sesiones(ahora)
 
         assert not movil.admite_el_acceso(ahora.timestamp() - 10)

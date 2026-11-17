@@ -72,7 +72,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -241,9 +241,8 @@ class _Escenario:
 
 
 def _ahora():
-    from datetime import UTC, datetime
 
-    return datetime.now(UTC)
+    return ahora_en_utc()
 
 
 @pytest.fixture

@@ -28,6 +28,7 @@ from src.config.rate_limit import (
     skip_refresh_limit_without_valid_cookie,
 )
 from src.config.settings import settings
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.infrastructure.security.jwt_handler import (
     create_access_token,
     create_refresh_token,
@@ -403,12 +404,12 @@ def test_a_forged_expired_refresh_does_not_choose_a_counter():
     When: Se calcula la clave
     Then: La de red: uno inventado no elige contador
     """
-    from datetime import UTC, datetime, timedelta
+    from datetime import timedelta
 
     import jwt
 
     falso = jwt.encode(
-        {"sub": str(uuid4()), "type": "refresh", "exp": datetime.now(UTC) - timedelta(minutes=1)},
+        {"sub": str(uuid4()), "type": "refresh", "exp": ahora_en_utc() - timedelta(minutes=1)},
         "otra-clave",
         algorithm="HS256",
     )

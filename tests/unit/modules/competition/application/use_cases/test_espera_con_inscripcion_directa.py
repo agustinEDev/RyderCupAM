@@ -13,7 +13,7 @@ La lista de espera con la inscripción directa (release social 3, tabla del 28 o
     A4   quien no tiene franja ni espera                    | sigue bloqueando el cierre
 """
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -75,7 +75,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
@@ -143,7 +143,7 @@ class _E:
             inscripcion.entra_esperando()
         async with self.uow:
             await self.uow.enrollments.add(inscripcion)
-            ahora = datetime.now(UTC)
+            ahora = ahora_en_utc()
             if franja is not None:
                 await self.uow.plazas.add(
                     PlazaEnFranja.crear(self.competicion.id, franja.id, quien, ahora)

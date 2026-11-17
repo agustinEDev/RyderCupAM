@@ -20,7 +20,7 @@ quién lo mandó y de cuándo llegó solo el día (UTC); el id lo pone el móvil
 | B11  | Un datetime como día, o un id que no es UUID      | InvalidHoleReportError                     |
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -33,6 +33,7 @@ from src.modules.golf_course.domain.entities.hole_report import (
 )
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 M_PER_DEGREE = 6_371_000.0 * 3.141592653589793 / 180
 SALIDA = GeoPoint(latitude=36.28, longitude=-5.33)
@@ -76,7 +77,7 @@ def test_b1_creates_a_report_with_the_phone_id_and_the_utc_day():
     assert report.tee == SALIDA
     assert report.bends == (_north(100), _north(200))
     assert report.green_center == _north(300)
-    assert report.received_on == datetime.now(UTC).date()
+    assert report.received_on == ahora_en_utc().date()
     assert type(report.received_on) is date
     assert MAX_REPORTS_PER_HOLE == 3
 

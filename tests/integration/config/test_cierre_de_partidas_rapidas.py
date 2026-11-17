@@ -4,7 +4,7 @@ El cierre de las partidas rápidas que nadie termina, contra Postgres de verdad
 cierre con su sesión propia y el candado entre procesos.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -40,13 +40,14 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
-AHORA = datetime.now(UTC).replace(tzinfo=None)
+AHORA = ahora_utc_sin_zona()
 HACE_TRES_DIAS = AHORA - timedelta(days=3)
 # El reloj de la vuelta: ya vencidas las de hace tres días, y todavía no las que
 # otros tests crean ahora en la misma base, que no se tocan

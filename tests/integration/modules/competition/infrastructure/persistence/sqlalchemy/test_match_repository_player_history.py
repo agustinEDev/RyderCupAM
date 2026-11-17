@@ -8,7 +8,7 @@ por `created_at` a falta de rondas, así que el orden real solo se comprueba
 aquí, contra PostgreSQL.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -47,6 +47,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
     GolfCourseRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -59,7 +60,7 @@ BASE_DATE = date(2026, 6, 1)
 
 async def _insert_user(db_session, user_id: UserId) -> None:
     """Fila mínima de usuario: las claves ajenas de competitions la exigen."""
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

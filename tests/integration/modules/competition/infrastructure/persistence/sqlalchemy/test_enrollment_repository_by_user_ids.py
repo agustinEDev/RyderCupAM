@@ -8,7 +8,7 @@ repositorio en memoria compara objetos Python directamente—, así que solo
 aquí, contra PostgreSQL, se comprueba que la conversión funciona de verdad.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -30,6 +30,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
     SQLAlchemyEnrollmentRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -40,7 +41,7 @@ BASE_DATE = date(2026, 6, 1)
 
 async def _insert_user(db_session, user_id: UserId) -> None:
     """Fila mínima de usuario: las claves ajenas de enrollments la exigen."""
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = ahora_utc_sin_zona()
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "
