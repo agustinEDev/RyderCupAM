@@ -56,16 +56,3 @@ class PasswordHistoryRepositoryInterface(ABC):
             True
         """
         pass
-
-    @abstractmethod
-    async def count_by_user(self, user_id: UserId) -> int:
-        """
-        Cuenta el total de registros de historial para un usuario.
-
-        Args:
-            user_id: ID del usuario
-
-        Returns:
-            int: Número total de registros
-        """
-        pass
