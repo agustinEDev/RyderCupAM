@@ -79,8 +79,9 @@ class TestIsDue:
     """`is_due` lo decide el reloj del servidor, nunca el del movil."""
 
     def test_ya_paso_la_hora(self):
-        ayer = ahora_utc_sin_zona().date()
-        assert EnrollmentOpeningService.is_due(ayer, 1, "Europe/Madrid") is True
+        # Empieza hoy y abre un día antes: ya tocaba
+        hoy = ahora_utc_sin_zona().date()
+        assert EnrollmentOpeningService.is_due(hoy, 1, "Europe/Madrid") is True
 
     def test_todavia_no_toca(self):
         # Con timedelta y no `replace(year=...)`: el 29 de febrero de un bisiesto

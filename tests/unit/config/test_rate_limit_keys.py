@@ -124,8 +124,8 @@ def test_expired_token_keys_on_the_network():
     When: Se calcula la clave
     Then: Cae en la de red
     """
-    # A mano y en UTC: create_access_token usa datetime.now() sin zona, y fuera de
-    # UTC un "-1 s" no está caducado
+    # A mano y ya caducado: un token con `exp` en el pasado, sin depender de cómo lo
+    # construye create_access_token
     expired = jwt.encode(
         {
             "sub": str(uuid4()),

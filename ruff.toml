@@ -51,6 +51,9 @@ select = [
     "DTZ011", # date.today(): lo mismo; se usa el reloj de instante_utc
     "DTZ003", # datetime.utcnow(): obsoleto; el reloj de instante_utc
     "DTZ006", # fromtimestamp() sin zona: hora local
+    "DTZ002", # datetime.today(): hora local
+    "DTZ007", # strptime() sin zona en el formato
+    "DTZ012", # date.fromtimestamp(): fecha local
 ]
 
 # Reglas ignoradas (desactivadas)
