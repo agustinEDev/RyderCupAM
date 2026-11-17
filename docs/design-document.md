@@ -46,7 +46,7 @@ Domain (Entities, VOs, Repos)
 
 **Patterns**: Repository, UoW, Value Objects, External Services (domain events removed, ADR-050).
 
-> ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
+> ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md)
 
 ---
 
@@ -256,7 +256,7 @@ Client → API → UseCase → User.create() → UoW.save() → commit()
 3. UoW saves + commits
 4. The use case sends the verification email itself (no domain events, ADR-050)
 
-> ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
+> ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md)
 
 ### 2. Update Handicap (RFEG)
 
@@ -443,11 +443,11 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Foundation**: [001](architecture/decisions/ADR-001-clean-architecture.md), [004](architecture/decisions/ADR-004-tech-stack.md)
 
-**Patterns**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md) (supersedes 007)
+**Patterns**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [050](architecture/decisions/ADR-050-remove-unused-domain-events.md)
 
 **Infrastructure**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
-**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
+**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [039](architecture/decisions/ADR-039-session-lifetime-per-device.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 

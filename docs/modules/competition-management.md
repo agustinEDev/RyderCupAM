@@ -608,7 +608,7 @@ REJECTED    CANCELLED
 - **ADR-020:** Competition Module Domain Design
 - **ADR-005:** Repository Pattern
 - **ADR-006:** Unit of Work Pattern
-- **ADR-050:** Remove the Unused Domain Events (supersedes ADR-007)
+- **ADR-050:** Remove the Unused Domain Events
 - **ADR-026:** Playing Handicap WHS Calculation
 - **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model ⭐ Sprint 2
 
