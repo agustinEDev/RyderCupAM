@@ -113,9 +113,9 @@ class JWTTokenService:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
-            # Verificar que sea un access token (v1.8.0+)
-            if payload.get("type") == "refresh":
-                # No permitir refresh tokens en endpoints de access token
+            # Solo lo que es de acceso, no lo que no es de refresh (SB-04): otro JWT
+            # firmado con la misma clave, sin tipo o con otro, no vale como acceso
+            if payload.get("type") != "access":
                 return None
 
             return payload
@@ -287,8 +287,10 @@ def subject_ignoring_expiry(token: str) -> str | None:
 
     Para saber de quién es una sesión sin autenticarla (el CSRF atado al usuario,
     BE #724): un acceso caducado sigue diciendo de quién es, y la petición ya
-    dará su 401 donde toque. La firma y el algoritmo SÍ se comprueban, con las
-    mismas reglas que `verify_access_token`.
+    dará su 401 donde toque. La firma y el algoritmo SÍ se comprueban; el tipo NO,
+    a propósito: vale para el token de acceso (CSRF) y para el de refresh
+    (`expired_refresh_subject`), y no autentica nada. Quien autentica es
+    `verify_access_token`, que exige `type == "access"` (SB-04).
 
     Returns:
         El `sub`, o None si el token no es de esta API o no lo trae.
