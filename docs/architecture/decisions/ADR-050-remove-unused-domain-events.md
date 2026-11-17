@@ -1,6 +1,6 @@
 # ADR-050: Remove the Unused Domain Events
 
-**Status:** Accepted (supersedes ADR-007)
+**Status:** Accepted (replaces ADR-007, removed)
 **Date:** November 17, 2026
 **Context:** Architecture - DDD, code quality plan (re-audit r2, finding F-03)
 **Author:** Agustín Estévez

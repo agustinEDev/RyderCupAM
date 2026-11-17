@@ -4,7 +4,7 @@
 **Date:** September 24, 2026
 **Context:** Security - OWASP A07 (Identification and Authentication Failures)
 **Author:** Agustín Estévez
-**Supersedes:** the logout behaviour described in ADR-015 (Phase 1 revoked every token)
+**Supersedes:** the logout behaviour described in ADR-015 (Phase 1 revoked every token; ADR-015 was removed on 17 Nov 2026, this ADR replaces it)
 
 ---
 

@@ -447,7 +447,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Infrastructure**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
-**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
+**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [039](architecture/decisions/ADR-039-session-lifetime-per-device.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 
