@@ -1,6 +1,6 @@
 """Tests para UpdateCompetitionUseCase."""
 
-from datetime import date, datetime
+from datetime import date
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -35,6 +35,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
@@ -586,8 +587,8 @@ class TestUpdateCompetitionUseCase:
                     status=RoundStatus.SCHEDULED,
                     handicap_mode=None,
                     allowance_percentage=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
+                    created_at=ahora_utc_sin_zona(),
+                    updated_at=ahora_utc_sin_zona(),
                 )
             )
             await uow.commit()

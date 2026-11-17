@@ -88,10 +88,6 @@ unfixable = []
     "E402",     # module-level-import-not-at-top-of-file (setup imports)
 ]
 
-# Los tests unitarios aún usan datetime.now() y date.today(): pasan al reloj UTC en la
-# siguiente tanda (re-auditoría F-02). Los de integración ya no
-"tests/unit/**/*.py" = ["DTZ005", "DTZ011", "DTZ003", "DTZ006"]
-
 # Archivos de configuración pueden tener imports no ordenados
 "alembic/env.py" = ["I", "ERA001"]
 

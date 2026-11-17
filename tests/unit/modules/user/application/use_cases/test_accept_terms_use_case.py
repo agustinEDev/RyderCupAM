@@ -41,6 +41,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 _REGISTRO = {
@@ -330,8 +331,8 @@ class TestUsuarioDTO:
             first_name="Ana",
             last_name="Lopez",
             display_name="Ana Lopez",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         assert dto.terms_accepted is False

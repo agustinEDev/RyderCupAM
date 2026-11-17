@@ -23,6 +23,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
@@ -201,7 +202,7 @@ class TestScheduledOpening:
         quedo atras. Todo relativo a hoy, que si no los tests se estropean solos
         el dia en que la fecha fijada queda por detras.
         """
-        empieza = date.today() + timedelta(days=empieza_en)
+        empieza = ahora_utc_sin_zona().date() + timedelta(days=empieza_en)
         create_uc = CreateCompetitionUseCase(
             uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
         )

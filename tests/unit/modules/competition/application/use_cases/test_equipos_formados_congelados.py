@@ -29,7 +29,7 @@ E2 y E5 (entrar sin partidos reinicia) están en test_entrar_deshace_equipos. E1
 organizador que también juega no sale: como cualquier jugador (30 oct 2026).
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -96,6 +96,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import (
     _jugador,
@@ -121,7 +122,7 @@ async def _reabierta(*, publica: bool = False):
         competicion.reopen_enrollments()
         if publica:
             # Pública y por jugar: si no, la fecha la rechaza antes (revisor)
-            empieza = date.today() + timedelta(days=30)
+            empieza = ahora_utc_sin_zona().date() + timedelta(days=30)
             competicion.update_info(
                 visibility=Visibility.PUBLIC,
                 dates=DateRange(empieza, empieza + timedelta(days=2)),

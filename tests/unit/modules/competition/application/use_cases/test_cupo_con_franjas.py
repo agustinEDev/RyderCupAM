@@ -17,7 +17,7 @@ organizador (B-02, 15 nov 2026).
     C5   sin franjas (aprobar una solicitud)       | llena, como siempre
 """
 
-from datetime import date, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -65,13 +65,14 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
 
-DIA = date.today() + timedelta(days=30)
+DIA = ahora_utc_sin_zona().date() + timedelta(days=30)
 
 
 class _E:

@@ -1,7 +1,5 @@
 """Tests para Match entity."""
 
-from datetime import datetime
-
 import pytest
 
 from src.modules.competition.domain.entities.match import Match
@@ -11,6 +9,7 @@ from src.modules.competition.domain.value_objects.match_status import MatchStatu
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 
 
@@ -153,8 +152,8 @@ class TestMatchStatusTransitions:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result={"winner": "A", "score": "2&1"},
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         with pytest.raises(ValueError, match="Expected SCHEDULED"):
@@ -172,8 +171,8 @@ class TestMatchStatusTransitions:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         match.complete({"winner": "A", "score": "3&2"})
@@ -193,8 +192,8 @@ class TestMatchStatusTransitions:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         match.complete({"winner": "HALVED", "score": "AS"})
@@ -233,8 +232,8 @@ class TestMatchWalkover:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         match.declare_walkover("B")
@@ -270,8 +269,8 @@ class TestMatchQueryMethods:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result={"winner": "A"},
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         assert match.is_finished() is True
@@ -299,8 +298,8 @@ class TestMatchQueryMethods:
             handicap_strokes_given=0,
             strokes_given_to_team="",
             result={"winner": "B", "score": "1UP"},
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
+            updated_at=ahora_utc_sin_zona(),
         )
 
         assert match.get_winner() == "B"
@@ -338,7 +337,7 @@ class TestMatchEquality:
     def test_matches_with_same_id_are_equal(self):
         """Matches con mismo ID son iguales."""
         match_id = MatchId.generate()
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
 
         match1 = Match.reconstruct(
             id=match_id,

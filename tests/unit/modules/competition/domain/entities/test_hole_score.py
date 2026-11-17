@@ -9,6 +9,7 @@ from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 @pytest.fixture
@@ -295,9 +296,8 @@ class TestHoleScoreReconstruct:
 
     def test_reconstruct_preserves_all_fields(self, match_id, player_id):
         hs_id = HoleScoreId.generate()
-        from datetime import datetime
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         hs = HoleScore.reconstruct(
             id=hs_id,
             match_id=match_id,

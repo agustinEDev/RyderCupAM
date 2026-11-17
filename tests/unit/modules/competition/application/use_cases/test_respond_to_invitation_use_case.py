@@ -1,6 +1,6 @@
 """Tests para RespondToInvitationUseCase."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -41,6 +41,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import (
     USUARIOS_CON_GENERO,
@@ -503,7 +504,7 @@ class TestRespondToInvitationUseCase:
         )
         async with comp_uow:
             guardada = await comp_uow.invitations.find_by_id(invitation.id)
-            guardada._expires_at = datetime.now() - timedelta(days=1)
+            guardada._expires_at = ahora_utc_sin_zona() - timedelta(days=1)
             await comp_uow.invitations.update(guardada)
 
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
@@ -532,8 +533,8 @@ class TestRespondToInvitationUseCase:
             invitee_email="invitee@test.com",
             invitee_user_id=invitee.id,
             status=InvitationStatus.ACCEPTED,
-            expires_at=datetime.now() + timedelta(days=7),
-            responded_at=datetime.now(),
+            expires_at=ahora_utc_sin_zona() + timedelta(days=7),
+            responded_at=ahora_utc_sin_zona(),
         )
         async with comp_uow:
             await comp_uow.invitations.add(invitation)

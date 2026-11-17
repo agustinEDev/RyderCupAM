@@ -16,7 +16,7 @@ V3 (el organizador le inscribe con una vieja) se fue con la inscripción directa
 organizador (B-02, 15 nov 2026): nadie vuelve sin su consentimiento.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -58,6 +58,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -146,7 +147,7 @@ async def test_una_viva_no_vuelve_a_entrar(estado):
 
 
 async def _abierta(uow, organizador: UserId, *, publica: bool = False) -> Competition:
-    empieza = date.today() + timedelta(days=5)
+    empieza = ahora_utc_sin_zona().date() + timedelta(days=5)
     competicion = Competition(
         id=CompetitionId.generate(),
         creator_id=organizador,

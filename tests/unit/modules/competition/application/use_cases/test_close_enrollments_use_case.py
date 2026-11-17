@@ -1,6 +1,6 @@
 """Tests para CloseEnrollmentsUseCase."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -28,6 +28,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
@@ -127,7 +128,7 @@ class TestCloseEnrollmentsUseCase:
         pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
         # Caducada sin que nadie la pasara a EXPIRED: caducada, no «sin plaza»
         caducada = invitacion(esta, "c@test.com")
-        caducada._expires_at = datetime.now() - timedelta(days=1)
+        caducada._expires_at = ahora_utc_sin_zona() - timedelta(days=1)
         aceptada = invitacion(esta, "a@test.com")
         aceptada.accept()
         de_otra = invitacion(otra, "o@test.com")

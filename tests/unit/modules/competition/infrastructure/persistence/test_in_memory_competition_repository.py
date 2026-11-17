@@ -1,6 +1,6 @@
 """El doble en memoria del repositorio de competiciones cumple la interfaz."""
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -15,12 +15,13 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_comp
     InMemoryCompetitionRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 def _competicion(nombre: str) -> Competition:
-    hoy = date.today() + timedelta(days=30)
+    hoy = ahora_utc_sin_zona().date() + timedelta(days=30)
     return Competition.create(
         id=CompetitionId(uuid4()),
         creator_id=UserId.generate(),

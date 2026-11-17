@@ -10,7 +10,7 @@ Arquitectura:
 - Feature: Session Timeout with Refresh Tokens
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -34,6 +34,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 @pytest.mark.asyncio
@@ -395,7 +396,7 @@ class TestRefreshAccessTokenUseCase:
 
         # Crear refresh token entity expirado
         token_hash = TokenHash.from_token(token)
-        expires_at = datetime.now() - timedelta(days=1)  # Expirado hace 1 día
+        expires_at = ahora_utc_sin_zona() - timedelta(days=1)  # Expirado hace 1 día
 
         expired_token = RefreshToken(
             id=RefreshTokenId.generate(),
