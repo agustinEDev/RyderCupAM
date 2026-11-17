@@ -1,8 +1,9 @@
 """
 Domain Event Base - Shared Domain Layer
 
-Clase base abstracta para todos los eventos de dominio del sistema.
-Los eventos de dominio representan algo importante que ha ocurrido en el negocio.
+Clase base de los eventos de auditoría de seguridad (`security_events.py`), los que
+escribe el log de seguridad. Las entidades ya no emiten eventos de dominio (ADR-050): uno
+nuevo tiene que llegar con quien lo reparte y su primer consumidor en el mismo cambio.
 """
 
 import uuid

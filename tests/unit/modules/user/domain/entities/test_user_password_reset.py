@@ -4,7 +4,7 @@ Tests unitarios para los métodos de password reset de la entidad User.
 Este archivo contiene tests que verifican:
 - generate_password_reset_token(): Generación de token seguro con expiración 24h
 - can_reset_password(): Validación de token y expiración
-- reset_password(): Cambio de contraseña, invalidación de token, emisión de eventos
+- reset_password(): Cambio de contraseña e invalidación de token
 
 Estructura:
 - TestGeneratePasswordResetToken: Tests para generación de tokens
@@ -63,7 +63,7 @@ class TestGeneratePasswordResetToken:
         Given: Usuario existente sin token previo
         When: Se llama a generate_password_reset_token()
         Then: Se genera un token URL-safe de 32 bytes, se establece expiración 24h,
-              y se emite PasswordResetRequestedEvent
+              y se guarda su hash
         """
         # Arrange
         user = User.create(
@@ -262,7 +262,7 @@ class TestResetPassword:
         Test: Resetear contraseña exitosamente
         Given: Usuario con token válido
         When: Se llama a reset_password() con token correcto y nueva contraseña
-        Then: La contraseña cambia, el token se invalida, y se emite PasswordResetCompletedEvent
+        Then: La contraseña cambia y el token se invalida
         """
         # Arrange
         user = User.create(

@@ -136,7 +136,6 @@ from src.shared.infrastructure.security.cookie_handler import (
     delete_refresh_token_cookie,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
-    read_access_token,
     set_auth_cookie,
     set_csrf_cookie,
     set_refresh_token_cookie,
@@ -419,16 +418,6 @@ async def logout_user(
         LogoutResponseDTO con confirmación y timestamp
     """
     user_id = str(current_user.id)
-
-    # El token de la cookie (la regla de get_current_user, que ya exigió que esté).
-    # La comprobación solo acota el tipo: sin cookie no se llega aquí
-    token = read_access_token(request)
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token no encontrado",
-        )
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing

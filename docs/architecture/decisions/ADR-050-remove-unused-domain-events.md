@@ -34,7 +34,8 @@ only purpose was to fill an event.
 
 ## Consequences
 
-- Behaviour is unchanged: nothing consumed the removed events.
+- Behaviour is unchanged: nothing consumed the removed events. The one visible difference
+  is that logout no longer rewrites the user row, which nothing changed anyway.
 - Readers find the side effects where they happen, in the use case.
 - If an event-driven flow is ever needed, it must come with its dispatcher and its first
   consumer in the same change, and a new ADR.

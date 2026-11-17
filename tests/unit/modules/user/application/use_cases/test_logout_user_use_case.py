@@ -137,3 +137,29 @@ class TestLogoutUserUseCase:
         after_logout = datetime.now()
         assert result is not None
         assert before_logout <= result.logged_out_at <= after_logout
+
+
+class TestLogoutNoTocaAlUsuario:
+    """Cerrar sesión solo escribe los tokens (ADR-050, 17 nov 2026)."""
+
+    async def test_logout_usuario_existente_no_reescribe_su_fila(
+        self, uow, use_case, existing_user, monkeypatch
+    ):
+        """
+        Given: Un usuario con sesión
+        When: Cierra sesión
+        Then: Su fila no se vuelve a guardar: nada del usuario cambia, y un guardado
+              entero podía pisar un cambio de contraseña hecho a la vez
+        """
+        guardados = []
+        original = uow.users.save
+
+        async def apunta(user):
+            guardados.append(user)
+            await original(user)
+
+        monkeypatch.setattr(uow.users, "save", apunta)
+
+        await use_case.execute(LogoutRequestDTO(), str(existing_user.id.value))
+
+        assert guardados == []

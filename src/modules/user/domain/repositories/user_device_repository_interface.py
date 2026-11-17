@@ -79,7 +79,6 @@ class UserDeviceRepositoryInterface(ABC):
         actualizaciones de dispositivos existentes (UPDATE).
 
         Responsabilidades adicionales:
-        - Procesar eventos de dominio del dispositivo
         - Hacer commit de la transacción (si usa UoW)
         - Manejar errores de persistencia
 
