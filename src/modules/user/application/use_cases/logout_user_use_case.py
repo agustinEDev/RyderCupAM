@@ -110,10 +110,7 @@ class LogoutUserUseCase:
                 tokens_revoked_count = await self._cierra_este_dispositivo(
                     user_id_vo, request.refresh_token
                 )
-
-            # Guardar usuario dentro de la misma transacción
-            await self._uow.users.save(user)
-            # Commit automático al salir del contexto (atomicidad garantizada)
+            # El usuario no cambia al cerrar sesión: solo los tokens. Commit al salir
 
         # 5. Security Logging: Logout exitoso
         registra_sin_romper(

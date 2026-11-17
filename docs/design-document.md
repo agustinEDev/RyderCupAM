@@ -252,14 +252,12 @@ CREATE INDEX idx_users_email ON users(email);
 
 ```
 Client → API → UseCase → User.create() → UoW.save() → commit()
-                                            ↓
-                                       EventBus → Handlers
 ```
 
 1. Validate email does not exist
-2. `User.create()` generates `UserRegisteredEvent`
+2. `User.create()` builds the user
 3. UoW saves + commits
-4. Events published
+4. The use case sends the verification email itself (no domain events, ADR-050)
 5. Handlers process (email, audit)
 
 > ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
