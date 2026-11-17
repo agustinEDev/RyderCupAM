@@ -154,7 +154,7 @@ class EnvelopeDesk:
         self._uow = uow
         self._generador = generador
         self._user_repo = user_repository
-        self._clock = clock or (ahora_en_utc)
+        self._clock = clock or ahora_en_utc
         self._timezone = timezone_service
 
     @property

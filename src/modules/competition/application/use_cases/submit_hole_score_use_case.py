@@ -74,7 +74,7 @@ class SubmitHoleScoreUseCase:
         self._gc_repo = golf_course_repo
         # El reloj del SERVIDOR decide si la anotacion ya abrio (BE #305), nunca
         # una hora que mande el cliente. Inyectable solo para poder probarlo
-        self._now = now or (ahora_en_utc)
+        self._now = now or ahora_en_utc
         # Los avisos de Actividad (BE-2); sin el, no se avisa. Si el golpe
         # arranca la competicion, las solicitudes que cierra se avisan al final
         self._actividad = AvisosDeActividad(actividad)

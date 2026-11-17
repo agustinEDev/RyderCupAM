@@ -408,7 +408,7 @@ class UpdateRoundUseCase:
         """
         esperas = EsperasDeLaCompeticion(self._uow)
         if request.tee_sheet is not None:
-            await esperas.rellenar(competition, round_entity.id, ahora_en_utc())
+            await esperas.rellenar(competition, round_entity.id, self._reloj())
         if request.round_date:
             await esperas.limpiar(competition)
         return esperas.asignadas

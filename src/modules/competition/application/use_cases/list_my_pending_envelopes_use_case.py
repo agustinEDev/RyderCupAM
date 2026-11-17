@@ -63,7 +63,7 @@ class ListMyPendingEnvelopesUseCase:
                 franja en una hora. Sin ella no hay plazo que vencer
         """
         self._uow = uow
-        self._clock = clock or (ahora_en_utc)
+        self._clock = clock or ahora_en_utc
         self._timezone = timezone_service
 
     async def execute(self, user_id: UserId) -> list[PendingEnvelopeDTO]:
