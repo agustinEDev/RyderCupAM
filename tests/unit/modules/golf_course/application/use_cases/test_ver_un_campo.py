@@ -91,7 +91,8 @@ def _pide(campo: GolfCourse, quien: str, es_admin: bool = False) -> GetGolfCours
 
 
 class TestCampoAprobado:
-    async def test_given_an_approved_course_when_anyone_asks_then_they_see_it(self):
+    async def test_ver_campo_aprobado_lo_ve_cualquiera(self):
+        """Given un campo aprobado, When otro jugador lo pide, Then lo ve."""
         uow = _Uow()
         campo = await _campo(uow, "APPROVED")
 
@@ -102,7 +103,8 @@ class TestCampoAprobado:
 
 @pytest.mark.parametrize("estado", ["PENDING_APPROVAL", "REJECTED"])
 class TestCampoSinAprobar:
-    async def test_given_an_unapproved_course_when_another_player_asks_then_forbidden(self, estado):
+    async def test_ver_campo_sin_aprobar_otro_jugador_prohibido(self, estado):
+        """Given un campo pendiente o rechazado, When lo pide otro jugador, Then 403 con el texto de siempre."""
         uow = _Uow()
         campo = await _campo(uow, estado)
 
@@ -112,7 +114,8 @@ class TestCampoSinAprobar:
         ):
             await GetGolfCourseByIdUseCase(uow).execute(_pide(campo, OTRO))
 
-    async def test_given_an_unapproved_course_when_its_proposer_asks_then_they_see_it(self, estado):
+    async def test_ver_campo_sin_aprobar_quien_lo_propuso_lo_ve(self, estado):
+        """Given un campo pendiente o rechazado, When lo pide quien lo propuso, Then lo ve."""
         uow = _Uow()
         campo = await _campo(uow, estado)
 
@@ -120,7 +123,8 @@ class TestCampoSinAprobar:
 
         assert respuesta.golf_course.approval_status == estado
 
-    async def test_given_an_unapproved_course_when_an_admin_asks_then_they_see_it(self, estado):
+    async def test_ver_campo_sin_aprobar_un_admin_lo_ve(self, estado):
+        """Given un campo pendiente o rechazado, When lo pide un admin, Then lo ve."""
         uow = _Uow()
         campo = await _campo(uow, estado)
 
@@ -130,7 +134,8 @@ class TestCampoSinAprobar:
 
 
 class TestCampoQueNoEsta:
-    async def test_given_no_course_when_asked_then_missing_and_not_a_value_error(self):
+    async def test_ver_campo_que_no_existe_falta_sin_ser_valueerror(self):
+        """Given ningún campo con ese id, When se pide, Then GolfCourseMissingError, que no es un ValueError."""
         with pytest.raises(GolfCourseMissingError) as error:
             await GetGolfCourseByIdUseCase(_Uow()).execute(
                 GetGolfCourseByIdRequestDTO(golf_course_id=str(uuid4()), requester_id=OTRO)
