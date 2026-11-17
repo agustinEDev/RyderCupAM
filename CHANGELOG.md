@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.71.0] - 2026-11-17
+
+**Nombre real en las competiciones públicas, alias como apodo, nada de enlaces en lo que se
+escribe y endurecimiento de la re-auditoría** (#888, #889, #890; excepción de licencia en el
+CI en #887; merge-back de la 2.70.0 en #886). Sin cambio incompatible de contrato: los campos
+nuevos se añaden y el backend sale primero. Una migración: `b29a88392439` (quita el índice
+único duplicado `refresh_tokens_token_hash_key`).
+
+### Changed
+
+- **Qué nombre va delante** (SB-08, decidido el 17 nov 2026): en una competición **pública**,
+  el nombre real de todos; en una **privada**, lo que elige cada jugador al inscribirse. El
+  organizador sigue la misma regla (en una privada, la elección de su propia inscripción). Lo
+  aplican la lista de inscritos, la ficha, la clasificación, la vista de anotación, los avisos
+  al organizador y los correos.
+- **El alias es un apodo, no oculta nada**: la API manda siempre nombre, apellidos y alias en
+  la lista de inscritos, el organizador, la lista de amigos y las solicitudes
+  (`requester_real_name`/`requester_alias`, `addressee_real_name`/`addressee_alias`), el
+  perfil de un jugador y los autores del feed. Solo cambia el orden.
+
+### Security
+
+- **No se dejan escribir enlaces** (SB-05) en el nombre de una competición, el alias ni el
+  mensaje de una invitación, que salen en correos firmados por la app. Cuenta como enlace un
+  esquema («https://», «tel:»…), lo que empieza por «www.», un correo, una IPv4 y
+  «algo.terminación» con una terminación real de la IANA (1.436, también las de otros
+  alfabetos y en punycode); escrita con mayúscula inicial solo si es habitual («premio.Com»)
+  o le sigue una ruta. Antes se quitan los caracteres invisibles. El mensaje con enlace
+  responde 400 `MESSAGE_HAS_LINK`, antes del tope por hora.
+- **Un token de refresco ya no vale como token de acceso** (SB-04): `verify_access_token`
+  exige `type == "access"`, también en el middleware de Sentry.
+- **Los logs de la consulta a la RFEG no llevan nombres ni valores** (SB-07).
+- **Base de datos** (DB-04, DB-06; aplicado en PRO por Agustín): `rydercup_app` con
+  `statement_timeout` 15 s, `idle_in_transaction_session_timeout` 120 s y `lock_timeout`
+  10 s, y sin `TEMP` para `PUBLIC`. Queda escrito en `scripts/db/ajustes_de_la_base.sql`.
+
+### Fixed
+
+- **Índice único duplicado en `refresh_tokens.token_hash`** (DB-07): la migración
+  `b29a88392439` quita `refresh_tokens_token_hash_key`, que repetía el índice único de la
+  columna.
+- **Tests de inscripción del mismo día que fallaban entre las 00:00 y la 01:00 de Madrid**:
+  comparaban `date.today()` del servidor con la fecha del campo.
+
+### Removed
+
+- `UserRegisteredEventHandler`, que no se usaba.
+
+### Documentation
+
+- **«Restaurar producción»** en `docs/RUNBOOK.md` (DB-03): migrar antes de los scripts de
+  roles, la contraseña solo al crear y `n8n_lectura` en un servidor nuevo.
+
+### CI
+
+- **Kind solo escucha en el Mac** (`listenAddress: 127.0.0.1`, INF-09) y **Dependabot espera
+  unos días** antes de proponer una versión nueva (cooldown, INF-12).
+- **Excepción de licencia para `typing-extensions`**, cuya licencia GitHub detectaba mal
+  (#887).
+
 ## [2.70.0] - 2026-11-16
 
 **Cadena de suministro del CI: lo que se prueba y se audita es lo que lleva la imagen, y el
