@@ -235,25 +235,23 @@ class EnrollmentDTOMapper:
 
         El nombre sigue la preferencia de SU inscripción en ESTA competición
         (BE #254), no la del perfil, así que no se lee de `user`. Y la regla del
-        nombre real (SB-08): en una pública va siempre a la vista, con el alias
-        además si lo tiene, para pintarlo debajo; en una privada, si eligió su
-        alias, el nombre y los apellidos solo van a quien también ve el correo (él
-        mismo, el organizador y los admin). Antes iban a todos, y cualquiera los
-        leía en la respuesta aunque la pantalla enseñara el alias.
+        nombre real (SB-08): en una pública, el real va delante siempre; en una
+        privada, lo que eligió. Nombre, apellidos y alias van siempre: el alias es
+        un apodo, no un dato oculto (Agustín, 17 nov 2026).
         """
         if not user:
             logger.warning(f"User with id {enrollment.user_id.value} not found")
             return None
 
         nombre_real = visibility.shows_real_name(enrollment.use_real_name)
-        ve_el_nombre_legal = nombre_real or con_correo
         return EnrolledUserDTO(
             id=user.id.value,
-            first_name=user.first_name if ve_el_nombre_legal else "",
-            last_name=user.last_name if ve_el_nombre_legal else "",
+            first_name=user.first_name,
+            last_name=user.last_name,
             display_name=user.display_name_or_legal(nombre_real),
-            # En una pública, el alias de quien lo tenga, para ponerlo debajo del nombre
-            alias=user.alias if visibility is Visibility.PUBLIC else None,
+            # El alias es un apodo, no un dato oculto (Agustín, 17 nov 2026): va siempre,
+            # para pintar el otro nombre pequeño debajo del que va delante
+            alias=user.alias,
             email=str(user.email) if con_correo else "",
             # Por su texto, como haría Pydantic con el float: 15.3 y no 15.29999...
             handicap=Decimal(str(user.handicap.value)) if user.handicap else None,

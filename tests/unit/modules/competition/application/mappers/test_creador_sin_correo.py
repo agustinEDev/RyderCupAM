@@ -33,9 +33,7 @@ async def test_the_creator_never_carries_an_email():
     user_uow = AsyncMock()
     user_uow.users.find_by_id.return_value = creador
 
-    dto = await CompetitionDTOMapper._get_creator_dto(
-        creador.id, user_uow, Visibility.PUBLIC, ve_el_nombre_legal=False
-    )
+    dto = await CompetitionDTOMapper._get_creator_dto(creador.id, user_uow, Visibility.PUBLIC)
 
     assert dto is not None
     assert "email" not in dto.model_dump()

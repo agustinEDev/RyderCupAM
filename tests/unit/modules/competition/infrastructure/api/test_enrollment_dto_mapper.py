@@ -212,64 +212,28 @@ async def test_seeing_every_email_sends_them_all(competition_id):
     assert [d.user.email for d in dtos] == [str(ana.email), str(bea.email)]
 
 
-# SB-08 (decidido por Agustín el 17 nov 2026): en una pública el nombre real va siempre a
-# la vista, con el alias además si el jugador lo eligió; en una privada, lo que eligió,
-# y si eligió su alias, su nombre real solo lo reciben él, el organizador y los admin.
+# SB-08 (decidido por Agustín el 17 nov 2026): delante va el nombre real en una pública
+# y lo que eligió el jugador en una privada. Nombre, apellidos y alias van siempre: el
+# alias es un apodo, no un dato oculto.
 
 
-async def test_private_alias_hides_the_legal_name_from_other_players(competition_id):
-    """
-    Given: Una privada, un jugador que eligió su alias, y otro jugador que mira
-    When: Se arma la lista
-    Then: Solo va el alias; ni nombre ni apellidos
-    """
-    uow = InMemoryUnitOfWork()
-    trinx = await _usuario(uow, "Agustin", alias="Trinx")
-
-    [dto] = await EnrollmentDTOMapper.to_response_dtos(
-        [_inscripcion(competition_id, trinx, use_real_name=False)],
-        uow,
-        visibility=Visibility.PRIVATE,
-        viewer_id=UserId(uuid4()),
-    )
-
-    assert dto.user.display_name == "Trinx"
-    assert (dto.user.first_name, dto.user.last_name) == ("", "")
-    assert dto.user.alias is None
-
-
-@pytest.mark.parametrize("quien", ["el-mismo", "organizador"])
-async def test_private_alias_keeps_the_legal_name_for_the_player_and_the_organizer(
-    competition_id, quien
+@pytest.mark.parametrize(
+    "visibility, use_real_name, delante",
+    [
+        (Visibility.PUBLIC, True, "Agustin Pérez"),
+        (Visibility.PUBLIC, False, "Agustin Pérez"),
+        (Visibility.PRIVATE, True, "Agustin Pérez"),
+        (Visibility.PRIVATE, False, "Trinx"),
+    ],
+    ids=["publica-nombre", "publica-alias", "privada-nombre", "privada-alias"],
+)
+async def test_the_name_in_front_follows_the_rule_and_everything_goes(
+    competition_id, visibility, use_real_name, delante
 ):
     """
-    Given: Una privada y un jugador que eligió su alias
-    When: Mira él mismo, o el organizador (que ve todos los correos)
-    Then: Va también su nombre real
-    """
-    uow = InMemoryUnitOfWork()
-    trinx = await _usuario(uow, "Agustin", alias="Trinx")
-
-    [dto] = await EnrollmentDTOMapper.to_response_dtos(
-        [_inscripcion(competition_id, trinx, use_real_name=False)],
-        uow,
-        visibility=Visibility.PRIVATE,
-        ve_todos_los_correos=quien == "organizador",
-        viewer_id=trinx.id if quien == "el-mismo" else UserId(uuid4()),
-    )
-
-    assert dto.user.display_name == "Trinx"
-    assert (dto.user.first_name, dto.user.last_name) == ("Agustin", "Pérez")
-
-
-@pytest.mark.parametrize("use_real_name", [True, False], ids=["eligio-nombre", "eligio-alias"])
-async def test_public_always_shows_the_real_name_and_the_alias_if_chosen(
-    competition_id, use_real_name
-):
-    """
-    Given: Una pública y un jugador con alias, que eligió su nombre o su alias
-    When: Otro jugador mira la lista
-    Then: El nombre real a la vista, y su alias aparte para ponerlo debajo
+    Given: Un jugador con alias que eligió su nombre o su alias
+    When: Otro jugador mira la lista de una pública o una privada
+    Then: Delante, el que toca; nombre, apellidos y alias, siempre
     """
     uow = InMemoryUnitOfWork()
     trinx = await _usuario(uow, "Agustin", alias="Trinx")
@@ -277,10 +241,13 @@ async def test_public_always_shows_the_real_name_and_the_alias_if_chosen(
     [dto] = await EnrollmentDTOMapper.to_response_dtos(
         [_inscripcion(competition_id, trinx, use_real_name=use_real_name)],
         uow,
-        visibility=Visibility.PUBLIC,
+        visibility=visibility,
         viewer_id=UserId(uuid4()),
     )
 
-    assert dto.user.display_name == "Agustin Pérez"
-    assert (dto.user.first_name, dto.user.last_name) == ("Agustin", "Pérez")
-    assert dto.user.alias == "Trinx"
+    assert dto.user.display_name == delante
+    assert (dto.user.first_name, dto.user.last_name, dto.user.alias) == (
+        "Agustin",
+        "Pérez",
+        "Trinx",
+    )

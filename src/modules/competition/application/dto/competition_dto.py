@@ -96,14 +96,8 @@ class CreatorDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID único del usuario creador")
-    first_name: str = Field(
-        ...,
-        description=(
-            "Nombre del creador. Vacío en una privada si tiene alias y quien mira no es "
-            "él ni un admin (SB-08)"
-        ),
-    )
-    last_name: str = Field(..., description="Apellidos del creador; vacío en el mismo caso")
+    first_name: str = Field(..., description="Nombre del creador")
+    last_name: str = Field(..., description="Apellido del creador")
     display_name: str = Field(
         ...,
         description=(
@@ -117,8 +111,8 @@ class CreatorDTO(BaseModel):
     alias: str | None = Field(
         None,
         description=(
-            "En una competición pública, el alias del creador si tiene, para enseñarlo "
-            "debajo de su nombre real (SB-08). Null en una privada."
+            "El alias del creador si tiene, para enseñar pequeño el nombre que no va "
+            "delante (SB-08). Null si no tiene."
         ),
     )
 

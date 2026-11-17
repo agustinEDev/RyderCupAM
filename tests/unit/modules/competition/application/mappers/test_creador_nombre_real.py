@@ -1,9 +1,9 @@
 """
 El nombre del organizador con la regla del nombre real (SB-08, 17 nov 2026).
 
-Pública: su nombre real a la vista, y su alias además si tiene, para ponerlo debajo.
-Privada: su nombre visible (el alias si tiene); su nombre y apellidos solo para él y
-los admin. Antes iban a cualquiera que viera la competición.
+Qué va delante: en una pública, su nombre real; en una privada, lo que eligió si juega
+en ella y, si no, su nombre visible (el alias si tiene). Nombre, apellidos y alias van
+siempre: el alias es un apodo, no un dato oculto (Agustín, 17 nov 2026).
 """
 
 from unittest.mock import AsyncMock
@@ -36,90 +36,47 @@ def _uow_con(alias: str | None):
     return creador, user_uow
 
 
-async def test_public_shows_the_real_name_and_the_alias_below():
+@pytest.mark.parametrize(
+    "visibility, eligio, delante",
+    [
+        (Visibility.PUBLIC, None, "Orga Niza"),
+        (Visibility.PRIVATE, None, "Trinx"),
+        (Visibility.PRIVATE, True, "Orga Niza"),
+        (Visibility.PRIVATE, False, "Trinx"),
+    ],
+    ids=["publica", "privada-no-juega", "privada-juega-con-nombre", "privada-juega-con-alias"],
+)
+async def test_the_name_in_front_follows_the_rule_and_everything_goes(visibility, eligio, delante):
     """
-    Given: Una pública y un organizador con alias
-    When: Cualquiera la mira
-    Then: Su nombre real a la vista, nombre y apellidos, y el alias aparte
-    """
-    creador, user_uow = _uow_con("Trinx")
-
-    dto = await CompetitionDTOMapper._get_creator_dto(
-        creador.id, user_uow, Visibility.PUBLIC, ve_el_nombre_legal=False
-    )
-
-    assert dto.display_name == "Orga Niza"
-    assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
-    assert dto.alias == "Trinx"
-
-
-async def test_private_with_alias_hides_the_legal_name_from_others():
-    """
-    Given: Una privada y un organizador con alias
-    When: La mira otro jugador
-    Then: Solo su alias
-    """
-    creador, user_uow = _uow_con("Trinx")
-
-    dto = await CompetitionDTOMapper._get_creator_dto(
-        creador.id, user_uow, Visibility.PRIVATE, ve_el_nombre_legal=False
-    )
-
-    assert dto.display_name == "Trinx"
-    assert (dto.first_name, dto.last_name) == ("", "")
-    assert dto.alias is None
-
-
-async def test_private_with_alias_keeps_the_legal_name_for_him_and_admins():
-    """
-    Given: Una privada y un organizador con alias
-    When: La mira él o un admin
-    Then: Va también su nombre real
-    """
-    creador, user_uow = _uow_con("Trinx")
-
-    dto = await CompetitionDTOMapper._get_creator_dto(
-        creador.id, user_uow, Visibility.PRIVATE, ve_el_nombre_legal=True
-    )
-
-    assert dto.display_name == "Trinx"
-    assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
-
-
-async def test_private_without_alias_shows_his_name():
-    """
-    Given: Una privada y un organizador sin alias
-    When: La mira otro jugador
-    Then: Su nombre, que es lo único que tiene
-    """
-    creador, user_uow = _uow_con(None)
-
-    dto = await CompetitionDTOMapper._get_creator_dto(
-        creador.id, user_uow, Visibility.PRIVATE, ve_el_nombre_legal=False
-    )
-
-    assert dto.display_name == "Orga Niza"
-    assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
-
-
-async def test_private_organizer_who_plays_follows_his_own_choice():
-    """
-    Given: Una privada; el organizador, con alias, juega en ella y eligió su nombre real
-    When: La mira otro jugador
-    Then: Su nombre real, como en la lista de inscritos: no dos nombres para el mismo
+    Given: Un organizador con alias, que juega o no en su competición
+    When: Se arma su ficha
+    Then: Delante, el que toca; nombre, apellidos y alias, siempre
     """
     creador, user_uow = _uow_con("Trinx")
 
     dto = await CompetitionDTOMapper._get_creator_dto(
         creador.id,
         user_uow,
-        Visibility.PRIVATE,
-        ve_el_nombre_legal=False,
-        eligio_su_nombre=AsyncMock(return_value=True),
+        visibility,
+        eligio_su_nombre=None if eligio is None else AsyncMock(return_value=eligio),
     )
 
+    assert dto.display_name == delante
+    assert (dto.first_name, dto.last_name, dto.alias) == ("Orga", "Niza", "Trinx")
+
+
+async def test_without_alias_his_name_and_no_alias():
+    """
+    Given: Un organizador sin alias, en una privada
+    When: Se arma su ficha
+    Then: Su nombre, y alias vacío
+    """
+    creador, user_uow = _uow_con(None)
+
+    dto = await CompetitionDTOMapper._get_creator_dto(creador.id, user_uow, Visibility.PRIVATE)
+
     assert dto.display_name == "Orga Niza"
-    assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
+    assert dto.alias is None
 
 
 async def test_the_organizer_enrolment_is_not_read_when_it_cannot_change_the_name():
@@ -134,11 +91,7 @@ async def test_the_organizer_enrolment_is_not_read_when_it_cannot_change_the_nam
         lectura = AsyncMock(return_value=True)
 
         await CompetitionDTOMapper._get_creator_dto(
-            creador.id,
-            user_uow,
-            visibility,
-            ve_el_nombre_legal=False,
-            eligio_su_nombre=lectura,
+            creador.id, user_uow, visibility, eligio_su_nombre=lectura
         )
 
         lectura.assert_not_awaited()

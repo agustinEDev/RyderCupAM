@@ -141,7 +141,6 @@ class CompetitionDTOMapper:
                 competition.creator_id,
                 user_uow,
                 competition.visibility,
-                ve_el_nombre_legal=is_creator or is_admin,
                 eligio_su_nombre=eligio_su_nombre,
             )
 
@@ -354,18 +353,16 @@ class CompetitionDTOMapper:
         user_uow: UserUnitOfWorkInterface,
         visibility: Visibility,
         *,
-        ve_el_nombre_legal: bool,
         eligio_su_nombre: Callable[[], Awaitable[bool]] | None = None,
     ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición. Sin su correo:
         no sale nunca (BE #531).
 
-        Su nombre, con la regla de los jugadores (SB-08): en una pública, el real a
-        la vista y el alias aparte, para pintarlo debajo; en una privada, lo que
-        eligió si juega en ella (`eligio_su_nombre`) y si no, el visible (su alias si
-        tiene); su nombre y apellidos, solo si se enseña el real, o a él y a los
-        admin (`ve_el_nombre_legal`).
+        Qué nombre va delante, con la regla de los jugadores (SB-08): en una pública,
+        el real; en una privada, lo que eligió si juega en ella (`eligio_su_nombre`)
+        y si no, el visible (su alias si tiene). Nombre, apellidos y alias van
+        siempre: el alias es un apodo, no un dato oculto (Agustín, 17 nov 2026).
 
         Assumes caller manages the user_uow transaction context.
         """
@@ -385,13 +382,12 @@ class CompetitionDTOMapper:
             else False
         )
         nombre_real = visibility.shows_real_name(eligio)
-        legal = nombre_real or ve_el_nombre_legal or creator.alias is None
         return CreatorDTO(
             id=creator.id.value,
-            first_name=creator.first_name if legal else "",
-            last_name=creator.last_name if legal else "",
+            first_name=creator.first_name,
+            last_name=creator.last_name,
             display_name=creator.display_name_or_legal(nombre_real),
-            alias=creator.alias if visibility is Visibility.PUBLIC else None,
+            alias=creator.alias,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),
         )

@@ -33,14 +33,8 @@ class EnrolledUserDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID único del usuario")
-    first_name: str = Field(
-        ...,
-        description=(
-            "Nombre del usuario. Vacío si eligió su alias en una competición privada y "
-            "quien mira no es él, el organizador ni un admin (SB-08)"
-        ),
-    )
-    last_name: str = Field(..., description="Apellidos del usuario; vacío en el mismo caso")
+    first_name: str = Field(..., description="Nombre del usuario")
+    last_name: str = Field(..., description="Apellido del usuario")
     display_name: str = Field(
         ...,
         description=(
@@ -62,8 +56,8 @@ class EnrolledUserDTO(BaseModel):
     alias: str | None = Field(
         None,
         description=(
-            "En una competición pública, el alias del jugador si tiene, para enseñarlo "
-            "debajo de su nombre real (SB-08). Null en una privada."
+            "El alias del jugador si tiene, para enseñar pequeño el nombre que no va "
+            "delante (SB-08). Null si no tiene."
         ),
     )
 
