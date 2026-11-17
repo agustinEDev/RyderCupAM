@@ -100,6 +100,9 @@ updates:
     # Espera 5 días antes de proponer una versión nueva de una acción (INF-12): la
     # ventana en que se detecta una acción comprometida, como tj-actions en 2025. Las
     # de seguridad no esperan.
+    # Ojo: Dependabot toma la fecha de la Release de GitHub; una etiqueta sin Release
+    # usa la fecha de su commit, que puede ser vieja o falsa, y se salta la espera. Por
+    # eso las acciones van fijadas por SHA y se revisa cada salto a mano (CodeRabbit)
     cooldown:
       default-days: 5
     schedule:

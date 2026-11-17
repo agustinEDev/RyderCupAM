@@ -344,13 +344,20 @@ Ninguna contraseña va en la línea de órdenes: psql y pg_restore la piden en s
    haya antes de cargar; en una base nueva no hace falta. Tiene que acabar sin errores
    (los avisos de «does not exist» del `--clean` en una base vacía no lo son).
 5. **Comprobar la versión del esquema.** `SELECT version_num FROM alembic_version;` tiene
-   que ser la de la release desplegada. Si es anterior, el arranque de la API migrará
-   solo; si es posterior, la API desplegada no entiende el esquema: desplegar la release
-   que corresponde.
+   que ser la de la release desplegada. Si es anterior, migrar AHORA, antes del paso 6:
+   `MIGRATIONS_DATABASE_URL=<la del dueño> alembic upgrade head` desde el repo en la
+   versión desplegada (los scripts del paso 6 dan permisos sobre columnas que una copia
+   vieja puede no tener, y pararían). Si es posterior, la API desplegada no entiende el
+   esquema: desplegar la release que corresponde.
 6. **Los usuarios y sus permisos**, en psql como el dueño y con `\set ON_ERROR_STOP on`:
-   - `\i scripts/db/rol_de_la_api.sql` y `\password rydercup_app` (sección «Usuario de
-     la API sin permisos de estructura»). En una base nueva el usuario no existe y se crea.
-   - `\i scripts/db/rol_de_n8n.sql` (sección «n8n solo lee lo del informe»).
+   - `\i scripts/db/rol_de_la_api.sql` (sección «Usuario de la API sin permisos de
+     estructura»). En una base nueva el usuario no existe y se crea: solo entonces,
+     `\password rydercup_app`. En la misma base de antes NO cambiar la contraseña: la
+     `DATABASE_URL` de Render sigue con la de siempre (si se cambia, cambiarla allí).
+   - En una base nueva, `n8n_lectura` tampoco existe y el script no lo crea: antes,
+     `CREATE ROLE n8n_lectura LOGIN;` y `\password n8n_lectura`, y poner esa contraseña
+     en la conexión de n8n. Después, `\i scripts/db/rol_de_n8n.sql` (sección «n8n solo
+     lee lo del informe»).
    - `\i scripts/db/ajustes_de_la_base.sql`: tiempos límite de `rydercup_app`, sin
      tablas temporales ni creación en `public` para nadie más.
    - `backup_ro` (no tiene script): `GRANT CONNECT ON DATABASE <base> TO backup_ro;`,
