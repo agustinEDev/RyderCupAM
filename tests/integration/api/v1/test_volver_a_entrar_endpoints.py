@@ -6,11 +6,12 @@ reutiliza la fila cerrada, y aquí se ve que la base de datos lo acepta.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -30,7 +31,7 @@ async def _jugador(client: AsyncClient) -> dict:
 
 
 async def _publica(client: AsyncClient, creador: dict) -> dict:
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     return await create_competition(
         client,
         creador["cookies"],

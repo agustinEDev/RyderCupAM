@@ -7,11 +7,12 @@ cambiado» (`changed: true`), no «ya tienes partido». Cubre el cableado real:
 la tabla de avisos retirados en Postgres y el candado del torneo.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     approve_golf_course,
@@ -37,7 +38,7 @@ async def _ryder_de_dos_partidos(client: AsyncClient) -> tuple[dict, dict, list[
         for clave, nombre in nombres.items()
     }
     admin = await create_admin_user(client, "r2p_admin@test.com", PASSWORD, "Admin", "Dos")
-    inicio = date.today() + timedelta(days=30)
+    inicio = ahora_utc_sin_zona().date() + timedelta(days=30)
     comp = await create_competition(
         client,
         creador["cookies"],

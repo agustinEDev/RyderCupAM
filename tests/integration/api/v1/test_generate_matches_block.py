@@ -8,11 +8,12 @@ los colores escritos en el servidor. Ahora apunta el motivo en la sesión, como
 la apertura, y lo devuelve con un código propio.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     approve_golf_course,
@@ -39,7 +40,7 @@ async def _fourball_de_uno_contra_uno(client: AsyncClient) -> dict:
     ]
     admin = await create_admin_user(client, "gb_admin@test.com", "P@ssw0rd123!", "Admin", "Block")
 
-    inicio = date.today() + timedelta(days=30)
+    inicio = ahora_utc_sin_zona().date() + timedelta(days=30)
     comp = await create_competition(
         client,
         creador["cookies"],

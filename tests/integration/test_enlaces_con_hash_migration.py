@@ -7,10 +7,11 @@ añade la caducidad de la verificación, el aviso de registro y el cupo de resta
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import create_engine, text
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.integration.test_activity_events_published_at_migration import (
     _alembic,
     base_desechable,  # noqa: F401
@@ -37,7 +38,7 @@ def _usuario(conn, verificacion, reset) -> str:
             "email": f"{user_id}@example.com",
             "v": verificacion,
             "r": reset,
-            "x": datetime.now() + timedelta(hours=5) if reset else None,
+            "x": ahora_utc_sin_zona() + timedelta(hours=5) if reset else None,
         },
     )
     return user_id

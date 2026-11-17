@@ -8,11 +8,12 @@ la categoría desde el cierre.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     add_one_session,
     create_authenticated_user,
@@ -32,7 +33,7 @@ def _cookies(client: AsyncClient) -> dict:
 
 
 def _datos(**extra) -> dict:
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     datos = {
         "name": f"Medal {uuid.uuid4().hex[:8]}",
         "start_date": start.isoformat(),

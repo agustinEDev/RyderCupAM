@@ -20,6 +20,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import set_auth_cookies
 from tests.integration.api.v1.test_tee_groups_endpoints import (
     _generar,
@@ -53,7 +54,7 @@ def _ya_abrio():
     from main import app
     from src.config.dependencies import get_reloj_del_servidor
 
-    dia = date.today() + timedelta(days=30)
+    dia = ahora_utc_sin_zona().date() + timedelta(days=30)
     app.dependency_overrides[get_reloj_del_servidor] = lambda: (
         lambda: datetime(dia.year, dia.month, dia.day, 12, 0, tzinfo=UTC)
     )
@@ -672,7 +673,7 @@ async def test_overall_and_scratch(client: AsyncClient):
 
 async def test_a_ryder_has_no_standings(client: AsyncClient):
     organizador = await _usuario(client)
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     from tests.conftest import create_competition
 
     ryder = await create_competition(

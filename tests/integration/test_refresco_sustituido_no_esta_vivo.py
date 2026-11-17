@@ -10,7 +10,7 @@ Un refresh token sustituido ya no es una sesión viva (F-02), en los dos reposit
 """
 
 import contextlib
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -28,6 +28,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,7 +65,7 @@ async def _escena(uow):
 async def _solo_sustituido(uow, usuario, dispositivo):
     """Un login más nuevo, ya sustituido, cuyo sucesor se revocó: no queda nada vivo."""
     nuevo = RefreshToken.create(user_id=usuario.id, token="nuevo", device_id=dispositivo.id)
-    sucesor = nuevo.sustituye("sucesor", datetime.now())
+    sucesor = nuevo.sustituye("sucesor", ahora_utc_sin_zona())
     sucesor.revoke()
     async with uow:
         await uow.refresh_tokens.save(nuevo)
@@ -84,7 +85,7 @@ async def test_v1_v2_v3_a_replaced_token_is_not_live(client: AsyncClient, tipo):
             viejo.revoke()
             await uow.refresh_tokens.save(viejo)
         await _solo_sustituido(uow, usuario, dispositivo)
-        ahora = datetime.now()
+        ahora = ahora_utc_sin_zona()
 
         async with uow:
             mas_nuevo = await uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
@@ -135,7 +136,7 @@ async def test_v5_the_locked_read_sees_what_another_session_committed(client: As
         await primera.user_devices.find_by_id(dispositivo.id)
         async with segunda:
             suyo = await segunda.refresh_tokens.find_by_token_hash("viejo")
-            sucesor = suyo.sustituye("sucesor", datetime.now())
+            sucesor = suyo.sustituye("sucesor", ahora_utc_sin_zona())
             await segunda.refresh_tokens.save(sucesor)
             await segunda.refresh_tokens.save(suyo)
             del_otro = await segunda.user_devices.find_by_id(dispositivo.id)
@@ -161,8 +162,8 @@ async def test_v6_revoking_counts_only_the_live_sessions(client: AsyncClient, ti
     """
     async with _uow(tipo) as uow:
         usuario, dispositivo, viejo = await _escena(uow)
-        segundo = viejo.sustituye("segundo", datetime.now())
-        tercero = segundo.sustituye("tercero", datetime.now())
+        segundo = viejo.sustituye("segundo", ahora_utc_sin_zona())
+        tercero = segundo.sustituye("tercero", ahora_utc_sin_zona())
         async with uow:
             for token in (viejo, segundo, tercero):
                 await uow.refresh_tokens.save(token)

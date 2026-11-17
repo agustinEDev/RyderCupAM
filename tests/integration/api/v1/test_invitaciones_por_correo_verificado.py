@@ -9,11 +9,12 @@ Invitaciones por correo solo con el correo verificado, por la API (F-07, fase 3)
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -43,7 +44,7 @@ async def _verifica(email: str) -> None:
 
 async def _privada(client: AsyncClient, creador: dict) -> dict:
     """Una competición privada del creador."""
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     return await create_competition(
         client,
         creador["cookies"],

@@ -5,11 +5,12 @@ Las barras se valoran por género: sin él, al generar los partidos se bloqueaba
 la sesión entera. Se exige al entrar, y quien lo tiene no nota nada.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
 
 pytestmark = pytest.mark.asyncio
@@ -56,8 +57,8 @@ class TestElGeneroParaApuntarse:
             "/api/v1/competitions",
             json={
                 "name": "Sin género",
-                "start_date": (date.today() + timedelta(days=30)).isoformat(),
-                "end_date": (date.today() + timedelta(days=31)).isoformat(),
+                "start_date": (ahora_utc_sin_zona().date() + timedelta(days=30)).isoformat(),
+                "end_date": (ahora_utc_sin_zona().date() + timedelta(days=31)).isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "max_players": 12,

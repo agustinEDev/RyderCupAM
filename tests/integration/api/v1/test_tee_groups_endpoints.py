@@ -14,13 +14,14 @@ Generar las partidas de una franja por la API (#251, PR 4; decidido el 6-9 oct 2
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     add_one_session,
@@ -128,7 +129,7 @@ async def _stableford(
 ) -> tuple[dict, dict, str, list[dict]]:
     """El organizador (inscrito) y `jugadores` más, todos con plaza en la franja."""
     organizador = await _usuario(client)
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     competicion = await create_competition(
         client,
         organizador["cookies"],
@@ -588,7 +589,7 @@ async def test_another_course_recalculates_the_playing_handicaps(client: AsyncCl
 
 async def test_a_ryder_session_is_not_a_tee_window(client: AsyncClient):
     organizador = await _usuario(client)
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     ryder = await create_competition(
         client,
         organizador["cookies"],

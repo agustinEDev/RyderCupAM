@@ -16,7 +16,7 @@ GET /api/v1/competitions/me/handicaps-not-updated, contra Postgres.
 """
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_upda
     SQLAlchemyHandicapUpdateRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -65,7 +66,7 @@ async def _cerrada_con_un_no_encontrado(client: AsyncClient) -> tuple[dict, dict
         json={"user_id": organizador["user"]["id"], "handicap": 15.0},
     )
     assert puesto.status_code == 200, puesto.text
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     competicion = await create_competition(
         client,
         organizador["cookies"],
