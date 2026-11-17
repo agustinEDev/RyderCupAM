@@ -26,6 +26,7 @@ from src.shared.infrastructure.email.envio_de_correo import (
     EnvioConRespaldo,
     envio_de_la_app,
 )
+from src.shared.infrastructure.email.sin_enlaces import desarma_enlaces
 
 logger = logging.getLogger(__name__)
 
@@ -963,8 +964,13 @@ password, change it: {cambiar}
         return await self._send_email(to_email, subject, text_body, html_body)
 
     def _sanitize_name(self, name: str) -> str:
-        """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
-        return (
+        """
+        Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322).
+
+        Y lo desarma: los nombres de personas y competiciones los escribe un usuario,
+        y un «premio.com» ahí salía como enlace en un correo firmado por la app (SB-05).
+        """
+        limpio = (
             name.replace("\n", "")
             .replace("\r", "")
             .replace('"', "")
@@ -974,6 +980,7 @@ password, change it: {cambiar}
             .replace(">", "")
             .strip()
         )
+        return desarma_enlaces(limpio)
 
     async def send_invitation_email(
         self,
@@ -1001,9 +1008,11 @@ password, change it: {cambiar}
         # Mensaje personal (si existe)
         personal_es = ""
         personal_en = ""
-        if personal_message:
-            personal_es = f'\nMensaje de {safe_inviter}: "{personal_message}"\n'
-            personal_en = f'\nMessage from {safe_inviter}: "{personal_message}"\n'
+        # El mensaje lo escribe quien invita: sin enlaces que se puedan pulsar (SB-05)
+        mensaje = desarma_enlaces(personal_message) if personal_message else None
+        if mensaje:
+            personal_es = f'\nMensaje de {safe_inviter}: "{mensaje}"\n'
+            personal_en = f'\nMessage from {safe_inviter}: "{mensaje}"\n'
 
         # El buzón del jugador: «/invitations» no existe y dejaba una página en blanco
         invitations_link = f"{settings.FRONTEND_URL}/player/invitations"
@@ -1051,8 +1060,8 @@ The Ryder Cup Friends Team
             parrafo(*saludo, negrita(safe_inviter), " te ha invitado a esta competición:"),
             recuadro(safe_competition, f"Responde antes del {expires_str}"),
         ]
-        if personal_message:
-            cuerpo.append(cita(personal_message, safe_inviter))
+        if mensaje:
+            cuerpo.append(cita(mensaje, safe_inviter))
         otros_botones = []
         if not safe_invitee:
             cuerpo.append(
