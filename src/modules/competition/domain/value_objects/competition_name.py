@@ -10,6 +10,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
+from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
+
 # Constantes de validación
 MIN_COMPETITION_NAME_LENGTH = 3
 MAX_COMPETITION_NAME_LENGTH = 100
@@ -118,7 +120,13 @@ class CompetitionName:
                 f"Longitud actual: {len(normalized_name)}"
             )
 
-        # 6. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
+        # 6. Sin enlaces: sale en correos que firma la app (SB-05, 17 nov 2026)
+        if contiene_enlace(normalized_name):
+            raise InvalidCompetitionNameError(
+                "El nombre de la competición no puede llevar enlaces ni direcciones web."
+            )
+
+        # 7. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
         object.__setattr__(self, "value", normalized_name)
 
     @classmethod
