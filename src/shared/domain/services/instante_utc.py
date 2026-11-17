@@ -1,8 +1,10 @@
 """
 La hora del servidor, siempre en UTC (H5, 25 oct 2026; re-auditoría F-02).
 
-Dos relojes y ninguno más: `ahora_utc_sin_zona()` para lo que se guarda o se compara
-con fechas guardadas sin zona, y `ahora_en_utc()` para instantes con zona.
+Los dos relojes que usar: `ahora_utc_sin_zona()` para lo que se guarda o se compara
+con fechas guardadas sin zona, y `ahora_en_utc()` para instantes con zona. Quedan llamadas
+que escriben a mano `datetime.now(UTC)…` y el `utc_now` de `utc_clock`: dan lo mismo y
+pasan a estos en la siguiente tanda.
 `datetime.now()` sin zona da la hora LOCAL de la máquina y ruff lo prohíbe (DTZ005).
 
 Las fechas de la partida rápida se guardan sin zona y en UTC (BE #635). Así

@@ -122,8 +122,8 @@ async def alcance_de(
     Con los `aprobados` que ya haya leído quien llama, no se vuelven a pedir;
     lo mismo si ya sabe si tiene una invitación pendiente (`invitado`).
 
-    El reloj de la invitación es el suyo (`Invitation.is_expired`, hora local
-    sin zona): con otro, se vería caducada aquí y viva al aceptarla.
+    El reloj de la invitación es el suyo (`Invitation.is_expired`, UTC sin zona):
+    con otro, se vería caducada aquí y viva al aceptarla.
     """
     if es_admin or competition.is_creator(quien):
         return Alcance.TODO
