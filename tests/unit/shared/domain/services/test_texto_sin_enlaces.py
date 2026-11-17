@@ -41,6 +41,16 @@ from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
         "premio\u200e.com",
         "premio\u2063.com",
         "Club.golf",
+        # Marcas que se combinan dentro de la terminación (CodeRabbit en #890)
+        "ejemplo.\u092d\u093e\u0930\u0924",
+        "ejemplo.xn--h2brj9c",
+        "premio\u200b.\u092d\u093e\u0930\u0924",
+        # Mayúscula inicial: las habituales y con ruta sí cuentan (17 nov 2026)
+        "premio.Com",
+        "premio.Com/regalo",
+        "premio.Es/regalo",
+        "Entra en premio.Net",
+        "premio.Golf/regalo",
     ],
 )
 def test_links_domains_ips_and_call_schemes_are_detected(texto):
