@@ -9,12 +9,7 @@ from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 
-from ..events.enrollment_approved_event import EnrollmentApprovedEvent
-from ..events.enrollment_cancelled_event import EnrollmentCancelledEvent
-from ..events.enrollment_requested_event import EnrollmentRequestedEvent
-from ..events.enrollment_withdrawn_event import EnrollmentWithdrawnEvent
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.enrollment_id import EnrollmentId
 from ..value_objects.enrollment_status import EnrollmentStatus
@@ -58,7 +53,6 @@ class Enrollment:
         entered_waiting: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None,
     ):
         # Validaciones
         """
@@ -87,7 +81,6 @@ class Enrollment:
         self._entered_waiting = entered_waiting
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
-        self._domain_events: list[DomainEvent] = domain_events or []
 
     @classmethod
     def request(
@@ -105,13 +98,6 @@ class Enrollment:
             status=EnrollmentStatus.REQUESTED,
             tee_color=tee_color,
         )
-
-        event = EnrollmentRequestedEvent(
-            enrollment_id=str(enrollment._id),
-            competition_id=str(enrollment._competition_id),
-            user_id=str(enrollment._user_id),
-        )
-        enrollment._add_domain_event(event)
 
         return enrollment
 
@@ -145,13 +131,6 @@ class Enrollment:
             custom_handicap=custom_handicap,
             tee_color=tee_color,
         )
-
-        event = EnrollmentApprovedEvent(
-            enrollment_id=str(enrollment._id),
-            competition_id=str(enrollment._competition_id),
-            user_id=str(enrollment._user_id),
-        )
-        enrollment._add_domain_event(event)
 
         return enrollment
 
@@ -283,13 +262,6 @@ class Enrollment:
         self._status = EnrollmentStatus.APPROVED
         self._updated_at = datetime.now()
 
-        event = EnrollmentApprovedEvent(
-            enrollment_id=str(self._id),
-            competition_id=str(self._competition_id),
-            user_id=str(self._user_id),
-        )
-        self._add_domain_event(event)
-
     def reject(self) -> None:
         """Rechaza la inscripción (REQUESTED/INVITED → REJECTED)."""
         if not self._status.can_transition_to(EnrollmentStatus.REJECTED):
@@ -311,14 +283,6 @@ class Enrollment:
         self._status = EnrollmentStatus.WITHDRAWN
         self._updated_at = datetime.now()
 
-        event = EnrollmentWithdrawnEvent(
-            enrollment_id=str(self._id),
-            competition_id=str(self._competition_id),
-            user_id=str(self._user_id),
-            reason=reason,
-        )
-        self._add_domain_event(event)
-
     def cancel(self, reason: str | None = None) -> None:
         """Cancela la solicitud (REQUESTED/INVITED → CANCELLED)."""
         if not self._status.can_transition_to(EnrollmentStatus.CANCELLED):
@@ -329,14 +293,6 @@ class Enrollment:
 
         self._status = EnrollmentStatus.CANCELLED
         self._updated_at = datetime.now()
-
-        event = EnrollmentCancelledEvent(
-            enrollment_id=str(self._id),
-            competition_id=str(self._competition_id),
-            user_id=str(self._user_id),
-            reason=reason,
-        )
-        self._add_domain_event(event)
 
     @property
     def entered_waiting(self) -> bool:
@@ -408,15 +364,6 @@ class Enrollment:
         self._created_at = datetime.now()
         self._updated_at = self._created_at
 
-        evento = EnrollmentApprovedEvent if aprobada else EnrollmentRequestedEvent
-        self._add_domain_event(
-            evento(
-                enrollment_id=str(self._id),
-                competition_id=str(self._competition_id),
-                user_id=str(self._user_id),
-            )
-        )
-
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
     # ===========================================
@@ -448,27 +395,6 @@ class Enrollment:
         """
         self._use_real_name = use_real_name
         self._updated_at = datetime.now()
-
-    # ===========================================
-    # DOMAIN EVENTS
-    # ===========================================
-
-    def _add_domain_event(self, event: DomainEvent) -> None:
-        """Añade un evento de dominio a la lista, inicializándola si es necesario."""
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def get_domain_events(self) -> list[DomainEvent]:
-        """Obtiene los eventos de dominio pendientes."""
-        if not hasattr(self, "_domain_events") or self._domain_events is None:
-            self._domain_events = []
-        return self._domain_events.copy()
-
-    def clear_domain_events(self) -> None:
-        """Limpia los eventos de dominio después de procesarlos."""
-        if hasattr(self, "_domain_events") and self._domain_events is not None:
-            self._domain_events.clear()
 
     # ===========================================
     # MÉTODOS ESPECIALES

@@ -501,7 +501,6 @@ tests/unit/modules/competition/
 ├── domain/value_objects/test_*.py (20 base + 9 R&M VOs + 3 scoring VOs)
 ├── domain/entities/test_*.py (3 R&M + 1 invitation + 1 hole_score + 1 match_scoring)
 ├── domain/services/test_*.py (2 base + 1 scoring_service)
-├── domain/events/test_scoring_events.py
 ├── application/dto/test_*.py (49 base + 12 R&M + 15 invitation + 15 scoring)
 ├── application/use_cases/test_*.py (84 base + 62 R&M + 43 invitation + 85 scoring)
 └── infrastructure/persistence/ (52 base + 14 scoring mappers)

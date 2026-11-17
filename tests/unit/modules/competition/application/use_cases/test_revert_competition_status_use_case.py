@@ -20,9 +20,6 @@ from src.modules.competition.application.use_cases.revert_competition_status_use
     RevertCompetitionStatusUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
-from src.modules.competition.domain.events.competition_reverted_to_closed_event import (
-    CompetitionRevertedToClosedEvent,
-)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -182,25 +179,3 @@ class TestRevertCompetitionStatusUseCase:
 
         with pytest.raises(CompetitionStateError):
             await use_case.execute(request, creator_id)
-
-    async def test_should_emit_domain_event_when_reverted(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Given: Una competición en estado IN_PROGRESS
-        When: Se revierte correctamente
-        Then: Se emite CompetitionRevertedToClosedEvent
-        """
-        created = await self._create_in_progress_competition(uow, creator_id)
-
-        use_case = RevertCompetitionStatusUseCase(uow)
-        request = RevertCompetitionStatusRequestDTO(competition_id=created.id)
-        await use_case.execute(request, creator_id)
-
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            events = competition.get_domain_events()
-
-            reverted_events = [e for e in events if isinstance(e, CompetitionRevertedToClosedEvent)]
-            assert len(reverted_events) == 1
-            assert reverted_events[0].competition_id == str(created.id)

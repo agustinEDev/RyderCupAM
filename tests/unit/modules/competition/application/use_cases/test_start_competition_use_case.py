@@ -249,52 +249,6 @@ class TestStartCompetitionUseCase:
 
         assert "No se puede iniciar una competición en estado ACTIVE" in str(exc_info.value)
 
-    async def test_should_emit_domain_event_when_started(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Verifica que se emite el evento CompetitionStartedEvent.
-
-        Given: Una competición en estado CLOSED
-        When: Se inicia correctamente
-        Then: Se emite el evento de dominio
-        """
-        # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(
-            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
-        )
-        create_request = CreateCompetitionRequestDTO(
-            name="Ryder Cup 2025",
-            start_date=date(2025, 6, 1),
-            end_date=date(2025, 6, 3),
-            main_country="ES",
-            play_mode="SCRATCH",
-        )
-        created = await create_use_case.execute(create_request, creator_id)
-
-        # Activar y cerrar
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.close_enrollments()
-            await uow.competitions.update(competition)
-            await uow.commit()
-        await _con_una_sesion(uow, created.id)
-
-        # Act: Iniciar competición
-        start_use_case = StartCompetitionUseCase(uow)
-        start_request = StartCompetitionRequestDTO(competition_id=created.id)
-        await start_use_case.execute(start_request, creator_id)
-
-        # Assert: Verificar eventos
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            events = competition.get_domain_events()
-
-            # Debe tener 4 eventos: Created, Activated, EnrollmentsClosed, Started
-            assert len(events) == 4
-            assert events[3].__class__.__name__ == "CompetitionStartedEvent"
-            assert events[3].competition_id == str(created.id)
-
 
 async def test_sin_ninguna_sesion_no_se_inicia_y_lo_dice():
     """Decidido el 25 sep (#710): un torneo en juego sin nada que jugar no tiene

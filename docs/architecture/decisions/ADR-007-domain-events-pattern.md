@@ -3,6 +3,8 @@
 **Status**: ✅ Accepted
 **Date**: Nov 1, 2025
 
+> **Update (17 Nov 2026):** the mechanism was removed as unused. Entities recorded events (`_add_domain_event` and friends) but nothing ever read them: no use case, repository or Unit of Work pulled or published them, and the event bus (`EventBus`, `EventHandler`, `InMemoryEventBus`) had no subscribers in production. The module event classes, the bus and the SQLAlchemy load listeners that only initialised the list are gone. Only the `DomainEvent` base class remains, because the security audit events (`src/shared/domain/events/security_events.py`) extend it and `security_logger` writes them. Side effects are triggered explicitly by the use cases.
+
 ---
 
 ## Context

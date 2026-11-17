@@ -10,12 +10,6 @@ from src.modules.competition.domain.entities.invitation import (
     MAX_PERSONAL_MESSAGE_LENGTH,
     Invitation,
 )
-from src.modules.competition.domain.events.invitation_created_event import (
-    InvitationCreatedEvent,
-)
-from src.modules.competition.domain.events.invitation_declined_event import (
-    InvitationDeclinedEvent,
-)
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationExpiredViolation,
@@ -106,25 +100,6 @@ class TestInvitationCreate:
         invitation = _make_invitation()
         assert invitation.personal_message is None
 
-    def test_create_emits_invitation_created_event(self):
-        invitation = _make_invitation()
-        events = invitation.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], InvitationCreatedEvent)
-
-    def test_create_event_has_correct_fields(self):
-        comp_id = CompetitionId(uuid4())
-        inviter_id = UserId(uuid4())
-        invitation = _make_invitation(
-            competition_id=comp_id,
-            inviter_id=inviter_id,
-            invitee_email="test@test.com",
-        )
-        event = invitation.get_domain_events()[0]
-        assert event.competition_id == str(comp_id)
-        assert event.inviter_id == str(inviter_id)
-        assert event.invitee_email == "test@test.com"
-
     def test_create_responded_at_is_none(self):
         invitation = _make_invitation()
         assert invitation.responded_at is None
@@ -187,17 +162,6 @@ class TestInvitationReconstruct:
         assert invitation.invitee_user_id == invitee
         assert invitation.status == InvitationStatus.ACCEPTED
         assert invitation.personal_message == "Hello"
-
-    def test_reconstruct_does_not_emit_events(self):
-        invitation = Invitation.reconstruct(
-            id=InvitationId.generate(),
-            competition_id=CompetitionId(uuid4()),
-            inviter_id=UserId(uuid4()),
-            invitee_email="test@test.com",
-            status=InvitationStatus.PENDING,
-            expires_at=datetime.now() + timedelta(days=7),
-        )
-        assert invitation.get_domain_events() == []
 
 
 # ==========================================================================
@@ -379,27 +343,6 @@ class TestInvitationDecline:
         invitation.decline()
         assert invitation.responded_at is not None
 
-    def test_decline_emits_declined_event(self):
-        invitation = _make_invitation()
-        invitation.clear_domain_events()
-        invitation.decline()
-        events = invitation.get_domain_events()
-        declined_events = [e for e in events if isinstance(e, InvitationDeclinedEvent)]
-        assert len(declined_events) == 1
-
-    def test_decline_event_has_correct_fields(self):
-        comp_id = CompetitionId(uuid4())
-        invitee_id = UserId(uuid4())
-        invitation = _make_invitation(
-            competition_id=comp_id,
-            invitee_user_id=invitee_id,
-        )
-        invitation.clear_domain_events()
-        invitation.decline()
-        event = invitation.get_domain_events()[0]
-        assert event.competition_id == str(comp_id)
-        assert event.invitee_user_id == str(invitee_id)
-
     def test_decline_expired_raises(self):
         invitation = _make_expired_invitation()
         with pytest.raises(InvitationExpiredViolation):
@@ -454,28 +397,6 @@ class TestInvitationCheckExpiration:
         )
         invitation.check_expiration()
         assert invitation.status == InvitationStatus.DECLINED
-
-
-# ==========================================================================
-# Domain Events Tests
-# ==========================================================================
-
-
-class TestInvitationDomainEvents:
-    """Tests para el manejo de domain events."""
-
-    def test_get_domain_events_returns_copy(self):
-        invitation = _make_invitation()
-        events1 = invitation.get_domain_events()
-        events2 = invitation.get_domain_events()
-        assert events1 == events2
-        assert events1 is not events2
-
-    def test_clear_domain_events(self):
-        invitation = _make_invitation()
-        assert len(invitation.get_domain_events()) > 0
-        invitation.clear_domain_events()
-        assert invitation.get_domain_events() == []
 
 
 # ==========================================================================
