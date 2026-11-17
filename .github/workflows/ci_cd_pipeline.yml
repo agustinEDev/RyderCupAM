@@ -113,8 +113,11 @@ jobs:
       - name: Run Unit Tests with Coverage
         run: |
           echo "Running unit tests on Python ${{ matrix.python-version }}..."
-          # El JUnit XML solo lo lee la tarjeta del resumen (no cambia qué pasa o falla)
-          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html \
+          # El JUnit XML solo lo lee la tarjeta del resumen (no cambia qué pasa o falla).
+          # Cobertura con ramas y un suelo: si baja del 88 % falla (re-auditoría F-10;
+          # el 17 nov 2026 estaba en el 89 %). Subirlo cuando suba la cobertura.
+          pytest tests/unit/ -v --cov=src --cov-branch --cov-fail-under=88 \
+            --cov-report=xml --cov-report=term-missing --cov-report=html \
             --junitxml="$RUNNER_TEMP/junit.xml"
 
       - name: Upload Coverage Report (XML)
@@ -226,7 +229,10 @@ jobs:
           DOCS_PASSWORD: testpassword123
         run: |
           echo "Running integration tests (with database)..."
-          pytest tests/integration/ -v --maxfail=5 --junitxml="$RUNNER_TEMP/junit.xml"
+          # Mide también la cobertura de esta suite, la que llega a la infraestructura
+          # (repositorios, rutas). Solo se informa: no tiene suelo (re-auditoría F-10)
+          pytest tests/integration/ -v --maxfail=5 --junitxml="$RUNNER_TEMP/junit.xml" \
+            --cov=src --cov-branch --cov-report=term:skip-covered
 
       # Tarjeta en el resumen de la ejecución: qué hace el job y qué ha salido
       - name: Summary card
