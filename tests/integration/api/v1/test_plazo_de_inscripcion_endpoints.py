@@ -31,6 +31,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.config.cierre_de_inscripciones import CierreDeInscripciones
+from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
+from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     add_one_session,
@@ -40,6 +42,18 @@ from tests.conftest import (
     set_auth_cookies,
     sql_en_la_bd_de_test,
 )
+
+
+def _hoy() -> date:
+    """
+    Hoy en el campo, con el reloj de la API (sin zona del campo, la de por defecto).
+
+    No `date.today()`, que es la del sistema: el CI va en UTC, y entre las 00:00 y las
+    01:00 de Madrid (las 02:00 en verano) eran dos días distintos y los casos del mismo
+    día fallaban (el CI de BE #888, a las 00:53).
+    """
+    return fecha_en_el_campo(ahora_en_utc(), None)
+
 
 pytestmark = pytest.mark.asyncio
 
@@ -61,7 +75,7 @@ async def _usuario(client: AsyncClient) -> dict:
 
 async def _competicion(client: AsyncClient, stroke_play: bool = False) -> tuple[dict, dict]:
     organizador = await _usuario(client)
-    inicio = date.today() + timedelta(days=30)
+    inicio = _hoy() + timedelta(days=30)
     datos = {
         "name": f"Plazo {uuid.uuid4().hex[:8]}",
         "start_date": inicio.isoformat(),
@@ -77,7 +91,7 @@ async def _competicion(client: AsyncClient, stroke_play: bool = False) -> tuple[
 
 async def _pasado_el_plazo(competicion: dict, dias: int = 1) -> None:
     """El torneo, hoy: el plazo fue ayer a las 12:00. Y abierta hace diez días."""
-    hoy = date.today()
+    hoy = _hoy()
     await sql_en_la_bd_de_test(
         "UPDATE competitions SET start_date = :hoy, end_date = :fin, "
         "enrollment_opened_at = :abierta WHERE id = :id",
@@ -260,7 +274,7 @@ async def test_r1_reabierta_pasado_el_plazo_se_entra_y_la_vuelta_no_la_toca(
 
 async def test_r2_creada_para_hoy_se_entra(client: AsyncClient):
     organizador = await _usuario(client)
-    hoy = date.today()
+    hoy = _hoy()
     competicion = await create_competition(
         client,
         organizador["cookies"],
@@ -282,7 +296,7 @@ async def test_r2_creada_para_hoy_se_entra(client: AsyncClient):
 async def test_r3_movida_mas_tarde_se_vuelve_a_entrar(client: AsyncClient):
     organizador, competicion = await _competicion(client)
     await _pasado_el_plazo(competicion)
-    inicio = date.today() + timedelta(days=10)
+    inicio = _hoy() + timedelta(days=10)
 
     set_auth_cookies(client, organizador["cookies"])
     movida = await client.put(
@@ -299,7 +313,7 @@ async def test_r3_movida_mas_tarde_se_vuelve_a_entrar(client: AsyncClient):
 
 
 async def _mover(client: AsyncClient, organizador: dict, competicion: dict, dias: int):
-    inicio = date.today() + timedelta(days=dias)
+    inicio = _hoy() + timedelta(days=dias)
     set_auth_cookies(client, organizador["cookies"])
     return await client.put(
         f"/api/v1/competitions/{competicion['id']}",
@@ -343,7 +357,7 @@ async def test_c4_al_cerrarse_por_fin_se_retira_el_aviso_de_bloqueo(client: Asyn
     assert len(await _avisos(client, organizador, "ENROLLMENT_CLOSE_BLOCKED")) == 1
     # El organizador coge plaza en una franja y la vuelta siguiente la cierra
     # La franja, mañana: dentro del torneo movido a hoy y todavía por salir
-    manana = {**competicion, "start_date": (date.today() + timedelta(days=1)).isoformat()}
+    manana = {**competicion, "start_date": (_hoy() + timedelta(days=1)).isoformat()}
     franja = await add_one_session(client, organizador["cookies"], manana)
     set_auth_cookies(client, organizador["cookies"])
     plaza = await client.post(f"/api/v1/competitions/rounds/{franja['id']}/places", json={})
@@ -380,7 +394,7 @@ async def test_o1_f1_movida_con_el_formulario_entero_mueve_sus_sesiones(client: 
     antes = await _fecha_de_la_sesion(sesion["id"])
     set_auth_cookies(client, organizador["cookies"])
     ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
-    inicio = date.today() + timedelta(days=10)
+    inicio = _hoy() + timedelta(days=10)
 
     movida = await client.put(
         f"/api/v1/competitions/{competicion['id']}",
