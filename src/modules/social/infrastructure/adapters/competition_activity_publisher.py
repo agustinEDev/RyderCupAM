@@ -116,7 +116,8 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             str(enrollment.id.value),
             _franja(franja) if franja is not None else None,
             waiting,
-            use_real_name=enrollment.use_real_name,
+            # Pública: el nombre real, siempre (SB-08)
+            use_real_name=competition.visibility.shows_real_name(enrollment.use_real_name),
         )
 
     async def placed_from_waiting_list(
@@ -230,7 +231,8 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             enrollment.user_id,
             _ref(competition),
             str(enrollment.id.value),
-            use_real_name=enrollment.use_real_name,
+            # Pública: el nombre real, siempre (SB-08)
+            use_real_name=competition.visibility.shows_real_name(enrollment.use_real_name),
         )
 
     async def teams_formed(self, competition: Competition) -> None:

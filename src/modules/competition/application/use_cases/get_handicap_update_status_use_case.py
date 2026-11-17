@@ -92,7 +92,10 @@ class GetHandicapUpdateStatusUseCase:
                         competicion, actualizacion, inscritos, usuarios, resultados
                     ).para_el_organizador
                 nombres = PlayerNames.de_lo_leido(
-                    list(dict.fromkeys([*pendientes, *sin_actualizar])), usuarios, inscritos
+                    list(dict.fromkeys([*pendientes, *sin_actualizar])),
+                    usuarios,
+                    inscritos,
+                    competicion.visibility,
                 )
         return HandicapUpdateStatusDTO(
             status=actualizacion.estado.value,

@@ -154,7 +154,11 @@ class _Clasificaciones:
             participantes, competicion.tournament_type, escala, regla, categoria
         )
         nombres = await PlayerNames.de_la_competicion(
-            [f.user_id for f in filas], competicion.id, self._usuarios, self._uow
+            [f.user_id for f in filas],
+            competicion.id,
+            self._usuarios,
+            self._uow,
+            competicion.visibility,
         )
         return filas, _Personas(nombres, generos)
 

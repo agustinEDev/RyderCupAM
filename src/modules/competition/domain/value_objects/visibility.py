@@ -29,5 +29,15 @@ class Visibility(StrEnum):
         """Indica si un desconocido puede pedir plaza por su cuenta."""
         return self == Visibility.PUBLIC
 
+    def shows_real_name(self, chosen: bool) -> bool:
+        """
+        Si el nombre real de un jugador va a la vista en esta competición (SB-08).
+
+        En una pública, siempre: es lo que piden actas, premios y la RFEG, y quien
+        tenga alias lo lleva además, debajo. En una privada, lo que eligió el jugador
+        al apuntarse (`chosen`, su `use_real_name`). Decidido por Agustín el 17 nov 2026.
+        """
+        return self == Visibility.PUBLIC or chosen
+
     def __str__(self) -> str:
         return self.value

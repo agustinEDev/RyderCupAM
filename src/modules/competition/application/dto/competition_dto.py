@@ -101,13 +101,20 @@ class CreatorDTO(BaseModel):
     display_name: str = Field(
         ...,
         description=(
-            "Nombre con el que se debe mostrar al creador: su alias si tiene, "
-            "y si no su nombre completo. Es lo que hay que pintar; first_name "
-            "y last_name siguen aquí para lo que necesite el nombre real."
+            "Nombre con el que se debe mostrar al creador. En una pública, su nombre "
+            "real; en una privada, su alias si tiene, y si no su nombre completo. Es "
+            "lo que hay que pintar (SB-08)."
         ),
     )
     handicap: float | None = Field(None, description="Handicap actual del creador")
     country_code: str | None = Field(None, description="Código ISO del país del creador")
+    alias: str | None = Field(
+        None,
+        description=(
+            "El alias del creador si tiene, para enseñar pequeño el nombre que no va "
+            "delante (SB-08). Null si no tiene."
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

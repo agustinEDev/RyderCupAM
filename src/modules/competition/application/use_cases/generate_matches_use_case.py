@@ -454,7 +454,7 @@ class GenerateMatchesUseCase:
         if not sin_inscripcion:
             return
         nombres = await PlayerNames.de_la_competicion(
-            sin_inscripcion, competition.id, self._user_repo, self._uow
+            sin_inscripcion, competition.id, self._user_repo, self._uow, competition.visibility
         )
         raise PlayersNotEnrolledError(
             [
@@ -515,7 +515,11 @@ class GenerateMatchesUseCase:
             return
 
         nombres = await PlayerNames.de_la_competicion(
-            [uid for uid, _, _ in sin_barras], competition.id, self._user_repo, self._uow
+            [uid for uid, _, _ in sin_barras],
+            competition.id,
+            self._user_repo,
+            self._uow,
+            competition.visibility,
         )
         raise PlayersWithoutTeeError(
             [
