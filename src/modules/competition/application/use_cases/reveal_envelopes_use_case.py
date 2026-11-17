@@ -8,7 +8,6 @@ que si entrego**: el que llego a tiempo no se queda sin su lista por culpa del
 que se olvido (decidido el 20 sep).
 """
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import (
@@ -30,6 +29,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class EarlyRevealNeedsBothCaptainsError(Exception):
@@ -131,7 +131,7 @@ class RevealEnvelopesUseCase:
                     "capitanes lo piden al entregar"
                 )
 
-            ahora = datetime.now(UTC).replace(tzinfo=None)
+            ahora = ahora_utc_sin_zona()
             automaticos = []
             sobres = {}
             for team in ("A", "B"):

@@ -4,7 +4,7 @@ Round Entity - Sesión de competición.
 Representa una sesión de partidos (mañana/tarde/noche) en un día específico.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
@@ -16,6 +16,7 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.scoring_format import STROKE_PLAY_INDIVIDUAL_ALLOWANCE
@@ -120,7 +121,7 @@ class Round:
         if match_format != MatchFormat.SINGLES:
             effective_handicap_mode = None
 
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = ahora_utc_sin_zona()
         return cls(
             id=RoundId.generate(),
             competition_id=competition_id,
@@ -184,7 +185,7 @@ class Round:
         Individual y al 95 %, el allowance del stroke play individual: aquí no
         se elige formato ni modo de hándicap.
         """
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = ahora_utc_sin_zona()
         return cls(
             id=RoundId.generate(),
             competition_id=competition_id,
@@ -212,7 +213,7 @@ class Round:
         if self._hoja_de_salidas is None:
             raise ValueError("Solo una franja de stroke play tiene hoja de salidas.")
         self._hoja_de_salidas = hoja
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def mark_teams_assigned(self) -> None:
         """
@@ -224,7 +225,7 @@ class Round:
                 f"Cannot mark teams assigned from status {self._status}. Expected PENDING_TEAMS"
             )
         self._status = RoundStatus.PENDING_MATCHES
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def mark_teams_unassigned(self) -> None:
         """
@@ -242,7 +243,7 @@ class Round:
             )
         self._status = RoundStatus.PENDING_TEAMS
         self._match_generation_block = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def mark_matches_generated(self) -> None:
         """
@@ -257,7 +258,7 @@ class Round:
         self._status = RoundStatus.SCHEDULED
         # Con los partidos hechos, el motivo por el que no salian ya no vale
         self._match_generation_block = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def block_match_generation(self, block: MatchGenerationBlock) -> None:
         """
@@ -276,12 +277,12 @@ class Round:
                 "Expected PENDING_MATCHES"
             )
         self._match_generation_block = block
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def clear_match_generation_block(self) -> None:
         """Olvida el motivo: se han rehecho los sobres y se empieza de nuevo."""
         self._match_generation_block = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def reopen_for_regeneration(self) -> None:
         """
@@ -300,7 +301,7 @@ class Round:
         if self._status != RoundStatus.SCHEDULED:
             raise ValueError(f"Cannot reopen a round in status {self._status}. Expected SCHEDULED")
         self._status = RoundStatus.PENDING_MATCHES
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def reset_to_pending_matches(self) -> None:
         """
@@ -323,7 +324,7 @@ class Round:
                 f"Cannot reset a round in status {self._status}. Expected SCHEDULED or IN_PROGRESS"
             )
         self._status = RoundStatus.PENDING_MATCHES
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def start(self) -> None:
         """
@@ -333,7 +334,7 @@ class Round:
         if self._status != RoundStatus.SCHEDULED:
             raise ValueError(f"Cannot start round from status {self._status}. Expected SCHEDULED")
         self._status = RoundStatus.IN_PROGRESS
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def complete(self) -> None:
         """
@@ -345,7 +346,7 @@ class Round:
                 f"Cannot complete round from status {self._status}. Expected IN_PROGRESS"
             )
         self._status = RoundStatus.COMPLETED
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def update_details(
         self,
@@ -410,7 +411,7 @@ class Round:
                 )
             self._allowance_percentage = allowance_percentage
 
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def desplazar(self, dias: int) -> None:
         """
@@ -423,7 +424,7 @@ class Round:
         if self._status in (RoundStatus.IN_PROGRESS, RoundStatus.COMPLETED):
             raise ValueError("Una sesión ya jugada no se mueve de día")
         self._round_date = self._round_date + timedelta(days=dias)
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     # ==================== Query Methods ====================
 

@@ -1,7 +1,5 @@
 """Caso de Uso: Eliminar Ronda/Sesión de competición."""
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.dto.round_match_dto import (
     DeleteRoundRequestDTO,
     DeleteRoundResponseDTO,
@@ -29,6 +27,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class DeleteRoundUseCase:
@@ -141,7 +140,7 @@ class DeleteRoundUseCase:
             id=request.round_id,
             deleted=True,
             matches_deleted=matches_deleted,
-            deleted_at=datetime.now(UTC).replace(tzinfo=None),
+            deleted_at=ahora_utc_sin_zona(),
         )
 
     async def _sin_su_ultima_espera(

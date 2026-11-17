@@ -27,7 +27,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.integration
 
@@ -341,7 +341,7 @@ class TestTheSameAchievementKeepsItsDate:
         await repository.add_many([_logro(diego, T.NEW_COURSE, "grupo-1", golf_course_id="c-1")])
         await repository.delete_pairs(T.NEW_COURSE, [(diego.id, "grupo-1")])
         await db_session.commit()
-        antes = utc_now()
+        antes = ahora_utc_sin_zona()
 
         await repository.add_many(
             [_logro(diego, T.NEW_COURSE, "grupo-1", publicado=DESPUES, golf_course_id="c-1")]

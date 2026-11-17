@@ -11,9 +11,10 @@ entre 40 y 750 m en recta, y ningún punto a más de 3 km del campo.
 """
 
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 from ..value_objects.geo_point import GeoPoint
 from ..value_objects.golf_course_id import GolfCourseId
@@ -94,7 +95,7 @@ class SavedHole:
             bends=bends,
             green_center=green_center,
             saved_by=saved_by,
-            saved_at=datetime.now(UTC).replace(tzinfo=None),
+            saved_at=ahora_utc_sin_zona(),
         )
         problem = play_line_problem(tee, green_center, hole.play_line, course_location)
         if problem:

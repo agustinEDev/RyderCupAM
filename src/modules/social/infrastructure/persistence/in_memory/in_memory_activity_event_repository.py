@@ -17,7 +17,7 @@ from src.modules.social.domain.services.withdrawn_achievement import (
 )
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
@@ -50,7 +50,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         aceptara el duplicado, los tests de los casos de uso pasarian con una
         idempotencia que en produccion depende de la base de datos.
         """
-        escrito = utc_now()
+        escrito = ahora_utc_sin_zona()
         ocultos_exclusivos = {
             exclusive_scope(user_id, tipo, apunte.golf_course_id)
             for (user_id, tipo, _), apunte in self._apuntes.items()

@@ -8,7 +8,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class MarkFeedAsSeenUseCase:
@@ -39,7 +39,7 @@ class MarkFeedAsSeenUseCase:
         reloj: Callable[[], datetime] | None = None,
     ):
         self._user_uow = user_uow
-        self._reloj = reloj or utc_now
+        self._reloj = reloj or ahora_utc_sin_zona
 
     async def execute(self, user_id_raw: str) -> datetime | None:
         """Marca el feed como visto y devuelve la marca que queda guardada."""

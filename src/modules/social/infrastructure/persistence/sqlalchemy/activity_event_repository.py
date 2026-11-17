@@ -48,7 +48,7 @@ from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper
     withdrawn_tee_time_notices_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.persistence.filas_afectadas import filas_afectadas
 
 UQ_ACTIVITY_EVENTS_MATCH_TYPE = "uq_activity_events_match_type"
@@ -85,7 +85,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
 
         # Con el reloj de la aplicacion, como el `calculado_en` con el que se
         # compara al publicar un torneo
-        escrito = utc_now()
+        escrito = ahora_utc_sin_zona()
         filas = [
             {
                 "id": event.id,
