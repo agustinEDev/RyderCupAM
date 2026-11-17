@@ -263,15 +263,15 @@ Client → API → UseCase → User.create() → UoW.save() → commit()
 ```
 API → UseCase → HandicapService.search(name) → RFEG
                       ↓
-                user.update_handicap() → HandicapUpdatedEvent
+                user.update_handicap()
                       ↓
                   UoW.commit()
 ```
 
 1. Find user
 2. Query RFEG with full name
-3. Update + emit event
-4. Commit publishes event
+3. Update the user
+4. Commit (no domain events, ADR-050)
 
 **Fallback**: If RFEG fails, use `manual_handicap` (optional)
 
