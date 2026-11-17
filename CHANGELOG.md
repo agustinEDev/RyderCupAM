@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.72.0] - 2026-11-17
+
+**Calidad de la re-auditoría: fuera los eventos de dominio que nadie leía, un solo reloj en
+UTC, los errores de campos en el mapa central y ADR al día** (#892, #895, #896, #897, #898,
+#899, #900; merge-back de la 2.71.0 en #894). Para el jugador no cambia nada salvo tres
+detalles de las rutas de campos (abajo). Sin migraciones. Probado en el Kind con la copia
+anonimizada de producción.
+
+### Changed
+
+- **Un campo pendiente o rechazado de otro jugador responde 404**, como uno que no existe
+  (antes 403, que decía que había un campo pendiente con ese id; OWASP A01). Quien lo propuso
+  y un admin lo siguen viendo (F-04).
+- **Los errores de las rutas de campos se traducen en el mapa central** (`golf_course`):
+  un error inesperado responde 500 como el resto de la API
+  (`{"detail": "Error interno del servidor", "error_code": "INTERNAL_ERROR"}`) y un código de
+  país inválido, 400 (antes caía en un 500). La regla de quién ve un campo sin aprobar está
+  en el caso de uso, no en la ruta.
+- **El servidor lee la hora en UTC en todas partes** (F-02): `instante_utc` tiene los dos
+  relojes (`ahora_utc_sin_zona()` y `ahora_en_utc()`) y es el único módulo que lee la hora
+  como `datetime`. En producción ya era UTC; en cualquier otra máquina las fechas ya no se
+  desplazan (un enlace de cambio de correo, por ejemplo, podía caducar horas antes).
+  `UpdateRoundUseCase` usa su reloj inyectado también al llenar las listas de espera.
+- **Cerrar sesión ya no reescribe la fila del usuario**: nada de él cambia; solo se revocan
+  los tokens del dispositivo.
+
+### Removed
+
+- **Los eventos de dominio que nadie consumía** (F-03): listas de eventos, emisiones, paquetes
+  de eventos, el bus y sus manejadores, y los parámetros que solo los alimentaban. Quedan los
+  eventos de auditoría de seguridad que escribe el log. ADR-050.
+- La consulta del recuento del historial de contraseñas que solo alimentaba un evento.
+
+### Documentation
+
+- **ADR obsoletos sustituidos**: fuera ADR-007, 008, 015, 022 y 033; nuevos ADR-050
+  (eventos), ADR-051 (logging estándar y log de seguridad en JSON), ADR-052 (sin asistente de
+  IA por ahora) y ADR-053 (invitaciones desde la bandeja con sesión). ADR-015 lo sustituye el
+  ADR-039, que ya existía.
+
+### CI
+
+- **Suelo de cobertura con ramas del 88 %** en los tests unitarios (3.12) y cobertura de la
+  suite de integración como artefacto (F-10).
+- **ruff prohíbe leer la hora local** en todo el repositorio, tests incluidos (DTZ002, DTZ003,
+  DTZ005, DTZ006, DTZ007, DTZ011, DTZ012), y un test exige que solo `instante_utc` lea la
+  hora. Los tests unitarios pasan igual en UTC, Madrid, Kiritimati (UTC+14) y Los Ángeles.
+
 ## [2.71.0] - 2026-11-17
 
 **Nombre real en las competiciones públicas, alias como apodo, nada de enlaces en lo que se
