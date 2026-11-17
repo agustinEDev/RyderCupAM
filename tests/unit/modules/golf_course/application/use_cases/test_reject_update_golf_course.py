@@ -10,6 +10,9 @@ import pytest
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     RejectUpdateGolfCourseRequestDTO,
 )
+from src.modules.golf_course.application.exceptions import (
+    GolfCourseMissingError,
+)
 from src.modules.golf_course.application.use_cases.reject_update_golf_course_use_case import (
     RejectUpdateGolfCourseUseCase,
 )
@@ -192,7 +195,7 @@ class TestRejectUpdateGolfCourseUseCase:
         use_case = RejectUpdateGolfCourseUseCase(mock_uow)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(GolfCourseMissingError, match="not found"):
             await use_case.execute(request_dto)
 
         mock_uow.golf_courses.save.assert_not_called()
@@ -269,5 +272,5 @@ class TestRejectUpdateGolfCourseUseCase:
         use_case = RejectUpdateGolfCourseUseCase(mock_uow)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Original golf course"):
+        with pytest.raises(GolfCourseMissingError, match="Original golf course"):
             await use_case.execute(request_dto)

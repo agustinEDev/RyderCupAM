@@ -5,13 +5,9 @@ Este archivo contiene tests que verifican:
 - create_from_oauth() factory method
 - has_password para usuarios OAuth vs normales
 - is_valid() para usuarios OAuth sin password
-- record_login() con método Google
 """
 
-from datetime import datetime
-
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -60,26 +56,6 @@ class TestUserCreateFromOAuth:
 
         # Assert
         assert user.email_verified is True
-
-    def test_create_from_oauth_emits_registered_event(self):
-        """
-        Test: create_from_oauth() emite UserRegisteredEvent
-        Given: Datos de usuario OAuth
-        When: Se llama a create_from_oauth()
-        Then: Emite evento de registro
-        """
-        # Arrange & Act
-        user = User.create_from_oauth(
-            first_name="Bob",
-            last_name="Johnson",
-            email_str="bob.johnson@gmail.com",
-        )
-
-        # Assert
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert isinstance(events[0], UserRegisteredEvent)
-        assert events[0].email == "bob.johnson@gmail.com"
 
     def test_create_from_oauth_with_country_code(self):
         """
@@ -178,66 +154,6 @@ class TestUserIsValidOAuth:
 
         # Act & Assert
         assert user.is_valid() is True
-
-
-class TestUserRecordLoginOAuth:
-    """Tests para record_login() con método OAuth"""
-
-    def test_record_login_with_google_method(self):
-        """
-        Test: record_login() acepta login_method="google"
-        Given: Usuario OAuth
-        When: Se registra login con método "google"
-        Then: Evento UserLoggedInEvent se emite con login_method correcto
-        """
-        # Arrange
-        user = User.create_from_oauth(
-            first_name="Login",
-            last_name="Test",
-            email_str="login.test@gmail.com",
-        )
-        user.clear_domain_events()  # Limpiar evento de registro
-
-        # Act
-        user.record_login(
-            logged_in_at=datetime.now(),
-            ip_address="192.168.1.100",
-            user_agent="Chrome/120.0",
-            session_id="session-123",
-            login_method="google",
-        )
-
-        # Assert
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert events[0].login_method == "google"
-
-    def test_record_login_default_email_method(self):
-        """
-        Test: record_login() usa "email" como método por defecto
-        Given: Usuario normal
-        When: Se registra login sin especificar método
-        Then: login_method es "email" por defecto
-        """
-        # Arrange
-        user = User.create(
-            first_name="Default",
-            last_name="Method",
-            email_str="default@example.com",
-            plain_password="Segura-Prueba123!",
-        )
-        user.clear_domain_events()
-
-        # Act
-        user.record_login(
-            logged_in_at=datetime.now(),
-            ip_address="192.168.1.101",
-        )
-
-        # Assert
-        events = user.get_domain_events()
-        assert len(events) == 1
-        assert events[0].login_method == "email"
 
 
 class TestClaimWithVerifiedOAuth:

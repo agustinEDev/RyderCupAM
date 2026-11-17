@@ -448,13 +448,8 @@ def start_golf_course_mappers():
             },
         )
 
-        # Event listener: initialize _domain_events when SQLAlchemy loads from DB
-        # (replaces @reconstructor that was previously in the domain entity)
         @event.listens_for(GolfCourse, "load")
-        def _init_golf_course_domain_events(target, _context):
-            if not hasattr(target, "_domain_events"):
-                target._domain_events = []
-
+        def _init_golf_course_on_load(target, _context):
             # La tarjeta del campo no se persiste: la propiedad `holes` la
             # deriva de la primera salida al consultarla. Aquí solo se asegura
             # que el atributo exista, porque SQLAlchemy hidrata sin pasar por

@@ -164,6 +164,8 @@ class GetGolfCourseByIdRequestDTO(BaseModel):
     """Request para obtener un campo por ID."""
 
     golf_course_id: str = Field(..., description="ID del campo (UUID)")
+    requester_id: str = Field(..., description="ID de quien lo pide (UUID)")
+    requester_is_admin: bool = Field(False, description="Si quien lo pide es admin")
 
 
 class ListApprovedGolfCoursesRequestDTO(BaseModel):

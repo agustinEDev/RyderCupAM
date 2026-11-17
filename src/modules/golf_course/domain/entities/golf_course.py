@@ -11,13 +11,9 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
-from ..events.golf_course_approved_event import GolfCourseApprovedEvent
-from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
-from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.course_location import CourseLocation
 from ..value_objects.course_provenance import CourseProvenance
@@ -114,7 +110,6 @@ class GolfCourse:
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
         timezone: str | None = None,
-        domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
         Constructor privado. Usar create() o reconstruct().
@@ -137,7 +132,6 @@ class GolfCourse:
             provenance: De dónde salen los datos (manual por defecto)
             physical_holes: Hoyos que tiene el campo sobre el terreno (9 o 18).
                 None si no consta
-            domain_events: Eventos de dominio (opcional)
         """
         self._id = id
         self._name = name
@@ -152,7 +146,6 @@ class GolfCourse:
         self._updated_at = updated_at
         self._original_golf_course_id = original_golf_course_id
         self._is_pending_update = is_pending_update
-        self._domain_events: list[DomainEvent] = domain_events or []
 
         # La ubicación se guarda desglosada en escalares, no como Value Object
         # compuesto: es opcional, y `composite()` no admite NULL (falla en el
@@ -355,15 +348,6 @@ class GolfCourse:
             timezone=timezone,
         )
 
-        # Registrar evento de creación
-        golf_course._record_event(
-            GolfCourseRequestedEvent(
-                golf_course_id=str(golf_course_id),
-                golf_course_name=name,
-                creator_id=str(creator_id),
-            )
-        )
-
         return golf_course
 
     @classmethod
@@ -431,15 +415,6 @@ class GolfCourse:
         self._rejection_reason = None
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-        # Registrar evento de aprobación
-        self._record_event(
-            GolfCourseApprovedEvent(
-                golf_course_id=str(self._id),
-                golf_course_name=self._name,
-                creator_id=str(self._creator_id),
-            )
-        )
-
     def reject(self, reason: str) -> None:
         """
         Rechaza el campo de golf (Admin).
@@ -464,16 +439,6 @@ class GolfCourse:
         self._approval_status = ApprovalStatus.REJECTED
         self._rejection_reason = reason
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
-
-        # Registrar evento de rechazo
-        self._record_event(
-            GolfCourseRejectedEvent(
-                golf_course_id=str(self._id),
-                golf_course_name=self._name,
-                creator_id=str(self._creator_id),
-                rejection_reason=reason,
-            )
-        )
 
     def update(
         self,
@@ -875,27 +840,6 @@ class GolfCourse:
                     f"{min_rating} and {max_rating}, got {tee.course_rating} "
                     f"on tee {tee.display_name}"
                 )
-
-    # Domain Events Management
-
-    def _record_event(self, event: DomainEvent) -> None:
-        """Registra un evento de dominio."""
-        self._domain_events.append(event)
-
-    def pull_domain_events(self) -> list[DomainEvent]:
-        """
-        Retorna y limpia los eventos de dominio.
-
-        Returns:
-            Lista de eventos de dominio
-        """
-        events = self._domain_events.copy()
-        self._domain_events.clear()
-        return events
-
-    def clear_domain_events(self) -> None:
-        """Limpia los eventos de dominio sin retornarlos."""
-        self._domain_events.clear()
 
     # Properties
 

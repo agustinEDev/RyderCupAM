@@ -29,12 +29,12 @@ class InvalidHoleLineError(Exception):
     """La línea que el admin quiere guardar no vale: codos, distancias o puntos (BE #575)."""
 
 
-class GolfCourseMissingError(ValueError):
+class GolfCourseMissingError(Exception):
     """
     No está el campo que se pide: el campo, la propuesta de cambio (clon) o su original.
 
-    Hereda de ValueError porque antes era un ValueError con el texto «not found»: todo
-    `except ValueError` lo sigue capturando. La ruta lo traduce a 404 por su tipo.
+    La API lo traduce a 404 en el mapa de errores del módulo. No hereda de ValueError:
+    el `except ValueError` de una ruta lo convertiría en un 400.
     """
 
 
@@ -42,5 +42,5 @@ class CountryNotFoundError(ValueError):
     """No hay ningún país con ese código. Al editar se responde 404; al crear, 400."""
 
 
-class GolfCourseEditForbiddenError(ValueError):
+class GolfCourseEditForbiddenError(Exception):
     """Quien edita el campo no es su creador ni admin (403)."""

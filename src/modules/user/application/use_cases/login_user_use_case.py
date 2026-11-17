@@ -11,7 +11,7 @@ dispositivos desconocidos: los fallos de otro no dejan fuera al dueño.
 CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Literal, NoReturn
 
 from src.modules.user.application.dto.device_dto import (
@@ -514,14 +514,6 @@ class LoginUserUseCase:
                 ),
             )
             raise AccountDeactivatedException()
-
-        # Registrar evento de login exitoso (Clean Architecture)
-        login_time = datetime.now(UTC)
-        user.record_login(
-            logged_in_at=login_time,
-            # ip_address y user_agent se pueden agregar cuando el controlador los pase
-            # session_id se podría generar aquí si fuera necesario
-        )
 
         # Device Fingerprinting (v2.0.4): Registrar/actualizar dispositivo PRIMERO
         # Cookie-based identification: device_id_from_cookie tiene prioridad

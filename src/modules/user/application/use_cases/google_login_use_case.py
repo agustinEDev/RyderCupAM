@@ -11,7 +11,6 @@ Los flujos 2 y 3, solo con el correo verificado por Google.
 """
 
 import logging
-from datetime import datetime
 
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
@@ -316,13 +315,6 @@ class GoogleLoginUseCase:
         # redes y se acaba con su hora
 
         # 4. Login flow
-        user.record_login(
-            logged_in_at=datetime.now(),
-            ip_address=ip_address,
-            user_agent=user_agent,
-            login_method="google",
-        )
-
         device_id, device_id_str, es_nuevo, dado_de_alta = await self._register_device(
             request, str(user.id.value)
         )

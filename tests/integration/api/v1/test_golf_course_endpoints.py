@@ -249,8 +249,8 @@ class TestGetGolfCourseById:
         assert data["approval_status"] == "PENDING_APPROVAL"
 
     @pytest.mark.asyncio
-    async def test_get_pending_golf_course_as_other_user_returns_403(self, client: AsyncClient):
-        """Otro usuario no puede ver campo pendiente de otro creator."""
+    async def test_get_pending_golf_course_as_other_user_returns_404(self, client: AsyncClient):
+        """Otro usuario no ve el campo pendiente de otro: 404, como si no existiera (A01)."""
         # Arrange
         creator = await create_authenticated_user(
             client, "creator6@test.com", "P@ssw0rd123!", "Creator", "Six"
@@ -267,7 +267,7 @@ class TestGetGolfCourseById:
         )
 
         # Assert
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_golf_course_not_found_returns_404(self, client: AsyncClient):

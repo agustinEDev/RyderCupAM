@@ -154,7 +154,6 @@ async def test_l3_a_reused_password_is_recorded(registro):
             PasswordHistory.create(
                 user_id=user.id,
                 password_hash=Password.from_plain_text(NUEVA).hashed_value,
-                total_history_count=1,
             )
         )
 

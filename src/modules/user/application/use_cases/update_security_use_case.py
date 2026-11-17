@@ -195,12 +195,10 @@ class UpdateSecurityUseCase:
         user.change_password(nueva)
 
         # Guardar el nuevo hash en el historial
-        total_history_count = await self._uow.password_history.count_by_user(user_id_vo) + 1
         password_history = PasswordHistory.create(
             user_id=user_id_vo,
             # `nueva` es la que acaba de quedar puesta (`user.password is nueva`)
             password_hash=nueva.hashed_value,
-            total_history_count=total_history_count,
         )
         await self._uow.password_history.save(password_history)
 

@@ -19,7 +19,6 @@ Post-Conditions:
 """
 
 import logging
-from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
@@ -293,12 +292,10 @@ class ResetPasswordUseCase:
 
             # Guardar el nuevo hash en el historial de contraseñas, revocar las
             # sesiones y guardar el usuario, en la MISMA transacción
-            total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
             password_history = PasswordHistory.create(
                 user_id=user.id,
                 # `nueva` es la que acaba de quedar puesta (`user.password is nueva`)
                 password_hash=nueva.hashed_value,
-                total_history_count=total_history_count,
             )
             await self._uow.password_history.save(password_history)
 
@@ -314,9 +311,6 @@ class ResetPasswordUseCase:
                 # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
                 # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
                 _d, _t, google_quitado = await cierra_lo_que_no_se_probo(self._uow, user.id)
-                if google_quitado:
-                    # Que quede como al desvincularlo a mano (code-review)
-                    user.record_google_unlinked(provider="google", unlinked_at=datetime.now())
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en

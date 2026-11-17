@@ -277,8 +277,8 @@ class TestUpdateSecurityUseCase:
                 confirm_password=None,
             )
 
-    async def test_update_emits_domain_events(self, uow, existing_user):
-        """Debe emitir eventos de dominio cuando se actualiza."""
+    async def test_update_applies_email_and_password(self, uow, existing_user):
+        """Debe dejar el correo pendiente y la contraseña nueva puesta."""
         # Arrange
         use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)

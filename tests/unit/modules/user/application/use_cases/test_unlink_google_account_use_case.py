@@ -153,22 +153,6 @@ class TestUnlinkGoogleAccountUseCase:
                 UnlinkGoogleAccountRequestDTO(user_id=str(fake_id.value)), reautenticado=True
             )
 
-    async def test_unlink_emits_domain_event(self, use_case, user_with_password):
-        """Debe emitir GoogleAccountUnlinkedEvent en el usuario."""
-        await use_case.execute(
-            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value)),
-            reautenticado=True,
-        )
-
-        from src.modules.user.domain.events.google_account_unlinked_event import (
-            GoogleAccountUnlinkedEvent,
-        )
-
-        events = user_with_password.get_domain_events()
-        unlinked_events = [e for e in events if isinstance(e, GoogleAccountUnlinkedEvent)]
-        assert len(unlinked_events) == 1
-        assert unlinked_events[0].provider == "google"
-
 
 @pytest.mark.asyncio
 async def test_the_google_link_is_looked_up_after_locking_the_account():

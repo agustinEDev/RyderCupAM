@@ -1,25 +1,12 @@
 """
-Shared Domain Events - Event System Base
+Shared Domain Events
 
-Exporta las clases base para el sistema de eventos de dominio.
-Estas clases serán utilizadas por todos los módulos del sistema. La
-implementación en memoria vive en src.shared.infrastructure.events.
+La clase base DomainEvent y los eventos de seguridad que la extienden
+(security_events), que registra el log de seguridad.
 """
 
 from .domain_event import DomainEvent
-from .event_bus import EventBus
-from .event_handler import EventHandler
-from .exceptions import (
-    EventBusError,
-    EventHandlerError,
-)
 
 __all__ = [
-    # Clases base
     "DomainEvent",
-    "EventBus",
-    "EventBusError",
-    "EventHandler",
-    # Excepciones
-    "EventHandlerError",
 ]

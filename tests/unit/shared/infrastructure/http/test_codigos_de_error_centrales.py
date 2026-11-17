@@ -110,6 +110,9 @@ CODIGOS_DE_DEVELOP = {
     "src.modules.competition.domain.exceptions.competition_violations.SelfInvitationViolation": 400,
     "src.modules.competition.domain.services.location_builder.InvalidCountryError": 400,
     "src.modules.competition.domain.value_objects.location.InvalidLocationError": 400,
+    # Campos (re-auditoría F-04): los mismos códigos que daban sus rutas
+    "src.modules.golf_course.application.exceptions.GolfCourseEditForbiddenError": 403,
+    "src.modules.golf_course.application.exceptions.GolfCourseMissingError": 404,
     "src.modules.quick_match.application.exceptions.FriendUserNotFoundError": 404,
     "src.modules.quick_match.application.exceptions.GolfCourseNotFoundError": 404,
     "src.modules.quick_match.application.exceptions.InvalidParticipantError": 422,

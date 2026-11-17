@@ -93,9 +93,8 @@ class LogoutUserUseCase:
         if not user:
             return None
 
-        # 2. Registrar evento de logout para auditoría (dominio)
+        # 2. Hora del logout para la respuesta
         logout_time = datetime.now()
-        user.record_logout(logout_time, token)
 
         # 3. y 4. Los refresh tokens de ESTE dispositivo (BE #376), en la misma
         # transacción que el usuario: el que llega en la petición y todos los de su

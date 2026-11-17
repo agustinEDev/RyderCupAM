@@ -9,11 +9,6 @@ import pytest
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
-from src.modules.golf_course.domain.events.golf_course_approved_event import GolfCourseApprovedEvent
-from src.modules.golf_course.domain.events.golf_course_rejected_event import GolfCourseRejectedEvent
-from src.modules.golf_course.domain.events.golf_course_requested_event import (
-    GolfCourseRequestedEvent,
-)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -91,7 +86,7 @@ def test_create_golf_course_success(valid_tees, valid_holes):
     """
     GIVEN: Datos válidos para un campo de golf
     WHEN: Se crea un GolfCourse con create()
-    THEN: El campo se crea en estado PENDING_APPROVAL con evento registrado
+    THEN: El campo se crea en estado PENDING_APPROVAL
     """
     # Given
     name = "Real Club de Golf El Prat"
@@ -122,14 +117,6 @@ def test_create_golf_course_success(valid_tees, valid_holes):
     assert golf_course.total_par == 72  # sum of pars
     assert isinstance(golf_course.created_at, datetime)
     assert isinstance(golf_course.updated_at, datetime)
-
-    # Event registrado
-    events = golf_course.pull_domain_events()
-    assert len(events) == 1
-    assert isinstance(events[0], GolfCourseRequestedEvent)
-    assert events[0].golf_course_id == str(golf_course.id)
-    assert events[0].golf_course_name == name
-    assert events[0].creator_id == str(creator_id)
 
 
 def test_create_golf_course_invalid_name_too_short(valid_tees, valid_holes):
@@ -362,7 +349,7 @@ def test_approve_golf_course_success(valid_tees, valid_holes):
     """
     GIVEN: Un campo en estado PENDING_APPROVAL
     WHEN: Se llama a approve()
-    THEN: El campo pasa a APPROVED y se registra un evento
+    THEN: El campo pasa a APPROVED
     """
     # Given
     golf_course = GolfCourse.create(
@@ -373,7 +360,6 @@ def test_approve_golf_course_success(valid_tees, valid_holes):
         tees=valid_tees,
         holes=valid_holes,
     )
-    golf_course.clear_domain_events()  # Limpiar evento de creación
 
     # When
     golf_course.approve()
@@ -381,14 +367,6 @@ def test_approve_golf_course_success(valid_tees, valid_holes):
     # Then
     assert golf_course.approval_status == ApprovalStatus.APPROVED
     assert golf_course.rejection_reason is None
-
-    # Event registrado
-    events = golf_course.pull_domain_events()
-    assert len(events) == 1
-    assert isinstance(events[0], GolfCourseApprovedEvent)
-    assert events[0].golf_course_id == str(golf_course.id)
-    assert events[0].golf_course_name == golf_course.name
-    assert events[0].creator_id == str(golf_course.creator_id)
 
 
 def test_approve_golf_course_already_approved(valid_tees, valid_holes):
@@ -448,7 +426,7 @@ def test_reject_golf_course_success(valid_tees, valid_holes):
     """
     GIVEN: Un campo en estado PENDING_APPROVAL
     WHEN: Se llama a reject() con razón válida
-    THEN: El campo pasa a REJECTED y se registra un evento
+    THEN: El campo pasa a REJECTED
     """
     # Given
     golf_course = GolfCourse.create(
@@ -459,7 +437,6 @@ def test_reject_golf_course_success(valid_tees, valid_holes):
         tees=valid_tees,
         holes=valid_holes,
     )
-    golf_course.clear_domain_events()  # Limpiar evento de creación
 
     reason = "Los ratings WHS no coinciden con los datos oficiales del campo"
 
@@ -469,15 +446,6 @@ def test_reject_golf_course_success(valid_tees, valid_holes):
     # Then
     assert golf_course.approval_status == ApprovalStatus.REJECTED
     assert golf_course.rejection_reason == reason
-
-    # Event registrado
-    events = golf_course.pull_domain_events()
-    assert len(events) == 1
-    assert isinstance(events[0], GolfCourseRejectedEvent)
-    assert events[0].golf_course_id == str(golf_course.id)
-    assert events[0].golf_course_name == golf_course.name
-    assert events[0].creator_id == str(golf_course.creator_id)
-    assert events[0].rejection_reason == reason
 
 
 def test_reject_golf_course_reason_too_short(valid_tees, valid_holes):
@@ -580,7 +548,7 @@ def test_reconstruct_golf_course_success(valid_tees, valid_holes):
     """
     GIVEN: Datos completos de un campo desde persistencia
     WHEN: Se reconstruye con reconstruct()
-    THEN: El campo se hidrata correctamente SIN registrar eventos
+    THEN: El campo se hidrata correctamente
     """
     # Given
     from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -615,7 +583,6 @@ def test_reconstruct_golf_course_success(valid_tees, valid_holes):
     assert golf_course.approval_status == approval_status
     assert golf_course.created_at == created_at
     assert golf_course.updated_at == updated_at
-    assert len(golf_course.pull_domain_events()) == 0  # Sin eventos en reconstrucción
 
 
 # ============================================================================
