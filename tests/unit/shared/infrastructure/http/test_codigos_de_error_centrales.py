@@ -24,6 +24,8 @@ RAIZ = Path(__file__).resolve().parents[5]
 # El código que daba cada excepción en develop (12 nov 2026, tras la #809): en sus rutas o,
 # las dos de los torneos sin equipos (#251), en exception_handlers.py de competición
 CODIGOS_DE_DEVELOP = {
+    # Un enlace en el mensaje de una invitación (SB-05, 17 nov 2026)
+    "src.modules.competition.domain.entities.invitation.InvitationMessageWithLinkError": 400,
     "src.modules.competition.domain.entities.competition.TournamentTypeError": 400,
     "src.modules.competition.domain.value_objects.stroke_play_setup.StrokePlaySettingsError": 400,
     "src.modules.competition.application.exceptions.AgendaNotEditableError": 400,
@@ -416,6 +418,8 @@ def test_only_the_deadline_on_hold_draft_and_images_busy_errors_bring_their_code
         "src.modules.competition.application.services.baja_de_la_competicion.DraftInProgressError",
         # Imágenes ocupadas (SB-01): el front lo traduce por su código
         "src.modules.user.domain.errors.user_errors.ImageProcessingBusyError",
+        # Un enlace en el mensaje de una invitación (SB-05): ídem
+        "src.modules.competition.domain.entities.invitation.InvitationMessageWithLinkError",
     }
     assert los_que_llevan_su_codigo() <= todos_los_codigos().keys()
 

@@ -156,6 +156,6 @@ class AliasValidator:
             raise ValueError(f"{field_name} debe contener al menos una letra o un número")
 
         # Sin enlaces: el alias sale en correos que firma la app (SB-05, 17 nov 2026)
-        if contiene_enlace(alias):
+        if contiene_enlace(normalized):
             raise ValueError(f"El {field_name} no puede llevar enlaces ni direcciones web.")
         return normalized

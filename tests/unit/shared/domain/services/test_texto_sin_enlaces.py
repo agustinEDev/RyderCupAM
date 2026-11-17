@@ -34,7 +34,13 @@ from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
         "Llama ya: tel:+34600000000",
         "sms:+34600000000?body=x",
         "mailto:gana@premio.com",
-        "PREMIO.COM",
+        "premio.cat",
+        "premio.eus",
+        "www.premio.bet",
+        "gana@premio.lat",
+        "premio\u200e.com",
+        "premio\u2063.com",
+        "Club.golf",
     ],
 )
 def test_links_domains_ips_and_call_schemes_are_detected(texto):
@@ -58,6 +64,13 @@ def test_links_domains_ips_and_call_schemes_are_detected(texto):
         "j.garcia",
         "Ana.Maria",
         "Copa St.Andrews",
+        "Hola Juan.Te invito",
+        "Nos vemos el sabado.Un abrazo",
+        "Copa Pro.Am 2026",
+        "Torneo Ed.II",
+        "Pepe.Jr",
+        "Dr.No",
+        "Club.Golf",
         None,
     ],
 )

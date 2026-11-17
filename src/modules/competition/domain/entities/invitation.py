@@ -26,6 +26,20 @@ INVITATION_EXPIRATION_DAYS = 7
 MAX_PERSONAL_MESSAGE_LENGTH = 500
 
 
+class InvitationMessageWithLinkError(ValueError):
+    """
+    El mensaje de una invitación lleva un enlace o una dirección web (SB-05, 17 nov 2026).
+
+    Sale en el correo que firma la app: no se deja escribir. Con su `error_code`, para
+    que el front lo diga en su idioma junto al campo.
+    """
+
+    error_code = "MESSAGE_HAS_LINK"
+
+    def __init__(self) -> None:
+        super().__init__("The message cannot contain links or web addresses.")
+
+
 class Invitation:
     """
     Entidad Invitation - Representa una invitacion a una competicion.
@@ -99,7 +113,7 @@ class Invitation:
         # Sin enlaces en el mensaje: sale en el correo que firma la app (SB-05). Solo al
         # crearla: las ya guardadas se leen tal cual
         if contiene_enlace(personal_message):
-            raise ValueError("El mensaje no puede llevar enlaces ni direcciones web.")
+            raise InvitationMessageWithLinkError()
         now = datetime.now()
         invitation = cls(
             id=id,

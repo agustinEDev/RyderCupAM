@@ -8,10 +8,13 @@ la app. Decidido por Agustín el 17 nov 2026: no se dejan escribir (se avisa en 
 formulario y no se guarda), en vez de desarmarlos en el correo, que dejaba corchetes
 raros a la vista. Los nombres y apellidos ya no admiten puntos ni barras.
 
-Cuenta como enlace: un esquema con «://», los de llamar o escribir sin él («tel:»,
-«sms:», «mailto:»…), una dirección IPv4 y cualquier dominio («premio.com»,
-«пример.рф», «xn--…»). Antes de buscar, el texto se normaliza a NFC, los puntos que se
-parecen a un punto pasan a ser un punto y fuera los caracteres invisibles: los
+Cuenta como enlace, siempre: un esquema con «://», los de llamar o escribir sin él
+(«tel:», «sms:», «mailto:»…), lo que empieza por «www.», una dirección de correo y una
+IPv4. Y «algo.terminación» solo si la terminación existe (la lista de la IANA, en
+`terminaciones_de_dominio`) y no está escrita «Mayúscula+minúsculas»: así empieza una
+frase sin espacio tras el punto o un nombre («Juan.Te invito», «Copa Pro.Am»), no una
+dirección. Antes de buscar, el texto se normaliza a NFC, los puntos que se parecen a un
+punto pasan a ser un punto y fuera todos los caracteres de formato (invisibles): los
 detectores de enlaces de los clientes los leen así.
 
 Coste: la búsqueda crece con el cuadrado de la longitud; los tres textos tienen tope
@@ -21,37 +24,47 @@ Coste: la búsqueda crece con el cuadrado de la longitud; los tres textos tienen
 import re
 import unicodedata
 
+from src.shared.domain.services.terminaciones_de_dominio import TERMINACIONES_DE_DOMINIO
+
 # Puntos de otros alfabetos que los detectores de enlaces leen como un punto (UTS-46)
 _PUNTOS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
-# Invisibles: de anchura cero, unión de palabras, marca de orden, guion blando
-_INVISIBLES = re.compile("[\u200b-\u200d\u2060\ufeff\u00ad]")
 
-# Una etiqueta de dominio: letras (de cualquier alfabeto) y números, con guiones dentro
-_ETIQUETA = r"[^\W_](?:[\w-]{0,61}[^\W_])?"
-# Las terminaciones que un cliente de correo convierte en enlace: las de dos letras (los
-# países: .es, .io, .ly…), las genéricas de siempre y las nuevas que más usa el spam.
-# No cualquier palabra: «j.garcia» o «Ana.Maria» son alias, no dominios (falsos
-# positivos que rechazaban alias normales)
-_TERMINACIONES = (
-    "com|net|org|info|biz|edu|gov|mil|int|name|pro|mobi|app|dev|page|io|ai|co|me|tv|"
-    "xyz|top|site|online|shop|store|club|link|click|live|life|world|today|news|blog|"
-    "cloud|tech|fun|icu|vip|win|bid|loan|work|space|website|email|support|help|"
-    "login|secure|bank|money|pay|wallet|crypto|golf|gift|deals|sale|promo"
+# Lo que es enlace sin mirar más
+_ESQUEMA = re.compile(r"[a-z][a-z0-9+.-]*://", re.IGNORECASE)
+_ESQUEMA_SIN_BARRAS = re.compile(
+    r"(?<![a-z])(?:tel|sms|mailto|callto|whatsapp):(?!//)", re.IGNORECASE
 )
-# Un dominio: etiquetas separadas por puntos que acaban en una terminación de las de
-# arriba, en dos letras, en letras de otro alfabeto («пример.рф») o en punycode
+_WWW = re.compile(r"(?<![a-z0-9])www\.[^\s.]", re.IGNORECASE)
+_CORREO = re.compile(r"[^\s@]+@[^\s@.]+\.[^\s@]+")
+# Al final de una frase puede seguir un punto: lo que no puede seguir es otro número
+_IP = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9]|\.[0-9])")
+
+# «algo.algo»: etiquetas de letras y números con guiones dentro, y una última de letras
+# (o punycode). Si es dominio lo decide la terminación, en `_es_terminacion`
+_ETIQUETA = r"[^\W_](?:[\w-]{0,61}[^\W_])?"
 _DOMINIO = re.compile(
-    rf"(?<![\w-])(?:{_ETIQUETA}\.)+"
-    rf"(?:{_TERMINACIONES}|[a-z]{{2}}|[^\W\da-z_]{{2,63}}|xn--[a-z0-9-]{{1,59}})"
-    r"(?![\w-])",
+    rf"(?<![\w-])(?:{_ETIQUETA}\.)+([^\W\d_]{{2,63}}|xn--[a-z0-9-]{{1,59}})(?![\w-])",
     re.IGNORECASE,
 )
-# Una dirección IPv4: también lleva a un servidor, sin dominio
-# Al final de una frase puede seguir un punto: lo que no puede seguir es otro número
-_IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)")
-# Un esquema con «//» (https://, ftp://…) o de los que abren algo sin él
-_ESQUEMA = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*)://")
-_ESQUEMA_SIN_BARRAS = re.compile(r"(?i)\b(tel|sms|mailto|callto|whatsapp):(?!//)")
+
+
+def _sin_invisibles(texto: str) -> str:
+    """Fuera los caracteres de formato (Cf): de anchura cero, de dirección, guion blando…"""
+    return "".join(c for c in texto if unicodedata.category(c) != "Cf")
+
+
+def _es_terminacion(final: str) -> bool:
+    """Si la última etiqueta es una terminación de dominio, escrita como dirección."""
+    # «Te», «Am», «Golf»: una palabra que empieza frase o nombre, no una dirección
+    if len(final) > 1 and final[0].isupper() and final[1:].islower():
+        return False
+    if final.isascii():
+        return final.lower() in TERMINACIONES_DE_DOMINIO
+    # Otro alfabeto («рф»): la IANA la lista en punycode
+    try:
+        return "xn--" + final.lower().encode("punycode").decode() in TERMINACIONES_DE_DOMINIO
+    except UnicodeError:
+        return False
 
 
 def contiene_enlace(texto: str | None) -> bool:
@@ -62,10 +75,11 @@ def contiene_enlace(texto: str | None) -> bool:
         texto: Lo que escribió un usuario (un nombre, un alias, un mensaje)
 
     Returns:
-        True si lleva un esquema, una IP o un dominio
+        True si lleva un esquema, «www.», un correo, una IP o un dominio
     """
     if not texto:
         return False
-    limpio = unicodedata.normalize("NFC", texto)
-    limpio = _INVISIBLES.sub("", limpio.translate(_PUNTOS))
-    return any(patron.search(limpio) for patron in (_ESQUEMA, _ESQUEMA_SIN_BARRAS, _IP, _DOMINIO))
+    limpio = _sin_invisibles(unicodedata.normalize("NFC", texto).translate(_PUNTOS))
+    if any(p.search(limpio) for p in (_ESQUEMA, _ESQUEMA_SIN_BARRAS, _WWW, _CORREO, _IP)):
+        return True
+    return any(_es_terminacion(m.group(1)) for m in _DOMINIO.finditer(limpio))
