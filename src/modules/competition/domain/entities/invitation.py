@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
 from ..events.invitation_accepted_event import InvitationAcceptedEvent
 from ..events.invitation_created_event import InvitationCreatedEvent
@@ -95,6 +96,10 @@ class Invitation:
         sent_by_email: bool = False,
     ) -> "Invitation":
         """Factory method para crear una nueva invitacion con status PENDING."""
+        # Sin enlaces en el mensaje: sale en el correo que firma la app (SB-05). Solo al
+        # crearla: las ya guardadas se leen tal cual
+        if contiene_enlace(personal_message):
+            raise ValueError("El mensaje no puede llevar enlaces ni direcciones web.")
         now = datetime.now()
         invitation = cls(
             id=id,
