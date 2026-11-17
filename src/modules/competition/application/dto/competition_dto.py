@@ -96,18 +96,31 @@ class CreatorDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID único del usuario creador")
-    first_name: str = Field(..., description="Nombre del creador")
-    last_name: str = Field(..., description="Apellido del creador")
+    first_name: str = Field(
+        ...,
+        description=(
+            "Nombre del creador. Vacío en una privada si tiene alias y quien mira no es "
+            "él ni un admin (SB-08)"
+        ),
+    )
+    last_name: str = Field(..., description="Apellidos del creador; vacío en el mismo caso")
     display_name: str = Field(
         ...,
         description=(
-            "Nombre con el que se debe mostrar al creador: su alias si tiene, "
-            "y si no su nombre completo. Es lo que hay que pintar; first_name "
-            "y last_name siguen aquí para lo que necesite el nombre real."
+            "Nombre con el que se debe mostrar al creador. En una pública, su nombre "
+            "real; en una privada, su alias si tiene, y si no su nombre completo. Es "
+            "lo que hay que pintar (SB-08)."
         ),
     )
     handicap: float | None = Field(None, description="Handicap actual del creador")
     country_code: str | None = Field(None, description="Código ISO del país del creador")
+    alias: str | None = Field(
+        None,
+        description=(
+            "En una competición pública, el alias del creador si tiene, para enseñarlo "
+            "debajo de su nombre real (SB-08). Null en una privada."
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

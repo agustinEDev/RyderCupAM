@@ -13,6 +13,7 @@ import pytest
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.api.v1.enrollment_routes import EnrollmentDTOMapper
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -195,3 +196,77 @@ async def test_seeing_every_email_sends_them_all(competition_id):
     dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, ve_todos_los_correos=True)
 
     assert [d.user.email for d in dtos] == [str(ana.email), str(bea.email)]
+
+
+# SB-08 (decidido por Agustín el 17 nov 2026): en una pública el nombre real va siempre a
+# la vista, con el alias además si el jugador lo eligió; en una privada, lo que eligió,
+# y si eligió su alias, su nombre real solo lo reciben él, el organizador y los admin.
+
+
+async def test_private_alias_hides_the_legal_name_from_other_players(competition_id):
+    """
+    Given: Una privada, un jugador que eligió su alias, y otro jugador que mira
+    When: Se arma la lista
+    Then: Solo va el alias; ni nombre ni apellidos
+    """
+    uow = InMemoryUnitOfWork()
+    trinx = await _usuario(uow, "Agustin", alias="Trinx")
+
+    [dto] = await EnrollmentDTOMapper.to_response_dtos(
+        [_inscripcion(competition_id, trinx, use_real_name=False)],
+        uow,
+        visibility=Visibility.PRIVATE,
+        viewer_id=UserId(uuid4()),
+    )
+
+    assert dto.user.display_name == "Trinx"
+    assert (dto.user.first_name, dto.user.last_name) == ("", "")
+    assert dto.user.alias is None
+
+
+@pytest.mark.parametrize("quien", ["el-mismo", "organizador"])
+async def test_private_alias_keeps_the_legal_name_for_the_player_and_the_organizer(
+    competition_id, quien
+):
+    """
+    Given: Una privada y un jugador que eligió su alias
+    When: Mira él mismo, o el organizador (que ve todos los correos)
+    Then: Va también su nombre real
+    """
+    uow = InMemoryUnitOfWork()
+    trinx = await _usuario(uow, "Agustin", alias="Trinx")
+
+    [dto] = await EnrollmentDTOMapper.to_response_dtos(
+        [_inscripcion(competition_id, trinx, use_real_name=False)],
+        uow,
+        visibility=Visibility.PRIVATE,
+        ve_todos_los_correos=quien == "organizador",
+        viewer_id=trinx.id if quien == "el-mismo" else UserId(uuid4()),
+    )
+
+    assert dto.user.display_name == "Trinx"
+    assert (dto.user.first_name, dto.user.last_name) == ("Agustin", "Pérez")
+
+
+@pytest.mark.parametrize("use_real_name", [True, False], ids=["eligio-nombre", "eligio-alias"])
+async def test_public_always_shows_the_real_name_and_the_alias_if_chosen(
+    competition_id, use_real_name
+):
+    """
+    Given: Una pública y un jugador con alias, que eligió su nombre o su alias
+    When: Otro jugador mira la lista
+    Then: El nombre real a la vista; el alias, solo si lo eligió, para ponerlo debajo
+    """
+    uow = InMemoryUnitOfWork()
+    trinx = await _usuario(uow, "Agustin", alias="Trinx")
+
+    [dto] = await EnrollmentDTOMapper.to_response_dtos(
+        [_inscripcion(competition_id, trinx, use_real_name=use_real_name)],
+        uow,
+        visibility=Visibility.PUBLIC,
+        viewer_id=UserId(uuid4()),
+    )
+
+    assert dto.user.display_name == "Agustin Pérez"
+    assert (dto.user.first_name, dto.user.last_name) == ("Agustin", "Pérez")
+    assert dto.user.alias == (None if use_real_name else "Trinx")

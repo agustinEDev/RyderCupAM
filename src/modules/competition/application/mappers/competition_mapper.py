@@ -123,7 +123,10 @@ class CompetitionDTOMapper:
         creator_dto = None
         if user_uow:
             creator_dto = await CompetitionDTOMapper._get_creator_dto(
-                competition.creator_id, user_uow
+                competition.creator_id,
+                user_uow,
+                competition.visibility,
+                ve_el_nombre_legal=is_creator or is_admin,
             )
 
         # La tarjeta de «Mis competiciones» (FE #846)
@@ -333,10 +336,18 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
+        visibility: Visibility = Visibility.PRIVATE,
+        *,
+        ve_el_nombre_legal: bool = False,
     ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición. Sin su correo:
         no sale nunca (BE #531).
+
+        Su nombre, con la regla de los jugadores (SB-08): en una pública, el real a
+        la vista y el alias aparte, para pintarlo debajo; en una privada, el visible
+        (su alias si tiene), y su nombre y apellidos solo a él y a los admin
+        (`ve_el_nombre_legal`).
 
         Assumes caller manages the user_uow transaction context.
         """
@@ -346,11 +357,14 @@ class CompetitionDTOMapper:
             logger.warning("Creator with id %s not found", creator_id.value)
             return None
 
+        publica = visibility.shows_real_name(False)
+        legal = publica or ve_el_nombre_legal or creator.alias is None
         return CreatorDTO(
             id=creator.id.value,
-            first_name=creator.first_name,
-            last_name=creator.last_name,
-            display_name=creator.display_name,
+            first_name=creator.first_name if legal else "",
+            last_name=creator.last_name if legal else "",
+            display_name=creator.display_name_or_legal(publica),
+            alias=creator.alias if publica else None,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),
         )

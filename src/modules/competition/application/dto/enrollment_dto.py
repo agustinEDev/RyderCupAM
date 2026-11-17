@@ -33,8 +33,14 @@ class EnrolledUserDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID único del usuario")
-    first_name: str = Field(..., description="Nombre del usuario")
-    last_name: str = Field(..., description="Apellido del usuario")
+    first_name: str = Field(
+        ...,
+        description=(
+            "Nombre del usuario. Vacío si eligió su alias en una competición privada y "
+            "quien mira no es él, el organizador ni un admin (SB-08)"
+        ),
+    )
+    last_name: str = Field(..., description="Apellidos del usuario; vacío en el mismo caso")
     display_name: str = Field(
         ...,
         description=(
@@ -53,6 +59,13 @@ class EnrolledUserDTO(BaseModel):
     handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
     country_code: str | None = Field(None, description="Código ISO del país del usuario")
     avatar_url: str | None = Field(None, description="URL del avatar del usuario (futuro)")
+    alias: str | None = Field(
+        None,
+        description=(
+            "En una competición pública, el alias del jugador si lo eligió para ella, "
+            "para enseñarlo debajo de su nombre real (SB-08). Null en el resto de casos."
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
