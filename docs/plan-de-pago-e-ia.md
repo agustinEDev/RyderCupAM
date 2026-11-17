@@ -4,7 +4,7 @@
 >
 > Issues: épica [RyderCupAM#676](https://github.com/agustinEDev/RyderCupAM/issues/676) (asistente, con el modelo de rentabilidad en un comentario) y sus hijas #677–#680 y [RyderCupWeb#977](https://github.com/agustinEDev/RyderCupWeb/issues/977); entrenador de swing en [RyderCupWeb#937](https://github.com/agustinEDev/RyderCupWeb/issues/937).
 >
-> Sustituye al plan de diciembre de 2025: [RAG_IMPLEMENTATION.md](RAG_IMPLEMENTATION.md), [ADR-022](architecture/decisions/ADR-022-rag-golf-rules-assistant.md) (los ADR no se editan: lo sustituirá uno nuevo al empezar la fase 1) y la v2.2.0 del [ROADMAP](../ROADMAP.md).
+> Sustituye al plan de diciembre de 2025: [RAG_IMPLEMENTATION.md](RAG_IMPLEMENTATION.md), [ADR-052](architecture/decisions/ADR-052-no-ai-rules-assistant-for-now.md) (sustituye al ADR-022, borrado; al empezar la fase 1 hará falta otro) y la v2.2.0 del [ROADMAP](../ROADMAP.md).
 
 Las cifras son estimaciones del 26 oct 2026 con precios consultados ese día, no presupuestos. La cuota de autónomo, la gestoría y la comisión de Stripe están por confirmar.
 

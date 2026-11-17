@@ -412,9 +412,9 @@ pytest tests/unit/modules/user/ -n auto
 - **ADR-002:** Value Objects
 - **ADR-005:** Repository Pattern
 - **ADR-006:** Unit of Work Pattern
-- **ADR-050:** Remove the Unused Domain Events (supersedes ADR-007)
+- **ADR-050:** Remove the Unused Domain Events
 - **ADR-013:** External Services Pattern
-- **ADR-015:** Session Management Progressive Strategy
+- **ADR-039:** Session Lifetime per Device
 - **ADR-019:** Email Verification System
 
 ### Testing

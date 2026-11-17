@@ -300,7 +300,7 @@ Este documento puede **ELIMINARSE** cuando:
 - [ ] Variables de entorno configuradas en producción
 - [ ] Monitoreo activo (métricas de uso primeros 7 días)
 - [ ] Documentación técnica actualizada en docs/
-- [ ] ADR-022 revisado y confirmado
+- [ ] ADR revisado y confirmado (el ADR-022 se borró: ver ADR-052)
 
 ---
 
@@ -320,7 +320,7 @@ Este documento puede **ELIMINARSE** cuando:
 ## 🔗 Referencias
 
 ### Documentación
-- **ADR-022:** RAG Assistant Architecture (pendiente de crear)
+- **ADR-052:** No AI Rules Assistant for Now (sustituye al ADR-022, borrado)
 - **docs/README.md:** Actualizar con RAG module
 - **API.md:** Actualizar con endpoints de AI
 
