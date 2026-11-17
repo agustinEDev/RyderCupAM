@@ -1,9 +1,10 @@
 # ADR-052: No AI Rules Assistant for Now
 
-**Status:** Accepted (replaces ADR-022, removed)
+**Status:** Accepted
 **Date:** November 17, 2026
 **Context:** Product - AI features
 **Author:** Agustín Estévez
+**Replaces:** ADR-022 (RAG golf rules assistant), removed on November 17, 2026
 
 ---
 

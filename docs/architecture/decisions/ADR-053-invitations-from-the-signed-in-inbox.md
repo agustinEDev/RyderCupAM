@@ -1,9 +1,10 @@
 # ADR-053: Invitations Are Answered from the Signed-in Player's Inbox
 
-**Status:** Accepted (replaces ADR-033, removed)
+**Status:** Accepted
 **Date:** November 17, 2026
 **Context:** Competition module; Security - OWASP A01, A07
 **Author:** Agustín Estévez
+**Replaces:** ADR-033 (invitation token security), removed on November 17, 2026
 
 ---
 

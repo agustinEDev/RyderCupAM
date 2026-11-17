@@ -1,9 +1,10 @@
 # ADR-051: Standard Python Logging plus a Durable JSON Security Log
 
-**Status:** Accepted (replaces ADR-008, removed)
+**Status:** Accepted
 **Date:** November 17, 2026
 **Context:** Architecture - observability; Security - OWASP A09
 **Author:** Agustín Estévez
+**Replaces:** ADR-008 (logging system), removed on November 17, 2026
 
 ---
 
