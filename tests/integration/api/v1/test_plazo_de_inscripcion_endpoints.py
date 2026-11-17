@@ -31,8 +31,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.config.cierre_de_inscripciones import CierreDeInscripciones
-from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     add_one_session,

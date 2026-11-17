@@ -10,7 +10,7 @@ Quién ve qué en la lista de inscritos (BE #531; release social 2, 27 oct 2026)
 - El filtro `?status=` se aplica encima.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -38,6 +38,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
@@ -110,7 +111,7 @@ class _Escenario:
     async def invitar(self, quien: UserId, *, email: str = "x@test.com", **como) -> None:
         datos = {
             "status": InvitationStatus.PENDING,
-            "expires_at": datetime.now() + timedelta(days=7),
+            "expires_at": ahora_utc_sin_zona() + timedelta(days=7),
             "invitee_user_id": quien,
         }
         invitacion = Invitation(
@@ -312,7 +313,7 @@ class TestInvitadoAUnaPrivada:
             {"status": InvitationStatus.DECLINED},
             {"status": InvitationStatus.CANCELLED},
             {"status": InvitationStatus.EXPIRED},
-            {"expires_at": datetime.now() - timedelta(minutes=1)},
+            {"expires_at": ahora_utc_sin_zona() - timedelta(minutes=1)},
         ],
     )
     async def test_una_invitacion_que_ya_no_vale_no_deja_ver(self, e, como):

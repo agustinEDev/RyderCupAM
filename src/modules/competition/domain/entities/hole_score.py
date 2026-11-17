@@ -13,6 +13,7 @@ from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 MIN_SCORE = 1
 MAX_SCORE = 15
@@ -103,7 +104,7 @@ class HoleScore:
         if strokes_received < 0:
             raise ValueError(f"strokes_received must be >= 0, got {strokes_received}")
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         return cls(
             id=HoleScoreId.generate(),
             match_id=match_id,
@@ -174,7 +175,7 @@ class HoleScore:
 
         self._own_score = score
         self._own_submitted = True
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def set_marker_score(self, score: int | None) -> None:
         """
@@ -191,7 +192,7 @@ class HoleScore:
 
         self._marker_score = score
         self._marker_submitted = True
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def recalculate_validation(self) -> None:
         """
@@ -210,7 +211,7 @@ class HoleScore:
             self._validation_status = ValidationStatus.MISMATCH
 
         self._calculate_net_score()
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def _calculate_net_score(self) -> None:
         """

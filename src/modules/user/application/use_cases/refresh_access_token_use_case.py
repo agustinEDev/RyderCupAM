@@ -42,6 +42,7 @@ from src.modules.user.domain.services.rotacion_del_refresco import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class RefreshRejection(StrEnum):
@@ -312,7 +313,7 @@ class RefreshAccessTokenUseCase:
             propio = await self._uow.user_devices.find_by_id(dispositivo)
             if propio is not None and not propio.is_active:
                 return False
-        ahora = datetime.now()
+        ahora = ahora_utc_sin_zona()
         # Solo una sesión reciente: la petición tardía llega segundos después del
         # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)
         desde = max(creado, ahora - VENTANA_DE_LA_SESION_NUEVA)
@@ -351,7 +352,7 @@ class RefreshAccessTokenUseCase:
                     await self._uow.refresh_tokens.save(refresh_token_entity)
             raise RefreshRejectedError(RefreshRejection.USER_INACTIVE)
 
-        ahora = datetime.now()
+        ahora = ahora_utc_sin_zona()
         await self._robo_si_vuelve_un_anulado(refresh_token_entity, user, request, ahora)
         await self._rechaza_si_no_vale(refresh_token_entity)
 

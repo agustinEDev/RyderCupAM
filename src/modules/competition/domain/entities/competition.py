@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.modality import Modality
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -191,8 +192,8 @@ class Competition:
         self._visibility = visibility
         self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
         self._golf_courses: list[CompetitionGolfCourse] = []
         # El plazo de inscripcion (15 nov 2026): cuando se abrieron por ultima
         # vez, en UTC sin zona; si las cerro el plazo y no el organizador; y si
@@ -455,7 +456,7 @@ class Competition:
         )
         nuevos.check_fits_in(self._days_of(self._dates))
         self._stroke_play = nuevos
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return nuevos
 
     def repartir_categorias(self, handicaps: Iterable[Decimal | None]) -> StrokePlaySetup:
@@ -471,7 +472,7 @@ class Competition:
         if self._stroke_play is None:
             raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
         self._stroke_play = self._stroke_play.repartir(handicaps)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return self._stroke_play
 
     @property
@@ -575,7 +576,7 @@ class Competition:
             )
 
         self._enrollment_opens_days_before = dias
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         # Quitar los dias es decir «abrela ya»: sin programacion no hay nada que
         # esperar, y dejarla en DRAFT la varaba sin salida (BE #332)
@@ -730,7 +731,7 @@ class Competition:
         if self._stroke_play is not None:
             self._stroke_play.check_fits_in(self._days_of(dates))
         self._mover_fechas(dates)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
@@ -775,7 +776,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.ACTIVE
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         self._abiertas_ahora(now)
 
         # La apertura programada queda cumplida al abrir, venga de su hora, de
@@ -799,7 +800,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.CLOSED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         self._enrollment_closed_by_deadline = by_deadline
         # Ya cerradas, el aviso de que no se podian cerrar deja de valer (C4)
         self._close_blocked_notified = False
@@ -817,7 +818,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.IN_PROGRESS
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def complete(self) -> None:
         """
@@ -832,7 +833,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.COMPLETED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def cancel(self, reason: str | None = None) -> None:
         """
@@ -850,7 +851,7 @@ class Competition:
             raise CompetitionStateError(f"No se puede cancelar desde estado {self._status.value}")
 
         self._status = CompetitionStatus.CANCELLED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def revert_to_closed(self) -> None:
         """
@@ -868,7 +869,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.CLOSED
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def revert_to_in_progress(self) -> None:
         """
@@ -887,7 +888,7 @@ class Competition:
             )
 
         self._status = CompetitionStatus.IN_PROGRESS
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # ===========================================
     # CAPITANES (BE #320)
@@ -946,7 +947,7 @@ class Competition:
         if self._status == CompetitionStatus.ACTIVE:
             self.close_enrollments(total_enrollments=len(approved_player_ids))
         else:
-            self._updated_at = datetime.now()
+            self._updated_at = ahora_utc_sin_zona()
 
     def name_vice_captain(
         self,
@@ -977,7 +978,7 @@ class Competition:
         if player == ryder_cup.captain(team):
             raise ValueError("El capitán no puede ser también su subcapitán")
         self._ryder_cup = ryder_cup.with_vice_captain(team, player)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def fill_captain(
         self,
@@ -1008,7 +1009,7 @@ class Competition:
             )
         # Si era el subcapitán de ese equipo, la pieza deja ese puesto libre
         self._ryder_cup = ryder_cup.with_captain(team, player)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def handle_withdrawal(self, user_id: UserId) -> bool:
         """Lo que pasa con los capitanes cuando un jugador se da de baja.
@@ -1032,7 +1033,7 @@ class Competition:
         if despues is None:
             return False
         self._ryder_cup = despues
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
         return True
 
     def teams_reassigned(self) -> None:
@@ -1091,7 +1092,7 @@ class Competition:
         # límites del cierre anterior ya no dicen nada (10 oct 2026)
         if self._stroke_play is not None:
             self._stroke_play = self._stroke_play.sin_reparto()
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
@@ -1180,7 +1181,7 @@ class Competition:
 
         self._ryder_cup = ryder_cup
 
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def _mover_fechas(self, dates: DateRange) -> None:
         """
@@ -1236,7 +1237,7 @@ class Competition:
         )
 
         self._golf_courses.append(association)
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def remove_golf_course(self, golf_course_id: GolfCourseId) -> None:
         """
@@ -1269,7 +1270,7 @@ class Competition:
         for i, cgc in enumerate(self._golf_courses, start=1):
             cgc.change_order(i)
 
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def validate_reorder(self, golf_course_ids: list[GolfCourseId]) -> None:
         """
@@ -1321,7 +1322,7 @@ class Competition:
                     cgc.change_order(new_display_order)
                     break
 
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def reorder_golf_courses(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
         """
@@ -1358,7 +1359,7 @@ class Competition:
             else:
                 raise ValueError(f"Campo {golf_course_id} no encontrado")
 
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def _is_country_compatible(self, country_code: CountryCode) -> bool:
         """Verifica si un país es compatible con la location de la competición."""

@@ -19,6 +19,7 @@ from src.modules.user.application.ports.cupo_de_avisos_port import (
     MOTIVO_SESION_CERRADA,
     ICupoDeAvisos,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 AVISOS_DE_RED_POR_HORA = 20
 AVISOS_DE_RED_POR_DIA = 30
@@ -33,7 +34,7 @@ UN_DIA = timedelta(hours=24)
 class CupoDeAvisosEnMemoria(ICupoDeAvisos):
     """Los avisos enviados en el último día, por tipo."""
 
-    def __init__(self, reloj: Callable[[], datetime] = datetime.now):
+    def __init__(self, reloj: Callable[[], datetime] = ahora_utc_sin_zona):
         """El tope, vacío, con su reloj."""
         self._reloj = reloj
         self._de_red: deque[datetime] = deque()

@@ -34,6 +34,7 @@ from src.modules.user.domain.services.freno_del_login import (
     MINUTOS_DE_BLOQUEO_POR_ORIGEN,
     MINUTOS_DE_LA_VENTANA_POR_ORIGEN,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 INTENTOS_POR_MINUTO = parse(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT).amount
 FALLOS_QUE_BLOQUEAN = FALLOS_POR_ORIGEN
@@ -53,7 +54,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
 
     def __init__(
         self,
-        reloj: Callable[[], datetime] = datetime.now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
         limita_intentos: Callable[[], bool] = lambda: limiter.enabled,
         maximo_de_parejas: int = MAXIMO_DE_PAREJAS,
     ):

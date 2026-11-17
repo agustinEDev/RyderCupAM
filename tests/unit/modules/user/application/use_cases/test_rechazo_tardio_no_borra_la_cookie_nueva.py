@@ -17,7 +17,7 @@ en segundo plano) después de volver a entrar, su Set-Cookie borraría la cookie
       navegador tenga una sesión más nueva (revocado o caducado, revisor de seguridad)
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -32,6 +32,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.unit.modules.user.application.use_cases._sesion_al_registrar import (
     uow_con_sesion_al_registrar,
 )
@@ -70,7 +71,9 @@ async def _nuevo(uow, usuario, device_id, despues=timedelta(seconds=5), dias=7, 
     nuevo = RefreshToken.create(
         user_id=usuario.id, token=NUEVO, device_id=device_id, expires_in_days=dias
     )
-    nuevo._created_at = datetime.now() - hace if hace is not None else nuevo.created_at + despues
+    nuevo._created_at = (
+        ahora_utc_sin_zona() - hace if hace is not None else nuevo.created_at + despues
+    )
     await uow.refresh_tokens.save(nuevo)
     return nuevo
 
@@ -157,7 +160,7 @@ async def test_s5_only_a_session_newer_than_five_minutes_keeps_the_cookie(hace, 
     Then: Se conserva si el nuevo tiene menos de 5 minutos; si no, se borra
     """
     uow, usuario, dispositivo, viejo, caso = await _escena()
-    viejo._created_at = datetime.now() - timedelta(hours=1)
+    viejo._created_at = ahora_utc_sin_zona() - timedelta(hours=1)
     await uow.refresh_tokens.save(viejo)
     await _nuevo(uow, usuario, dispositivo.id, hace=hace)
 
@@ -249,7 +252,6 @@ async def test_s9_only_a_replaced_token_keeps_the_cookie(como):
     When: Refresca con el viejo
     Then: Se borra la cookie: «desactivada = sin sesión» no depende de la casualidad
     """
-    from datetime import datetime
 
     uow, usuario, dispositivo, viejo, caso = await _escena()
     await _nuevo(uow, usuario, dispositivo.id)
@@ -262,7 +264,7 @@ async def test_s9_only_a_replaced_token_keeps_the_cookie(como):
         dispositivo.revoke()
         await uow.user_devices.save(dispositivo)
     else:
-        dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+        dispositivo._last_used_at = ahora_utc_sin_zona() - timedelta(hours=25)
         await uow.user_devices.save(dispositivo)
 
     # Con la cookie de dispositivo del navegador, como manda uno de verdad
@@ -298,7 +300,7 @@ async def test_s10_a_token_of_a_revoked_device_never_keeps_the_cookie(como):
     suyo = await _otra_cuenta_con_sesion_nueva(uow)
     if como != "revocado":
         viejo._revoked = False
-        viejo._expires_at = datetime.now() - timedelta(minutes=1)
+        viejo._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
         await uow.refresh_tokens.save(viejo)
     if como == "caducado en el JWT":
         caso._token_service.verify_refresh_token.return_value = None

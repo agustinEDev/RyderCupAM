@@ -13,6 +13,7 @@ from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.value_objects.oauth_account_id import OAuthAccountId
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestUserOAuthAccountCreation:
@@ -100,11 +101,11 @@ class TestUserOAuthAccountCreation:
         Test: El constructor inicializa created_at por defecto
         Given: Constructor sin created_at explícito
         When: Se crea UserOAuthAccount
-        Then: created_at se establece a datetime.now()
+        Then: created_at se establece a ahora_utc_sin_zona()
         """
         # Arrange
         user_id = UserId.generate()
-        before = datetime.now()
+        before = ahora_utc_sin_zona()
 
         # Act
         account = UserOAuthAccount(
@@ -116,7 +117,7 @@ class TestUserOAuthAccountCreation:
         )
 
         # Assert
-        after = datetime.now()
+        after = ahora_utc_sin_zona()
         assert before <= account.created_at <= after
 
 

@@ -1,5 +1,11 @@
 """
-Un instante en UTC con su zona (H5, 25 oct 2026).
+La hora del servidor, siempre en UTC (H5, 25 oct 2026; re-auditoría F-02).
+
+Los dos relojes que usar: `ahora_utc_sin_zona()` para lo que se guarda o se compara
+con fechas guardadas sin zona, y `ahora_en_utc()` para instantes con zona. Quedan llamadas
+que escriben a mano `datetime.now(UTC)…` y el `utc_now` de `utc_clock`: dan lo mismo y
+pasan a estos en la siguiente tanda.
+`datetime.now()` sin zona da la hora LOCAL de la máquina y ruff lo prohíbe (DTZ005).
 
 Las fechas de la partida rápida se guardan sin zona y en UTC (BE #635). Así
 viajaban sin zona, y el navegador las tomaba como hora local: un instante de las
@@ -26,3 +32,8 @@ def ahora_utc_sin_zona() -> datetime:
     en Render; en otra zona las fechas salían desplazadas.
     """
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def ahora_en_utc() -> datetime:
+    """Ahora, en UTC y con zona: para comparar con instantes que llevan la suya."""
+    return datetime.now(UTC)

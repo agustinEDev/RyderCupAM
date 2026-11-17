@@ -14,6 +14,7 @@ from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TeamAssignment:
@@ -114,7 +115,7 @@ class TeamAssignment:
             mode=mode,
             team_a_player_ids=tuple(team_a_player_ids),
             team_b_player_ids=tuple(team_b_player_ids),
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
     @classmethod

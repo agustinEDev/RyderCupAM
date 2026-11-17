@@ -13,13 +13,14 @@ from src.modules.competition.domain.value_objects.invitation_id import (
 from src.modules.social.application.ports.invitation_availability_interface import (
     InvitationAvailabilityInterface,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class InvitationAvailabilityAdapter(InvitationAvailabilityInterface):
     """
     Pregunta por todas las invitaciones de una pagina de una vez.
 
-    El reloj es el de la propia invitacion (`Invitation.is_expired`, hora local
+    El reloj es el de la propia invitacion (`Invitation.is_expired`, UTC
     sin zona): con otro, una invitacion se veria caducada en el feed y viva al
     aceptarla, o al reves.
     """
@@ -27,7 +28,7 @@ class InvitationAvailabilityAdapter(InvitationAvailabilityInterface):
     def __init__(
         self,
         competition_uow: CompetitionUnitOfWorkInterface,
-        reloj: Callable[[], datetime] = datetime.now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._competition_uow = competition_uow
         self._reloj = reloj

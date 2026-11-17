@@ -12,8 +12,6 @@ Security Features:
 - Security logging: Registra todas las solicitudes (exitosas y fallidas)
 """
 
-from datetime import datetime
-
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
     RequestPasswordResetResponseDTO,
@@ -28,6 +26,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class RequestPasswordResetUseCase:
@@ -142,7 +141,9 @@ class RequestPasswordResetUseCase:
         # peticiones a la vez no se pasan del tope
         async with self._uow:
             bloqueado = await self._uow.users.find_by_id_for_update(user.id)
-            cabe = bloqueado is not None and bloqueado.cuenta_un_correo_de_reset(datetime.now())
+            cabe = bloqueado is not None and bloqueado.cuenta_un_correo_de_reset(
+                ahora_utc_sin_zona()
+            )
             if cabe and bloqueado is not None:
                 user = bloqueado
                 token = user.generate_password_reset_token()

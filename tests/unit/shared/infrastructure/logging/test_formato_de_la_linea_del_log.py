@@ -9,7 +9,7 @@ lee en Render y en el fichero no cambia. El único cambio: sin `extra.taskName`.
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -56,7 +56,7 @@ def test_format_plain_record_writes_the_base_fields(formatea):
     """
     linea = formatea(_registro())
 
-    assert linea["timestamp"] == datetime.fromtimestamp(1_762_900_000.25).strftime(
+    assert linea["timestamp"] == datetime.fromtimestamp(1_762_900_000.25, UTC).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
     assert linea["level"] == "WARNING"

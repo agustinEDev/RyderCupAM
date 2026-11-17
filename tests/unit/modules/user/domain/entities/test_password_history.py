@@ -10,11 +10,12 @@ Arquitectura:
 - Feature: Password History (OWASP A07)
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.value_objects.password_history_id import PasswordHistoryId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestPasswordHistoryCreation:
@@ -47,8 +48,8 @@ class TestPasswordHistoryCreation:
         assert isinstance(history.id, PasswordHistoryId)
         assert history.user_id == user_id
         assert history.password_hash == password_hash
-        assert history.created_at <= datetime.now()
-        assert history.created_at >= datetime.now() - timedelta(seconds=1)
+        assert history.created_at <= ahora_utc_sin_zona()
+        assert history.created_at >= ahora_utc_sin_zona() - timedelta(seconds=1)
 
     def test_constructor_creates_history_with_explicit_id(self):
         """
@@ -107,7 +108,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=400),
+            created_at=ahora_utc_sin_zona() - timedelta(days=400),
         )
 
         # When
@@ -131,7 +132,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=30),
+            created_at=ahora_utc_sin_zona() - timedelta(days=30),
         )
 
         # When
@@ -155,7 +156,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=365),
+            created_at=ahora_utc_sin_zona() - timedelta(days=365),
         )
 
         # When

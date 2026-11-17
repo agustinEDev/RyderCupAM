@@ -46,6 +46,7 @@ from src.modules.user.domain.value_objects.password import (
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,7 @@ class UpdateSecurityUseCase:
         # El mismo correo que ya tiene: nada que cambiar (como antes)
         if email_vo == user.email:
             return False, None
-        token = user.request_email_change(new_email, ahora=datetime.now())
+        token = user.request_email_change(new_email, ahora=ahora_utc_sin_zona())
         return True, token
 
     async def _handle_password_change(

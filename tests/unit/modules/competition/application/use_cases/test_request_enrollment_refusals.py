@@ -23,7 +23,6 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
 )
 from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
-from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     CompetitionFullError,
     EnrollmentClosedError,
@@ -49,6 +48,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode

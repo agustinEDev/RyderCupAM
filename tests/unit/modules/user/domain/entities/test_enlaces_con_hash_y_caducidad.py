@@ -34,6 +34,7 @@ from src.modules.user.domain.exceptions.verification_token_expired_error import 
     VerificationTokenExpiredError,
 )
 from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 AHORA = datetime(2026, 11, 10, 10, 0)
 NUEVA = "N3wS3cur3P@ss!"
@@ -298,7 +299,7 @@ def test_c2_an_expired_link_cannot_reset():
     Then: InvalidResetTokenError y la contraseña no cambia
     """
     ana = _ana()
-    token = ana.generate_password_reset_token(ahora=datetime.now() - timedelta(hours=2))
+    token = ana.generate_password_reset_token(ahora=ahora_utc_sin_zona() - timedelta(hours=2))
 
     with pytest.raises(InvalidResetTokenError):
         ana.reset_password(token, NUEVA)
@@ -314,7 +315,7 @@ def test_c3_a_plaintext_reset_token_from_before_does_not_work():
     """
     ana = _ana()
     ana._password_reset_token = "reset-en-claro-de-antes-0123456789abcdef012"
-    ana._reset_token_expires_at = datetime.now() + timedelta(hours=10)
+    ana._reset_token_expires_at = ahora_utc_sin_zona() + timedelta(hours=10)
 
     assert ana.can_reset_password("reset-en-claro-de-antes-0123456789abcdef012") is False
 

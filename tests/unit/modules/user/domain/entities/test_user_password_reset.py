@@ -12,13 +12,14 @@ Estructura:
 - TestResetPassword: Tests para el proceso completo de reseteo
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 def _rebuild_user(user: User, **overrides) -> User:
@@ -92,7 +93,7 @@ class TestGeneratePasswordResetToken:
         # 4. Verificar que se estableció la fecha de expiración (1 hora desde ahora, fase 3)
         assert user.reset_token_expires_at is not None
         # Verificar que la expiración está a una hora de ahora (tolerancia de 6 minutos)
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         expected_expiration = now + timedelta(hours=1)
         time_diff = abs((user.reset_token_expires_at - expected_expiration).total_seconds())
         assert time_diff < 360  # Menos de 6 minutos de diferencia
@@ -198,7 +199,7 @@ class TestCanResetPassword:
         token = user.generate_password_reset_token()
 
         # Simular que pasaron 25 horas (token expirado)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=1))
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona() - timedelta(hours=1))
 
         # Act
         result = user.can_reset_password(token)
@@ -230,10 +231,10 @@ class TestCanResetPassword:
 
     def test_can_reset_password_at_exact_expiration_boundary(self, sample_user_data):
         """
-        Test: Validar token exactamente en el momento de expiración
-        Given: Usuario con token que expira justo ahora
-        When: Se valida el token en el momento exacto de expiración
-        Then: Retorna False (expiración estricta)
+        Test: El límite de la caducidad, con la hora fijada
+        Given: Usuario con token que caduca a una hora conocida
+        When: Se valida justo en ese instante y un microsegundo después
+        Then: En el instante aún vale (la caducidad incluye su último instante); después, no
         """
         # Arrange
         user = User.create(
@@ -244,14 +245,12 @@ class TestCanResetPassword:
         )
         token = user.generate_password_reset_token()
 
-        # Establecer expiración exactamente ahora (boundary)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now())
+        caduca = ahora_utc_sin_zona()
+        user = _rebuild_user(user, reset_token_expires_at=caduca)
 
-        # Act
-        result = user.can_reset_password(token)
-
-        # Assert
-        assert result is False
+        # Act / Assert: con la hora fijada, sin volver a leer el reloj
+        assert user.can_reset_password(token, ahora=caduca) is True
+        assert user.can_reset_password(token, ahora=caduca + timedelta(microseconds=1)) is False
 
 
 class TestResetPassword:
@@ -331,7 +330,7 @@ class TestResetPassword:
         token = user.generate_password_reset_token()
 
         # Simular expiración (hace 2 horas)
-        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
+        user = _rebuild_user(user, reset_token_expires_at=ahora_utc_sin_zona() - timedelta(hours=2))
 
         # Act & Assert
         with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):

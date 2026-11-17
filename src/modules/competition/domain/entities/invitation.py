@@ -7,6 +7,7 @@ Esta entidad gestiona el ciclo de vida de invitaciones enviadas por el creador.
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
 from ..exceptions.competition_violations import (
@@ -82,8 +83,8 @@ class Invitation:
         self._personal_message = personal_message
         self._expires_at = expires_at
         self._responded_at = responded_at
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
         # Si el organizador la mandó tecleando un correo (y no eligiendo a un usuario):
         # decide qué ve de ella (auditoría de la fase 6, B-01/B-03)
         self._sent_by_email = sent_by_email
@@ -108,7 +109,7 @@ class Invitation:
         # crearla: las ya guardadas se leen tal cual
         if contiene_enlace(personal_message):
             raise InvitationMessageWithLinkError()
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         invitation = cls(
             id=id,
             competition_id=competition_id,
@@ -216,7 +217,7 @@ class Invitation:
 
     def is_expired(self) -> bool:
         """Verifica si la invitacion ha expirado."""
-        return datetime.now() >= self._expires_at
+        return ahora_utc_sin_zona() >= self._expires_at
 
     def is_pending(self) -> bool:
         """Verifica si la invitacion esta pendiente."""
@@ -266,7 +267,7 @@ class Invitation:
             )
 
         self._ata_a(respondida_por)
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = InvitationStatus.ACCEPTED
         self._responded_at = now
         self._updated_at = now
@@ -284,7 +285,7 @@ class Invitation:
             )
 
         self._ata_a(respondida_por)
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = InvitationStatus.DECLINED
         self._responded_at = now
         self._updated_at = now
@@ -299,7 +300,7 @@ class Invitation:
             raise InvalidInvitationStatusViolation(
                 f"Cannot reject for no room an invitation in status {self._status.value}."
             )
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = InvitationStatus.NO_ROOM
         self._responded_at = now
         self._updated_at = now
@@ -315,7 +316,7 @@ class Invitation:
                 f"Cannot put on hold an invitation in status {self._status.value}."
             )
         self._status = InvitationStatus.ON_HOLD
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def resume(self) -> None:
         """Se reabre la inscripcion: se puede aceptar otra vez (ON_HOLD -> PENDING, P2).
@@ -326,7 +327,7 @@ class Invitation:
             raise InvalidInvitationStatusViolation(
                 f"Cannot resume an invitation in status {self._status.value}."
             )
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = InvitationStatus.PENDING
         self._expires_at = now + timedelta(days=INVITATION_EXPIRATION_DAYS)
         self._updated_at = now
@@ -341,7 +342,7 @@ class Invitation:
             raise InvalidInvitationStatusViolation(
                 f"Cannot cancel an invitation in status {self._status.value}."
             )
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = InvitationStatus.CANCELLED
         self._responded_at = now
         self._updated_at = now
@@ -355,7 +356,7 @@ class Invitation:
         """Transiciona internamente a EXPIRED: solo una pendiente; en espera no caduca."""
         if self.is_pending():
             self._status = InvitationStatus.EXPIRED
-            self._updated_at = datetime.now()
+            self._updated_at = ahora_utc_sin_zona()
 
     # ===========================================
     # METODOS ESPECIALES

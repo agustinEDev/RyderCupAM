@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Tiempo sin usar la app tras el que la sesión de ESE dispositivo deja de valer
 # (BE #376). OWASP A07 pide invalidar por inactividad, y el servidor es quien
@@ -150,7 +151,7 @@ class UserDevice:
             raise ValueError("fingerprint debe ser una instancia de DeviceFingerprint")
 
         # Crear entidad
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         device = UserDevice(
             id=UserDeviceId.generate(),
             user_id=user_id,
@@ -243,7 +244,7 @@ class UserDevice:
 
     def is_idle(self, now: datetime | None = None) -> bool:
         """Si lleva más de `SESSION_IDLE_TIMEOUT` sin usarse (BE #376)."""
-        return (now or datetime.now()) - self._last_used_at > SESSION_IDLE_TIMEOUT
+        return (now or ahora_utc_sin_zona()) - self._last_used_at > SESSION_IDLE_TIMEOUT
 
     def update_last_used(self) -> None:
         """
@@ -260,7 +261,7 @@ class UserDevice:
             >>> device.last_used_at > original_time
             True
         """
-        self._last_used_at = datetime.now()
+        self._last_used_at = ahora_utc_sin_zona()
 
     def update_country(self, country_code: str | None) -> None:
         """El país de la última conexión, si Cloudflare lo dio (BE #737)."""

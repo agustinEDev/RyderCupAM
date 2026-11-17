@@ -42,7 +42,7 @@ solo frena a los dispositivos desconocidos. Los números de la tabla aprobada.
        uno que no                                            |   el tiempo no delata cuál existe
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -68,6 +68,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -223,7 +224,7 @@ async def test_u5_el_bloqueo_es_de_la_pareja_y_otra_cuenta_entra_desde_a():
 
 async def _con_el_respaldo_saltado(e: Escena) -> User:
     ana = await e.usuario()
-    ahora = datetime.now()
+    ahora = ahora_utc_sin_zona()
     for _ in range(50):
         ana.record_failed_login(ahora=ahora)
     async with e.uow:
@@ -367,7 +368,7 @@ async def test_u12_avisa_al_dueno_cuando_se_bloquea_una_red_y_cuando_salta_el_re
 
     releida = await e.releido(ana)
     releida._failed_login_attempts = 49
-    releida._failed_login_window_started_at = datetime.now() - timedelta(minutes=5)
+    releida._failed_login_window_started_at = ahora_utc_sin_zona() - timedelta(minutes=5)
     async with e.uow:
         await e.uow.users.save(releida)
     await e.falla(1, red=RED_B)
@@ -483,7 +484,7 @@ async def test_u12c_un_fallo_que_bloquea_la_red_y_salta_el_respaldo_da_un_aviso(
     await e.falla(9, red=RED_A)
     releida = await e.releido(ana)
     releida._failed_login_attempts = 49
-    releida._failed_login_window_started_at = datetime.now() - timedelta(minutes=5)
+    releida._failed_login_window_started_at = ahora_utc_sin_zona() - timedelta(minutes=5)
     async with e.uow:
         await e.uow.users.save(releida)
 
@@ -542,9 +543,9 @@ async def test_u16_acertar_en_una_cuenta_desactivada_no_borra_los_fallos():
 async def _con_fallos(e: Escena, user: User, hora: int, dia: int) -> None:
     releida = await e.releido(user)
     releida._failed_login_attempts = hora
-    releida._failed_login_window_started_at = datetime.now() - timedelta(minutes=5)
+    releida._failed_login_window_started_at = ahora_utc_sin_zona() - timedelta(minutes=5)
     releida._failed_login_day_attempts = dia
-    releida._failed_login_day_window_started_at = datetime.now() - timedelta(hours=5)
+    releida._failed_login_day_window_started_at = ahora_utc_sin_zona() - timedelta(hours=5)
     async with e.uow:
         await e.uow.users.save(releida)
 

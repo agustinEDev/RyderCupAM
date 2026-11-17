@@ -6,6 +6,8 @@ Representa un registro de historial de contraseñas para prevenir reutilización
 
 from datetime import datetime
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+
 from ..value_objects.password_history_id import PasswordHistoryId
 from ..value_objects.user_id import UserId
 
@@ -49,7 +51,7 @@ class PasswordHistory:
         self._id = id or PasswordHistoryId.generate()
         self._user_id = user_id
         self._password_hash = password_hash
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     # ===========================================
     # PROPERTIES (Encapsulación — solo lectura)
@@ -96,7 +98,7 @@ class PasswordHistory:
             id=PasswordHistoryId.generate(),
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
         return history
@@ -116,7 +118,7 @@ class PasswordHistory:
             >>> history.is_older_than(365)
             True
         """
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         age = (now - self.created_at).days
         return age > days
 

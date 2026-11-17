@@ -84,6 +84,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class CompetitionNotActiveError(Exception):
@@ -405,7 +406,7 @@ class RequestEnrollmentUseCase:
             else None
         )
         pendiente = await self._uow.invitations.pendiente_de(
-            user_id, correo, competition.id, datetime.now()
+            user_id, correo, competition.id, ahora_utc_sin_zona()
         )
         if pendiente is None:
             return None

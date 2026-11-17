@@ -14,7 +14,6 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
@@ -37,6 +36,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
     SQLAlchemyEnrollmentRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.conftest import _URL_DE_LA_BD_DE_TEST, set_auth_cookies, solicitud_pendiente

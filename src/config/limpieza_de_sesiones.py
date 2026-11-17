@@ -24,6 +24,7 @@ from src.modules.user.application.use_cases.purge_stale_sessions_use_case import
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class LimpiezaDeSesiones:
         self,
         fabrica: async_sessionmaker[AsyncSession],
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        reloj: Callable[[], datetime] = datetime.now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
     ):
         self._fabrica = fabrica
         self._esperar = esperar

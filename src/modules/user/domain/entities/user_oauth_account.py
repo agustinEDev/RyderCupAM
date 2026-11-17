@@ -6,6 +6,8 @@ Representa una cuenta OAuth vinculada a un usuario del sistema.
 
 from datetime import datetime
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+
 from ..value_objects.oauth_account_id import OAuthAccountId
 from ..value_objects.oauth_provider import OAuthProvider
 from ..value_objects.user_id import UserId
@@ -41,7 +43,7 @@ class UserOAuthAccount:
         self._provider = provider
         self._provider_user_id = provider_user_id
         self._provider_email = provider_email
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
 
     # === Read-only Properties ===
 
@@ -95,7 +97,7 @@ class UserOAuthAccount:
             provider=provider,
             provider_user_id=provider_user_id,
             provider_email=provider_email,
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
         )
 
         return account

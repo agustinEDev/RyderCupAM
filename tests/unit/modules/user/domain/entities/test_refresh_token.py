@@ -10,12 +10,13 @@ Arquitectura:
 - Feature: Session Timeout with Refresh Tokens (OWASP A01/A02/A07)
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class TestRefreshTokenCreation:
@@ -47,10 +48,10 @@ class TestRefreshTokenCreation:
         assert refresh_token.token_hash.verify(token_jwt)
         assert refresh_token.revoked is False
         assert refresh_token.revoked_at is None
-        assert refresh_token.created_at <= datetime.now()
+        assert refresh_token.created_at <= ahora_utc_sin_zona()
 
         # Verificar expiración (7 días)
-        expected_expiry = datetime.now() + timedelta(days=7)
+        expected_expiry = ahora_utc_sin_zona() + timedelta(days=7)
         assert refresh_token.expires_at <= expected_expiry + timedelta(seconds=1)
         assert refresh_token.expires_at >= expected_expiry - timedelta(seconds=1)
 
@@ -71,7 +72,7 @@ class TestRefreshTokenCreation:
         refresh_token = RefreshToken.create(user_id, token_jwt, expires_in_days=expires_in_days)
 
         # Then
-        expected_expiry = datetime.now() + timedelta(days=expires_in_days)
+        expected_expiry = ahora_utc_sin_zona() + timedelta(days=expires_in_days)
         assert refresh_token.expires_at <= expected_expiry + timedelta(seconds=1)
         assert refresh_token.expires_at >= expected_expiry - timedelta(seconds=1)
 
@@ -153,7 +154,7 @@ class TestRefreshTokenValidation:
         token_hash = TokenHash.from_token(token_jwt)
 
         # Token expirado hace 1 día
-        expires_at = datetime.now() - timedelta(days=1)
+        expires_at = ahora_utc_sin_zona() - timedelta(days=1)
         refresh_token = RefreshToken(
             id=RefreshTokenId.generate(),
             user_id=user_id,
@@ -216,7 +217,7 @@ class TestRefreshTokenRevocation:
         # Then
         assert refresh_token.revoked is True
         assert refresh_token.revoked_at is not None
-        assert refresh_token.revoked_at <= datetime.now()
+        assert refresh_token.revoked_at <= ahora_utc_sin_zona()
 
     def test_revoke_is_idempotent(self):
         """
@@ -279,7 +280,7 @@ class TestRefreshTokenExpiration:
         token_jwt = "eyJhbGciOiJIUzI1NiJ9.past"
         token_hash = TokenHash.from_token(token_jwt)
 
-        expires_at = datetime.now() - timedelta(days=1)
+        expires_at = ahora_utc_sin_zona() - timedelta(days=1)
         refresh_token = RefreshToken(
             id=RefreshTokenId.generate(),
             user_id=user_id,
@@ -307,7 +308,7 @@ class TestRefreshTokenExpiration:
         token_hash = TokenHash.from_token(token_jwt)
 
         # Expiración exactamente ahora (o hace 1 segundo para evitar race condition)
-        expires_at = datetime.now() - timedelta(seconds=1)
+        expires_at = ahora_utc_sin_zona() - timedelta(seconds=1)
         refresh_token = RefreshToken(
             id=RefreshTokenId.generate(),
             user_id=user_id,
@@ -339,7 +340,7 @@ class TestRefreshTokenEquality:
         user_id2 = UserId.generate()
 
         token_hash = TokenHash.from_token("token")
-        expires_at = datetime.now() + timedelta(days=7)
+        expires_at = ahora_utc_sin_zona() + timedelta(days=7)
 
         token1 = RefreshToken(
             id=token_id,
@@ -369,7 +370,7 @@ class TestRefreshTokenEquality:
         # Given
         user_id = UserId.generate()
         token_hash = TokenHash.from_token("token")
-        expires_at = datetime.now() + timedelta(days=7)
+        expires_at = ahora_utc_sin_zona() + timedelta(days=7)
 
         token1 = RefreshToken(
             id=RefreshTokenId.generate(),
@@ -468,7 +469,7 @@ class TestRefreshTokenRepresentation:
         token_jwt = "eyJhbGciOiJIUzI1NiJ9.expired_repr"
         token_hash = TokenHash.from_token(token_jwt)
 
-        expires_at = datetime.now() - timedelta(days=1)
+        expires_at = ahora_utc_sin_zona() - timedelta(days=1)
         refresh_token = RefreshToken(
             id=RefreshTokenId.generate(),
             user_id=user_id,

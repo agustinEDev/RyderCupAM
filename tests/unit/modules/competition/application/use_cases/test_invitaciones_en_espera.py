@@ -45,7 +45,7 @@ ver con la lista de espera de las franjas de un stroke play (`esperas`).
 
 import importlib.util
 import logging
-from datetime import datetime, time, timedelta
+from datetime import time, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -151,6 +151,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases import (
     test_plazo_respuestas_del_15_nov as r3,
@@ -286,7 +287,7 @@ class TestP1AlCerrarEsperan:
         """P1. Given una pendiente ya caducada / When se cierra / Then EXPIRED, no ON_HOLD."""
         uow, comp_id, organizador, _, _, invitado, _ = await _abierta_con_invitado()
         caducada = await _invita(
-            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+            uow, comp_id, invitado, _expires_at=ahora_utc_sin_zona() - timedelta(minutes=1)
         )
 
         await _cierra(uow, comp_id, organizador)
@@ -377,10 +378,10 @@ class TestP1AlCerrarEsperan:
 
         async with uow:
             visibles = await uow.invitations.competiciones_con_invitacion_pendiente(
-                invitado.id, str(invitado.email), datetime.now()
+                invitado.id, str(invitado.email), ahora_utc_sin_zona()
             )
             ofrecida = await uow.invitations.pendiente_de(
-                invitado.id, str(invitado.email), comp_id, datetime.now()
+                invitado.id, str(invitado.email), comp_id, ahora_utc_sin_zona()
             )
         assert comp_id in visibles
         assert ofrecida is None
@@ -429,19 +430,19 @@ class TestP2AlReabrirVuelven:
         await _cierra(uow, comp_id, organizador)
         async with uow:
             esperando = await uow.invitations.find_by_id(invitacion.id)
-            esperando._expires_at = datetime.now() - timedelta(minutes=1)
+            esperando._expires_at = ahora_utc_sin_zona() - timedelta(minutes=1)
             await uow.invitations.update(esperando)
             await uow.commit()
         actividad = _Actividad()
 
-        antes = datetime.now()
+        antes = ahora_utc_sin_zona()
         await _reabre(uow, comp_id, organizador, actividad)
 
         async with uow:
             vuelta = await uow.invitations.find_by_id(invitacion.id)
         assert vuelta.status is InvitationStatus.PENDING
         assert antes + timedelta(days=7) <= vuelta.expires_at
-        assert vuelta.expires_at <= datetime.now() + timedelta(days=7)
+        assert vuelta.expires_at <= ahora_utc_sin_zona() + timedelta(days=7)
         [(_, vuelven)] = actividad.de("invitations_acceptable_again")
         assert [i.id for i in vuelven] == [invitacion.id]
 
@@ -836,7 +837,7 @@ class TestSeGuardaCadaUna:
     async def test_al_cerrar(self):
         uow, comp_id, _, _, _, invitado, invitacion = await _abierta_con_invitado()
         caducada = await _invita(
-            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+            uow, comp_id, invitado, _expires_at=ahora_utc_sin_zona() - timedelta(minutes=1)
         )
         espia = await _con_espia(uow)
 
@@ -852,7 +853,7 @@ class TestSeGuardaCadaUna:
         await _cierra(uow, comp_id, organizador)
         async with uow:
             (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
-                datetime.now() - timedelta(minutes=1)
+                ahora_utc_sin_zona() - timedelta(minutes=1)
             )
         espia = await _con_espia(uow)
 
@@ -867,7 +868,7 @@ class TestSeGuardaCadaUna:
         uow, comp_id, _, invitacion = await _cerrada_con_equipos_y_en_espera()
         async with uow:
             (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
-                datetime.now() - timedelta(minutes=1)
+                ahora_utc_sin_zona() - timedelta(minutes=1)
             )
         espia = await _con_espia(uow)
 
@@ -896,7 +897,7 @@ class TestEsperandoNoCaduca:
         await _cierra(uow, comp_id, organizador)
         async with uow:
             (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
-                datetime.now() - timedelta(minutes=1)
+                ahora_utc_sin_zona() - timedelta(minutes=1)
             )
         actividad = _Actividad()
 
@@ -911,7 +912,7 @@ class TestEsperandoNoCaduca:
         await _cierra(uow, comp_id, organizador)
         async with uow:
             (await uow.invitations.find_by_id(invitacion.id))._expires_at = (
-                datetime.now() - timedelta(minutes=1)
+                ahora_utc_sin_zona() - timedelta(minutes=1)
             )
 
         with pytest.raises(InvitationOnHoldViolation):
@@ -920,7 +921,7 @@ class TestEsperandoNoCaduca:
         assert await _estado(uow, invitacion) is InvitationStatus.ON_HOLD
         async with uow:
             visibles = await uow.invitations.competiciones_con_invitacion_pendiente(
-                invitado.id, None, datetime.now()
+                invitado.id, None, ahora_utc_sin_zona()
             )
         assert comp_id in visibles
 
@@ -935,7 +936,7 @@ class TestP3CancelarAbierta:
         """
         uow, comp_id, organizador, _, _, invitado, invitacion = await _abierta_con_invitado()
         caducada = await _invita(
-            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+            uow, comp_id, invitado, _expires_at=ahora_utc_sin_zona() - timedelta(minutes=1)
         )
         actividad = _Actividad()
 
@@ -955,7 +956,7 @@ class TestP3CancelarAbierta:
         guardadas."""
         uow, comp_id, organizador, _, _, invitado, invitacion = await _abierta_con_invitado()
         caducada = await _invita(
-            uow, comp_id, invitado, _expires_at=datetime.now() - timedelta(minutes=1)
+            uow, comp_id, invitado, _expires_at=ahora_utc_sin_zona() - timedelta(minutes=1)
         )
         espia = await _con_espia(uow)
 
@@ -1194,7 +1195,10 @@ class TestO2CorreoAlReabrir:
         _, invitado = await _usuarios()
         con_cuenta = await _en_espera(uow, comp_id, invitado)
         sin_cuenta = await _en_espera(
-            uow, comp_id, _personal_message="Ven", _expires_at=datetime.now() - timedelta(days=1)
+            uow,
+            comp_id,
+            _personal_message="Ven",
+            _expires_at=ahora_utc_sin_zona() - timedelta(days=1),
         )
         correos = _Correos()
 
@@ -1207,7 +1211,7 @@ class TestO2CorreoAlReabrir:
         [enviado] = correos.enviados
         assert enviado["to_email"] == sin_cuenta.invitee_email
         assert enviado["expires_at"] == vuelta.expires_at
-        assert vuelta.expires_at > datetime.now()
+        assert vuelta.expires_at > ahora_utc_sin_zona()
         assert enviado["personal_message"] == "Ven"
         assert enviado["competition_name"] == "Test Cup"
         assert enviado["invitee_name"] is None
@@ -1618,7 +1622,7 @@ class TestAlLlenarseApuntandose:
         async with uow:
             competicion = await uow.competitions.find_by_id(comp_id)
             # Pública y por jugar: si no, la fecha la rechaza antes
-            empieza = datetime.now().date() + timedelta(days=30)
+            empieza = ahora_utc_sin_zona().date() + timedelta(days=30)
             competicion.update_info(
                 visibility=Visibility.PUBLIC,
                 dates=DateRange(empieza, empieza + timedelta(days=2)),

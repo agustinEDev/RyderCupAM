@@ -10,6 +10,7 @@ from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenI
 from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Dos pestañas refrescan a la vez con la misma cookie: la segunda llega con el token
 # que la primera acaba de sustituir. Dentro de este margen no es un robo (F-02, A2)
@@ -81,7 +82,7 @@ class RefreshToken:
         self._token_hash = token_hash
         self._expires_at = expires_at
         self._device_id = device_id
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
         self._revoked = revoked
         self._revoked_at = revoked_at
         self._replaced_at = replaced_at
@@ -223,7 +224,7 @@ class RefreshToken:
         """
         token_id = RefreshTokenId.generate()
         token_hash = TokenHash.from_token(token)
-        expires_at = datetime.now() + timedelta(days=expires_in_days)
+        expires_at = ahora_utc_sin_zona() + timedelta(days=expires_in_days)
 
         return cls(
             id=token_id,
@@ -231,7 +232,7 @@ class RefreshToken:
             token_hash=token_hash,
             expires_at=expires_at,
             device_id=device_id,
-            created_at=datetime.now(),
+            created_at=ahora_utc_sin_zona(),
             revoked=False,
             revoked_at=None,
         )
@@ -256,7 +257,7 @@ class RefreshToken:
             return False
 
         # 2. Verificar que no haya expirado
-        if datetime.now() > self._expires_at:
+        if ahora_utc_sin_zona() > self._expires_at:
             return False
 
         # 3. Verificar que el token coincida con el hash
@@ -275,7 +276,7 @@ class RefreshToken:
         """
         if not self._revoked:
             self._revoked = True
-            self._revoked_at = datetime.now()
+            self._revoked_at = ahora_utc_sin_zona()
 
     def is_expired(self) -> bool:
         """
@@ -284,7 +285,7 @@ class RefreshToken:
         Returns:
             True si la fecha de expiración ha pasado
         """
-        return datetime.now() > self._expires_at
+        return ahora_utc_sin_zona() > self._expires_at
 
     def __eq__(self, other: object) -> bool:
         """Compara dos RefreshTokens por ID."""

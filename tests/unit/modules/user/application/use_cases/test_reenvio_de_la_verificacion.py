@@ -19,7 +19,7 @@ DESPUÉS se guarda el enlace nuevo: si el envío falla, el de antes sigue valien
   S1  con sesión, su correo, falla el proveedor    | error y el enlace de antes intacto
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,6 +37,7 @@ from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -50,7 +51,7 @@ def _sha(token: str) -> str:
 
 async def _ana(uow, hace=timedelta(hours=49)) -> tuple[User, str]:
     ana = User.create("Ana", "Lopez", CORREO, "SecureP@ssw0rd123!")
-    token = ana.generate_verification_token(ahora=datetime.now() - hace)
+    token = ana.generate_verification_token(ahora=ahora_utc_sin_zona() - hace)
     async with uow:
         await uow.users.save(ana)
     return ana, token
@@ -99,7 +100,7 @@ async def test_r1_an_expired_link_brings_a_new_one_saved_after_sending():
 
     nuevo = _enviado(correo)
     assert ana.verification_token == _sha(nuevo)
-    assert ana.verification_token_expires_at > datetime.now() + timedelta(hours=47)
+    assert ana.verification_token_expires_at > ahora_utc_sin_zona() + timedelta(hours=47)
     correo.send_verification_email.assert_awaited_once()
     assert correo.send_verification_email.await_args.kwargs["to_email"] == CORREO
 

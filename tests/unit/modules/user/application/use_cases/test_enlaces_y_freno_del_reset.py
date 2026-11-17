@@ -17,7 +17,7 @@ Los enlaces de verificación y de restablecer en los casos de uso (fase 3, F-04/
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -50,6 +50,7 @@ from src.modules.user.domain.value_objects.token_hash import hash_del_enlace
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -106,7 +107,7 @@ async def test_c1_an_expired_verification_link_raises_its_own_error():
     """
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    token = ana.generate_verification_token(ahora=datetime.now() - timedelta(hours=49))
+    token = ana.generate_verification_token(ahora=ahora_utc_sin_zona() - timedelta(hours=49))
 
     with pytest.raises(VerificationTokenExpiredError):
         await VerifyEmailUseCase(uow).execute(token)
@@ -122,7 +123,7 @@ async def test_c1_a_current_verification_link_verifies():
     """
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    token = ana.generate_verification_token(ahora=datetime.now() - timedelta(hours=1))
+    token = ana.generate_verification_token(ahora=ahora_utc_sin_zona() - timedelta(hours=1))
 
     await VerifyEmailUseCase(uow).execute(token)
 
@@ -158,7 +159,7 @@ async def test_c1_resending_stores_the_hash_of_the_token_it_sent():
 
     enviado = correo.send_verification_email.await_args.kwargs["verification_token"]
     assert ana.verification_token == _sha(enviado)
-    assert ana.verification_token_expires_at > datetime.now() + timedelta(hours=47)
+    assert ana.verification_token_expires_at > ahora_utc_sin_zona() + timedelta(hours=47)
     await VerifyEmailUseCase(uow).execute(enviado)
     assert ana.email_verified
 
@@ -179,7 +180,7 @@ async def test_c3_the_mailed_link_has_the_token_and_the_account_its_hash():
 
     token = _token_del_enlace(correo)
     assert ana.password_reset_token == _sha(token)
-    assert ana.reset_token_expires_at <= datetime.now() + timedelta(hours=1)
+    assert ana.reset_token_expires_at <= ahora_utc_sin_zona() + timedelta(hours=1)
 
 
 async def test_c2_validate_says_valid_then_not_after_a_new_link():
@@ -211,7 +212,7 @@ async def test_c2_validate_says_not_valid_after_one_hour():
     """
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    token = ana.generate_password_reset_token(ahora=datetime.now() - timedelta(minutes=61))
+    token = ana.generate_password_reset_token(ahora=ahora_utc_sin_zona() - timedelta(minutes=61))
 
     respuesta = await ValidateResetTokenUseCase(uow).execute(
         ValidateResetTokenRequestDTO(token=token)
@@ -337,7 +338,7 @@ async def test_b2_forgot_password_without_email_does_not_wait_either(monkeypatch
     ana = await _ana(uow)
     if caso == "sin cupo":
         for _ in range(10):
-            ana.cuenta_un_correo_de_reset(datetime.now())
+            ana.cuenta_un_correo_de_reset(ahora_utc_sin_zona())
     esperas = []
 
     async def espera(segundos):

@@ -23,6 +23,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,7 +39,7 @@ async def _escena(respaldo=False, red=False):
     )
     if respaldo:
         for _ in range(50):
-            ana.record_failed_login(ahora=datetime.now())
+            ana.record_failed_login(ahora=ahora_utc_sin_zona())
     async with uow:
         await uow.users.save(ana)
     if red:

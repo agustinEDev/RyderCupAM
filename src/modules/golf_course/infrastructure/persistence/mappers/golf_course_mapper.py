@@ -8,7 +8,6 @@ Tablas:
 """
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 import sqlalchemy.types
@@ -42,6 +41,7 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
@@ -159,9 +159,13 @@ golf_courses_table = Table(
         nullable=True,
         comment="Razón de rechazo (solo si REJECTED)",
     ),
-    Column("created_at", DateTime, nullable=False, default=datetime.utcnow),
+    Column("created_at", DateTime, nullable=False, default=ahora_utc_sin_zona),
     Column(
-        "updated_at", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        "updated_at",
+        DateTime,
+        nullable=False,
+        default=ahora_utc_sin_zona,
+        onupdate=ahora_utc_sin_zona,
     ),
     Column(
         "original_golf_course_id",

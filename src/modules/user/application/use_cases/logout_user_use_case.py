@@ -19,6 +19,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class LogoutUserUseCase:
@@ -91,7 +92,7 @@ class LogoutUserUseCase:
             return None
 
         # 2. Hora del logout para la respuesta
-        logout_time = datetime.now()
+        logout_time = ahora_utc_sin_zona()
 
         # 3. y 4. Los refresh tokens de ESTE dispositivo (BE #376), en una sola
         # transacción: el que llega en la petición y todos los de su
