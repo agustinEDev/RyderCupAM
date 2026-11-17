@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.config.correo_verificado import usuario_con_correo_verificado
 from src.config.dependencies import (
@@ -59,6 +59,7 @@ from src.modules.competition.domain.services.competition_policy import (
 )
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
 
 def _validate_status_filter(status_filter: str | None) -> str | None:
@@ -122,12 +123,28 @@ class SendInvitationByUserIdBody(BaseModel):
     invitee_user_id: UUID
     personal_message: str | None = Field(None, max_length=500)
 
+    @field_validator("personal_message")
+    @classmethod
+    def sin_enlaces(cls, valor: str | None) -> str | None:
+        """Antes que el cupo de invitaciones: un enlace no gasta un intento (SB-05)."""
+        if contiene_enlace(valor):
+            raise ValueError("The message cannot contain links or web addresses.")
+        return valor
+
 
 class SendInvitationByEmailBody(BaseModel):
     """Body para enviar invitacion por email."""
 
     invitee_email: EmailStr
     personal_message: str | None = Field(None, max_length=500)
+
+    @field_validator("personal_message")
+    @classmethod
+    def sin_enlaces(cls, valor: str | None) -> str | None:
+        """Antes que el cupo de invitaciones: un enlace no gasta un intento (SB-05)."""
+        if contiene_enlace(valor):
+            raise ValueError("The message cannot contain links or web addresses.")
+        return valor
 
 
 class RespondInvitationBody(BaseModel):

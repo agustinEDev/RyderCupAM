@@ -124,6 +124,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 from src.modules.competition.domain.entities.competition import TournamentTypeError
 from src.modules.competition.domain.entities.draft import NotYourTurnError
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
+from src.modules.competition.domain.entities.invitation import InvitationMessageWithLinkError
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
     CompetitionFullViolation,
@@ -142,6 +143,8 @@ from src.modules.competition.domain.value_objects.stroke_play_setup import (
 )
 
 CODIGOS: dict[type[Exception], int] = {
+    # 400 (SB-05): un enlace en el mensaje de una invitación; con su código, ver CON_SU_CODIGO
+    InvitationMessageWithLinkError: status.HTTP_400_BAD_REQUEST,
     # 400 (#251): pedir equipos, capitanes, draft, sobres o la clasificación por equipos a un
     # torneo que no los tiene, o unos ajustes de stroke play sin sentido. Lo pueden lanzar
     # rutas que no lo esperan; sin esto serían un 500
@@ -244,6 +247,7 @@ CODIGOS: dict[type[Exception], int] = {
 # el texto aprobado de la lista de espera (P1), y DRAFT_IN_PROGRESS (B3)
 CON_SU_CODIGO: frozenset[type[Exception]] = frozenset(
     {
+        InvitationMessageWithLinkError,
         EnrollmentDeadlinePassedError,
         InvitationOnHoldViolation,
         InvitationOnHoldExistsViolation,
