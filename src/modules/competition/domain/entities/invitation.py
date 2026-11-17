@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
 from ..events.invitation_accepted_event import InvitationAcceptedEvent
 from ..events.invitation_created_event import InvitationCreatedEvent
@@ -23,6 +24,20 @@ from ..value_objects.invitation_status import InvitationStatus
 
 INVITATION_EXPIRATION_DAYS = 7
 MAX_PERSONAL_MESSAGE_LENGTH = 500
+
+
+class InvitationMessageWithLinkError(ValueError):
+    """
+    El mensaje de una invitación lleva un enlace o una dirección web (SB-05, 17 nov 2026).
+
+    Sale en el correo que firma la app: no se deja escribir. Con su `error_code`, para
+    que el front lo diga en su idioma junto al campo.
+    """
+
+    error_code = "MESSAGE_HAS_LINK"
+
+    def __init__(self) -> None:
+        super().__init__("The message cannot contain links or web addresses.")
 
 
 class Invitation:
@@ -95,6 +110,10 @@ class Invitation:
         sent_by_email: bool = False,
     ) -> "Invitation":
         """Factory method para crear una nueva invitacion con status PENDING."""
+        # Sin enlaces en el mensaje: sale en el correo que firma la app (SB-05). Solo al
+        # crearla: las ya guardadas se leen tal cual
+        if contiene_enlace(personal_message):
+            raise InvitationMessageWithLinkError()
         now = datetime.now()
         invitation = cls(
             id=id,

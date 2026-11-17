@@ -25,12 +25,18 @@ def _migracion():
     return modulo
 
 
-def test_cuelga_del_head_de_develop_y_es_el_unico_head():
-    """Given las migraciones / Then esta va tras c8e1a3f5b7d9 y no deja dos heads."""
+def test_cuelga_del_head_de_develop_y_no_deja_dos_heads():
+    """
+    Given las migraciones / Then esta va tras c8e1a3f5b7d9, sigue en la cadena del único
+    head (las que vengan después cuelgan de ella) y no hay dos heads.
+    """
     scripts = ScriptDirectory.from_config(Config(str(RAIZ / "alembic.ini")))
 
     assert scripts.get_revision(REVISION).down_revision == "c8e1a3f5b7d9"
-    assert scripts.get_heads() == [REVISION]
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    cadena = {r.revision for r in scripts.iterate_revisions(heads[0], "base")}
+    assert REVISION in cadena
 
 
 def test_sube_una_columna_nullable_sin_valor_por_defecto(monkeypatch):

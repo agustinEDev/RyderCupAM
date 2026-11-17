@@ -210,11 +210,13 @@ class RFEGHandicapService(HandicapService):
         jugadores = []
         for hit in hits:
             if not isinstance(hit, dict):
-                logger.warning("Resultado descartado, no es un objeto: %r", hit)
+                logger.warning("Resultado descartado, no es un objeto: %s", type(hit).__name__)
                 continue
             jugador = hit.get("document") or {}
             if not isinstance(jugador, dict):
-                logger.warning("Resultado descartado, 'document' no es un objeto: %r", jugador)
+                logger.warning(
+                    "Resultado descartado, 'document' no es un objeto: %s", type(jugador).__name__
+                )
                 continue
             jugadores.append(jugador)
 
@@ -283,10 +285,11 @@ class RFEGHandicapService(HandicapService):
                         # Un hándicap ilegible se descarta, pero con rastro: un
                         # cambio de formato al otro lado degradaría la búsqueda en
                         # silencio y no habría forma de saber por qué.
+                        # Solo el tipo: el nombre y el valor son datos personales,
+                        # y el log va a Render y a Sentry (SB-07)
                         logger.warning(
-                            "Hándicap no numérico en la respuesta de la RFEG para '%s': %r",
-                            nombre_encontrado,
-                            handicap,
+                            "Hándicap no numérico en la respuesta de la RFEG: %s",
+                            type(handicap).__name__,
                         )
                         continue
 

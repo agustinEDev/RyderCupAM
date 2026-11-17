@@ -39,6 +39,7 @@ from src.modules.competition.domain.services.scoring_service import ScoringServi
 from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -118,7 +119,9 @@ class GetScoringViewUseCase:
             )
         async with self._uow:
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)
-            user_names = await self._resolve_user_names(match.get_all_player_ids(), competition.id)
+            user_names = await self._resolve_user_names(
+                match.get_all_player_ids(), competition.id, competition.visibility
+            )
 
             # Cargar golf course para obtener holes y nombre
             golf_course_name = ""
@@ -355,14 +358,15 @@ class GetScoringViewUseCase:
         )
 
     async def _resolve_user_names(
-        self, user_ids: list[UserId], competition_id: CompetitionId
+        self, user_ids: list[UserId], competition_id: CompetitionId, visibility: Visibility
     ) -> dict[UserId, str]:
         """
         Resuelve user_id → el nombre con el que se pinta a esa persona.
 
         `display_name` por defecto —el alias de quien lo tenga y el nombre
         completo de quien no (BE #239)—, salvo que la inscripción de esa
-        persona en ESTA competición haya elegido el nombre legal (BE #254).
+        persona en ESTA competición haya elegido el nombre legal (BE #254), o
+        que la competición sea pública: ahí, siempre el real (SB-08).
         Los campos de esta vista —`user_name`, `scorer_name`, `marks_name`—
         ya eran «nombre para enseñar», así que no hace falta un campo nuevo:
         cambia lo que llevan.
@@ -392,6 +396,6 @@ class GetScoringViewUseCase:
             # Sin inscripción no hay preferencia que leer, y en una competición
             # lo que se muestra por defecto es el nombre legal (BE #254)
             names[uid] = user.display_name_or_legal(
-                enrollment.use_real_name if enrollment else True
+                visibility.shows_real_name(enrollment.use_real_name if enrollment else True)
             )
         return names

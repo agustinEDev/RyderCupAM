@@ -911,7 +911,11 @@ jobs:
           # - secure: GitHub registra CC-BY-SA-2.5/4.0 AND MIT, por textos del repo;
           #   el paquete que se instala declara MIT (License-Expression y su fichero
           #   LICENSE; deps.dev también dice MIT). Comprobado el 30 sep 2026, #441.
-          allow-dependencies-licenses: pkg:pypi/secure
+          # - typing-extensions: GitHub registra «Python-2.0 AND GPL-1.0-or-later AND
+          #   BSD-3-Clause AND 0BSD», por la historia de la licencia de Python que copia
+          #   su LICENSE; el paquete declara PSF-2.0 (License-Expression de la 4.16.0) y
+          #   deps.dev también. Salió al enviar el SBOM desde main (2.70.0). 16 nov 2026.
+          allow-dependencies-licenses: pkg:pypi/secure, pkg:pypi/typing-extensions
 
       # Tarjeta en el resumen de la ejecución (solo en PRs: en un push el job se salta)
       - name: Summary card

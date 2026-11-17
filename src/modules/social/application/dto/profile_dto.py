@@ -64,6 +64,13 @@ class PlayerProfileResponseDTO(BaseModel):
             "tiene, y si no su nombre completo."
         ),
     )
+    alias: str | None = Field(
+        None,
+        description=(
+            "Su alias, si tiene: la app lo enseña delante y el nombre real pequeño "
+            "debajo. Es un apodo, no un dato oculto (SB-08, 17 nov 2026)."
+        ),
+    )
     avatar_source: str
     avatar_preset_id: int | None = None
     has_avatar_upload: bool = Field(
@@ -202,6 +209,13 @@ class FeedAuthorDTO(BaseModel):
     )
     avatar_source: str
     avatar_preset_id: int | None = None
+    alias: str | None = Field(
+        None,
+        description=(
+            "Su alias, si tiene: la app lo enseña delante y el nombre real pequeño "
+            "debajo. Es un apodo, no un dato oculto (SB-08, 17 nov 2026)."
+        ),
+    )
 
 
 class FriendRequestNoticeDTO(BaseModel):

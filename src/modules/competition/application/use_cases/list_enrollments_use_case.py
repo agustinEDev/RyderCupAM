@@ -23,6 +23,7 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
 
 # Desde que se cierran las inscripciones, el hándicap de cada uno está fijado (#251)
@@ -39,6 +40,8 @@ class ListaDeInscritos:
     categorias: dict[UserId, int | None]
     # El organizador y los admin ven todos los correos; el resto, solo el suyo
     ve_todos_los_correos: bool
+    # La de la competición: decide si el nombre real va siempre a la vista (SB-08)
+    visibility: Visibility
 
 
 class ListEnrollmentsUseCase:
@@ -133,4 +136,9 @@ class ListEnrollmentsUseCase:
                 for e in enrollments
                 if e.status is EnrollmentStatus.APPROVED
             }
-        return ListaDeInscritos(enrollments, categorias, ve_todos_los_correos=ve_todo)
+        return ListaDeInscritos(
+            enrollments,
+            categorias,
+            ve_todos_los_correos=ve_todo,
+            visibility=competition.visibility,
+        )

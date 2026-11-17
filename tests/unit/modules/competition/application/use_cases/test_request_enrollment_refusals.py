@@ -23,6 +23,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
 )
 from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
+from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     CompetitionFullError,
     EnrollmentClosedError,
@@ -31,6 +32,7 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from src.modules.competition.domain.services.competition_policy import (
     MAX_ENROLLMENTS_PER_USER,
 )
@@ -67,6 +69,17 @@ class _Usuarios:
 
 
 _CON_GENERO = _Usuarios()
+
+
+def _hoy() -> date:
+    """
+    Hoy en el campo, con el reloj del caso de uso: sin plazo, la zona por defecto.
+
+    No `_hoy()`, que es la del sistema: el CI va en UTC, y entre las 00:00 y las
+    01:00 de Madrid (las 02:00 en verano) eran dos días distintos y los casos del mismo
+    día fallaban (el CI de BE #888, a las 00:44).
+    """
+    return fecha_en_el_campo(ahora_en_utc(), None)
 
 
 async def _publica(uow, empieza: date, max_players: int = 12) -> Competition:
@@ -107,7 +120,7 @@ def _pide(competicion: Competition, quien=None) -> RequestEnrollmentRequestDTO:
 
 async def test_r1_se_pide_plaza_el_mismo_dia_del_torneo():
     uow = InMemoryUnitOfWork()
-    competicion = await _publica(uow, empieza=date.today())
+    competicion = await _publica(uow, empieza=_hoy())
 
     respuesta = await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
 
@@ -116,7 +129,7 @@ async def test_r1_se_pide_plaza_el_mismo_dia_del_torneo():
 
 async def test_r2_empezado_el_torneo_no_y_lo_dice():
     uow = InMemoryUnitOfWork()
-    competicion = await _publica(uow, empieza=date.today() - timedelta(days=1))
+    competicion = await _publica(uow, empieza=_hoy() - timedelta(days=1))
 
     with pytest.raises(EnrollmentClosedError, match="ya ha empezado"):
         await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
@@ -124,7 +137,7 @@ async def test_r2_empezado_el_torneo_no_y_lo_dice():
 
 async def test_r3_llena_no_y_lo_dice():
     uow = InMemoryUnitOfWork()
-    competicion = await _publica(uow, empieza=date.today() + timedelta(days=3), max_players=2)
+    competicion = await _publica(uow, empieza=_hoy() + timedelta(days=3), max_players=2)
     await _dentro(uow, competicion.id)
     await _dentro(uow, competicion.id)
 
@@ -136,9 +149,9 @@ async def test_r4_con_el_maximo_de_inscripciones_no_y_lo_dice():
     uow = InMemoryUnitOfWork()
     quien = UserId(uuid4())
     for _ in range(MAX_ENROLLMENTS_PER_USER):
-        otra = await _publica(uow, empieza=date.today() + timedelta(days=3))
+        otra = await _publica(uow, empieza=_hoy() + timedelta(days=3))
         await _dentro(uow, otra.id, quien)
-    competicion = await _publica(uow, empieza=date.today() + timedelta(days=3))
+    competicion = await _publica(uow, empieza=_hoy() + timedelta(days=3))
 
     with pytest.raises(TooManyEnrollmentsError, match=str(MAX_ENROLLMENTS_PER_USER)):
         await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion, quien.value))
@@ -151,7 +164,7 @@ async def test_r4_con_el_maximo_de_inscripciones_no_y_lo_dice():
 
 async def test_g1_sin_genero_no_se_pide_plaza_y_lo_dice():
     uow = InMemoryUnitOfWork()
-    competicion = await _publica(uow, empieza=date.today() + timedelta(days=3))
+    competicion = await _publica(uow, empieza=_hoy() + timedelta(days=3))
     quien = UserId(uuid4())
 
     with pytest.raises(GenderRequiredError, match="tu género en tu perfil"):
@@ -168,7 +181,7 @@ async def test_r5_pedir_plaza_bloquea_la_competicion_como_empezarla(monkeypatch)
     mientras otra transacción la empieza se guarda REQUESTED con la competición
     ya en juego, después de que el arranque haya rechazado las pendientes."""
     uow = InMemoryUnitOfWork()
-    competicion = await _publica(uow, empieza=date.today())
+    competicion = await _publica(uow, empieza=_hoy())
     lecturas = []
     original = uow.competitions.find_by_id_for_update
 

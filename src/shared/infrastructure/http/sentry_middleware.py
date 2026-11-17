@@ -86,7 +86,9 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         """
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            return payload
+            # Solo un token de acceso da usuario, como en `verify_access_token` (SB-04):
+            # un refresh o cualquier otro JWT de la API no atribuye errores a nadie
+            return payload if payload.get("type") == "access" else None
         except InvalidTokenError as e:
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
             return None

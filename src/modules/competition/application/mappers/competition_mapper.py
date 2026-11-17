@@ -1,6 +1,7 @@
 """Mapper para convertir entidades Competition a DTOs de presentación."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
@@ -122,8 +123,25 @@ class CompetitionDTOMapper:
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
         if user_uow:
+            # Si el organizador juega, su elección de nombre, como la de cualquier
+            # inscrito: si no, una tarjeta y la lista le darían dos nombres. Se lee
+            # solo si hace falta (ver `_get_creator_dto`): la ficha tiene tope de
+            # consultas
+            async def eligio_su_nombre() -> bool:
+                inscripcion = (
+                    user_enrollment
+                    if is_creator
+                    else await uow.enrollments.find_by_user_and_competition(
+                        competition.creator_id, competition.id
+                    )
+                )
+                return inscripcion.use_real_name if inscripcion else False
+
             creator_dto = await CompetitionDTOMapper._get_creator_dto(
-                competition.creator_id, user_uow
+                competition.creator_id,
+                user_uow,
+                competition.visibility,
+                eligio_su_nombre=eligio_su_nombre,
             )
 
         # La tarjeta de «Mis competiciones» (FE #846)
@@ -333,10 +351,18 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
+        visibility: Visibility,
+        *,
+        eligio_su_nombre: Callable[[], Awaitable[bool]] | None = None,
     ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición. Sin su correo:
         no sale nunca (BE #531).
+
+        Qué nombre va delante, con la regla de los jugadores (SB-08): en una pública,
+        el real; en una privada, lo que eligió si juega en ella (`eligio_su_nombre`)
+        y si no, el visible (su alias si tiene). Nombre, apellidos y alias van
+        siempre: el alias es un apodo, no un dato oculto (Agustín, 17 nov 2026).
 
         Assumes caller manages the user_uow transaction context.
         """
@@ -346,11 +372,22 @@ class CompetitionDTOMapper:
             logger.warning("Creator with id %s not found", creator_id.value)
             return None
 
+        # Su inscripción solo importa en una privada y si tiene alias: si no, el nombre
+        # que se enseña es el mismo elija lo que elija, y no se lee
+        eligio = (
+            await eligio_su_nombre()
+            if eligio_su_nombre is not None
+            and visibility is Visibility.PRIVATE
+            and creator.alias is not None
+            else False
+        )
+        nombre_real = visibility.shows_real_name(eligio)
         return CreatorDTO(
             id=creator.id.value,
             first_name=creator.first_name,
             last_name=creator.last_name,
-            display_name=creator.display_name,
+            display_name=creator.display_name_or_legal(nombre_real),
+            alias=creator.alias,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),
         )

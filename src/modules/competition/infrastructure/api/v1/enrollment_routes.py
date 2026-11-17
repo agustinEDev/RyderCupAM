@@ -84,6 +84,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.entities.user import User
@@ -156,6 +157,7 @@ class EnrollmentDTOMapper:
         *,
         ve_todos_los_correos: bool = False,
         viewer_id: UserId | None = None,
+        visibility: Visibility,
     ) -> list[EnrollmentResponseDTO]:
         """
         Convierte inscripciones a EnrollmentResponseDTO, con los datos de cada usuario.
@@ -171,6 +173,9 @@ class EnrollmentDTOMapper:
             ve_todos_los_correos: Si van todos los correos (organizador o admin)
             viewer_id: Quien pide: el suyo va siempre. Sin los dos, ningún
                 correo (BE #531)
+            visibility: La de la competición, que decide si el nombre real va
+                siempre a la vista (SB-08). Obligatoria: un valor por defecto
+                aplicaría la regla equivocada sin que nada fallara
 
         Returns:
             Un DTO por inscripción; `user` a None si el usuario ya no existe
@@ -189,6 +194,7 @@ class EnrollmentDTOMapper:
                 por_id.get(e.user_id),
                 categorias,
                 ve_todos_los_correos or e.user_id == viewer_id,
+                visibility,
             )
             for e in enrollments
         ]
@@ -199,12 +205,13 @@ class EnrollmentDTOMapper:
         user: User | None,
         categorias: Mapping[UserId, int | None] | None,
         con_correo: bool,
+        visibility: Visibility,
     ) -> EnrollmentResponseDTO:
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
-            user=EnrollmentDTOMapper._user_dto(enrollment, user, con_correo),
+            user=EnrollmentDTOMapper._user_dto(enrollment, user, con_correo, visibility),
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
@@ -218,23 +225,33 @@ class EnrollmentDTOMapper:
 
     @staticmethod
     def _user_dto(
-        enrollment: Enrollment, user: User | None, con_correo: bool
+        enrollment: Enrollment,
+        user: User | None,
+        con_correo: bool,
+        visibility: Visibility,
     ) -> EnrolledUserDTO | None:
         """
         Los datos del usuario inscrito.
 
         El nombre sigue la preferencia de SU inscripción en ESTA competición
-        (BE #254), no la del perfil, así que no se lee de `user`.
+        (BE #254), no la del perfil, así que no se lee de `user`. Y la regla del
+        nombre real (SB-08): en una pública, el real va delante siempre; en una
+        privada, lo que eligió. Nombre, apellidos y alias van siempre: el alias es
+        un apodo, no un dato oculto (Agustín, 17 nov 2026).
         """
         if not user:
             logger.warning(f"User with id {enrollment.user_id.value} not found")
             return None
 
+        nombre_real = visibility.shows_real_name(enrollment.use_real_name)
         return EnrolledUserDTO(
             id=user.id.value,
             first_name=user.first_name,
             last_name=user.last_name,
-            display_name=user.display_name_or_legal(enrollment.use_real_name),
+            display_name=user.display_name_or_legal(nombre_real),
+            # El alias es un apodo, no un dato oculto (Agustín, 17 nov 2026): va siempre,
+            # para pintar el otro nombre pequeño debajo del que va delante
+            alias=user.alias,
             email=str(user.email) if con_correo else "",
             # Por su texto, como haría Pydantic con el float: 15.3 y no 15.29999...
             handicap=Decimal(str(user.handicap.value)) if user.handicap else None,
@@ -351,6 +368,7 @@ async def list_enrollments(
             categorias=lista.categorias,
             ve_todos_los_correos=lista.ve_todos_los_correos,
             viewer_id=viewer_id,
+            visibility=lista.visibility,
         )
 
     except ValueError as e:

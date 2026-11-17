@@ -12,6 +12,7 @@ import re
 from typing import ClassVar
 
 from src.shared.application.validation.field_limits import FieldLimits
+from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
 
 
 class NameValidator:
@@ -154,4 +155,7 @@ class AliasValidator:
         if not any(c.isalnum() for c in normalized):
             raise ValueError(f"{field_name} debe contener al menos una letra o un número")
 
+        # Sin enlaces: el alias sale en correos que firma la app (SB-05, 17 nov 2026)
+        if contiene_enlace(normalized):
+            raise ValueError(f"El {field_name} no puede llevar enlaces ni direcciones web.")
         return normalized

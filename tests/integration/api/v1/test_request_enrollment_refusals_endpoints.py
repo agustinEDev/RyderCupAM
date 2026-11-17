@@ -14,8 +14,10 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from src.modules.competition.application.services.plazo_de_inscripcion import ahora_en_utc
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.policies.enrollment_deadline import fecha_en_el_campo
 from src.modules.competition.domain.services.competition_policy import (
     MAX_ENROLLMENTS_PER_USER,
 )
@@ -39,6 +41,18 @@ from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.conftest import _URL_DE_LA_BD_DE_TEST, set_auth_cookies, solicitud_pendiente
 from tests.integration.api.v1.helpers.auth_helper import create_and_login_user
+
+
+def _hoy() -> date:
+    """
+    Hoy en el campo, con el reloj de la API (sin zona del campo, la de por defecto).
+
+    No `date.today()`, que es la del sistema: el CI va en UTC, y entre las 00:00 y las
+    01:00 de Madrid (las 02:00 en verano) eran dos días distintos y los casos del mismo
+    día fallaban (el CI de BE #888, a las 00:53).
+    """
+    return fecha_en_el_campo(ahora_en_utc(), None)
+
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -82,7 +96,7 @@ async def _pide(client: AsyncClient, competicion_id: str, cookies):
 
 
 async def test_el_dia_del_torneo_se_pide_plaza(client: AsyncClient):
-    competicion_id, _ = await _publica(client, date.today())
+    competicion_id, _ = await _publica(client, _hoy())
 
     respuesta = await _pide(client, competicion_id, await _jugador(client, "tarde"))
 
@@ -90,13 +104,13 @@ async def test_el_dia_del_torneo_se_pide_plaza(client: AsyncClient):
 
 
 async def test_empezado_el_torneo_es_un_400_con_el_motivo(client: AsyncClient):
-    competicion_id, _ = await _publica(client, date.today())
+    competicion_id, _ = await _publica(client, _hoy())
     engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
     try:
         async with engine.begin() as conn:
             await conn.execute(
                 text("UPDATE competitions SET start_date = :d WHERE id = :id"),
-                {"d": date.today() - timedelta(days=1), "id": competicion_id},
+                {"d": _hoy() - timedelta(days=1), "id": competicion_id},
             )
     finally:
         await engine.dispose()
@@ -108,7 +122,7 @@ async def test_empezado_el_torneo_es_un_400_con_el_motivo(client: AsyncClient):
 
 
 async def test_llena_es_un_400_con_el_motivo(client: AsyncClient):
-    competicion_id, _ = await _publica(client, date.today() + timedelta(days=5), max_players=2)
+    competicion_id, _ = await _publica(client, _hoy() + timedelta(days=5), max_players=2)
     # El organizador ya ocupa una plaza: con otro, que entra directo, se llena
     otro = await _pide(client, competicion_id, await _jugador(client, "otro"))
     assert otro.status_code == 201, otro.text
@@ -158,7 +172,7 @@ async def test_con_el_maximo_de_inscripciones_es_un_400_con_el_motivo(client: As
             await sesion.commit()
     finally:
         await engine.dispose()
-    competicion_id, _ = await _publica(client, date.today() + timedelta(days=5))
+    competicion_id, _ = await _publica(client, _hoy() + timedelta(days=5))
 
     respuesta = await _pide(client, competicion_id, cookies)
 
@@ -167,7 +181,7 @@ async def test_con_el_maximo_de_inscripciones_es_un_400_con_el_motivo(client: As
 
 
 def _competicion_publica(organizador: UserId) -> Competition:
-    empieza = date.today() + timedelta(days=5)
+    empieza = _hoy() + timedelta(days=5)
     return Competition(
         id=CompetitionId.generate(),
         creator_id=organizador,
@@ -185,9 +199,7 @@ def _competicion_publica(organizador: UserId) -> Competition:
 async def test_aprobar_con_la_competicion_llena_es_un_400_con_el_motivo(client: AsyncClient):
     """El gemelo del organizador: el día del torneo puede haber más solicitudes
     pendientes que plazas, y aprobar la que sobra reventaba igual."""
-    competicion_id, organiza = await _publica(
-        client, date.today() + timedelta(days=5), max_players=2
-    )
+    competicion_id, organiza = await _publica(client, _hoy() + timedelta(days=5), max_players=2)
     # Dos solicitudes de antes de la inscripción directa (28 oct 2026)
     set_auth_cookies(client, await _jugador(client, "primera"))
     primera = await solicitud_pendiente(client, competicion_id)

@@ -10,6 +10,11 @@ updates:
       time: "09:00"
       timezone: "Europe/Madrid"
     open-pull-requests-limit: 10
+    # Espera 5 días antes de proponer una versión recién publicada: es la ventana
+    # de los paquetes envenenados de PyPI y npm, que se retiran en horas o días
+    # (INF-12). Las actualizaciones de seguridad no esperan.
+    cooldown:
+      default-days: 5
     labels:
       - "dependencies"
       - "automated"
@@ -63,6 +68,11 @@ updates:
   - package-ecosystem: "docker"
     directory: "/docker"
     target-branch: "develop"
+    # Espera 3 días con un digest nuevo de la imagen (INF-12): menos que el resto
+    # porque es como entran los parches del sistema operativo que señala Trivy, y una
+    # imagen oficial retirada se nota antes. Las de seguridad no esperan.
+    cooldown:
+      default-days: 3
     schedule:
       interval: "weekly"
       day: "monday"
@@ -87,6 +97,14 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "develop"
+    # Espera 5 días antes de proponer una versión nueva de una acción (INF-12): la
+    # ventana en que se detecta una acción comprometida, como tj-actions en 2025. Las
+    # de seguridad no esperan.
+    # Ojo: Dependabot toma la fecha de la Release de GitHub; una etiqueta sin Release
+    # usa la fecha de su commit, que puede ser vieja o falsa, y se salta la espera. Por
+    # eso las acciones van fijadas por SHA y se revisa cada salto a mano (CodeRabbit)
+    cooldown:
+      default-days: 5
     schedule:
       interval: "weekly"
       day: "monday"

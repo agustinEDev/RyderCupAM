@@ -24,6 +24,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -58,7 +59,9 @@ def user_repo():
     return repo
 
 
-async def _setup_scheduled_match(uow: InMemoryUnitOfWork):
+async def _setup_scheduled_match(
+    uow: InMemoryUnitOfWork, visibility: Visibility = Visibility.PRIVATE
+):
     """
     Una competición con una ronda y un partido SCHEDULED entre dos jugadores.
 
@@ -105,6 +108,9 @@ async def _setup_scheduled_match(uow: InMemoryUnitOfWork):
     mock_comp.ryder_cup.team_1_name = "Team A"
     mock_comp.ryder_cup.team_2_name = "Team B"
     mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
+    # Una de verdad: un MagicMock contesta «sí» a `shows_real_name` y todos saldrían
+    # con su nombre real, pasara lo que pasara con la preferencia (revisión de SB-08)
+    mock_comp.visibility = visibility
     uow._competitions._competitions[competition_id] = mock_comp
 
     return competition_id, player_a, player_b
@@ -410,3 +416,30 @@ class TestConLaLlaveSoloElPartidoDeSuAmigo:
         return competition_id, player_a, rival
 
     # Quién ve qué, con la puerta dentro del caso de uso: test_lo_jugado_de_la_ryder.py
+
+
+class TestLeaderboardInAPublicCompetition:
+    """En una pública el nombre real va siempre a la vista (SB-08, 17 nov 2026)."""
+
+    @pytest.mark.asyncio
+    async def test_todos_salen_por_su_nombre_real_aunque_pidieran_alias(self, uow, user_repo):
+        competition_id, player_a, player_b = await _setup_scheduled_match(uow, Visibility.PUBLIC)
+        enrollment = Enrollment.direct_enroll(
+            id=EnrollmentId.generate(),
+            competition_id=competition_id,
+            user_id=player_a.user_id,
+        )
+        enrollment.set_name_preference(False)
+        await uow.enrollments.add(enrollment)
+
+        uc = GetLeaderboardUseCase(uow, user_repo, ScoringService())
+        view = await uc.execute(str(competition_id))
+
+        user_names = {
+            p.user_id: p.user_name
+            for m in view.matches
+            for p in (*m.team_a_players, *m.team_b_players)
+        }
+        assert user_names[str(player_a.user_id)] == "Nombre Legal"
+        # Sin inscripción también: la regla es de la competición, no de cada uno
+        assert user_names[str(player_b.user_id)] == "Nombre Legal"
