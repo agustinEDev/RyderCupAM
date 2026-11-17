@@ -346,7 +346,9 @@ def _agenda(
             # El aviso de por qué no hay partidos nombra a jugadores: de una
             # privada, solo para quien está dentro (CodeRabbit)
             entero=entero,
-            descansan=_descansan(leido.team_assignment, leido.inscritos, matches),
+            descansan=(
+                _descansan(leido.team_assignment, leido.inscritos, matches) if entero else []
+            ),
         )
         days_map[round_entity.round_date].append(round_dto)
     return _dias(days_map)

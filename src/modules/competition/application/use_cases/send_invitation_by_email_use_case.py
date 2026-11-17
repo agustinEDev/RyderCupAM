@@ -51,8 +51,6 @@ class SendInvitationByEmailUseCase:
         plazo: PlazoDeInscripcion | None = None,
     ):
         self._uow = uow
-        # Pasado el plazo de inscripción no se invita (C2, 15 nov 2026); sin él, no se mira
-        self._plazo = plazo
         self._user_uow = user_uow
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)

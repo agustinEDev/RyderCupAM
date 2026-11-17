@@ -243,6 +243,7 @@ class PublishQuickMatchResultUseCase:
                 total_players=len(cuentan),
                 hay_puesto=hay_puesto,
                 con_mejor_bruto=con_mejor_bruto,
+                es_medal=es_medal,
             )
             eventos.append(self._evento(match, user_id, payload))
         return eventos
@@ -274,6 +275,7 @@ class PublishQuickMatchResultUseCase:
         total_players: int,
         hay_puesto: bool,
         con_mejor_bruto: set[ParticipantId],
+        es_medal: bool,
     ) -> dict[str, Any]:
         """Lo que cuenta el evento de la vuelta de un jugador en Stableford o Medal."""
         pid = vuelta.participant.participant_id
@@ -293,7 +295,7 @@ class PublishQuickMatchResultUseCase:
             "best_gross_in_group": pid in con_mejor_bruto,
             "best_gross_tied": pid in con_mejor_bruto and len(con_mejor_bruto) > 1,
         }
-        if match.scoring_format == ScoringFormat.MEDAL:
+        if es_medal:
             payload["net_strokes"] = vuelta.net
             payload["to_par"] = vuelta.to_par
         else:

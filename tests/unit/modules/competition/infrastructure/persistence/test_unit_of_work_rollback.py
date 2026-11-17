@@ -50,3 +50,20 @@ async def test_salir_sin_fallos_hace_commit_sin_rollback():
 
     sesion.commit.assert_awaited_once()
     sesion.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_salir_si_el_rollback_tambien_falla_sube_el_error_del_commit():
+    """
+    Given: un commit que falla y un rollback que también falla (la conexión se cayó)
+    When: sale de la unidad de trabajo
+    Then: sube el error del commit, no el del rollback
+    """
+    sesion = MagicMock()
+    sesion.commit = AsyncMock(side_effect=RuntimeError("duplicate key"))
+    sesion.rollback = AsyncMock(side_effect=ConnectionError("conexión perdida"))
+    uow = SQLAlchemyCompetitionUnitOfWork(sesion)
+
+    with pytest.raises(RuntimeError, match="duplicate key"):
+        async with uow:
+            pass
