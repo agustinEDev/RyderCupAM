@@ -5,8 +5,6 @@ Permite desasociar un campo de golf de una competicion en estado DRAFT.
 Solo el creador puede realizar esta accion.
 """
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     RemoveGolfCourseRequestDTO,
     RemoveGolfCourseResponseDTO,
@@ -23,6 +21,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class GolfCourseNotAssignedError(Exception):
@@ -126,5 +125,5 @@ class RemoveGolfCourseFromCompetitionUseCase:
         return RemoveGolfCourseResponseDTO(
             competition_id=request.competition_id,
             golf_course_id=request.golf_course_id,
-            removed_at=datetime.now(UTC),
+            removed_at=ahora_en_utc(),
         )

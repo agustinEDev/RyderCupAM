@@ -2,7 +2,6 @@
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
 from sqlalchemy import delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +24,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
     tee_groups_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
@@ -41,7 +41,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
         await self.anadir(partidas)
 
     async def anadir(self, partidas: Sequence[Partida]) -> None:
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         for partida in partidas:
             await self._session.execute(
                 tee_groups_table.insert().values(
@@ -57,7 +57,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             await self._meter_jugadores(partida)
 
     async def guardar(self, partidas: Sequence[Partida]) -> None:
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         for partida in partidas:
             await self._session.execute(
                 update(tee_groups_table)

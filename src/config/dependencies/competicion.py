@@ -3,8 +3,6 @@ Proveedores de la organización de una competición: alta, edición, estados, li
 inscripciones, invitaciones, equipos y capitanes, draft y hándicaps.
 """
 
-from datetime import UTC, datetime
-
 from fastapi import Depends
 
 from src.config.dependencies.comun import (
@@ -193,6 +191,7 @@ from src.modules.social.infrastructure.adapters.tournament_achievements_publishe
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 def get_plazo_de_inscripcion(
@@ -387,7 +386,7 @@ def get_actualizar_handicaps_use_case(
         uow,
         CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         lanzador,
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
     )
 
 
@@ -400,7 +399,7 @@ def get_programar_actualizacion_use_case(
     return ProgramarActualizacionUseCase(
         uow,
         CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         refresco_activo=lanzador is not None,
     )
 
@@ -421,7 +420,7 @@ def get_ventana_de_actualizacion_use_case(
     return VentanaDeActualizacionUseCase(
         uow,
         CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         refresco_activo=lanzador is not None,
     )
 
@@ -565,7 +564,7 @@ def get_reopen_enrollments_use_case(
     return ReopenEnrollmentsUseCase(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         actividad=actividad,
         correos=correos,
         user_uow=user_uow,
@@ -663,7 +662,7 @@ def get_withdraw_enrollment_use_case(
     return WithdrawEnrollmentUseCase(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         actividad=actividad,
     )
 
@@ -677,7 +676,7 @@ def get_remove_enrolled_player_use_case(
     return RemoveEnrolledPlayerUseCase(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=ahora_en_utc,
         actividad=actividad,
     )
 

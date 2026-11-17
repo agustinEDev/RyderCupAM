@@ -14,7 +14,6 @@ puso el organizador y la RFEG no lo cambia. Esa decisión es de quien llama.
 """
 
 import logging
-from datetime import UTC, datetime
 
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     ResultadoRefresco,
@@ -24,6 +23,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class RefrescoRfeg:
     async def si_toca(self, user: User) -> None:
         """Refresca y guarda el hándicap del jugador, si es de España y no se hizo hoy."""
         if user.handicap_updated_at is not None and (
-            user.handicap_updated_at.date() == datetime.now(UTC).date()
+            user.handicap_updated_at.date() == ahora_en_utc().date()
         ):
             return
         await self.consultar(user)

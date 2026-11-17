@@ -37,6 +37,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 # La misma tabla, por el nombre de la franja que viaja en el DTO
 ORDEN_DE_SESION_POR_NOMBRE = {tipo.value: orden for tipo, orden in ORDEN_DE_SESION.items()}
@@ -62,7 +63,7 @@ class ListMyPendingEnvelopesUseCase:
                 franja en una hora. Sin ella no hay plazo que vencer
         """
         self._uow = uow
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock or ahora_en_utc
         self._timezone = timezone_service
 
     async def execute(self, user_id: UserId) -> list[PendingEnvelopeDTO]:

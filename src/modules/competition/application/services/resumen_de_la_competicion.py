@@ -13,7 +13,7 @@ pierde nunca (decidido con Agustín el 13 oct 2026).
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, time, timedelta
 
 from src.modules.competition.application.services.envelope_desk import ORDEN_DE_SESION
 from src.modules.competition.domain.entities.competition import Competition
@@ -27,6 +27,7 @@ from src.modules.competition.domain.value_objects.match_status import MatchStatu
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 _EN_JUEGO = {MatchStatus.SCHEDULED, MatchStatus.IN_PROGRESS}
 _SIN_PARTIDOS = {RoundStatus.PENDING_TEAMS, RoundStatus.PENDING_MATCHES}
@@ -77,7 +78,7 @@ class ResumenDeLaCompeticion:
             candidatas = await _en_stroke_play(sesiones, competicion, user_id, uow)
         else:
             candidatas = await _en_la_ryder(sesiones, user_id, uow)
-        desde = (hoy or datetime.now(UTC).date()) - timedelta(days=1)
+        desde = (hoy or ahora_en_utc().date()) - timedelta(days=1)
         candidatas = [c for c in candidatas if c.fecha >= desde]
         proxima = min(candidatas, key=lambda s: (s.fecha, ORDEN_DE_SESION[s.sesion]), default=None)
         return Resumen(jornadas, proxima)

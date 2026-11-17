@@ -12,8 +12,6 @@ siempre (pedir plaza, invitación o directa) y, ya aprobado, se eligen franjas:
 Con la competición bloqueada: dos a la vez por la última plaza, una sola.
 """
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
@@ -45,6 +43,7 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 async def _franja_y_competicion(
@@ -149,7 +148,7 @@ class CogerPlazaUseCase:
                 )
             except PlazaNoPosibleError as e:
                 raise PlazaEnFranjaError(str(e)) from e
-            ahora = datetime.now(UTC)
+            ahora = ahora_en_utc()
             # Si deja una plaza que le dio la lista y aún no ha visto, la nueva hereda el
             # aviso: si no, nunca se enteraría de que tiene plaza (code-review de la 3b)
             sin_ver = en_lugar_de is not None and any(
@@ -226,5 +225,5 @@ class SoltarPlazaUseCase:
             await self._uow.plazas.quitar(round_id, jugador)
             # La plaza libre, para el primero que espera (#251)
             esperas = EsperasDeLaCompeticion(self._uow)
-            await esperas.rellenar(competicion, round_id, datetime.now(UTC))
+            await esperas.rellenar(competicion, round_id, ahora_en_utc())
         await self._actividad.desde_la_espera(competicion, esperas.asignadas)

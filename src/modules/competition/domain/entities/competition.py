@@ -6,12 +6,12 @@ Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
 from collections.abc import Collection, Iterable, Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.modality import Modality
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -700,7 +700,7 @@ class Competition:
 
     def _abiertas_ahora(self, now: datetime | None) -> None:
         """Apunta cuando se abren; sin reloj, ahora."""
-        instante = en_utc(now) if now is not None else datetime.now(UTC)
+        instante = en_utc(now) if now is not None else ahora_en_utc()
         self._enrollment_opened_at = instante.replace(tzinfo=None)
 
     def scheduled_opening_at(self, timezone: str | None) -> datetime | None:

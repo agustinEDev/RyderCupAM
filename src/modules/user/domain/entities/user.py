@@ -1,5 +1,5 @@
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 
 from src.modules.user.domain.exceptions.email_change_exceptions import (
@@ -10,7 +10,7 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.exceptions.verification_token_expired_error import (
     VerificationTokenExpiredError,
 )
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -483,7 +483,7 @@ class User:
         if self._terms_version == version:
             return False
         self._terms_version = version
-        self._terms_accepted_at = datetime.now(UTC)
+        self._terms_accepted_at = ahora_en_utc()
         self._updated_at = ahora_utc_sin_zona()
         return True
 
@@ -611,7 +611,7 @@ class User:
         # handicap_updated_at se guarda en UTC (columna timezone-aware) para que el
         # frontend pueda convertirlo correctamente a la hora local del usuario.
         now = ahora_utc_sin_zona()
-        self._handicap_updated_at = datetime.now(UTC)
+        self._handicap_updated_at = ahora_en_utc()
         self._updated_at = now
 
     @classmethod

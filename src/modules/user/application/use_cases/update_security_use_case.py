@@ -9,7 +9,6 @@ Security Logging (v1.8.0): Registra cambios de contraseña y email.
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from src.modules.user.application.dto.user_dto import (
     SesionNuevaDTO,
@@ -46,7 +45,7 @@ from src.modules.user.domain.value_objects.password import (
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +217,7 @@ class UpdateSecurityUseCase:
         # Y los accesos, al momento, en todos sus dispositivos: uno robado deja de valer
         # ya, no a los 15 minutos (auditoría de la fase 6, B-05). Los dispositivos siguen
         # activos y de fiar
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         for dispositivo in dispositivos:
             dispositivo.cierra_las_sesiones(ahora)
             await self._uow.user_devices.save(dispositivo)

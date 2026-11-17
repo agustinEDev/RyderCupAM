@@ -28,7 +28,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -71,6 +71,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         try:
             await HandicapDeLaRfegDelPerfilUseCase(
                 herramientas=self.herramientas,
-                reloj=lambda: datetime.now(UTC),
+                reloj=ahora_en_utc,
                 actividad=None if self._actividad is None else self._actividad_en_su_sesion,
             ).execute(user_id, handicap)
         except Exception:
@@ -144,7 +145,7 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
                 herramientas=self.herramientas,
                 handicap_service=self._handicap_service,
                 avisos=self.avisos,
-                reloj=lambda: datetime.now(UTC),
+                reloj=ahora_en_utc,
                 esperar=self._esperar,
                 # Se monta al avisar, con la pasada ya hecha: si falla, la pasada
                 # no se entera (T1)
@@ -233,7 +234,7 @@ class VigilanteDeActualizaciones:
         self,
         lanzador: LanzadorEnSegundoPlano,
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         """El correo es el del lanzador: el mismo para la pasada y para el vigilante."""
         self._lanzador = lanzador

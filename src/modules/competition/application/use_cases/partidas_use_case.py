@@ -18,7 +18,7 @@ Con la competición bloqueada, como las plazas: dos a la vez, una sola.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
@@ -97,6 +97,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 SOLO_EN_FRANJAS = "Solo hay partidas en las franjas de un Stableford o un Medal."
 
@@ -145,7 +146,7 @@ class _ConLaFranja:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
@@ -236,7 +237,7 @@ class GenerarPartidasUseCase(_ConLaFranja):
         jugadores: JugadoresDeLaPartida,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         super().__init__(uow, zonas, user_repository, reloj, actividad)
@@ -293,7 +294,7 @@ class MoverJugadorUseCase(_ConLaFranja):
         jugadores: JugadoresDeLaPartida,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         super().__init__(uow, zonas, user_repository, reloj, actividad)
@@ -467,7 +468,7 @@ class VerPartidasUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         amigos: AmigosInterface | None = None,
         eventos: EventosDeAmigosInterface | None = None,
     ):

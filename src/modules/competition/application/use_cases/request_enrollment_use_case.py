@@ -7,7 +7,7 @@ la franja con hueco, o la lista de espera de una llena; sin franjas montadas
 (o en una Ryder) se entra con la barra y manda el maximo de jugadores.
 """
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
@@ -84,7 +84,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+from src.shared.domain.services.instante_utc import ahora_en_utc, ahora_utc_sin_zona
 
 
 class CompetitionNotActiveError(Exception):
@@ -377,7 +377,7 @@ class RequestEnrollmentUseCase:
         cupo = franja.hoja_de_salidas.cupo if franja.hoja_de_salidas else 0
         plazas = await self._uow.plazas.de_la_competicion(competition.id)
         llena = sum(1 for p in plazas if p.round_id == franja.id) >= cupo
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         if request.waiting_list:
             if not llena:
                 raise TeeWindowHasRoomError("Queda sitio en esa franja: coge plaza directamente.")

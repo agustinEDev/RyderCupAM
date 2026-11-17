@@ -8,7 +8,7 @@ quitado de X». Después se le puede volver a invitar, o pedir plaza.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.dto.enrollment_dto import (
     RemoveEnrolledPlayerRequestDTO,
@@ -37,6 +37,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 # Se reexporta: la ruta lo traduce a su codigo (409)
 __all__ = [
@@ -82,7 +83,7 @@ class RemoveEnrolledPlayerUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
-        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        reloj: Callable[[], datetime] = ahora_en_utc,
         actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """

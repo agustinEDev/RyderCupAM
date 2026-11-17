@@ -12,8 +12,6 @@ Decidido con Agustín (#251, 20 sep; y 8 oct 2026):
   visto, hasta que pulsa «Entendido».
 """
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.dto.round_match_dto import AssignedPlaceDTO
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -41,6 +39,7 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class EsperarUseCase:
@@ -94,7 +93,7 @@ class EsperarUseCase:
                 )
             except EsperaNoPosibleError as e:
                 raise PlazaEnFranjaError(str(e)) from e
-            espera = EsperaEnFranja.crear(competicion.id, round_id, jugador, datetime.now(UTC))
+            espera = EsperaEnFranja.crear(competicion.id, round_id, jugador, ahora_en_utc())
             await self._uow.esperas.add(espera)
         return espera
 
@@ -220,4 +219,4 @@ class EntendidoUseCase:
     async def execute(self, round_id: RoundId, user_id: UserId) -> None:
         """Solo la suya: se marca por jugador y franja."""
         async with self._uow:
-            await self._uow.plazas.marcar_vista(round_id, user_id, datetime.now(UTC))
+            await self._uow.plazas.marcar_vista(round_id, user_id, ahora_en_utc())

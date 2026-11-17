@@ -13,7 +13,7 @@ Crear y cortar van dentro de la transacción de quien llama; lanzar, después de
 guardar, para que la pasada encuentre la actualización.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.exceptions import (
     ActualizacionEnCursoError,
@@ -35,6 +35,7 @@ from src.modules.competition.domain.services.ventana_de_actualizacion import (
     CodigoDeVentana,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.shared.domain.services.instante_utc import ahora_en_utc
 
 
 class ActualizacionesDeHandicaps:
@@ -56,7 +57,7 @@ class ActualizacionesDeHandicaps:
         """Corta la anterior a medias y crea una nueva, si hay con qué lanzarla."""
         if self._lanzador is None:
             return None
-        ahora = datetime.now(UTC)
+        ahora = ahora_en_utc()
         await self.cortar(competition_id, ahora)
         actualizacion = ActualizacionDeHandicaps.crear(
             competition_id, OrigenActualizacion.CIERRE, ahora
@@ -94,7 +95,7 @@ class ActualizacionesDeHandicaps:
         """La que esté a medias se corta; una completa se queda como está."""
         ultima = await self._uow.handicap_updates.ultima_de(competition_id)
         if ultima is not None:
-            ultima.cortar(ahora or datetime.now(UTC))
+            ultima.cortar(ahora or ahora_en_utc())
             await self._uow.handicap_updates.update(ultima)
 
     def lanzar(self, actualizacion: ActualizacionDeHandicaps | None) -> None:
