@@ -198,7 +198,11 @@ class UpdateRoundUseCase:
 
         # Releída tras el bloqueo: si mientras se esperaba otra petición
         # generó sus partidos, se decide con eso y no con lo de antes
-        round_entity = await self._uow.rounds.find_by_id_for_update(round_id) or round_entity
+        # Si otra petición la borró mientras se esperaba, ya no existe
+        releida = await self._uow.rounds.find_by_id_for_update(round_id)
+        if releida is None:
+            raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
+        round_entity = releida
 
         # 3. Verificar creador
         if not is_admin and not competition.is_creator(user_id):
