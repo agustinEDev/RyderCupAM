@@ -71,10 +71,10 @@ class PlayerNames:
         leídos (para quien ya los tiene y no quiere leerlos otra vez), y su
         visibilidad, que decide si el nombre real va siempre a la vista.
         """
-        real_name_wanted = {
-            e.user_id for e in enrollments if visibility.shows_real_name(e.use_real_name)
-        }
+        real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
+        # En una pública, el real de todos, también de quien ya no tiene inscripción
         names: dict[UserId, str] = {
-            uid: user.display_name_or_legal(uid in real_name_wanted) for uid, user in users.items()
+            uid: user.display_name_or_legal(visibility.shows_real_name(uid in real_name_wanted))
+            for uid, user in users.items()
         }
         return {uid: names.get(uid, "") for uid in user_ids}
