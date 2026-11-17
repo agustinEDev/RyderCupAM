@@ -23,10 +23,11 @@ from src.modules.user.domain.value_objects.user_id import UserId
 async def quieren_su_nombre_legal(
     uow: CompetitionUnitOfWorkInterface, pares: Iterable[tuple[CompetitionId, UserId]]
 ) -> set[tuple[CompetitionId, UserId]]:
-    """De cada (competición, quien invita), si en ella pidió su nombre legal.
+    """De cada (competición, quien invita), si en ella va su nombre legal.
 
-    Se llama dentro de la transacción de la competición. Quien no está
-    inscrito en ella no ha pedido nada: sale con su nombre de siempre.
+    Se llama dentro de la transacción de la competición. En una pública, siempre
+    (SB-08). En una privada, si lo pidió al inscribirse; quien no está inscrito
+    no ha pedido nada: sale con su nombre de siempre.
     """
     # Una consulta por competición y no por invitación: una página puede traer
     # cien (CodeRabbit en la #381)
@@ -35,6 +36,12 @@ async def quieren_su_nombre_legal(
         por_competicion[competition_id].add(inviter_id)
     legales: set[tuple[CompetitionId, UserId]] = set()
     for competition_id, invitan in por_competicion.items():
+        # En una pública el nombre real va siempre a la vista, también el de quien
+        # invita (SB-08): no hace falta mirar qué eligió
+        competicion = await uow.competitions.find_by_id(competition_id)
+        if competicion is not None and competicion.visibility.shows_real_name(False):
+            legales.update((competition_id, uid) for uid in invitan)
+            continue
         for inscripcion in await uow.enrollments.find_by_user_ids_and_competition(
             list(invitan), competition_id
         ):

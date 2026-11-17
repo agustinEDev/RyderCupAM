@@ -22,6 +22,7 @@ from src.modules.competition.domain.services.scoring_service import ScoringServi
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -337,12 +338,23 @@ class TestScoringViewRespectsNamePreference:
         return repo
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "visibility, nombre_del_que_pidio_alias",
+        [(Visibility.PRIVATE, "Chuchi"), (Visibility.PUBLIC, "Nombre Legal")],
+        ids=["privada", "publica"],
+    )
     async def test_el_jugador_que_pidio_su_alias_se_pinta_por_el_y_el_resto_no(
-        self, uow, user_repo_con_alias
+        self, uow, user_repo_con_alias, visibility, nombre_del_que_pidio_alias
     ):
+        """
+        En una privada, quien pidió su alias sale por él; en una pública, el nombre
+        real va siempre a la vista (SB-08).
+        """
         match, yellow, red, gc_repo = await _setup(uow, _course_two_tees())
         # La única competición que `_setup` deja montada en el repo en memoria.
-        competition_id = next(iter(uow._competitions._competitions.values())).id
+        competicion = next(iter(uow._competitions._competitions.values()))
+        competicion.visibility = visibility
+        competition_id = competicion.id
         for user_id, quiere_alias in ((yellow.user_id, True), (red.user_id, False)):
             enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
@@ -357,7 +369,7 @@ class TestScoringViewRespectsNamePreference:
         view = await uc.execute(str(match.id))
 
         names = {p.user_id: p.user_name for p in view.players}
-        assert names[str(yellow.user_id)] == "Chuchi"
+        assert names[str(yellow.user_id)] == nombre_del_que_pidio_alias
         # Sin haber elegido nada: el nombre legal, que es el defecto de una
         # competición desde que se invirtió
         assert names[str(red.user_id)] == "Nombre Legal"
