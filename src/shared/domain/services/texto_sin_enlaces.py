@@ -23,7 +23,6 @@ Coste: la búsqueda crece con el cuadrado de la longitud; los tres textos tienen
 """
 
 import re
-import sys
 import unicodedata
 
 from src.shared.domain.services.terminaciones_de_dominio import TERMINACIONES_DE_DOMINIO
@@ -42,13 +41,16 @@ _CORREO = re.compile(r"[^\s@]+@[^\s@.]+\.[^\s@]+")
 _IP = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9]|\.[0-9])")
 
 
+_ULTIMO_PUNTO_DE_UNICODE = 0x10FFFF
+
+
 def _clase_de_marcas() -> str:
     """
     Las marcas que se combinan (Unicode M*), como clase de regex. `\\w` no las incluye y
     van dentro de las palabras de muchos alfabetos: el signo de la «ा» de «भारत».
     """
     rangos: list[tuple[int, int]] = []
-    for punto in range(sys.maxunicode + 1):
+    for punto in range(_ULTIMO_PUNTO_DE_UNICODE + 1):
         if unicodedata.category(chr(punto)).startswith("M"):
             if rangos and rangos[-1][1] == punto - 1:
                 rangos[-1] = (rangos[-1][0], punto)
