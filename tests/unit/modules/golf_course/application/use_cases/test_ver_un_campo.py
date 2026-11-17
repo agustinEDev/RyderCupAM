@@ -3,7 +3,9 @@ Quién puede ver un campo (re-auditoría F-04).
 
 La regla vivía en la ruta: un campo aprobado lo ve cualquiera; uno pendiente o
 rechazado, solo un admin o quien lo propuso. Ahora la aplica el caso de uso, así
-que cualquier otra entrada (un script, otra ruta) la cumple también.
+que cualquier otra entrada (un script, otra ruta) la cumple también. A quien no
+puede verlo se le responde como si no existiera (404): un 403 le diría que hay un
+campo pendiente con ese id.
 """
 
 from uuid import uuid4
@@ -15,7 +17,6 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
 )
 from src.modules.golf_course.application.exceptions import (
     GolfCourseMissingError,
-    GolfCourseViewForbiddenError,
 )
 from src.modules.golf_course.application.use_cases.get_golf_course_by_id_use_case import (
     GetGolfCourseByIdUseCase,
@@ -103,15 +104,12 @@ class TestCampoAprobado:
 
 @pytest.mark.parametrize("estado", ["PENDING_APPROVAL", "REJECTED"])
 class TestCampoSinAprobar:
-    async def test_ver_campo_sin_aprobar_otro_jugador_prohibido(self, estado):
-        """Given un campo pendiente o rechazado, When lo pide otro jugador, Then 403 con el texto de siempre."""
+    async def test_ver_campo_sin_aprobar_otro_jugador_no_lo_encuentra(self, estado):
+        """Given un campo pendiente o rechazado, When lo pide otro jugador, Then no está, como si no existiera."""
         uow = _Uow()
         campo = await _campo(uow, estado)
 
-        with pytest.raises(
-            GolfCourseViewForbiddenError,
-            match="^You don't have permission to view this golf course$",
-        ):
+        with pytest.raises(GolfCourseMissingError, match="^Golf course not found: "):
             await GetGolfCourseByIdUseCase(uow).execute(_pide(campo, OTRO))
 
     async def test_ver_campo_sin_aprobar_quien_lo_propuso_lo_ve(self, estado):

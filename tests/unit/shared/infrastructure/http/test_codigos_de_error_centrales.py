@@ -111,7 +111,6 @@ CODIGOS_DE_DEVELOP = {
     # Campos (re-auditoría F-04): los mismos códigos que daban sus rutas
     "src.modules.golf_course.application.exceptions.GolfCourseEditForbiddenError": 403,
     "src.modules.golf_course.application.exceptions.GolfCourseMissingError": 404,
-    "src.modules.golf_course.application.exceptions.GolfCourseViewForbiddenError": 403,
     "src.modules.quick_match.application.exceptions.FriendUserNotFoundError": 404,
     "src.modules.quick_match.application.exceptions.GolfCourseNotFoundError": 404,
     "src.modules.quick_match.application.exceptions.InvalidParticipantError": 422,
