@@ -95,7 +95,11 @@ class ListMyHandicapsNotUpdatedUseCase:
             if not hecho.para_el_organizador:
                 continue
             nombres = await PlayerNames.de_la_competicion(
-                hecho.para_el_organizador, competicion.id, self._users, self._uow
+                hecho.para_el_organizador,
+                competicion.id,
+                self._users,
+                self._uow,
+                competicion.visibility,
             )
             items.append(
                 HandicapsNotUpdatedAsOrganizerDTO(

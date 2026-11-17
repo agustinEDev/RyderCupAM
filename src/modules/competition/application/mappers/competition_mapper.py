@@ -122,11 +122,23 @@ class CompetitionDTOMapper:
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
         if user_uow:
+            # Si el organizador juega, su elección de nombre, como la de cualquier
+            # inscrito: si no, una tarjeta y la lista le darían dos nombres
+            inscripcion_del_creador = (
+                user_enrollment
+                if is_creator
+                else await uow.enrollments.find_by_user_and_competition(
+                    competition.creator_id, competition.id
+                )
+            )
             creator_dto = await CompetitionDTOMapper._get_creator_dto(
                 competition.creator_id,
                 user_uow,
                 competition.visibility,
                 ve_el_nombre_legal=is_creator or is_admin,
+                eligio_su_nombre=(
+                    inscripcion_del_creador.use_real_name if inscripcion_del_creador else False
+                ),
             )
 
         # La tarjeta de «Mis competiciones» (FE #846)
@@ -336,18 +348,20 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
-        visibility: Visibility = Visibility.PRIVATE,
+        visibility: Visibility,
         *,
-        ve_el_nombre_legal: bool = False,
+        ve_el_nombre_legal: bool,
+        eligio_su_nombre: bool = False,
     ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición. Sin su correo:
         no sale nunca (BE #531).
 
         Su nombre, con la regla de los jugadores (SB-08): en una pública, el real a
-        la vista y el alias aparte, para pintarlo debajo; en una privada, el visible
-        (su alias si tiene), y su nombre y apellidos solo a él y a los admin
-        (`ve_el_nombre_legal`).
+        la vista y el alias aparte, para pintarlo debajo; en una privada, lo que
+        eligió si juega en ella (`eligio_su_nombre`) y si no, el visible (su alias si
+        tiene); su nombre y apellidos, solo si se enseña el real, o a él y a los
+        admin (`ve_el_nombre_legal`).
 
         Assumes caller manages the user_uow transaction context.
         """
@@ -357,14 +371,14 @@ class CompetitionDTOMapper:
             logger.warning("Creator with id %s not found", creator_id.value)
             return None
 
-        publica = visibility.shows_real_name(False)
-        legal = publica or ve_el_nombre_legal or creator.alias is None
+        nombre_real = visibility.shows_real_name(eligio_su_nombre)
+        legal = nombre_real or ve_el_nombre_legal or creator.alias is None
         return CreatorDTO(
             id=creator.id.value,
             first_name=creator.first_name if legal else "",
             last_name=creator.last_name if legal else "",
-            display_name=creator.display_name_or_legal(publica),
-            alias=creator.alias if publica else None,
+            display_name=creator.display_name_or_legal(nombre_real),
+            alias=creator.alias if visibility is Visibility.PUBLIC else None,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),
         )

@@ -41,7 +41,7 @@ class ListaDeInscritos:
     # El organizador y los admin ven todos los correos; el resto, solo el suyo
     ve_todos_los_correos: bool
     # La de la competición: decide si el nombre real va siempre a la vista (SB-08)
-    visibility: Visibility = Visibility.PRIVATE
+    visibility: Visibility
 
 
 class ListEnrollmentsUseCase:

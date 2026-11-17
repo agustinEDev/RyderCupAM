@@ -35,6 +35,7 @@ class PlayerNames:
         competition_id: CompetitionId,
         user_repository: UserRepositoryInterface,
         uow: CompetitionUnitOfWorkInterface,
+        visibility: Visibility | None = None,
     ) -> dict[UserId, str]:
         """
         Args:
@@ -44,6 +45,8 @@ class PlayerNames:
             competition_id: Donde se mira, que la preferencia es por competicion
             user_repository: De donde salen los nombres
             uow: Para leer que inscripcion pidio el nombre legal
+            visibility: La de la competicion, si quien llama ya la tiene leida; si
+                no, se lee aqui (una lectura mas, que el que la tiene se ahorra)
 
         Returns:
             user_id -> nombre, con cadena vacia para quien no se encuentre
@@ -54,9 +57,10 @@ class PlayerNames:
         enrollments = await uow.enrollments.find_by_user_ids_and_competition(
             list(user_ids), competition_id
         )
-        competicion = await uow.competitions.find_by_id(competition_id)
-        # Sin competicion (borrada mientras tanto), la regla mas prudente: la privada
-        visibility = competicion.visibility if competicion else Visibility.PRIVATE
+        if visibility is None:
+            competicion = await uow.competitions.find_by_id(competition_id)
+            # Sin competicion (borrada mientras tanto), la regla mas prudente: la privada
+            visibility = competicion.visibility if competicion else Visibility.PRIVATE
         return PlayerNames.de_lo_leido(user_ids, {u.id: u for u in users}, enrollments, visibility)
 
     @staticmethod

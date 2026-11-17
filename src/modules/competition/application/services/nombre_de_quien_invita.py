@@ -16,6 +16,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -39,7 +40,7 @@ async def quieren_su_nombre_legal(
         # En una pública el nombre real va siempre a la vista, también el de quien
         # invita (SB-08): no hace falta mirar qué eligió
         competicion = await uow.competitions.find_by_id(competition_id)
-        if competicion is not None and competicion.visibility.shows_real_name(False):
+        if competicion is not None and competicion.visibility is Visibility.PUBLIC:
             legales.update((competition_id, uid) for uid in invitan)
             continue
         for inscripcion in await uow.enrollments.find_by_user_ids_and_competition(

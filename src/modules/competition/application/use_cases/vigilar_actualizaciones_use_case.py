@@ -151,7 +151,7 @@ class VigilarActualizacionesUseCase:
             await uow.handicap_updates.update(actual)
             if pendientes:
                 por_id = await PlayerNames.de_la_competicion(
-                    pendientes, competicion.id, h.usuarios, uow
+                    pendientes, competicion.id, h.usuarios, uow, competicion.visibility
                 )
                 nombres = list(por_id.values())
                 organizador = await self._avisos.quien(h.usuarios, competicion)

@@ -81,7 +81,7 @@ async def test_reads_every_user_in_one_query(competition_id):
     usuarios = [await _usuario(uow, n) for n in ("Ana", "Bea", "Carla")]
     inscripciones = [_inscripcion(competition_id, u) for u in usuarios]
 
-    await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+    await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, visibility=Visibility.PRIVATE)
 
     assert uow.aperturas == 1
     assert uow.por_id == 0
@@ -95,7 +95,9 @@ async def test_a_user_with_several_rows_is_asked_for_once(competition_id):
     ana = await _usuario(uow, "Ana")
     inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, ana)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, visibility=Visibility.PRIVATE
+    )
 
     assert uow.en_bloque == [[ana.id]]
     assert [d.user.first_name for d in dtos] == ["Ana", "Ana"]
@@ -106,7 +108,9 @@ async def test_keeps_the_order_of_the_enrollments_and_pairs_each_with_its_user(c
     usuarios = [await _usuario(uow, n) for n in ("Ana", "Bea", "Carla")]
     inscripciones = [_inscripcion(competition_id, u) for u in reversed(usuarios)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, visibility=Visibility.PRIVATE
+    )
 
     assert [d.id for d in dtos] == [e.id.value for e in inscripciones]
     assert [d.user.id for d in dtos] == [e.user_id.value for e in inscripciones]
@@ -120,7 +124,9 @@ async def test_an_enrollment_whose_user_no_longer_exists_comes_without_user(comp
     fantasma = User.create("Fantasma", "Nadie", "fantasma@test.com", "P@ssw0rd123!")
     inscripciones = [_inscripcion(competition_id, fantasma), _inscripcion(competition_id, ana)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, visibility=Visibility.PRIVATE
+    )
 
     assert dtos[0].user is None
     assert dtos[0].user_id == fantasma.id.value
@@ -137,7 +143,9 @@ async def test_the_name_follows_the_preference_of_each_enrollment(competition_id
         _inscripcion(competition_id, con_alias, use_real_name=False),
     ]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, visibility=Visibility.PRIVATE
+    )
 
     assert [d.user.display_name for d in dtos] == ["Ana Pérez", "Beíta"]
 
@@ -145,7 +153,7 @@ async def test_the_name_follows_the_preference_of_each_enrollment(competition_id
 async def test_no_enrollments_no_query():
     uow = _UoWQueCuenta()
 
-    assert await EnrollmentDTOMapper.to_response_dtos([], uow) == []
+    assert await EnrollmentDTOMapper.to_response_dtos([], uow, visibility=Visibility.PRIVATE) == []
     assert uow.en_bloque == []
     assert uow.por_id == 0
 
@@ -158,7 +166,7 @@ async def test_categories_reach_each_enrollment(competition_id):
     inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
 
     dtos = await EnrollmentDTOMapper.to_response_dtos(
-        inscripciones, uow, categorias={ana.id: 1, bea.id: 2}
+        inscripciones, uow, categorias={ana.id: 1, bea.id: 2}, visibility=Visibility.PRIVATE
     )
 
     assert [d.category for d in dtos] == [1, 2]
@@ -169,7 +177,9 @@ async def test_without_saying_whose_email_goes_no_email_goes(competition_id):
     uow = _UoWQueCuenta()
     ana = await _usuario(uow, "Ana")
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos([_inscripcion(competition_id, ana)], uow)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        [_inscripcion(competition_id, ana)], uow, visibility=Visibility.PRIVATE
+    )
 
     assert dtos[0].user.email == ""
 
@@ -181,7 +191,9 @@ async def test_only_the_viewer_email_goes(competition_id):
     bea = await _usuario(uow, "Bea")
     inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, viewer_id=bea.id)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, viewer_id=bea.id, visibility=Visibility.PRIVATE
+    )
 
     assert [d.user.email for d in dtos] == ["", str(bea.email)]
 
@@ -193,7 +205,9 @@ async def test_seeing_every_email_sends_them_all(competition_id):
     bea = await _usuario(uow, "Bea")
     inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, ve_todos_los_correos=True)
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, ve_todos_los_correos=True, visibility=Visibility.PRIVATE
+    )
 
     assert [d.user.email for d in dtos] == [str(ana.email), str(bea.email)]
 
@@ -255,7 +269,7 @@ async def test_public_always_shows_the_real_name_and_the_alias_if_chosen(
     """
     Given: Una pública y un jugador con alias, que eligió su nombre o su alias
     When: Otro jugador mira la lista
-    Then: El nombre real a la vista; el alias, solo si lo eligió, para ponerlo debajo
+    Then: El nombre real a la vista, y su alias aparte para ponerlo debajo
     """
     uow = InMemoryUnitOfWork()
     trinx = await _usuario(uow, "Agustin", alias="Trinx")
@@ -269,4 +283,4 @@ async def test_public_always_shows_the_real_name_and_the_alias_if_chosen(
 
     assert dto.user.display_name == "Agustin Pérez"
     assert (dto.user.first_name, dto.user.last_name) == ("Agustin", "Pérez")
-    assert dto.user.alias == (None if use_real_name else "Trinx")
+    assert dto.user.alias == "Trinx"

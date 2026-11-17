@@ -62,8 +62,8 @@ class EnrolledUserDTO(BaseModel):
     alias: str | None = Field(
         None,
         description=(
-            "En una competición pública, el alias del jugador si lo eligió para ella, "
-            "para enseñarlo debajo de su nombre real (SB-08). Null en el resto de casos."
+            "En una competición pública, el alias del jugador si tiene, para enseñarlo "
+            "debajo de su nombre real (SB-08). Null en una privada."
         ),
     )
 

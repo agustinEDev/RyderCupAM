@@ -13,6 +13,7 @@ import pytest
 
 from src.modules.competition.application.dto.competition_dto import CreatorDTO
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
@@ -32,7 +33,9 @@ async def test_the_creator_never_carries_an_email():
     user_uow = AsyncMock()
     user_uow.users.find_by_id.return_value = creador
 
-    dto = await CompetitionDTOMapper._get_creator_dto(creador.id, user_uow)
+    dto = await CompetitionDTOMapper._get_creator_dto(
+        creador.id, user_uow, Visibility.PUBLIC, ve_el_nombre_legal=False
+    )
 
     assert dto is not None
     assert "email" not in dto.model_dump()

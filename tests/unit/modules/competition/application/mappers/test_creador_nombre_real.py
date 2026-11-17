@@ -100,3 +100,23 @@ async def test_private_without_alias_shows_his_name():
 
     assert dto.display_name == "Orga Niza"
     assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
+
+
+async def test_private_organizer_who_plays_follows_his_own_choice():
+    """
+    Given: Una privada; el organizador, con alias, juega en ella y eligió su nombre real
+    When: La mira otro jugador
+    Then: Su nombre real, como en la lista de inscritos: no dos nombres para el mismo
+    """
+    creador, user_uow = _uow_con("Trinx")
+
+    dto = await CompetitionDTOMapper._get_creator_dto(
+        creador.id,
+        user_uow,
+        Visibility.PRIVATE,
+        ve_el_nombre_legal=False,
+        eligio_su_nombre=True,
+    )
+
+    assert dto.display_name == "Orga Niza"
+    assert (dto.first_name, dto.last_name) == ("Orga", "Niza")
