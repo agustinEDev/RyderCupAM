@@ -103,7 +103,7 @@ class CancelCompetitionUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede cancelar la competición")
 
             # 3. Cancelar la competición (la entidad valida la transición)
-            competition.cancel(reason=request.reason)
+            competition.cancel()
 
             # Sin listas de espera: ya no se juega (#251)
             await self._uow.esperas.vaciar(competition.id)

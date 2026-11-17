@@ -7,7 +7,7 @@ que se abren; despues no, que seria rehacer el sorteo a escondidas.
 """
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO, envelope_to_dto
@@ -23,6 +23,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class NotATeamCaptainError(Exception):
@@ -111,7 +112,7 @@ class SubmitEnvelopeUseCase:
                 [[UserId(UUID(str(uid))) for uid in fila] for fila in entries],
                 equipo=jugadores,
                 por=user_id,
-                ahora=datetime.now(UTC).replace(tzinfo=None),
+                ahora=ahora_utc_sin_zona(),
                 sin_esperar=sin_esperar,
             )
             await self._uow.envelopes.update(sobre)

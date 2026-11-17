@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     add_one_session,
@@ -170,7 +171,7 @@ async def test_e_un_torneo_que_ahora_es_privado_no_sale_aunque_quede_su_aviso(
     await hacerse_amigos(client, yo, amigo)
     privada = await create_competition(client, org["cookies"])
     publica = await create_competition(client, org["cookies"])
-    ahora = datetime.now().replace(microsecond=0)
+    ahora = ahora_utc_sin_zona().replace(microsecond=0)
     for minuto, comp in ((1, privada), (2, publica)):
         await insertar_eventos(
             amigo["user"]["id"],
@@ -244,7 +245,7 @@ async def test_e_el_contador_cuenta_lo_mismo_que_se_ve(client: AsyncClient):
     await hacerse_amigos(client, yo, amigo)
     privada = await create_competition(client, org["cookies"])
     publicas = [await create_competition(client, org["cookies"]) for _ in range(2)]
-    ahora = datetime.now().replace(microsecond=0)
+    ahora = ahora_utc_sin_zona().replace(microsecond=0)
     for minuto, comp in enumerate([privada, *publicas], start=1):
         await insertar_eventos(
             amigo["user"]["id"],

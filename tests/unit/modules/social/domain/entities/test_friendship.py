@@ -174,7 +174,7 @@ class TestFechasEnUTC:
     @pytest.fixture
     def reloj(self, monkeypatch):
         monkeypatch.setattr(
-            "src.modules.social.domain.entities.friendship.utc_now",
+            "src.modules.social.domain.entities.friendship.ahora_utc_sin_zona",
             lambda: self.FIJO,
             raising=False,
         )

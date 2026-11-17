@@ -10,7 +10,7 @@ donde se entrase.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.dto.draft_dto import (
     DraftPickDTO,
@@ -44,6 +44,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 
 class DraftRoom:
@@ -74,7 +75,7 @@ class DraftRoom:
         # Madrid, `datetime.now` dejaria estas horas dos horas por delante de
         # las columnas hermanas, y `server_time` saldria del lado del cliente
         # con un desfase que no existe
-        self._clock = clock or (lambda: datetime.now(UTC).replace(tzinfo=None))
+        self._clock = clock or ahora_utc_sin_zona
 
     @property
     def ahora(self) -> datetime:

@@ -1,7 +1,6 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.modules.competition.application.dto.round_match_dto import (
@@ -67,6 +66,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import I
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
@@ -234,7 +234,7 @@ class GenerateMatchesUseCase:
         except Exception as error:
             # Lo deshecho no se avisa
             self.descartar_salidas(desde=marca)
-            motivo = bloqueo_por(error, datetime.now(UTC).replace(tzinfo=None))
+            motivo = bloqueo_por(error, ahora_utc_sin_zona())
             if motivo is None:
                 raise
             # Todos los motivos saltan antes de tocar la sesión: no hay nada

@@ -8,7 +8,6 @@ va en la línea guardada de cada hoyo, aparte, y prevalece sobre OSM. En seco
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from src.modules.golf_course.application.dtos.hole_map_import_dtos import (
     ImportHoleMapRequestDTO,
@@ -26,6 +25,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Un campo sin hoyos sobre el terreno declarados es uno de 18
 DEFAULT_PHYSICAL_HOLES = 18
@@ -123,7 +123,7 @@ class ImportHoleMapFromOsmUseCase:
         async with self._uow:
             # Lo último de la BD y bloqueado: otra pasada pudo crearlo mientras OSM respondía
             current = await self._uow.hole_maps.find_by_golf_course_id_for_update(course_id)
-            now = datetime.now(UTC).replace(tzinfo=None)
+            now = ahora_utc_sin_zona()
             if current is None:
                 current = CourseHoleMap.create_approved(
                     golf_course_id=course_id,

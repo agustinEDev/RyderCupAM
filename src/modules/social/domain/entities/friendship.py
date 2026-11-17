@@ -7,7 +7,7 @@ Esta entidad gestiona el ciclo de vida de una solicitud/relacion de amistad.
 from datetime import datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 from ..exceptions.social_violations import (
     InvalidFriendshipStatusViolation,
@@ -50,8 +50,8 @@ class Friendship:
         self._status = status
         self._blocked_by = blocked_by
         self._responded_at = responded_at
-        self._created_at = created_at or utc_now()
-        self._updated_at = updated_at or utc_now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
         # Bloqueo de los dos (SB-02): cuándo bloqueó el participante que NO es
         # `blocked_by`, que ya le había bloqueado a él. None: solo bloquea uno
         self._second_blocked_at = second_blocked_at
@@ -71,7 +71,7 @@ class Friendship:
         if requester_id == addressee_id:
             raise SelfFriendRequestViolation("No puedes enviarte una solicitud a ti mismo.")
 
-        now = utc_now()
+        now = ahora_utc_sin_zona()
         friendship = cls(
             id=id,
             requester_id=requester_id,
@@ -100,7 +100,7 @@ class Friendship:
         if blocker_id == blocked_id:
             raise SelfFriendRequestViolation("No puedes bloquearte a ti mismo.")
 
-        now = utc_now()
+        now = ahora_utc_sin_zona()
         friendship = cls(
             id=id,
             requester_id=blocker_id,
@@ -249,7 +249,7 @@ class Friendship:
                 f"Cannot accept friendship request in status {self._status.value}."
             )
 
-        now = utc_now()
+        now = ahora_utc_sin_zona()
         self._status = FriendshipStatus.ACCEPTED
         self._responded_at = now
         self._updated_at = now
@@ -261,7 +261,7 @@ class Friendship:
                 f"Cannot decline friendship request in status {self._status.value}."
             )
 
-        now = utc_now()
+        now = ahora_utc_sin_zona()
         self._status = FriendshipStatus.DECLINED
         self._responded_at = now
         self._updated_at = now
@@ -282,7 +282,7 @@ class Friendship:
                 f"Cannot block friendship in status {self._status.value}."
             )
 
-        now = utc_now()
+        now = ahora_utc_sin_zona()
         self._status = FriendshipStatus.BLOCKED
         self._blocked_by = blocker_id
         self._responded_at = now
@@ -297,7 +297,7 @@ class Friendship:
         if self._blocked_by is None:
             self._blocked_by = blocker_id
             return
-        self._second_blocked_at = utc_now()
+        self._second_blocked_at = ahora_utc_sin_zona()
 
     def unblock(self, user_id: UserId) -> bool:
         """

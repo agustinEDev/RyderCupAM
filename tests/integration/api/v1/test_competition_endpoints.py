@@ -6,11 +6,12 @@ de competiciones incluyendo autenticación, validaciones y persistencia.
 """
 
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     add_one_session,
@@ -39,7 +40,7 @@ class TestCreateCompetition:
             client, "creator@test.com", "P@ssw0rd123!", "Creator", "Test"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
 
         competition_data = {
@@ -131,7 +132,7 @@ class TestListCompetitions:
         # Crear 2 competiciones
         await create_competition(client, user["cookies"])
 
-        start = date.today() + timedelta(days=60)
+        start = ahora_utc_sin_zona().date() + timedelta(days=60)
         end = start + timedelta(days=3)
         comp2_data = {
             "name": "Second Competition",
@@ -165,7 +166,7 @@ class TestListCompetitions:
 
         # Crear otra que siga en DRAFT: desde BE #332 la unica que espera es
         # la que tiene apertura programada
-        start = date.today() + timedelta(days=90)
+        start = ahora_utc_sin_zona().date() + timedelta(days=90)
         end = start + timedelta(days=3)
         await create_competition(
             client,
@@ -207,7 +208,7 @@ class TestListCompetitions:
             cookies=user["cookies"],
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         # El nombre se guarda normalizado —«del» sale como «Del»—, así que lo
         # que se espera sale de la respuesta y no del literal que se envía
@@ -275,7 +276,7 @@ class TestListCompetitions:
             cookies=user["cookies"],
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         await create_competition(
             client,
@@ -311,7 +312,7 @@ class TestListCompetitions:
             client, "comodin@test.com", "P@ssw0rd123!", "Agustin", "Estevez"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         await create_competition(
             client,
@@ -345,7 +346,7 @@ class TestListCompetitions:
             client, "sinapodo@test.com", "P@ssw0rd123!", "Ana", "Garcia"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         creada = await create_competition(
             client,
@@ -375,7 +376,7 @@ class TestListCompetitions:
             client, "searcher@test.com", "P@ssw0rd123!", "Search", "User"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
 
         # Crear competiciones
@@ -433,7 +434,7 @@ class TestListCompetitions:
     @staticmethod
     async def _crear_con_nombres(client: AsyncClient, cookies, nombres: list[str]) -> None:
         """Crea una competición por cada nombre, todas del mismo usuario."""
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         for nombre in nombres:
             await create_competition(
@@ -1009,7 +1010,7 @@ class TestListingOpensScheduledCompetitions:
         )
 
         # Empieza en 3 dias y abre 5 antes: su momento ya paso
-        empieza = date.today() + timedelta(days=3)
+        empieza = ahora_utc_sin_zona().date() + timedelta(days=3)
         comp = await create_competition(
             client,
             user["cookies"],
@@ -1184,7 +1185,7 @@ class TestCompetitionStateTransitions:
     @pytest.mark.asyncio
     async def test_shortening_the_dates_says_which_sessions_fall_out(self, client: AsyncClient):
         """#710: con varias sesiones, «alguna quedaría fuera» no decía cuál."""
-        from datetime import date, timedelta
+        from datetime import timedelta
 
         user = await create_authenticated_user(
             client, "fechas_fuera@test.com", "P@ssw0rd123!", "Fechas", "Fuera"
@@ -1442,7 +1443,7 @@ class TestEdgeCases:
             client, "dupname@test.com", "P@ssw0rd123!", "Dup", "Name"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
 
         comp_data = {
@@ -1471,7 +1472,7 @@ class TestEdgeCases:
         user = await create_authenticated_user(
             client, "capitals540@test.com", "P@ssw0rd123!", "Cap", "Itals"
         )
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         comp_data = {
             "name": "RCG El Prat",
             "start_date": start.isoformat(),
@@ -1499,7 +1500,7 @@ class TestEdgeCases:
         user = await create_authenticated_user(
             client, "shortname540@test.com", "P@ssw0rd123!", "Short", "Name"
         )
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
 
         respuesta = await client.post(
             "/api/v1/competitions",
@@ -1521,7 +1522,7 @@ class TestEdgeCases:
         user = await create_authenticated_user(
             client, "rename540@test.com", "P@ssw0rd123!", "Re", "Name"
         )
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         base = {
             "start_date": start.isoformat(),
             "end_date": (start + timedelta(days=1)).isoformat(),
@@ -1554,7 +1555,7 @@ class TestEdgeCases:
         user = await create_authenticated_user(
             client, "oldname540@test.com", "P@ssw0rd123!", "Old", "Name"
         )
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         creada = await client.post(
             "/api/v1/competitions",
             json={
@@ -1592,7 +1593,7 @@ class TestEdgeCases:
         user = await create_authenticated_user(
             client, "ryderplays552@test.com", "P@ssw0rd123!", "Ry", "Der"
         )
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
 
         creada = await client.post(
             "/api/v1/competitions",
@@ -1676,7 +1677,7 @@ class TestEdgeCases:
             client, "badcountry@test.com", "P@ssw0rd123!", "Bad", "Country"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
 
         comp_data = {
@@ -1705,7 +1706,7 @@ class TestEdgeCases:
             client, "nonadjacent@test.com", "P@ssw0rd123!", "Non", "Adjacent"
         )
 
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
 
         comp_data = {
@@ -2126,8 +2127,8 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo del club",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "enrollment_opens_days_before": 5,
@@ -2162,8 +2163,8 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo entre amigos",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
             },
@@ -2185,8 +2186,8 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo del club",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "enrollment_opens_days_before": 5,
@@ -2242,8 +2243,8 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo que ya abrio",
-                "start_date": (datetime.now() + timedelta(days=3)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=5)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=3)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=5)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "enrollment_opens_days_before": 5,
@@ -2311,8 +2312,8 @@ class TestPublicAndPrivate:
             "/api/v1/competitions",
             json={
                 "name": "Ryder de los amigos",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
             },
@@ -2341,8 +2342,8 @@ class TestPublicAndPrivate:
             "/api/v1/competitions",
             json={
                 "name": "Campeonato del club",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "visibility": "PUBLIC",
@@ -2379,8 +2380,8 @@ class TestPublicAndPrivate:
             "/api/v1/competitions",
             json={
                 "name": "Ryder cerrada",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
             },
@@ -2418,8 +2419,8 @@ class TestPublicAndPrivate:
             "/api/v1/competitions",
             json={
                 "name": "Ryder con puerta",
-                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
-                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "start_date": (ahora_utc_sin_zona() + timedelta(days=60)).date().isoformat(),
+                "end_date": (ahora_utc_sin_zona() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "visibility": "PUBLIC",

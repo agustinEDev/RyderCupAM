@@ -52,7 +52,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -1610,7 +1610,7 @@ class TestLaFechaDeLaPartida:
         ana = await _user(user_uow, "Ana")
         course = await _campo(golf_course_uow, ana.id)
         match = await _partida(qm_uow, course, ana, [_tarjeta(4)])
-        antes = utc_now()
+        antes = ahora_utc_sin_zona()
 
         await publicar(match)
 

@@ -6,11 +6,12 @@ volver a invitar (su inscripción cerrada se reutiliza).
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_authenticated_user,
     create_competition,
@@ -29,7 +30,7 @@ async def _jugador(client: AsyncClient) -> dict:
 
 async def _con_un_inscrito(client: AsyncClient):
     creador, jugador = await _jugador(client), await _jugador(client)
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     comp = await create_competition(
         client,
         creador["cookies"],

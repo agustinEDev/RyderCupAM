@@ -4,7 +4,6 @@ import os
 import sys
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -12,6 +11,8 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Constants
 POSTGRESQL_PREFIX = "postgresql://"
@@ -127,7 +128,7 @@ def pytest_configure(config):
     # Solo el proceso maestro (master) o una ejecución sin xdist inicializará los mappers
     if worker_id is None or worker_id == "master":
         print(
-            f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"\n🧪 Iniciando tests del Ryder Cup Manager - {ahora_utc_sin_zona().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         print("🚀 Inicializando mappers de SQLAlchemy...")
         start_all_mappers()  # Los mismos que la aplicación y Alembic (#565)
@@ -751,9 +752,9 @@ def reset_rate_limits():
 @pytest.fixture(scope="session")
 def sample_competition_data() -> dict:
     """Fixture con datos de ejemplo para una competición."""
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     end = start + timedelta(days=3)
 
     return {
@@ -785,10 +786,10 @@ async def create_competition(
         Dict con los datos de la competición creada
     """
     import uuid
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     if competition_data is None:
-        start = date.today() + timedelta(days=30)
+        start = ahora_utc_sin_zona().date() + timedelta(days=30)
         end = start + timedelta(days=3)
         competition_data = {
             "name": f"Test Competition {uuid.uuid4().hex[:8]}",
@@ -822,9 +823,9 @@ async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
     transiciones necesitan esa, porque son las que todavía pueden activarse.
     """
     import uuid
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     return await create_competition(
         client,
         cookies,

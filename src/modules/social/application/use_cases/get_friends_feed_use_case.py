@@ -46,7 +46,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Tope duro por pagina. El cliente puede pedir menos, nunca mas: el feed carga
 # los autores de cada pagina, y una pagina enorme seria una consulta enorme.
@@ -88,7 +88,7 @@ class GetFriendsFeedUseCase:
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        reloj: Callable[[], datetime] = utc_now,
+        reloj: Callable[[], datetime] = ahora_utc_sin_zona,
         tournaments: TournamentVisibilityInterface | None = None,
         invitations: InvitationAvailabilityInterface | None = None,
         quick_match_trash: QuickMatchTrashInterface | None = None,

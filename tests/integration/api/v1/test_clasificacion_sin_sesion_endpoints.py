@@ -3,11 +3,12 @@ La clasificación por enlace, sin sesión (release social 3, tabla del 28 oct 20
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import add_one_session, create_authenticated_user, create_competition
 
 pytestmark = pytest.mark.asyncio
@@ -25,7 +26,7 @@ async def _competicion(client: AsyncClient, visibilidad: str, stroke_play: bool)
             cookies=organizador["cookies"],
         )
         assert respuesta.status_code == 200, respuesta.text
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     datos = {
         "name": f"Vis {uuid.uuid4().hex[:8]}",
         "start_date": start.isoformat(),

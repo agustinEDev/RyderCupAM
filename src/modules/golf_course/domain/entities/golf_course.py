@@ -7,10 +7,11 @@ Ver ADR-032 para detalles del workflow de aprobación.
 
 from collections import defaultdict
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
@@ -327,7 +328,7 @@ class GolfCourse:
         if not (3 <= len(name) <= 200):  # noqa: PLR2004
             raise ValueError("Course name must be between 3 and 200 characters")
 
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = ahora_utc_sin_zona()
         golf_course_id = GolfCourseId.generate()
 
         golf_course = cls(
@@ -413,7 +414,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.APPROVED
         self._rejection_reason = None
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def reject(self, reason: str) -> None:
         """
@@ -438,7 +439,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.REJECTED
         self._rejection_reason = reason
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def update(
         self,
@@ -537,7 +538,7 @@ class GolfCourse:
         for hole in holes:
             self._holes.append(replace(hole))
 
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
         # Reconciliar tarjetas antes de validar: si las salidas llegan sin la
         # suya, heredan la del campo
@@ -664,7 +665,7 @@ class GolfCourse:
         Usado cuando un creator edita un campo APPROVED y se crea un clone.
         """
         self._is_pending_update = True
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def clear_pending_update(self) -> None:
         """
@@ -673,7 +674,7 @@ class GolfCourse:
         Usado cuando el admin aprueba o rechaza el clone.
         """
         self._is_pending_update = False
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
     def apply_changes_from_clone(self, clone: "GolfCourse") -> None:
         """
@@ -722,7 +723,7 @@ class GolfCourse:
         for hole in clone.reference_card:
             self._holes.append(replace(hole))
 
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self._updated_at = ahora_utc_sin_zona()
 
         # Quitar marca de pending update
         self._is_pending_update = False

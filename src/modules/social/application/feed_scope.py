@@ -32,7 +32,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
-from src.shared.domain.utc_clock import utc_now
 
 # Tope del contador de novedades (tabla del 22 oct 2026, B). Mas alla, el
 # numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
@@ -61,7 +60,7 @@ async def resolve_feed_scope(
     social_uow: SocialUnitOfWorkInterface,
     user_uow: UserUnitOfWorkInterface,
     viewer_id: UserId,
-    reloj: Callable[[], datetime] = utc_now,
+    reloj: Callable[[], datetime] = ahora_utc_sin_zona,
 ) -> FeedScope:
     """
     Lo mio que veo yo y lo de mis amigos que ven ellos, y cuando mire por

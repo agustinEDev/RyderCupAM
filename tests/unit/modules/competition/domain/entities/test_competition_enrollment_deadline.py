@@ -145,7 +145,7 @@ class TestQuienLaCerro:
         """C3. Given ACTIVE / When se cierra por el plazo / Then queda dicho."""
         competition = _abierta()
 
-        competition.close_enrollments(total_enrollments=3, by_deadline=True)
+        competition.close_enrollments(by_deadline=True)
 
         assert competition.status is CompetitionStatus.CLOSED
         assert competition.enrollment_closed_by_deadline is True
@@ -154,7 +154,7 @@ class TestQuienLaCerro:
         """C3. Given ACTIVE / When la cierra el organizador / Then no lo dice."""
         competition = _abierta()
 
-        competition.close_enrollments(total_enrollments=3)
+        competition.close_enrollments()
 
         assert competition.enrollment_closed_by_deadline is False
 

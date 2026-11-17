@@ -16,7 +16,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 # Como los logros de torneo: a mediodia UTC el dia cae en el mismo sitio en
 # cualquier zona de -12 a +12
@@ -930,7 +930,7 @@ class PublishCompetitionNoticesUseCase:
     def _salida(
         self, tournament: TournamentRef, round_id: str, salida: TeeTimeRef, changed: bool
     ) -> ActivityEvent:
-        momento = utc_now()
+        momento = ahora_utc_sin_zona()
         return ActivityEvent.create(
             user_id=salida.user_id,
             type=_SALIDA,
@@ -967,7 +967,7 @@ class PublishCompetitionNoticesUseCase:
         return ActivityEvent.create(
             user_id=user_id,
             type=tipo,
-            occurred_at=utc_now(),
+            occurred_at=ahora_utc_sin_zona(),
             source_match_id=origen,
             payload={**self._del_torneo(tournament), **(extra or {})},
         )

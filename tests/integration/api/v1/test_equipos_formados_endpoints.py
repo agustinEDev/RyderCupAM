@@ -9,11 +9,12 @@ Desde el 15 nov 2026 (B3), sin partidos el organizador invita, y al aceptar se
 deshacen los equipos; con partidos, no (test_invitaciones_en_espera_endpoints).
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     approve_golf_course,
@@ -207,7 +208,7 @@ async def _con_partidos(client: AsyncClient) -> dict:
     admin = await create_admin_user(
         client, "cp-admin@test.com", "P@ssw0rd123!", "Admin", "Partidos"
     )
-    inicio = date.today() + timedelta(days=30)
+    inicio = ahora_utc_sin_zona().date() + timedelta(days=30)
     comp = await create_competition(
         client,
         creador["cookies"],

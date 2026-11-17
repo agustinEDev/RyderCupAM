@@ -6,7 +6,7 @@ de scoring incluyendo registro de scores, validacion cruzada, entrega
 de tarjetas, leaderboard y concesion de partidos.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -15,6 +15,7 @@ from httpx import AsyncClient
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     activate_competition,
     approve_golf_course,
@@ -51,7 +52,7 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
     admin = await create_admin_user(client, "sc_admin@test.com", "P@ssw0rd123!", "Admin", "Scoring")
 
     # 2. Crear competicion SCRATCH
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     end = start + timedelta(days=3)
     comp_data = {
         "name": "Scoring Test Competition",
@@ -699,7 +700,7 @@ class TestGetLeaderboard:
         response = await client.get(f"/api/v1/competitions/{ctx['competition_id']}/leaderboard")
 
         match = response.json()["matches"][0]
-        assert match["round_date"] == (date.today() + timedelta(days=30)).isoformat()
+        assert match["round_date"] == (ahora_utc_sin_zona().date() + timedelta(days=30)).isoformat()
         assert match["session_type"] == "MORNING"
 
     @pytest.mark.asyncio

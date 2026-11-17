@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.hole_map_status import HoleMapStatus
@@ -36,10 +37,6 @@ class HoleMapNotPendingError(ValueError):
 
 class RejectionReasonTooLongError(ValueError):
     """El motivo de rechazo pasa del máximo."""
-
-
-def _now() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _naive_utc(moment: datetime) -> datetime:
@@ -124,7 +121,7 @@ class CourseHoleMap:
         *,
         approved: bool,
     ) -> "CourseHoleMap":
-        now = _now()
+        now = ahora_utc_sin_zona()
         return cls(
             golf_course_id=golf_course_id,
             holes=holes,
@@ -173,7 +170,7 @@ class CourseHoleMap:
     def approve(self, reviewer_id: UserId) -> None:
         """Un admin da el mapa por bueno: a partir de aquí lo ven los jugadores."""
         self._ensure_pending()
-        now = _now()
+        now = ahora_utc_sin_zona()
         self._status = HoleMapStatus.APPROVED
         self._reviewed_by = reviewer_id
         self._reviewed_at = now
@@ -187,7 +184,7 @@ class CourseHoleMap:
             raise RejectionReasonTooLongError(
                 f"Rejection reason must be at most {MAX_REJECTION_REASON_LENGTH} characters"
             )
-        now = _now()
+        now = ahora_utc_sin_zona()
         self._status = HoleMapStatus.REJECTED
         self._reviewed_by = reviewer_id
         self._reviewed_at = now
@@ -207,7 +204,7 @@ class CourseHoleMap:
         self._reviewed_by = None
         self._reviewed_at = self._imported_at
         self._rejection_reason = None
-        self._updated_at = _now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def hole(self, number: int) -> MappedHole | None:
         """El hoyo con ese número, o None si el mapa no lo tiene."""

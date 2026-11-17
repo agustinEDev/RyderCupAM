@@ -17,7 +17,7 @@ from src.modules.social.infrastructure.persistence.in_memory.in_memory_activity_
     InMemoryActivityEventRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.utc_clock import utc_now
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 
 pytestmark = pytest.mark.asyncio
 
@@ -171,7 +171,7 @@ async def test_the_last_write_is_when_it_was_written_not_its_kept_date(repo):
     )
     await repo.add_many([hace_meses])
     await repo.delete_for_competition("torneo-1", [T.NEW_COURSE])
-    antes = utc_now()
+    antes = ahora_utc_sin_zona()
 
     await repo.add_many([_logro(T.NEW_COURSE, "grupo-1")])
 

@@ -6,7 +6,7 @@ al suyo quién mira y que su «no» es un 403 con su código.
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import ClassVar
 
 import pytest
@@ -16,6 +16,7 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     NoPuedeVerloError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
@@ -92,7 +93,7 @@ async def _jugador(client: AsyncClient, nombre: str) -> dict:
 
 
 def _datos(visibilidad: str, stroke_play: bool) -> dict:
-    start = date.today() + timedelta(days=30)
+    start = ahora_utc_sin_zona().date() + timedelta(days=30)
     datos = {
         "name": f"LJ {uuid.uuid4().hex[:8]}",
         "start_date": start.isoformat(),
