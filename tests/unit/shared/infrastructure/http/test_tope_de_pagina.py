@@ -14,16 +14,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.shared.infrastructure.http.paginacion import PAGINA_MAXIMA
+from src.shared.infrastructure.http.paginacion import OFFSET_MAXIMO, PAGINA_MAXIMA
 
 
-def _parametros_page(app: FastAPI) -> list[tuple[str, dict]]:
+def _parametros_page(app: FastAPI, nombre: str = "page") -> list[tuple[str, dict]]:
     esquema = app.openapi()
     encontrados = []
     for ruta, metodos in esquema["paths"].items():
         for metodo, operacion in metodos.items():
             for parametro in operacion.get("parameters", []):
-                if parametro["name"] == "page" and parametro["in"] == "query":
+                if parametro["name"] == nombre and parametro["in"] == "query":
                     encontrados.append((f"{metodo.upper()} {ruta}", parametro["schema"]))
     return encontrados
 
@@ -71,3 +71,18 @@ def test_b3_the_cap_is_enforced(consulta, codigo, pagina):
     assert respuesta.status_code == codigo
     if pagina is not None:
         assert respuesta.json() == {"page": pagina}
+
+
+def test_every_offset_parameter_of_the_app_has_the_shared_cap():
+    """
+    Given: Todas las rutas de la app
+    When: Se mira su parámetro `offset` (el gemelo de `page`, revisión de la PR)
+    Then: Todos tienen mínimo 0 y máximo OFFSET_MAXIMO
+    """
+    import main
+
+    parametros = _parametros_page(main.app, "offset")
+
+    assert len(parametros) >= 2
+    assert [r for r, s in parametros if s.get("maximum") != OFFSET_MAXIMO] == []
+    assert all(s.get("minimum") == 0 for _, s in parametros)
