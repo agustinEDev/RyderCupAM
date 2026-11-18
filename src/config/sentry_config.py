@@ -61,28 +61,6 @@ def _quita_cabeceras_de_origen(event: Event) -> Event:
     return event
 
 
-# El cuerpo de estas rutas lleva datos de quien escribe (nombre, correo, mensaje), y
-# el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09).
-# También el registro (fase 3): nombre, correo y contraseña. Y el canje con Google:
-# lleva el código de autorización y el code_verifier de PKCE, que juntos valen una
-# sesión mientras el código no caduque (F8, fase 3)
-_RUTAS_SIN_CUERPO = (
-    "/api/v1/support/contact",
-    "/api/v1/auth/register",
-    "/api/v1/auth/google",
-    "/api/v1/auth/google/link",
-)
-
-
-def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
-    """Borra el cuerpo de la petición en las rutas de _RUTAS_SIN_CUERPO."""
-    peticion = event.get("request") or {}
-    url = str(peticion.get("url") or "").split("?")[0]
-    if url.endswith(_RUTAS_SIN_CUERPO):
-        peticion.pop("data", None)
-    return event
-
-
 # Lo único de la petición que lleva un evento de seguridad (revisión de la fase 2)
 _DE_LA_PETICION_EN_LOS_EVENTOS_DE_SEGURIDAD = ("method", "url")
 
@@ -120,7 +98,7 @@ def _recorta_los_eventos_de_seguridad(event: Event) -> Event:
 
 def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
     """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
-    return _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
+    return _quita_cabeceras_de_origen(event)
 
 
 def before_send(event: Event, hint: Hint) -> Event | None:
@@ -141,7 +119,6 @@ def before_send(event: Event, hint: Hint) -> Event | None:
         Event modificado (o None para descartarlo)
     """
     _quita_cabeceras_de_origen(event)
-    _quita_el_cuerpo_de_las_rutas_con_datos(event)
     _recorta_los_eventos_de_seguridad(event)
 
     # Filtrar health checks del endpoint "/"
@@ -229,6 +206,11 @@ def init_sentry() -> None:
         release=release,  # Misma versión que expone /health
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
+        # Ningún cuerpo de petición, en ninguna ruta (S-01, auditoría del 18 nov 2026): el
+        # SDK los adjuntaba y su filtro solo tacha claves exactas, así que
+        # `current_password`, `new_password` o `new_email` salían en claro. Antes había
+        # una lista de rutas a mano; así no depende de acordarse de cada ruta nueva
+        max_request_body_size="never",
         # SECURITY: send_default_pii=False NO cubre las variables locales de cada frame
         # del stack trace -- el SDK las adjunta por defecto. Cualquier logger.error()
         # dentro de un except que tenga en scope un secreto (p.ej. self.api_key en
