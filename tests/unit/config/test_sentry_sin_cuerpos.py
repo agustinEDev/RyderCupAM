@@ -58,9 +58,14 @@ def sentry_de_verdad(monkeypatch):
     sentry_config.init_sentry()
     _Transporte.enviados = []
     init_de_verdad(**{**opciones, "transport": _Transporte})
-    yield _Transporte.enviados
-    # Apagado de verdad: dsn vacío (no None, que leería SENTRY_DSN)
-    init_de_verdad(dsn="")
+    cliente_de_la_prueba = sentry_sdk.get_client()
+    try:
+        yield _Transporte.enviados
+    finally:
+        # Cerrar el cliente que capturó (su transporte y sus hilos), y luego apagar de
+        # verdad con dsn vacío (no None, que leería SENTRY_DSN) (CodeRabbit)
+        cliente_de_la_prueba.close()
+        init_de_verdad(dsn="")
     # Sin transporte no sale nada a la red
     assert sentry_sdk.get_client().transport is None
 
@@ -147,7 +152,9 @@ def test_b1_3_any_other_route_goes_without_the_body(sentry_de_verdad, metodo, ru
     getattr(TestClient(_app()), metodo)(ruta, json={"nombre": "Ana", "correo": SECRETOS[2]})
     sentry_sdk.flush()
 
-    assert sentry_de_verdad
+    # Un error de verdad, no solo la transacción (CodeRabbit: con trazas al 100 %, la
+    # transacción sola dejaba pasar el test aunque los errores no se capturaran)
+    assert [e for e in sentry_de_verdad if e.get("type") != "transaction"]
     assert SECRETOS[2] not in json.dumps(sentry_de_verdad)
     assert _cuerpos(sentry_de_verdad) == [None] * len(sentry_de_verdad)
 

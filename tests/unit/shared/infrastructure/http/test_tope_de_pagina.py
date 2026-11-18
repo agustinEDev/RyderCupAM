@@ -42,15 +42,14 @@ def test_every_page_parameter_of_the_app_has_the_shared_cap():
     sin_tope = [r for r, s in parametros if s.get("maximum") != PAGINA_MAXIMA]
     assert sin_tope == []
     assert all(s.get("minimum") == 1 for _, s in parametros)
+    # El tope aprobado, escrito aquí: si alguien cambia la constante, esto falla
+    # (CodeRabbit: comparar con la constante se movería con ella)
+    assert PAGINA_MAXIMA == 1000
 
 
 @pytest.mark.parametrize(
     ("consulta", "codigo", "pagina"),
-    [
-        (f"?page={PAGINA_MAXIMA}", 200, PAGINA_MAXIMA),
-        (f"?page={PAGINA_MAXIMA + 1}", 422, None),
-        ("", 200, 1),
-    ],
+    [("?page=1000", 200, 1000), ("?page=1001", 422, None), ("", 200, 1)],
 )
 def test_b3_the_cap_is_enforced(consulta, codigo, pagina):
     """
@@ -85,4 +84,5 @@ def test_every_offset_parameter_of_the_app_has_the_shared_cap():
 
     assert len(parametros) >= 2
     assert [r for r, s in parametros if s.get("maximum") != OFFSET_MAXIMO] == []
+    assert OFFSET_MAXIMO == 100_000
     assert all(s.get("minimum") == 0 for _, s in parametros)

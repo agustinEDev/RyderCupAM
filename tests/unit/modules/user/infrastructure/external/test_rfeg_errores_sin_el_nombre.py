@@ -62,7 +62,9 @@ async def test_r2_a_connection_failure_does_not_carry_the_name(monkeypatch):
     """La conexión falla: tampoco."""
 
     def falla(peticion):
-        raise httpx.ConnectError("sin red", request=peticion)
+        # El mensaje original lleva la URL con el nombre: el adaptador tiene que quitarla
+        # (CodeRabbit: con «sin red» el test pasaba aunque se copiara el mensaje)
+        raise httpx.ConnectError(f"sin red al pedir {peticion.url}", request=peticion)
 
     _con_respuesta(monkeypatch, falla)
 
@@ -76,11 +78,16 @@ async def test_r3_a_log_with_exc_info_does_not_write_the_name(monkeypatch, caplo
     """Como hacen refresco_rfeg y el refresco del propio hándicap: exc_info=True."""
     _con_respuesta(monkeypatch, lambda peticion: httpx.Response(429, request=peticion))
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING), pytest.raises(HandicapServiceUnavailableError):
         try:
             await RFEGHandicapService().search_handicap(NOMBRE)
         except HandicapServiceUnavailableError:
             logging.getLogger("prueba").warning("RFEG lookup failed", exc_info=True)
+            raise
 
+    # El log con la traza se escribió de verdad (CodeRabbit: si la búsqueda devolviera
+    # None con un 429, el except no correría y el test pasaría en falso)
+    registro = next(r for r in caplog.records if r.name == "prueba")
+    assert registro.exc_info is not None
     for rastro in RASTROS:
         assert rastro not in caplog.text, rastro

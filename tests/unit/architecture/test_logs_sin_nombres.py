@@ -23,23 +23,33 @@ def _llama_a_un_nombre(nodo: ast.AST) -> bool:
     )
 
 
+def _es_un_logger(receptor: ast.AST) -> bool:
+    """`logger`, `logging`, `log` y también `self._logger`, `self.logger`… (CodeRabbit)."""
+    if isinstance(receptor, ast.Name):
+        return receptor.id in {"logger", "logging", "log"}
+    return isinstance(receptor, ast.Attribute) and "log" in receptor.attr.lower()
+
+
+def _hallados_en(codigo: str, nombre: str) -> list[int]:
+    lineas = []
+    for nodo in ast.walk(ast.parse(codigo, filename=nombre)):
+        if (
+            isinstance(nodo, ast.Call)
+            and isinstance(nodo.func, ast.Attribute)
+            and nodo.func.attr in NIVELES
+            and _es_un_logger(nodo.func.value)
+            and any(_llama_a_un_nombre(a) for a in [*nodo.args, *(k.value for k in nodo.keywords)])
+        ):
+            lineas.append(nodo.lineno)
+    return lineas
+
+
 def _logs_con_nombres() -> list[str]:
-    hallados = []
-    for fichero in RAIZ.rglob("*.py"):
-        arbol = ast.parse(fichero.read_text(), filename=str(fichero))
-        for nodo in ast.walk(arbol):
-            if (
-                isinstance(nodo, ast.Call)
-                and isinstance(nodo.func, ast.Attribute)
-                and nodo.func.attr in NIVELES
-                and isinstance(nodo.func.value, ast.Name)
-                and nodo.func.value.id in {"logger", "logging", "log"}
-                and any(
-                    _llama_a_un_nombre(a) for a in [*nodo.args, *(k.value for k in nodo.keywords)]
-                )
-            ):
-                hallados.append(f"{fichero.relative_to(RAIZ.parent)}:{nodo.lineno}")
-    return hallados
+    return [
+        f"{fichero.relative_to(RAIZ.parent)}:{linea}"
+        for fichero in RAIZ.rglob("*.py")
+        for linea in _hallados_en(fichero.read_text(), str(fichero))
+    ]
 
 
 def test_no_log_call_carries_a_full_name():
@@ -49,3 +59,19 @@ def test_no_log_call_carries_a_full_name():
     Then: No hay ninguna
     """
     assert _logs_con_nombres() == []
+
+
+def test_the_guard_sees_module_and_instance_loggers():
+    """
+    Given: El mismo log con el nombre, con `logger` y con `self._logger`
+    When: Lo mira el vigilante
+    Then: Ve los tres con el nombre; el del id, no
+    """
+    codigo = (
+        "logger.warning('Player %s', user.get_full_name())\n"
+        "self._logger.warning('Player %s', user.get_full_name())\n"
+        "self._logger.info('Player %s', full_name)\n"
+        "self._logger.warning('Player %s', user.id)\n"
+    )
+
+    assert _hallados_en(codigo, "prueba.py") == [1, 2, 3]

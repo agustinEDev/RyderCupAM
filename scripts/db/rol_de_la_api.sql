@@ -7,7 +7,8 @@
 -- (DB-R3-02, auditoría del 18 nov 2026; vale igual para n8n_lectura y backup_ro):
 --     SET password_encryption = 'scram-sha-256';
 --     \password rydercup_app
--- Comprobación: conectar con `require_auth=scram-sha-256` tiene que funcionar.
+-- Comprobación: conectar COMO ESE ROL con `require_auth=scram-sha-256` tiene que funcionar
+-- (opción de libpq 16: con psql 15, o la imagen postgres:15, fallaría siempre).
 --
 -- Después, en Render: DATABASE_URL con rydercup_app y MIGRATIONS_DATABASE_URL con la URL
 -- de ahora (la del dueño). Guía: docs/RUNBOOK.md, «Usuario de la API sin permisos de estructura»
