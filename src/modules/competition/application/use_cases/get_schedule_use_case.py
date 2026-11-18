@@ -1,7 +1,8 @@
 """Caso de Uso: Obtener Schedule de la competición."""
 
 from collections import defaultdict
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -29,12 +30,15 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     con_la_llave,
 )
 from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    Alcance,
     LoQueVe,
     alcance_de,
     lo_que_ve,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.policies.zona_horaria import zona_del_campo
@@ -132,6 +136,51 @@ class GetScheduleUseCase:
         `quien_ve_los_inscritos` (con las plazas ocupadas de verdad); sin
         decirlo, entera: es como la leen los usos internos.
         """
+        leido = await self._lee(request, viewer_id, viewer_is_admin, viewer_email)
+        competition = leido.competition
+
+        ve = (
+            await lo_que_ve(leido.alcance, viewer_id, self._amigos)
+            if leido.alcance and viewer_id
+            else None
+        )
+        jugado = await self._lo_jugado_que_ve(competition, ve)
+        entero = jugado.acceso is Acceso.ENTERO
+        rounds_with_matches = _los_que_ve(jugado, leido.rounds_with_matches)
+
+        # 5. La zona horaria de cada campo, una consulta por campo distinto: una
+        # competicion juega en uno o dos, no en veinte
+        # (y su nombre, para «Mis Próximos Partidos», BE #532)
+        zonas_por_campo, nombres_por_campo = await self._campos(rounds_with_matches)
+
+        # 6. Agrupar rondas por día
+        days = _agenda(leido, rounds_with_matches, ve, entero, zonas_por_campo, nombres_por_campo)
+
+        # 7. Construir respuesta de team assignment
+        ta_dto = _equipos_dto(leido.team_assignment) if leido.team_assignment and entero else None
+
+        # Ya guardado: los avisos de los partidos que haya creado abrir los sobres (G2)
+        if self._sobres is not None:
+            await self._sobres.avisar_salidas()
+
+        return GetScheduleResponseDTO(
+            competition_id=request.competition_id,
+            days=days,
+            total_rounds=len(leido.rounds),
+            total_matches=sum(len(matches) for _, matches in rounds_with_matches),
+            team_assignment=ta_dto,
+            # Lo que caben en todas las franjas de un stroke play (#251)
+            tee_sheet_capacity=_cupo(competition, leido.rounds),
+        )
+
+    async def _lee(
+        self,
+        request: GetScheduleRequestDTO,
+        viewer_id: UserId | None,
+        viewer_is_admin: bool,
+        viewer_email: str | None,
+    ) -> "_Leido":
+        """Todo lo que la agenda lee de la base de datos, en una sola transacción."""
         alcance = None
         async with self._uow:
             # 1. Verificar que la competición existe
@@ -151,12 +200,10 @@ class GetScheduleUseCase:
             await self._abre_los_sobres_que_tocan(competition, rounds)
 
             # 3. Obtener partidos para cada ronda
-            total_matches = 0
             rounds_with_matches: list[tuple[Round, list[Match]]] = []
             for round_entity in rounds:
                 matches = await self._uow.matches.find_by_round(round_entity.id)
                 rounds_with_matches.append((round_entity, matches))
-                total_matches += len(matches)
 
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
@@ -178,150 +225,52 @@ class GetScheduleUseCase:
                     email=viewer_email,
                     aprobados=aprobados,
                 )
-
-        ve = await lo_que_ve(alcance, viewer_id, self._amigos) if alcance and viewer_id else None
-        # En una privada, sus partidos solo los ve quien está dentro (27 oct
-        # 2026): ahí `completa` es organizador, admin o aprobado
-        jugado = (
-            await con_la_llave(
-                competition.visibility is not Visibility.PRIVATE or ve.completa,
-                competition_id,
-                ve.quien,
-                self._eventos,
-            )
-            if ve
-            else LoJugadoQueVe(Acceso.ENTERO)
+        return _Leido(
+            competition=competition,
+            rounds=rounds,
+            plazas=plazas,
+            esperas=esperas,
+            rounds_with_matches=rounds_with_matches,
+            team_assignment=team_assignment,
+            inscritos=inscritos,
+            alcance=alcance,
         )
-        entero = jugado.acceso is Acceso.ENTERO
-        if not entero:
-            rounds_with_matches = [
-                (r, [m for m in matches if jugado.ve_la_partida(_jugadores(m))])
-                for r, matches in rounds_with_matches
-            ]
-            total_matches = sum(len(matches) for _, matches in rounds_with_matches)
 
-        # 5. La zona horaria de cada campo, una consulta por campo distinto: una
-        # competicion juega en uno o dos, no en veinte
-        # (y su nombre, para «Mis Próximos Partidos», BE #532)
+    async def _lo_jugado_que_ve(
+        self, competition: Competition, ve: LoQueVe | None
+    ) -> LoJugadoQueVe:
+        """
+        En una privada, sus partidos solo los ve quien está dentro (27 oct
+        2026): ahí `completa` es organizador, admin o aprobado.
+        """
+        if not ve:
+            return LoJugadoQueVe(Acceso.ENTERO)
+        return await con_la_llave(
+            competition.visibility is not Visibility.PRIVATE or ve.completa,
+            competition.id,
+            ve.quien,
+            self._eventos,
+        )
+
+    async def _campos(
+        self, rounds_with_matches: list[tuple[Round, list[Match]]]
+    ) -> tuple[dict[GolfCourseId, str | None], dict[GolfCourseId, str | None]]:
+        """La zona horaria y el nombre de cada campo, una consulta por campo distinto."""
         zonas_por_campo: dict[GolfCourseId, str | None] = {}
         nombres_por_campo: dict[GolfCourseId, str | None] = {}
-        if self._gc_repo:
-            for round_entity, _ in rounds_with_matches:
-                if round_entity.golf_course_id in zonas_por_campo:
-                    continue
-                golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-                zonas_por_campo[round_entity.golf_course_id] = (
-                    golf_course.timezone if golf_course else None
-                )
-                nombres_por_campo[round_entity.golf_course_id] = (
-                    golf_course.name if golf_course else None
-                )
-
-        # 6. Agrupar rondas por día
-        days_map = defaultdict(list)
-        for round_entity, matches in rounds_with_matches:
-            match_dtos = [
-                MatchResponseDTO(
-                    id=m.id.value,
-                    round_id=m.round_id.value,
-                    match_number=m.match_number,
-                    team_a_players=[
-                        MatchPlayerResponseDTO.from_domain(p) for p in m.team_a_players
-                    ],
-                    team_b_players=[
-                        MatchPlayerResponseDTO.from_domain(p) for p in m.team_b_players
-                    ],
-                    status=m.status.value,
-                    handicap_strokes_given=m.handicap_strokes_given,
-                    strokes_given_to_team=m.strokes_given_to_team,
-                    result=m.result,
-                    created_at=m.created_at,
-                    updated_at=m.updated_at,
-                )
-                for m in matches
-            ]
-
-            round_dto = RoundResponseDTO(
-                id=round_entity.id.value,
-                competition_id=round_entity.competition_id.value,
-                golf_course_id=round_entity.golf_course_id.value,
-                golf_course_name=nombres_por_campo.get(round_entity.golf_course_id),
-                round_date=round_entity.round_date,
-                session_type=round_entity.session_type.value,
-                # Una franja de stroke play no tiene formato de partido (#541)
-                match_format=None
-                if round_entity.hoja_de_salidas
-                else round_entity.match_format.value,
-                status=round_entity.status.value,
-                handicap_mode=round_entity.handicap_mode.value
-                if round_entity.handicap_mode
-                else None,
-                allowance_percentage=round_entity.allowance_percentage,
-                effective_allowance=round_entity.get_effective_allowance(),
-                tee_sheet=_hoja(
-                    round_entity.hoja_de_salidas,
-                    [p.user_id.value for p in plazas if p.round_id == round_entity.id],
-                    [e.user_id.value for e in esperas if e.round_id == round_entity.id],
-                    ve,
-                ),
-                matches=match_dtos,
-                scoring_opens_at=_abre(
-                    round_entity, zonas_por_campo.get(round_entity.golf_course_id)
-                ),
-                # El aviso de por qué no hay partidos nombra a jugadores: de una
-                # privada, solo para quien está dentro (CodeRabbit)
-                match_generation_block=block_to_dto(round_entity.match_generation_block)
-                if entero
-                else None,
-                resting_player_ids=[
-                    uid.value for uid in _descansan(team_assignment, inscritos, matches)
-                ]
-                if entero
-                else [],
-                created_at=round_entity.created_at,
-                updated_at=round_entity.updated_at,
+        if not self._gc_repo:
+            return zonas_por_campo, nombres_por_campo
+        for round_entity, _ in rounds_with_matches:
+            if round_entity.golf_course_id in zonas_por_campo:
+                continue
+            golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+            zonas_por_campo[round_entity.golf_course_id] = (
+                golf_course.timezone if golf_course else None
             )
-            days_map[round_entity.round_date].append(round_dto)
-
-        # 6. Construir días ordenados (cronológico: MORNING → AFTERNOON → EVENING)
-        session_order = {"MORNING": 0, "AFTERNOON": 1, "EVENING": 2}
-        days = [
-            ScheduleDayDTO(
-                day_date=d,
-                rounds=sorted(r, key=lambda x: session_order.get(x.session_type.upper(), 99)),
+            nombres_por_campo[round_entity.golf_course_id] = (
+                golf_course.name if golf_course else None
             )
-            for d, r in sorted(days_map.items())
-        ]
-
-        # 7. Construir respuesta de team assignment
-        ta_dto = None
-        if team_assignment and entero:
-            ta_dto = TeamAssignmentResponseDTO(
-                id=team_assignment.id.value,
-                competition_id=team_assignment.competition_id.value,
-                mode=team_assignment.mode.value,
-                team_a_player_ids=[uid.value for uid in team_assignment.team_a_player_ids],
-                team_b_player_ids=[uid.value for uid in team_assignment.team_b_player_ids],
-                created_at=team_assignment.created_at,
-            )
-
-        # Ya guardado: los avisos de los partidos que haya creado abrir los sobres (G2)
-        if self._sobres is not None:
-            await self._sobres.avisar_salidas()
-
-        return GetScheduleResponseDTO(
-            competition_id=request.competition_id,
-            days=days,
-            total_rounds=len(rounds),
-            total_matches=total_matches,
-            team_assignment=ta_dto,
-            # Lo que caben en todas las franjas de un stroke play (#251)
-            tee_sheet_capacity=(
-                sum(r.hoja_de_salidas.cupo for r in rounds if r.hoja_de_salidas is not None)
-                if competition.stroke_play is not None
-                else None
-            ),
-        )
+        return zonas_por_campo, nombres_por_campo
 
     async def _abre_los_sobres_que_tocan(
         self, competition: Competition, rounds: list[Round]
@@ -344,6 +293,153 @@ class GetScheduleUseCase:
                 continue
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             await self._sobres.revelar_si_toca(ronda, competition, sobres)
+
+
+@dataclass(frozen=True)
+class _Leido:
+    """Lo que la agenda lee de la base de datos antes de componer la respuesta."""
+
+    competition: Competition
+    rounds: list[Round]
+    plazas: list[PlazaEnFranja]
+    esperas: list[EsperaEnFranja]
+    rounds_with_matches: list[tuple[Round, list[Match]]]
+    team_assignment: TeamAssignment | None
+    inscritos: set[UserId]
+    alcance: Alcance | None
+
+
+def _los_que_ve(
+    jugado: LoJugadoQueVe, rounds_with_matches: list[tuple[Round, list[Match]]]
+) -> list[tuple[Round, list[Match]]]:
+    """Las rondas con solo los partidos que deja ver la llave de quien mira."""
+    if jugado.acceso is Acceso.ENTERO:
+        return rounds_with_matches
+    return [
+        (r, [m for m in matches if jugado.ve_la_partida(_jugadores(m))])
+        for r, matches in rounds_with_matches
+    ]
+
+
+def _agenda(
+    leido: _Leido,
+    rounds_with_matches: list[tuple[Round, list[Match]]],
+    ve: LoQueVe | None,
+    entero: bool,
+    zonas_por_campo: dict[GolfCourseId, str | None],
+    nombres_por_campo: dict[GolfCourseId, str | None],
+) -> list[ScheduleDayDTO]:
+    """Las rondas agrupadas por día."""
+    days_map: defaultdict[date, list[RoundResponseDTO]] = defaultdict(list)
+    for round_entity, matches in rounds_with_matches:
+        round_dto = _ronda_dto(
+            round_entity,
+            matches,
+            golf_course_name=nombres_por_campo.get(round_entity.golf_course_id),
+            tee_sheet=_hoja(
+                round_entity.hoja_de_salidas,
+                [p.user_id.value for p in leido.plazas if p.round_id == round_entity.id],
+                [e.user_id.value for e in leido.esperas if e.round_id == round_entity.id],
+                ve,
+            ),
+            scoring_opens_at=_abre(round_entity, zonas_por_campo.get(round_entity.golf_course_id)),
+            # El aviso de por qué no hay partidos nombra a jugadores: de una
+            # privada, solo para quien está dentro (CodeRabbit)
+            entero=entero,
+            descansan=(
+                _descansan(leido.team_assignment, leido.inscritos, matches) if entero else []
+            ),
+        )
+        days_map[round_entity.round_date].append(round_dto)
+    return _dias(days_map)
+
+
+def _cupo(competition: Competition, rounds: list[Round]) -> int | None:
+    """Lo que caben en todas las franjas de un stroke play (#251)."""
+    if competition.stroke_play is None:
+        return None
+    return sum(r.hoja_de_salidas.cupo for r in rounds if r.hoja_de_salidas is not None)
+
+
+def _partido_dto(m: Match) -> MatchResponseDTO:
+    """Un partido de la agenda."""
+    return MatchResponseDTO(
+        id=m.id.value,
+        round_id=m.round_id.value,
+        match_number=m.match_number,
+        team_a_players=[MatchPlayerResponseDTO.from_domain(p) for p in m.team_a_players],
+        team_b_players=[MatchPlayerResponseDTO.from_domain(p) for p in m.team_b_players],
+        status=m.status.value,
+        handicap_strokes_given=m.handicap_strokes_given,
+        strokes_given_to_team=m.strokes_given_to_team,
+        result=m.result,
+        created_at=m.created_at,
+        updated_at=m.updated_at,
+    )
+
+
+def _ronda_dto(
+    round_entity: Round,
+    matches: list[Match],
+    *,
+    golf_course_name: str | None,
+    tee_sheet: TeeSheetResponseDTO | None,
+    scoring_opens_at: datetime | None,
+    entero: bool,
+    descansan: list[UserId],
+) -> RoundResponseDTO:
+    """Una ronda de la agenda con sus partidos.
+
+    Quien no ve lo jugado entero no ve el aviso de por qué no hay partidos ni
+    quién descansa: los dos nombran a jugadores.
+    """
+    return RoundResponseDTO(
+        id=round_entity.id.value,
+        competition_id=round_entity.competition_id.value,
+        golf_course_id=round_entity.golf_course_id.value,
+        golf_course_name=golf_course_name,
+        round_date=round_entity.round_date,
+        session_type=round_entity.session_type.value,
+        # Una franja de stroke play no tiene formato de partido (#541)
+        match_format=None if round_entity.hoja_de_salidas else round_entity.match_format.value,
+        status=round_entity.status.value,
+        handicap_mode=round_entity.handicap_mode.value if round_entity.handicap_mode else None,
+        allowance_percentage=round_entity.allowance_percentage,
+        effective_allowance=round_entity.get_effective_allowance(),
+        tee_sheet=tee_sheet,
+        matches=[_partido_dto(m) for m in matches],
+        scoring_opens_at=scoring_opens_at,
+        match_generation_block=block_to_dto(round_entity.match_generation_block)
+        if entero
+        else None,
+        resting_player_ids=[uid.value for uid in descansan] if entero else [],
+        created_at=round_entity.created_at,
+        updated_at=round_entity.updated_at,
+    )
+
+
+def _dias(days_map: dict[date, list[RoundResponseDTO]]) -> list[ScheduleDayDTO]:
+    """Los días ordenados, y en cada uno MORNING → AFTERNOON → EVENING."""
+    session_order = {"MORNING": 0, "AFTERNOON": 1, "EVENING": 2}
+    return [
+        ScheduleDayDTO(
+            day_date=d,
+            rounds=sorted(r, key=lambda x: session_order.get(x.session_type.upper(), 99)),
+        )
+        for d, r in sorted(days_map.items())
+    ]
+
+
+def _equipos_dto(team_assignment: TeamAssignment) -> TeamAssignmentResponseDTO:
+    """La asignación de equipos."""
+    return TeamAssignmentResponseDTO(
+        id=team_assignment.id.value,
+        competition_id=team_assignment.competition_id.value,
+        mode=team_assignment.mode.value,
+        team_a_player_ids=[uid.value for uid in team_assignment.team_a_player_ids],
+        team_b_player_ids=[uid.value for uid in team_assignment.team_b_player_ids],
+        created_at=team_assignment.created_at,
+    )
 
 
 def _hoja(

@@ -8,6 +8,9 @@ from typing import Any
 from src.modules.social.application.exclusive_achievements import lock_players
 from src.modules.social.application.publication import stamp_for_publication
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivityEventRepositoryInterface,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -898,12 +901,7 @@ class PublishCompetitionNoticesUseCase:
             publicados = {e.user_id: e for e in await eventos.find_from_source(round_id, [_SALIDA])}
             # Quien perdio su aviso de esta ronda por un cambio y no lo recupero
             retirados = await eventos.withdrawn_tee_times(round_id)
-            quitar = [
-                user_id
-                for user_id, evento in publicados.items()
-                if user_id not in fuera
-                and (user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id]))
-            ]
+            quitar = _a_quitar(publicados, fuera, ahora)
             nuevos = [
                 self._salida(
                     tournament,
@@ -914,18 +912,15 @@ class PublishCompetitionNoticesUseCase:
                 for user_id, salida in ahora.items()
                 if user_id not in publicados or user_id in quitar
             ]
-            sin_salida = [user_id for user_id in quitar if user_id not in ahora]
-            vuelven = [user_id for user_id in ahora if user_id in retirados]
-            if quitar:
-                await eventos.delete_from_source_for_users(round_id, [_SALIDA], quitar)
-            if sin_salida:
-                await eventos.remember_withdrawn_tee_times(
-                    round_id, tournament.competition_id, sin_salida
-                )
-            if vuelven:
-                await eventos.forget_withdrawn_tee_times(round_id, vuelven)
-            if nuevos:
-                await eventos.add_many(nuevos)
+            await _escribir_salidas(
+                eventos,
+                round_id,
+                tournament.competition_id,
+                quitar=quitar,
+                sin_salida=[user_id for user_id in quitar if user_id not in ahora],
+                vuelven=[user_id for user_id in ahora if user_id in retirados],
+                nuevos=nuevos,
+            )
 
     def _salida(
         self, tournament: TournamentRef, round_id: str, salida: TeeTimeRef, changed: bool
@@ -1031,3 +1026,41 @@ class PublishCompetitionNoticesUseCase:
     ) -> None:
         async with self._social_uow:
             await self._social_uow.activity_events.delete_from_source(origen, tipos, user_id)
+
+
+def _a_quitar(
+    publicados: dict[UserId, ActivityEvent],
+    fuera: set[UserId],
+    ahora: dict[UserId, TeeTimeRef],
+) -> list[UserId]:
+    """
+    Los avisos publicados que ya no cuentan la salida de ahora. El de quien está
+    fuera de juego (no presentado, retirado) se queda como está.
+    """
+    return [
+        user_id
+        for user_id, evento in publicados.items()
+        if user_id not in fuera
+        and (user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id]))
+    ]
+
+
+async def _escribir_salidas(
+    eventos: ActivityEventRepositoryInterface,
+    round_id: str,
+    competition_id: str,
+    *,
+    quitar: list[UserId],
+    sin_salida: list[UserId],
+    vuelven: list[UserId],
+    nuevos: list[ActivityEvent],
+) -> None:
+    """Retira, recuerda a quien se queda sin salida, olvida a quien vuelve y publica."""
+    if quitar:
+        await eventos.delete_from_source_for_users(round_id, [_SALIDA], quitar)
+    if sin_salida:
+        await eventos.remember_withdrawn_tee_times(round_id, competition_id, sin_salida)
+    if vuelven:
+        await eventos.forget_withdrawn_tee_times(round_id, vuelven)
+    if nuevos:
+        await eventos.add_many(nuevos)

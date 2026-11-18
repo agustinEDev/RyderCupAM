@@ -5,6 +5,7 @@ Implementacion asincrona del Unit of Work para el modulo de competiciones.
 Coordina transacciones entre 8 repositorios.
 """
 
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -196,8 +197,17 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             await self.rollback()
-        else:
+            return
+        # Si el commit falla (una restricción única, la conexión), rollback: sin él la
+        # sesión quedaba inservible para lo siguiente de la misma petición (como la de
+        # usuarios, #752). Si el rollback también falla, sube el error del commit; y una
+        # cancelación (BaseException) se deshace igual
+        try:
             await self.commit()
+        except BaseException:
+            with contextlib.suppress(Exception):
+                await self.rollback()
+            raise
 
     async def commit(self) -> None:
         await self._session.commit()

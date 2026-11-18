@@ -28,6 +28,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -120,99 +121,25 @@ class GetLeaderboardUseCase:
             total_b_points = 0.0
             matches_dto = []
 
-            # Collect all user IDs and cache matches per round
-            all_user_ids: set[UserId] = set()
-            matches_by_round: dict[RoundId, list[Match]] = {}
-
-            for round_entity in rounds:
-                matches = await self._uow.matches.find_by_round(round_entity.id)
-                matches_by_round[round_entity.id] = matches
-
-                for match in matches:
-                    for p in (*match.team_a_players, *match.team_b_players):
-                        all_user_ids.add(p.user_id)
+            matches_by_round = await self._partidos_por_ronda(rounds)
 
             # Resolve all names
+            all_user_ids = {
+                p.user_id
+                for matches in matches_by_round.values()
+                for match in matches
+                for p in (*match.team_a_players, *match.team_b_players)
+            }
             user_names = await self._resolve_user_names(list(all_user_ids), comp_id)
 
             for round_entity in rounds:
-                matches = matches_by_round[round_entity.id]
-
-                for match in matches:
-                    standing_str = None
-                    leading_team = None
-                    current_hole = None
-                    result_dto = None
-
-                    if match.is_finished() and match.result:
-                        score_result = None
-                        if isinstance(match.result, dict) and match.result:
-                            stored_winner = match.result.get("winner")
-                            if stored_winner in ("A", "B", "HALVED"):
-                                score_result = match.result
-
-                        if not score_result:
-                            score_result = await self._compute_decided_result(
-                                match, round_entity.match_format
-                            ) or {"winner": "HALVED", "score": "AS"}
-
-                        points = self._scoring_service.calculate_ryder_cup_points(
-                            score_result, match.status.value
-                        )
-                        total_a_points += points["team_a"]
-                        total_b_points += points["team_b"]
-
-                        final_result = await self._resolve_final_result(
-                            match, round_entity, match.result
-                        )
-                        result_dto = DecidedResultDTO(
-                            winner=final_result.get("winner", ""),
-                            score=final_result.get("score", ""),
-                        )
-                    elif match.status.can_record_scores():
-                        (
-                            standing_str,
-                            leading_team,
-                            current_hole,
-                        ) = await self._compute_in_progress_standing(match, round_entity)
-
-                    team_a_players = [
-                        LeaderboardPlayerDTO(
-                            # A un visitante, sin el id interno (code-review, 28 oct)
-                            user_id=None if visitante else str(p.user_id),
-                            user_name=user_names.get(p.user_id, ""),
-                        )
-                        for p in match.team_a_players
-                    ]
-                    team_b_players = [
-                        LeaderboardPlayerDTO(
-                            # A un visitante, sin el id interno (code-review, 28 oct)
-                            user_id=None if visitante else str(p.user_id),
-                            user_name=user_names.get(p.user_id, ""),
-                        )
-                        for p in match.team_b_players
-                    ]
-
-                    matches_dto.append(
-                        LeaderboardMatchDTO(
-                            match_id=str(match.id),
-                            match_number=match.match_number,
-                            match_format=round_entity.match_format.value
-                            if round_entity.match_format
-                            else "",
-                            round_date=round_entity.round_date,
-                            session_type=round_entity.session_type.value
-                            if round_entity.session_type
-                            else None,
-                            status=match.status.value,
-                            current_hole=current_hole,
-                            standing=standing_str,
-                            leading_team=leading_team,
-                            team_a_players=team_a_players,
-                            team_b_players=team_b_players,
-                            result=result_dto,
-                        )
+                for match in matches_by_round[round_entity.id]:
+                    partido, points = await self._partido(
+                        match, round_entity, user_names, visitante
                     )
+                    total_a_points += points["team_a"]
+                    total_b_points += points["team_b"]
+                    matches_dto.append(partido)
 
             # Hoy son enfrentamientos entre dos equipos: un torneo de stroke
             # play tendrá los suyos (#251)
@@ -232,6 +159,78 @@ class GetLeaderboardUseCase:
                 matches=matches_dto,
             )
         return self._la_que_ve(clasificacion, ve)
+
+    async def _partidos_por_ronda(self, rounds: list[Round]) -> dict[RoundId, list[Match]]:
+        """Los partidos de cada ronda, leídos una vez (con el `uow` abierto)."""
+        matches_by_round: dict[RoundId, list[Match]] = {}
+        for round_entity in rounds:
+            matches_by_round[round_entity.id] = await self._uow.matches.find_by_round(
+                round_entity.id
+            )
+        return matches_by_round
+
+    async def _partido(
+        self,
+        match: Match,
+        round_entity: Round,
+        user_names: dict[UserId, str],
+        visitante: bool,
+    ) -> tuple[LeaderboardMatchDTO, dict[str, float]]:
+        """Un partido de la clasificación y los puntos que da a cada equipo."""
+        standing_str = None
+        leading_team = None
+        current_hole = None
+        result_dto = None
+        points = {"team_a": 0.0, "team_b": 0.0}
+
+        if match.is_finished() and match.result:
+            points = await self._puntos(match, round_entity)
+            final_result = await self._resolve_final_result(match, round_entity, match.result)
+            result_dto = DecidedResultDTO(
+                winner=final_result.get("winner", ""),
+                score=final_result.get("score", ""),
+            )
+        elif match.status.can_record_scores():
+            (
+                standing_str,
+                leading_team,
+                current_hole,
+            ) = await self._compute_in_progress_standing(match, round_entity)
+
+        partido = LeaderboardMatchDTO(
+            match_id=str(match.id),
+            match_number=match.match_number,
+            match_format=round_entity.match_format.value if round_entity.match_format else "",
+            round_date=round_entity.round_date,
+            session_type=round_entity.session_type.value if round_entity.session_type else None,
+            status=match.status.value,
+            current_hole=current_hole,
+            standing=standing_str,
+            leading_team=leading_team,
+            team_a_players=_jugadores(match.team_a_players, user_names, visitante),
+            team_b_players=_jugadores(match.team_b_players, user_names, visitante),
+            result=result_dto,
+        )
+        return partido, points
+
+    async def _puntos(self, match: Match, round_entity: Round) -> dict[str, float]:
+        """
+        Los puntos Ryder de un partido acabado: con el ganador guardado si es
+        válido; si no, con los hoyos, y sin hoyos, empate.
+        """
+        score_result = None
+        if isinstance(match.result, dict) and match.result:
+            stored_winner = match.result.get("winner")
+            if stored_winner in ("A", "B", "HALVED"):
+                score_result = match.result
+
+        if not score_result:
+            score_result = await self._compute_decided_result(match, round_entity.match_format) or {
+                "winner": "HALVED",
+                "score": "AS",
+            }
+
+        return self._scoring_service.calculate_ryder_cup_points(score_result, match.status.value)
 
     @staticmethod
     def _la_que_ve(
@@ -315,3 +314,16 @@ class GetLeaderboardUseCase:
         return await PlayerNames.de_la_competicion(
             user_ids, competition_id, self._user_repo, self._uow
         )
+
+
+def _jugadores(
+    players: tuple[MatchPlayer, ...], user_names: dict[UserId, str], visitante: bool
+) -> list[LeaderboardPlayerDTO]:
+    """Los jugadores de un lado; a un visitante, sin el id interno (code-review, 28 oct)."""
+    return [
+        LeaderboardPlayerDTO(
+            user_id=None if visitante else str(p.user_id),
+            user_name=user_names.get(p.user_id, ""),
+        )
+        for p in players
+    ]

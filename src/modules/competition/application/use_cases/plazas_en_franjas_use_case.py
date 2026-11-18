@@ -30,6 +30,7 @@ from src.modules.competition.application.services.partidas_del_jugador import (
     sacar_de_sus_partidas,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -42,6 +43,7 @@ from src.modules.competition.domain.services.plazas_en_franjas import (
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.instante_utc import ahora_en_utc
 
@@ -122,42 +124,18 @@ class CogerPlazaUseCase:
             franja, competicion = await _franja_y_competicion(
                 self._uow, round_id, jugador, quien, is_admin
             )
-            if competicion.stroke_play is None:
-                raise PlazaEnFranjaError("Las franjas son de un Stableford o un Medal.")
-            aprobados = await self._uow.enrollments.find_by_competition_and_status(
-                competicion.id, EnrollmentStatus.APPROVED
-            )
-            suya = next((i for i in aprobados if i.user_id == jugador), None)
-            if suya is None:
-                raise PlazaEnFranjaError(
-                    "Solo eligen franja los inscritos aprobados en la competición."
-                )
+            suya, stroke_play = await self._inscripcion_aprobada(competicion, jugador)
             plazas = await self._uow.plazas.de_la_competicion(competicion.id)
             sesiones = {s.id: s for s in await self._uow.rounds.find_by_competition(competicion.id)}
             suyas = [sesiones[p.round_id] for p in plazas if p.user_id == jugador]
             # Su primera plaza, si entró esperando: ya juega (A2, 28 oct 2026). Los
             # demás tuvieron su aviso al entrar
             primera = not suyas and suya.entered_waiting
-            try:
-                PlazasEnFranjas.comprobar(
-                    franja=franja,
-                    suyas=suyas,
-                    ocupadas=sum(1 for p in plazas if p.round_id == franja.id),
-                    max_jornadas=competicion.stroke_play.max_matchdays_per_player,
-                    en_lugar_de=en_lugar_de,
-                )
-            except PlazaNoPosibleError as e:
-                raise PlazaEnFranjaError(str(e)) from e
-            ahora = ahora_en_utc()
-            # Si deja una plaza que le dio la lista y aún no ha visto, la nueva hereda el
-            # aviso: si no, nunca se enteraría de que tiene plaza (code-review de la 3b)
-            sin_ver = en_lugar_de is not None and any(
-                p.round_id == en_lugar_de
-                and p.user_id == jugador
-                and p.desde_espera is not None
-                and p.vista is None
-                for p in plazas
+            _comprobar_reglas(
+                franja, suyas, plazas, stroke_play.max_matchdays_per_player, en_lugar_de
             )
+            ahora = ahora_en_utc()
+            sin_ver = _deja_una_sin_ver(plazas, en_lugar_de, jugador)
             fotos = {}
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
@@ -186,6 +164,69 @@ class CogerPlazaUseCase:
         if primera:
             await self._actividad.enrolled(competicion, suya, accepted_request=False)
         return plaza
+
+    async def _inscripcion_aprobada(
+        self, competicion: Competition, jugador: UserId
+    ) -> tuple[Enrollment, StrokePlaySetup]:
+        """
+        Su inscripción aprobada y la configuración del stroke play.
+
+        Raises:
+            PlazaEnFranjaError: Si no es de stroke play o no está aprobado
+        """
+        stroke_play = competicion.stroke_play
+        if stroke_play is None:
+            raise PlazaEnFranjaError("Las franjas son de un Stableford o un Medal.")
+        aprobados = await self._uow.enrollments.find_by_competition_and_status(
+            competicion.id, EnrollmentStatus.APPROVED
+        )
+        suya = next((i for i in aprobados if i.user_id == jugador), None)
+        if suya is None:
+            raise PlazaEnFranjaError(
+                "Solo eligen franja los inscritos aprobados en la competición."
+            )
+        return suya, stroke_play
+
+
+def _comprobar_reglas(
+    franja: Round,
+    suyas: list[Round],
+    plazas: list[PlazaEnFranja],
+    max_jornadas: int,
+    en_lugar_de: RoundId | None,
+) -> None:
+    """
+    Las reglas de `PlazasEnFranjas`: sitio, una por jornada, cupo de jornadas.
+
+    Raises:
+        PlazaEnFranjaError: Si no puede coger esa plaza
+    """
+    try:
+        PlazasEnFranjas.comprobar(
+            franja=franja,
+            suyas=suyas,
+            ocupadas=sum(1 for p in plazas if p.round_id == franja.id),
+            max_jornadas=max_jornadas,
+            en_lugar_de=en_lugar_de,
+        )
+    except PlazaNoPosibleError as e:
+        raise PlazaEnFranjaError(str(e)) from e
+
+
+def _deja_una_sin_ver(
+    plazas: list[PlazaEnFranja], en_lugar_de: RoundId | None, jugador: UserId
+) -> bool:
+    """
+    Si deja una plaza que le dio la lista y aún no ha visto, la nueva hereda el
+    aviso: si no, nunca se enteraría de que tiene plaza (code-review de la 3b).
+    """
+    return en_lugar_de is not None and any(
+        p.round_id == en_lugar_de
+        and p.user_id == jugador
+        and p.desde_espera is not None
+        and p.vista is None
+        for p in plazas
+    )
 
 
 class SoltarPlazaUseCase:

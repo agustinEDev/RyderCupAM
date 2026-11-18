@@ -91,37 +91,62 @@ class MovimientosDePartidas:
             )
         se_vacia = origen is not None and len(origen.jugadores) == 1
         quedan = [p for p in partidas if not (se_vacia and p is origen)]
-        # Empezada la franja nadie cambia de hora: la nueva, a la primera salida
-        # libre aún por llegar (también la de la que se vacía)
-        empezada = libres is not None
-        if empezada:
-            candidatas = sorted(
-                set(libres or ()) | ({origen.numero} if se_vacia and origen else set())
-            )
-            siguiente = candidatas[0] if candidatas else None
-        else:
-            siguiente = len(quedan) + 1 if len(quedan) < hoja.numero_de_salidas else None
+        siguiente = MovimientosDePartidas._siguiente(origen, se_vacia, quedan, hoja, libres)
         MovimientosDePartidas._comprobar(origen, destino, jugador, siguiente, hoja)
 
         cambios = Cambios()
         if origen is not None:
-            if se_vacia:
-                cambios.borrar.append(origen)
-            else:
-                origen.quitar(jugador.user_id)
-                cambios.a_guardar(origen)
+            MovimientosDePartidas._dejar_el_origen(origen, se_vacia, jugador.user_id, cambios)
         # Sin huecos en la hoja: las de detrás de la que desaparece suben (M3),
         # salvo con la franja ya empezada, que deja el hueco (#544)
-        for numero, partida in enumerate(sorted(quedan, key=lambda p: p.numero), start=1):
-            if not empezada and partida.numero != numero:
-                partida.renumerar(numero)
-                cambios.a_guardar(partida)
+        if libres is None:
+            MovimientosDePartidas._subir(quedan, cambios)
         if destino is not None:
             destino.meter(jugador, hoja.jugadores_por_partida)
             cambios.a_guardar(destino)
         elif siguiente is not None:  # sin número ya lo rechazó `_comprobar`
             cambios.crear.append(Partida.crear(competition_id, round_id, siguiente, [jugador]))
         return cambios
+
+    @staticmethod
+    def _siguiente(
+        origen: Partida | None,
+        se_vacia: bool,
+        quedan: Sequence[Partida],
+        hoja: HojaDeSalidas,
+        libres: Sequence[int] | None,
+    ) -> int | None:
+        """
+        El número de salida de una partida nueva, o None si no quedan.
+
+        Empezada la franja nadie cambia de hora: la nueva, a la primera salida
+        libre aún por llegar (también la de la que se vacía).
+        """
+        if libres is not None:
+            candidatas = sorted(
+                set(libres or ()) | ({origen.numero} if se_vacia and origen else set())
+            )
+            return candidatas[0] if candidatas else None
+        return len(quedan) + 1 if len(quedan) < hoja.numero_de_salidas else None
+
+    @staticmethod
+    def _dejar_el_origen(
+        origen: Partida, se_vacia: bool, user_id: UserId, cambios: Cambios
+    ) -> None:
+        """La de origen se borra si se vacía; si no, sale de ella."""
+        if se_vacia:
+            cambios.borrar.append(origen)
+        else:
+            origen.quitar(user_id)
+            cambios.a_guardar(origen)
+
+    @staticmethod
+    def _subir(quedan: Sequence[Partida], cambios: Cambios) -> None:
+        """Renumera las que quedan desde 1, sin huecos (M3)."""
+        for numero, partida in enumerate(sorted(quedan, key=lambda p: p.numero), start=1):
+            if partida.numero != numero:
+                partida.renumerar(numero)
+                cambios.a_guardar(partida)
 
     @staticmethod
     def _no_presentado(partida: Partida | None, user_id: UserId) -> None:

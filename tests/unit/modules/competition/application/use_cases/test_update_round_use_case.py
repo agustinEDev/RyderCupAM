@@ -189,6 +189,34 @@ class TestUpdateRoundUseCase:
         with pytest.raises(RoundNotFoundError):
             await use_case.execute(request, creator_id)
 
+    async def test_actualizar_ronda_borrada_mientras_se_bloquea_no_existe(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        monkeypatch,
+    ):
+        """
+        Given: Una ronda que otra petición borra mientras se espera el bloqueo de la
+               competición (la relectura bloqueada ya no la encuentra)
+        When: El creador la actualiza
+        Then: RoundNotFoundError, y no un fallo al guardar una ronda que ya no está
+        """
+        competition = await self._create_closed_competition_with_course(
+            uow, creator_id, golf_course_id
+        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
+
+        async def ya_no_esta(_round_id):
+            return None
+
+        monkeypatch.setattr(uow.rounds, "find_by_id_for_update", ya_no_esta)
+        use_case = UpdateRoundUseCase(uow=uow)
+        request = UpdateRoundRequestDTO(round_id=round_entity.id.value, session_type="AFTERNOON")
+
+        with pytest.raises(RoundNotFoundError):
+            await use_case.execute(request, creator_id)
+
     async def test_should_fail_when_not_creator(
         self,
         uow: InMemoryUnitOfWork,

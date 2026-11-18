@@ -450,6 +450,90 @@ class UpdateCompetitionUseCase:
         if estaba_avisada and competition.dates.start_date != inicio_de_antes:
             await self._actividad.close_block_withdrawn(competition)
 
+    async def _editable(
+        self, competition_id: CompetitionId, user_id: UserId, is_admin: bool
+    ) -> Competition:
+        """
+        La competición, bloqueada, si quien pide la organiza y aún se puede tocar.
+
+        Raises:
+            CompetitionNotFoundError, NotCompetitionCreatorError, CompetitionNotEditableError
+        """
+        # 1. Buscar la competición
+        # Bloqueada: mover las fechas no puede cruzarse con un cambio de las
+        # jornadas por jugador (#251)
+        competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+        if not competition:
+            raise CompetitionNotFoundError(f"No existe competición con ID {competition_id.value}")
+
+        # 2. Validar que el usuario es el creador
+        if not is_admin and not competition.is_creator(user_id):
+            raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
+
+        # 3. Validar que está en estado DRAFT (se puede modificar)
+        if not competition.allows_modifications():
+            raise CompetitionNotEditableError(
+                f"No se puede modificar una competición en estado {competition.status.value}. "
+                f"Solo mientras las inscripciones están abiertas."
+            )
+        return competition
+
+    async def _comprobar_el_cupo(
+        self, competition_id: CompetitionId, request: UpdateCompetitionRequestDTO
+    ) -> None:
+        """
+        Con las inscripciones abiertas ya hay gente apuntada (BE #323), y bajar el
+        número les dejaría fuera de un torneo que ya tenían.
+        """
+        if request.max_players is not None:
+            inscritos = await self._uow.enrollments.count_approved(competition_id)
+            if request.max_players < inscritos:
+                raise CompetitionNotEditableError(
+                    f"No se puede bajar el cupo a {request.max_players}: "
+                    f"ya hay {inscritos} jugadores inscritos."
+                )
+
+    async def _nombre_nuevo(
+        self, request: UpdateCompetitionRequestDTO, competition: Competition
+    ) -> CompetitionName | None:
+        """
+        El nombre nuevo, o None si no cambia.
+
+        El mismo de antes no se revalida: uno guardado con las reglas antiguas
+        no impide editar el resto (la app manda siempre el nombre, revisor).
+        Con los espacios ya normalizados: «A » sigue siendo «A» (CodeRabbit).
+        """
+        mismo = (
+            request.name is not None and " ".join(request.name.split()) == competition.name.value
+        )
+        name = CompetitionName(request.name) if request.name and not mismo else None
+        # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
+        if name is not None and await self._uow.competitions.exists_with_name(
+            name, competition.creator_id, except_id=competition.id
+        ):
+            raise CompetitionAlreadyExistsError(f"Ya existe una competición con el nombre '{name}'")
+        return name
+
+    async def _localizacion_nueva(
+        self, request: UpdateCompetitionRequestDTO, competition: Competition
+    ) -> tuple[Location | None, list[CountryCode] | None]:
+        """
+        La localización se reconstruye en cuanto llega cualquiera de sus campos,
+        no solo con `main_country`: la pantalla permite cambiar los países
+        acompañantes sin tocar el principal, y entonces el principal no llega.
+
+        «Llega» es traer el campo CON valor: `countries: []` significa «quítalos»
+        y `countries: null` significa «no los toques», que es lo que manda un
+        cliente que serializa el formulario entero con sus huecos.
+        """
+        if not self._campos_de_localizacion(request):
+            return None, None
+        nueva_location = await self._construir_location(request, competition)
+        # Los campos son otro agregado: sus países los trae el caso de uso
+        # y la entidad decide si la ubicación nueva los deja fuera
+        paises_de_los_campos = await self._paises_de_los_campos(competition)
+        return nueva_location, paises_de_los_campos
+
     async def execute(
         self,
         competition_id: CompetitionId,
@@ -479,25 +563,7 @@ class UpdateCompetitionUseCase:
             return movida
 
         async with self._uow:
-            # 1. Buscar la competición
-            # Bloqueada: mover las fechas no puede cruzarse con un cambio de las
-            # jornadas por jugador (#251)
-            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
-            if not competition:
-                raise CompetitionNotFoundError(
-                    f"No existe competición con ID {competition_id.value}"
-                )
-
-            # 2. Validar que el usuario es el creador
-            if not is_admin and not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
-
-            # 3. Validar que está en estado DRAFT (se puede modificar)
-            if not competition.allows_modifications():
-                raise CompetitionNotEditableError(
-                    f"No se puede modificar una competición en estado {competition.status.value}. "
-                    f"Solo mientras las inscripciones están abiertas."
-                )
+            competition = await self._editable(competition_id, user_id, is_admin)
 
             # 3a. Con agenda, solo se protege lo que ella necesita (BE #323,
             # afinado en BE #365). Antes se rechazaba TODO en cuanto habia una
@@ -513,56 +579,14 @@ class UpdateCompetitionUseCase:
             self._comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request)
 
             # 3b. El cupo no puede quedarse por debajo de quien ya esta dentro.
-            # Con las inscripciones abiertas ya hay gente apuntada (BE #323), y
-            # bajar el numero les dejaria fuera de un torneo que ya tenian
-            if request.max_players is not None:
-                inscritos = await self._uow.enrollments.count_approved(competition_id)
-                if request.max_players < inscritos:
-                    raise CompetitionNotEditableError(
-                        f"No se puede bajar el cupo a {request.max_players}: "
-                        f"ya hay {inscritos} jugadores inscritos."
-                    )
+            await self._comprobar_el_cupo(competition_id, request)
 
             # 4. Construir los Value Objects y obtener valores opcionales
-            # El mismo de antes no se revalida: uno guardado con las reglas antiguas
-            # no impide editar el resto (la app manda siempre el nombre, revisor)
-            # Con los espacios ya normalizados: «A » sigue siendo «A» (CodeRabbit)
-            mismo = (
-                request.name is not None
-                and " ".join(request.name.split()) == competition.name.value
+            name = await self._nombre_nuevo(request, competition)
+            dates = _fechas_nuevas(request)
+            nueva_location, paises_de_los_campos = await self._localizacion_nueva(
+                request, competition
             )
-            name = CompetitionName(request.name) if request.name and not mismo else None
-            # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
-            if name is not None and await self._uow.competitions.exists_with_name(
-                name, competition.creator_id, except_id=competition.id
-            ):
-                raise CompetitionAlreadyExistsError(
-                    f"Ya existe una competición con el nombre '{name}'"
-                )
-
-            dates = None
-            if request.start_date and request.end_date:
-                dates = DateRange(request.start_date, request.end_date)
-            elif request.start_date or request.end_date:
-                raise ValueError(
-                    "Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas."
-                )
-
-            # La localización se reconstruye en cuanto llega cualquiera de sus campos,
-            # no solo con `main_country`: la pantalla permite cambiar los países
-            # acompañantes sin tocar el principal, y entonces el principal no llega.
-            #
-            # «Llega» es traer el campo CON valor: `countries: []` significa «quítalos»
-            # y `countries: null` significa «no los toques», que es lo que manda un
-            # cliente que serializa el formulario entero con sus huecos.
-            location = self._campos_de_localizacion(request)
-            nueva_location = None
-            paises_de_los_campos = None
-            if location:
-                nueva_location = await self._construir_location(request, competition)
-                # Los campos son otro agregado: sus países los trae el caso de uso
-                # y la entidad decide si la ubicación nueva los deja fuera
-                paises_de_los_campos = await self._paises_de_los_campos(competition)
 
             play_mode = PlayMode(request.play_mode) if request.play_mode else None
 
@@ -608,3 +632,14 @@ class UpdateCompetitionUseCase:
             name=str(competition.name),
             updated_at=competition.updated_at,
         )
+
+
+def _fechas_nuevas(request: UpdateCompetitionRequestDTO) -> DateRange | None:
+    """Las fechas nuevas: las dos o ninguna."""
+    if request.start_date and request.end_date:
+        return DateRange(request.start_date, request.end_date)
+    if request.start_date or request.end_date:
+        raise ValueError(
+            "Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas."
+        )
+    return None

@@ -26,6 +26,7 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     esta_dentro,
     exigir_la_partida,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -92,55 +93,28 @@ class GetScoringViewUseCase:
             NoPuedeVerloError: Si es de una privada en la que no está, no juega
                 en el partido ni tiene la llave de un amigo que juegue
         """
-        async with self._uow:
-            match_id = MatchId(match_id_str)
-            match = await self._uow.matches.find_by_id(match_id)
-            if not match:
-                raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
-
-            round_entity = await self._uow.rounds.find_by_id(match.round_id)
-            if not round_entity:
-                raise RoundNotFoundError("La ronda asociada no existe")
-
-            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
-            if not competition:
-                raise CompetitionNotFoundError("La competicion asociada no existe")
-            # Con lo ya leído: quien juega en el partido ya está (cada anotación
-            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
-            dentro = (
-                quien is None
-                or quien in match.get_all_player_ids()
-                or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
-            )
+        match, round_entity, competition, dentro = await self._lee_partido(
+            match_id_str, quien, es_admin
+        )
         # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
         if not dentro and quien is not None:
             await exigir_la_partida(
                 competition.id, quien, match.get_all_player_ids(), self._eventos
             )
         async with self._uow:
-            hole_scores = await self._uow.hole_scores.find_by_match(match_id)
+            hole_scores = await self._uow.hole_scores.find_by_match(match.id)
             user_names = await self._resolve_user_names(
                 match.get_all_player_ids(), competition.id, competition.visibility
             )
 
             # Cargar golf course para obtener holes y nombre
-            golf_course_name = ""
-            holes_dto: list[HoleInfoDTO] = []
-            golf_course = None
-            if self._gc_repo:
-                golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-                if golf_course:
-                    golf_course_name = golf_course.name
-                    holes_dto = _hole_card_dto(golf_course.reference_card)
-
-            round_info = RoundInfoDTO(
-                id=str(round_entity.id),
-                date=str(round_entity.round_date) if round_entity.round_date else "",
-                session_type=round_entity.session_type.value if round_entity.session_type else "",
-                golf_course_name=golf_course_name,
-                golf_course_id=round_entity.golf_course_id.value,
-                golf_course_country_code=golf_course.country_code.value if golf_course else None,
+            golf_course = (
+                await self._gc_repo.find_by_id(round_entity.golf_course_id)
+                if self._gc_repo
+                else None
             )
+            holes_dto = _hole_card_dto(golf_course.reference_card) if golf_course else []
+            round_info = _round_info(round_entity, golf_course)
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
             players_dto = self._build_players(match, user_names, golf_course)
@@ -161,14 +135,7 @@ class GetScoringViewUseCase:
             # concesion o el walkover, no `decided_result`, que es el de los
             # hoyos (BE #384)
             cerrado_sin_jugar = match.closing_result
-            if cerrado_sin_jugar is not None:
-                decided_result = DecidedResultDTO(
-                    winner=cerrado_sin_jugar["winner"], score=cerrado_sin_jugar["score"]
-                )
-            elif match.decided_result:
-                decided_result = DecidedResultDTO(**match.decided_result)
-            else:
-                decided_result = None
+            decided_result = _resultado_decidido(match)
             # Hoy son enfrentamientos entre dos equipos: un torneo de stroke
             # play tendrá los suyos (#251)
             ryder_cup = competition.require_ryder_cup()
@@ -207,6 +174,37 @@ class GetScoringViewUseCase:
                 ),
             )
         return vista
+
+    async def _lee_partido(
+        self, match_id_str: str, quien: UserId | None, es_admin: bool
+    ) -> tuple[Match, Round, Competition, bool]:
+        """
+        El partido, su ronda, su competición y si quien mira está dentro.
+
+        Raises:
+            MatchNotFoundError, RoundNotFoundError, CompetitionNotFoundError
+        """
+        async with self._uow:
+            match_id = MatchId(match_id_str)
+            match = await self._uow.matches.find_by_id(match_id)
+            if not match:
+                raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
+
+            round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            if not round_entity:
+                raise RoundNotFoundError("La ronda asociada no existe")
+
+            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+            if not competition:
+                raise CompetitionNotFoundError("La competicion asociada no existe")
+            # Con lo ya leído: quien juega en el partido ya está (cada anotación
+            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
+            dentro = (
+                quien is None
+                or quien in match.get_all_player_ids()
+                or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
+            )
+        return match, round_entity, competition, dentro
 
     def _build_marker_assignments(
         self, match: Match, user_names: dict[UserId, str]
@@ -399,3 +397,31 @@ class GetScoringViewUseCase:
                 visibility.shows_real_name(enrollment.use_real_name if enrollment else True)
             )
         return names
+
+
+def _round_info(round_entity: Round, golf_course: GolfCourse | None) -> RoundInfoDTO:
+    """La ronda del partido, con el nombre y el país de su campo si se conoce."""
+    return RoundInfoDTO(
+        id=str(round_entity.id),
+        date=str(round_entity.round_date) if round_entity.round_date else "",
+        session_type=round_entity.session_type.value if round_entity.session_type else "",
+        golf_course_name=golf_course.name if golf_course else "",
+        golf_course_id=round_entity.golf_course_id.value,
+        golf_course_country_code=golf_course.country_code.value if golf_course else None,
+    )
+
+
+def _resultado_decidido(match: Match) -> DecidedResultDTO | None:
+    """
+    Un partido concedido o ganado por walkover también está decidido, y la
+    pantalla tiene que saber quién ganó: ese resultado lo guarda la concesión o
+    el walkover, no `decided_result`, que es el de los hoyos (BE #384).
+    """
+    cerrado_sin_jugar = match.closing_result
+    if cerrado_sin_jugar is not None:
+        return DecidedResultDTO(
+            winner=cerrado_sin_jugar["winner"], score=cerrado_sin_jugar["score"]
+        )
+    if match.decided_result:
+        return DecidedResultDTO(**match.decided_result)
+    return None

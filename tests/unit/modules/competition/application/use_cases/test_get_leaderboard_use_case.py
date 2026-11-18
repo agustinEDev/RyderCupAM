@@ -12,10 +12,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -31,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 @pytest.fixture
@@ -443,3 +446,131 @@ class TestLeaderboardInAPublicCompetition:
         assert user_names[str(player_a.user_id)] == "Nombre Legal"
         # Sin inscripción también: la regla es de la competición, no de cada uno
         assert user_names[str(player_b.user_id)] == "Nombre Legal"
+
+
+async def _anota(uow, match, jugador, team, hoyo, golpes):
+    """Un hoyo validado por los dos."""
+    fila = HoleScore.create(
+        match_id=match.id,
+        hole_number=hoyo,
+        player_user_id=jugador.user_id,
+        team=team,
+        strokes_received=0,
+    )
+    fila.set_own_score(golpes)
+    fila.set_marker_score(golpes)
+    fila.recalculate_validation()
+    await uow.hole_scores.add(fila)
+
+
+async def _partido_de_individuales(uow):
+    """El partido de `_setup_scheduled_match`, con su ronda en individuales de verdad."""
+    competition_id, player_a, player_b = await _setup_scheduled_match(uow)
+    [ronda] = uow._rounds._rounds.values()
+    ronda.match_format = MatchFormat.SINGLES
+    [match] = await uow.matches.find_by_round(ronda.id)
+    return competition_id, match, player_a, player_b
+
+
+class TestLeaderboardCharacterization:
+    """Caracteriza las ramas del cálculo de la clasificación (re-auditoría F-05)."""
+
+    @pytest.mark.asyncio
+    async def test_execute_competicion_inexistente_lanza_not_found(self, uow, user_repo):
+        """
+        Given: Un ID de competición que no existe
+        When: Se pide la clasificación
+        Then: CompetitionNotFoundError con el ID en el mensaje
+        """
+        fake_id = str(CompetitionId.generate())
+
+        with pytest.raises(CompetitionNotFoundError) as exc_info:
+            await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(fake_id)
+
+        assert fake_id in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_execute_partido_en_juego_devuelve_como_va(self, uow, user_repo):
+        """
+        Given: Un partido en juego en el que A ganó el hoyo 1 y B el 2 y el 3
+        When: Se pide la clasificación
+        Then: El partido dice cómo va (1UP de B tras 3 hoyos), sin resultado ni puntos
+        """
+        competition_id, match, player_a, player_b = await _partido_de_individuales(uow)
+        match.start()
+        for hoyo, (golpes_a, golpes_b) in enumerate([(4, 5), (5, 4), (6, 4)], start=1):
+            await _anota(uow, match, player_a, "A", hoyo, golpes_a)
+            await _anota(uow, match, player_b, "B", hoyo, golpes_b)
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        [partido] = view.matches
+        assert (partido.standing, partido.leading_team, partido.current_hole) == ("1UP", "B", 3)
+        assert partido.result is None
+        assert (view.team_a_points, view.team_b_points) == (0.0, 0.0)
+        assert partido.match_format == "SINGLES"
+        assert partido.status == "IN_PROGRESS"
+
+    @pytest.mark.asyncio
+    async def test_execute_acabado_con_ganador_guardado_suma_sus_puntos(self, uow, user_repo):
+        """
+        Given: Un partido acabado con {"winner": "A", "score": "3&2"} y sin hoyos
+        When: Se pide la clasificación
+        Then: Un punto para A y ese resultado en el partido
+        """
+        competition_id, match, _a, _b = await _partido_de_individuales(uow)
+        match.start()
+        match.complete({"winner": "A", "score": "3&2"})
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        [partido] = view.matches
+        assert (view.team_a_points, view.team_b_points) == (1.0, 0.0)
+        assert (partido.result.winner, partido.result.score) == ("A", "3&2")
+        assert partido.standing is None
+
+    @pytest.mark.asyncio
+    async def test_execute_acabado_sin_ganador_valido_ni_hoyos_cuenta_empate(self, uow, user_repo):
+        """
+        Given: Un partido acabado cuyo resultado guardado no trae un ganador válido, sin hoyos
+        When: Se pide la clasificación
+        Then: Medio punto para cada equipo, y el resultado guardado tal cual
+        """
+        competition_id, match, _a, _b = await _partido_de_individuales(uow)
+        match.start()
+        match.complete({"winner": "X", "score": "raro"})
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        [partido] = view.matches
+        assert (view.team_a_points, view.team_b_points) == (0.5, 0.5)
+        assert (partido.result.winner, partido.result.score) == ("X", "raro")
+
+    @pytest.mark.asyncio
+    async def test_execute_acabado_sin_ganador_valido_con_hoyos_cuenta_los_hoyos(
+        self, uow, user_repo
+    ):
+        """
+        Given: Un partido acabado sin ganador válido guardado y con un hoyo ganado por B
+        When: Se pide la clasificación
+        Then: El punto es de B, y el resultado sale de los hoyos
+        """
+        competition_id, match, player_a, player_b = await _partido_de_individuales(uow)
+        match.start()
+        await _anota(uow, match, player_a, "A", 1, 5)
+        await _anota(uow, match, player_b, "B", 1, 4)
+        match.complete({"winner": None})
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        [partido] = view.matches
+        assert (view.team_a_points, view.team_b_points) == (0.0, 1.0)
+        assert partido.result.winner == "B"

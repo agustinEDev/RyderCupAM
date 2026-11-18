@@ -5,8 +5,11 @@ from dataclasses import dataclass, field
 from datetime import date as date_type
 from decimal import Decimal
 
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -17,6 +20,7 @@ from src.modules.competition.domain.value_objects.estado_de_tarjeta import Estad
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
@@ -624,26 +628,8 @@ class GetPlayerStatsUseCase:
             }
             strokes = await uow.golpes_de_partida.de_las_partidas([g.id for g in groups])
 
-        validated: dict[PartidaId, list[_ValidatedHole]] = {}
-        for stroke in strokes:
-            if stroke.user_id == user_id and stroke.validado:
-                validated.setdefault(stroke.partida_id, []).append(
-                    _ValidatedHole(stroke.hoyo, stroke.golpes_validados)
-                )
-
-        countable = []
-        for group in groups:
-            round_ = rounds.get(group.round_id)
-            competition = competitions.get(group.competition_id)
-            if round_ is None or competition is None:
-                continue
-            if competition.status != CompetitionStatus.COMPLETED:
-                continue
-            if golf_course_id is not None and round_.golf_course_id != golf_course_id:
-                continue
-            countable.append((group, round_, competition))
-        countable.sort(key=lambda item: item[1].round_date, reverse=True)
-        countable = countable[:MAX_ROUNDS_AGGREGATED]
+        validated = _validated_by_group(strokes, user_id)
+        countable = _countable_groups(groups, rounds, competitions, golf_course_id)
         if not countable:
             return []
 
@@ -655,6 +641,17 @@ class GetPlayerStatsUseCase:
                 )
             }
 
+        return self._tournament_rounds(countable, courses, validated, user_id, profile_handicap)
+
+    def _tournament_rounds(
+        self,
+        countable: list[tuple[Partida, Round, Competition]],
+        courses: dict[GolfCourseId, GolfCourse],
+        validated: dict[PartidaId, list[_ValidatedHole]],
+        user_id: UserId,
+        profile_handicap: float | None,
+    ) -> list[_ComputableRound]:
+        """Cada grupo contable convertido en vuelta, si su campo y su foto existen."""
         results = []
         for group, round_, competition in countable:
             course = courses.get(round_.golf_course_id)
@@ -991,3 +988,38 @@ class GetPlayerStatsUseCase:
     @staticmethod
     def _as_float(value: Decimal | None) -> float | None:
         return float(value) if value is not None else None
+
+
+def _validated_by_group(
+    strokes: list[GolpeDePartida], user_id: UserId
+) -> dict[PartidaId, list[_ValidatedHole]]:
+    """Los hoyos VALIDADOS del jugador, por grupo de salida."""
+    validated: dict[PartidaId, list[_ValidatedHole]] = {}
+    for stroke in strokes:
+        if stroke.user_id == user_id and stroke.validado:
+            validated.setdefault(stroke.partida_id, []).append(
+                _ValidatedHole(stroke.hoyo, stroke.golpes_validados)
+            )
+    return validated
+
+
+def _countable_groups(
+    groups: list[Partida],
+    rounds: dict[RoundId, Round],
+    competitions: dict[CompetitionId, Competition],
+    golf_course_id: GolfCourseId | None,
+) -> list[tuple[Partida, Round, Competition]]:
+    """Los grupos de un torneo cerrado (y del campo pedido), los más recientes primero."""
+    countable = []
+    for group in groups:
+        round_ = rounds.get(group.round_id)
+        competition = competitions.get(group.competition_id)
+        if round_ is None or competition is None:
+            continue
+        if competition.status != CompetitionStatus.COMPLETED:
+            continue
+        if golf_course_id is not None and round_.golf_course_id != golf_course_id:
+            continue
+        countable.append((group, round_, competition))
+    countable.sort(key=lambda item: item[1].round_date, reverse=True)
+    return countable[:MAX_ROUNDS_AGGREGATED]
