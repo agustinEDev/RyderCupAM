@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.74.0] - 2026-11-18
+
+**Seguridad de la auditoría del 18 nov: la credencial del dueño de la base fuera de la API y
+los hallazgos bajos del back** (#906). Para el jugador no cambia nada, salvo que una foto ya no
+guarda comentarios ni metadatos. Sin migraciones. Va con el frontend 2.85.0: el único cambio
+de contrato son los topes de `page` (1.000) y `offset` (100.000), lejos de lo que pide el front.
+Probado en el Kind por HTTP real (registro, homónimos, topes, foto con perfil P3, cambio de
+contraseña) y con la imagen de producción (el proceso de uvicorn ya no tiene la credencial).
+
+### Security
+
+- **La credencial del dueño de la base (`MIGRATIONS_DATABASE_URL`) ya no llega al proceso
+  de la API** (DB-R3-01): `entrypoint.sh` migra con ella y arranca uvicorn con `env -u`. Si
+  aun así llega (otro comando de arranque), la app la borra, deja un evento HIGH sin el valor
+  y arranca igual; el log de seguridad se vacía si el arranque falla.
+- **Las contraseñas de los roles de la base, en SCRAM** (DB-R3-02, hecho a mano en
+  producción); el script de roles y el manual exigen `SET password_encryption`.
+- **Sentry no recibe el cuerpo de ninguna petición** (S-01): `max_request_body_size="never"`.
+  Los tests ya no pueden hablar con el Sentry de verdad (`SENTRY_DSN` vacía en `conftest.py`).
+- **Las fotos se guardan sin comentario, EXIF ni perfil de color** (S-09), con los colores
+  pasados antes a sRGB (las de iPhone en Display P3 no se destiñen).
+- **Los logs apuntan el id del usuario, no su nombre** (Q-BE-08), y los errores de la RFEG ya
+  no llevan la URL de la búsqueda; un vigilante revisa todo `src/`.
+- **gitleaks revisa todo el historial y los merges** (INF-R3-02) y caza URLs de base de datos
+  con contraseña (INF-R3-03); lo ya revisado va huella a huella en `.gitleaksignore`.
+- El cambio de contraseña o correo apunta la IP con la misma regla que el resto (S-15).
+
+### Fixed
+
+- **Topes de página (1.000) y de offset (100.000)** en todas las listas (S-11); por encima, 422.
+- **Buscar por nombre completo con dos personas que se llaman igual ya no da 500** (S-16):
+  responde «no encontrado», en una sola consulta y sin importar los espacios repetidos.
+
 ## [2.73.0] - 2026-11-18
 
 **Calidad de la re-auditoría, segunda tanda: las funciones más complejas partidas, un solo
