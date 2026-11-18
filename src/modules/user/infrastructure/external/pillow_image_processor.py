@@ -62,6 +62,8 @@ MAX_INPUT_PIXELS = 25_000_000
 
 # El espacio de color de la salida: el JPEG va sin perfil y sin perfil se lee como sRGB
 _SRGB = ImageCms.createProfile("sRGB")
+# Los modos que la conversión de color lee tal cual (el resto se pasa antes a RGB)
+_MODOS_CON_PERFIL = frozenset({"RGB", "L"})
 
 
 class PillowImageProcessor(IImageProcessor):
@@ -199,12 +201,17 @@ class PillowImageProcessor(IImageProcessor):
         """
         perfil = image.info.get("icc_profile")
         rgb = image.convert("RGB")
-        if not perfil:
+        # Solo un perfil binario: un PNG puede traer un TEXTO llamado así (str), que no es
+        # un perfil y rompía la lectura (CodeRabbit)
+        if not isinstance(perfil, bytes) or not perfil:
             return rgb
+        # Con el modo original si el perfil lo entiende (grises «L», o RGB): pasar antes un
+        # gris a RGB hacía que LittleCMS rechazara su perfil de grises (CodeRabbit)
+        entrada = image if image.mode in _MODOS_CON_PERFIL else rgb
         try:
             origen = ImageCms.ImageCmsProfile(io.BytesIO(perfil))
-            convertida = ImageCms.profileToProfile(rgb, origen, _SRGB, outputMode="RGB")
-        except (ImageCms.PyCMSError, OSError, ValueError):
+            convertida = ImageCms.profileToProfile(entrada, origen, _SRGB, outputMode="RGB")
+        except (ImageCms.PyCMSError, OSError, ValueError, TypeError):
             return rgb
         return convertida if convertida is not None else rgb
 
