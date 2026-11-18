@@ -155,6 +155,19 @@ from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
 )
 
 
+def _vacia_el_log_de_seguridad() -> None:
+    """
+    Escribe lo que el log de seguridad tenga en cola cuando el arranque falla.
+
+    Ese log escribe desde un hilo y su vaciado normal está tras el `yield` del lifespan,
+    al que un arranque fallido no llega: el evento de la credencial del dueño, que se
+    registra justo antes de estas comprobaciones, podía perderse (CodeRabbit, #906).
+    Nunca tapa el error del arranque.
+    """
+    with contextlib.suppress(Exception):
+        get_security_logger().para()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signature
     """
@@ -182,6 +195,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         comprueba_la_configuracion_de_seguridad(os.environ)
     except RuntimeError:
         logging.getLogger(__name__).exception("Insecure configuration: not starting")
+        _vacia_el_log_de_seguridad()
         raise
 
     # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
@@ -190,6 +204,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         comprueba_el_envio_de_correo(os.environ)
     except RuntimeError:
         logging.getLogger(__name__).exception("Invalid email configuration: not starting")
+        _vacia_el_log_de_seguridad()
         raise
 
     # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)

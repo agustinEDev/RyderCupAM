@@ -320,3 +320,33 @@ def test_e7_a_failing_notice_does_not_stop_the_startup(caplog):
     assert entorno == {}
     assert "MIGRATIONS_DATABASE_URL" in caplog.text
     assert "clave-del-dueno" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_e11_a_failed_startup_drains_the_security_log(monkeypatch):
+    """
+    Given: El arranque falla en la comprobación de seguridad justo después del aviso
+    When: Arranca la app (su lifespan)
+    Then: El log de seguridad se vacía antes de salir: escribe desde un hilo y su
+          vaciado normal está tras el `yield`, al que no se llega (CodeRabbit)
+    """
+    import main
+    from src.shared.infrastructure.logging import security_logger
+
+    vaciados = []
+
+    def para(registro):
+        vaciados.append(registro)
+
+    monkeypatch.setattr(security_logger.SecurityLogger, "para", para)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("SECRET_KEY", CLAVE)
+    monkeypatch.setenv("MIGRATIONS_DATABASE_URL", DUENO)
+    monkeypatch.setattr(main.settings, "SENTRY_DSN", "")
+
+    with pytest.raises(RuntimeError, match="TESTING"):
+        async with main.lifespan(main.app):
+            pass
+
+    assert len(vaciados) == 1
