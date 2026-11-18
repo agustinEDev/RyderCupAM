@@ -60,6 +60,7 @@ from src.modules.competition.domain.services.competition_policy import (
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.shared.domain.services.texto_sin_enlaces import contiene_enlace
+from src.shared.infrastructure.http.paginacion import parametro_page
 
 
 def _validate_status_filter(status_filter: str | None) -> str | None:
@@ -262,7 +263,7 @@ async def list_my_invitations(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListMyInvitationsUseCase = Depends(get_list_my_invitations_use_case),
     status_filter: str | None = Query(None, alias="status"),
-    page: int = Query(1, ge=1),
+    page: int = parametro_page(),
     limit: int = Query(20, ge=1, le=100),
 ):
     validated_status = _validate_status_filter(status_filter)
@@ -343,7 +344,7 @@ async def list_competition_invitations(
         get_list_competition_invitations_use_case
     ),
     status_filter: str | None = Query(None, alias="status"),
-    page: int = Query(1, ge=1),
+    page: int = parametro_page(),
     limit: int = Query(20, ge=1, le=100),
 ):
     validated_status = _validate_status_filter(status_filter)
