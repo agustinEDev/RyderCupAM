@@ -4,7 +4,7 @@ Los logs no llevan el nombre completo de nadie (Q-BE-08, auditoría del 18 nov 2
 Los correos se enmascaran, pero había 7 logs con `get_full_name()`. Se apunta el id del
 usuario: sirve igual para seguir el caso y no es un dato personal a la vista. Vigila todo
 `src/`: cualquier `logger.<nivel>(...)` (o `logging.<nivel>`) con un argumento que llame
-a `get_full_name()`, o a `full_name`, falla.
+a `get_full_name()`, o use `full_name` (atributo o variable), falla.
 """
 
 import ast
@@ -16,7 +16,11 @@ NOMBRES = {"get_full_name", "full_name"}
 
 
 def _llama_a_un_nombre(nodo: ast.AST) -> bool:
-    return any(isinstance(h, ast.Attribute) and h.attr in NOMBRES for h in ast.walk(nodo))
+    return any(
+        (isinstance(h, ast.Attribute) and h.attr in NOMBRES)
+        or (isinstance(h, ast.Name) and h.id in NOMBRES)
+        for h in ast.walk(nodo)
+    )
 
 
 def _logs_con_nombres() -> list[str]:
