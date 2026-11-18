@@ -1078,6 +1078,11 @@ class OwnerCredentialInAppEnvironmentAuditEvent(SecurityAuditEvent):
             raise ValueError("variable es requerido en OwnerCredentialInAppEnvironmentAuditEvent")
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
 
+    @property
+    def is_failure(self) -> bool:
+        """Siempre es un fallo de configuración: el log lo escribe como WARNING."""
+        return True
+
     def resumen(self, user_info: str) -> str:
         """La línea del log."""
         return f"OWNER DB CREDENTIAL IN THE API ENVIRONMENT | {self.variable} removed at startup"

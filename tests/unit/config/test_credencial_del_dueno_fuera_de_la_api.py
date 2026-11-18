@@ -223,6 +223,8 @@ def test_e7_the_event_is_high_and_does_not_carry_the_value():
     evento = OwnerCredentialInAppEnvironmentAuditEvent.al_arrancar("MIGRATIONS_DATABASE_URL")
 
     assert evento.severity is SecuritySeverity.HIGH
+    # Algo salió mal (alguien se saltó el entrypoint): el log lo escribe como WARNING
+    assert evento.is_failure is True
     datos = evento.to_dict()
     assert datos["variable"] == "MIGRATIONS_DATABASE_URL"
     assert "clave-del-dueno" not in str(datos)
