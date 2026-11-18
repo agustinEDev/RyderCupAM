@@ -176,6 +176,7 @@ def test_b7_3_the_rule_catches_a_real_database_url():
         "postgresql://rydercup_app:Zk81hQ2pLmW@dpg-abc-a.frankfurt-postgres.render.com/db",
         "postgres://dueno:s3cr3t-Larga@db.example.org:5432/rydercup",
         "postgresql+asyncpg://u:Abc123xyz!@10.0.0.5/base",
+        "redis://:Zk81hQ2pLmW@cache.example.org:6379/0",  # Redis, sin usuario (revisión)
     ):
         assert _salta(regla, f'DATABASE_URL = "{url}"'), url
 

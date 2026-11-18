@@ -6,6 +6,8 @@
 # - logs/security_audit.log.4 y .5 (enero 2026): logs de pruebas locales subidos por
 #   error y borrados; solo correos de example.com/test.com y la IP 127.0.0.1.
 # Un hallazgo nuevo NO se añade aquí sin rotar antes el secreto.
+# La huella lleva la regla, y gitleaks 8.30 da a la clave de Mailgun la regla
+# mailgun-signing-key: van también, para que subir GITLEAKS_VERSION no rompa el CI.
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.4:generic-api-key:10
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.4:generic-api-key:12
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.4:generic-api-key:3
@@ -18,3 +20,5 @@
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:37
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:44
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:47
+70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:mailgun-signing-key:43
+9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:mailgun-signing-key:47

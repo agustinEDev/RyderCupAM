@@ -49,7 +49,7 @@ useDefault = true
 [[rules]]
   id = "database-url-with-password"
   description = "URL de base de datos con contraseña"
-  regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?)(?:\+[a-z0-9]+)?://[^:@/\s'"`]+:([^@/\s'"`]+)@[^/\s'"`]+'''
+  regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?)(?:\+[a-z0-9]+)?://[^:@/\s'"`]*:([^@/\s'"`]+)@[^/\s'"`]+'''
   secretGroup = 1
   keywords = ["postgres", "mysql", "mariadb", "mongodb", "redis", "amqp"]
 

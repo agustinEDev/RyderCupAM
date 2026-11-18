@@ -7,6 +7,10 @@ uvicorn sin ella; esto es la segunda capa, por si alguien se salta el entrypoint
 comando de arranque en Render): la app la borra de su entorno al arrancar y lo avisa.
 Arranca igualmente (Agustín, 18 nov): una configuración rara no tira la API.
 
+Límite: desde Python solo se quita del entorno del proceso (`os.environ`, `getenv`);
+`/proc/<pid>/environ` sigue mostrando el entorno con el que arrancó. Por eso la capa que
+cuenta es `env -u` en el entrypoint, y esta avisa de que alguien se la saltó.
+
 En desarrollo el `.env` local puede tenerla (`load_dotenv` la mete en el proceso): se
 borra con un aviso normal, sin evento de seguridad. Alembic la lee por su cuenta.
 """
