@@ -40,3 +40,13 @@ async def test_one_active_and_one_deactivated_give_the_active_one():
     encontrado = await repo.find_by_full_name("luis gil")
 
     assert encontrado is not None and encontrado.id == activa.id
+
+
+async def test_repeated_spaces_are_normalised_on_both_sides():
+    """Los espacios repetidos no cuentan, ni en lo guardado ni en lo buscado (CodeRabbit)."""
+    repo = InMemoryUserRepository()
+    ana = _usuario("Ana  María", "López", "am@example.com")
+    await repo.save(ana)
+
+    assert (await repo.find_by_full_name("Ana María López")).id == ana.id
+    assert (await repo.find_by_full_name("ana   maría  lópez")).id == ana.id

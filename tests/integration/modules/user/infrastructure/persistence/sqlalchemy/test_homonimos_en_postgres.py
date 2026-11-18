@@ -54,8 +54,21 @@ async def test_b4_2_two_active_homonyms_give_not_found(db_session):
 
 
 async def test_b4_3_no_match_gives_not_found(db_session):
-    """Nadie con ese nombre: None, como antes."""
+    """Nadie con ese nombre, aunque haya casi iguales (CodeRabbit): None, como antes."""
+    await _guarda(db_session, "Nadie", "Ruiz", "nadie.ruiz@example.com")
+    await _guarda(db_session, "Ana", "Nunca", "ana.nunca@example.com")
+
     assert await SQLAlchemyUserRepository(db_session).find_by_full_name("Nadie Nunca") is None
+
+
+@pytest.mark.parametrize(("nombre", "apellidos"), [("Ana", "María López"), ("Ana María", "López")])
+async def test_b4_4_each_split_matches_on_its_own(db_session, nombre, apellidos):
+    """Cada forma de partir «Ana María López» encuentra a su persona si está sola."""
+    persona = await _guarda(db_session, nombre, apellidos, "ana.sola@example.com")
+
+    encontrado = await SQLAlchemyUserRepository(db_session).find_by_full_name("Ana María López")
+
+    assert encontrado is not None and encontrado.id == persona.id
 
 
 async def test_b4_4_two_people_matching_different_splits_give_not_found(db_session):
@@ -76,3 +89,12 @@ async def test_b4_5_a_deactivated_homonym_does_not_count(db_session):
     encontrado = await SQLAlchemyUserRepository(db_session).find_by_full_name("Luis Gil")
 
     assert encontrado is not None and encontrado.id == activa.id
+
+
+async def test_b4_6_repeated_spaces_do_not_matter(db_session):
+    """Espacios repetidos en lo guardado o en lo buscado no cuentan, como en memoria."""
+    ana = await _guarda(db_session, "Ana  María", "López", "ana.espacios@example.com")
+    repositorio = SQLAlchemyUserRepository(db_session)
+
+    assert (await repositorio.find_by_full_name("Ana María López")).id == ana.id
+    assert (await repositorio.find_by_full_name("ana   maría  lópez")).id == ana.id

@@ -144,12 +144,17 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
         Con dos o más que se llamen igual, None, como el real (S-16).
         """
-        full_name_lower = " ".join(full_name.lower().split())
+
+        def _normaliza(texto: str) -> str:
+            # Sin mayúsculas ni espacios repetidos, a los dos lados (CodeRabbit)
+            return " ".join(texto.lower().split())
+
+        buscado = _normaliza(full_name)
         coinciden = [
             user
             for user in self._users.values()
             # Solo activas, como el repositorio real (F7)
-            if user.is_active and f"{user.first_name} {user.last_name}".lower() == full_name_lower
+            if user.is_active and _normaliza(f"{user.first_name} {user.last_name}") == buscado
         ]
         return coinciden[0] if len(coinciden) == 1 else None
 
