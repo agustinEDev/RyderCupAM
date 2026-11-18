@@ -300,3 +300,23 @@ async def test_e10_the_real_startup_removes_it_and_reports_it(monkeypatch):
 
     assert "MIGRATIONS_DATABASE_URL" not in os.environ
     assert [type(e) for e in registrados] == [OwnerCredentialInAppEnvironmentAuditEvent]
+
+
+def test_e7_a_failing_notice_does_not_stop_the_startup(caplog):
+    """
+    Given: Fuera de desarrollo con la variable, y el aviso falla (log de seguridad roto)
+    When: Se retira
+    Then: Se retira igual, no lanza (la API arranca, decisión del 18 nov) y queda en el log
+    """
+    entorno = {"MIGRATIONS_DATABASE_URL": DUENO}
+
+    def avisa_roto():
+        raise OSError("sin permiso para escribir el log")
+
+    with caplog.at_level(logging.ERROR):
+        retirada = retira_la_credencial_del_dueno(entorno, en_desarrollo=False, avisa=avisa_roto)
+
+    assert retirada is True
+    assert entorno == {}
+    assert "MIGRATIONS_DATABASE_URL" in caplog.text
+    assert "clave-del-dueno" not in caplog.text

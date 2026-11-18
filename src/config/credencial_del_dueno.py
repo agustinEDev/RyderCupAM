@@ -46,7 +46,14 @@ def retira_la_credencial_del_dueno(
             VARIABLE_DE_LAS_MIGRACIONES,
         )
     else:
-        avisa()
+        # El aviso no puede tirar el arranque: la decisión es arrancar igualmente
+        try:
+            avisa()
+        except Exception:
+            logger.exception(
+                "%s removed from the API environment, but its security event failed",
+                VARIABLE_DE_LAS_MIGRACIONES,
+            )
     return True
 
 
