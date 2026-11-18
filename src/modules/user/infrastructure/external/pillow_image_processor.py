@@ -105,6 +105,11 @@ class PillowImageProcessor(IImageProcessor):
 
     @staticmethod
     def _to_jpeg(image: Image.Image) -> bytes:
+        # Sin nada de la foto original más que los píxeles (S-09): Pillow vuelve a
+        # escribir el comentario, el EXIF o el perfil de color que queden en `info`, y
+        # el comentario sobrevivía a la recodificación (cualquiera escondía ahí lo que
+        # quisiera en una foto que se sirve a otros)
+        image.info.clear()
         output = io.BytesIO()
         image.save(output, "JPEG", quality=AVATAR_JPEG_QUALITY, optimize=True)
         return output.getvalue()
