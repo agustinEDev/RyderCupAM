@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.73.0] - 2026-11-18
+
+**Calidad de la re-auditoría, segunda tanda: las funciones más complejas partidas, un solo
+flujo de invitaciones y la unidad de trabajo que deshace si falla al guardar** (#903;
+merge-back de la 2.72.0 en #902). Para el jugador no cambia nada. Sin migraciones. Va con
+el frontend 2.85.0; no hay cambio de contrato. Probado en el Kind con la copia anonimizada
+de producción.
+
+### Changed
+
+- **Las 14 funciones con complejidad ciclomática por encima de 20 se parten** en ayudantes
+  privados con la misma firma pública (F-05): `GetScheduleUseCase.execute` pasa de 43 a 7,
+  `GetEnvelopesUseCase.execute` de 29 a 6, la clasificación de 23 a 9 y la vista de
+  anotación de 21 a 11. Antes se escribieron tests de caracterización, que pasan antes y
+  después. ruff `C901` queda activo con `max-complexity = 15`.
+- **Invitar por correo y por id de usuario comparten un solo flujo**
+  (`application/services/envio_de_invitaciones.py`, F-09), con el mismo orden de
+  comprobaciones, errores, topes por hora, avisos y correos. 365 líneas menos.
+- **Fuera cinco `commit` explícitos redundantes** en los casos de uso de grupos de salida
+  (F-11): ya los hace la unidad de trabajo al salir.
+
+### Fixed
+
+- **La unidad de trabajo de competiciones y la social deshacen si el `commit` de salida
+  falla** (una restricción única, una conexión caída, una cancelación), como ya hacía la de
+  usuarios (#752). Si también falla deshacer, se lanza el error del `commit`, no el del
+  rollback.
+- **Una ronda borrada mientras se esperaba su bloqueo responde «no encontrada»** en vez de
+  seguir con una ronda que ya no existe.
+
 ## [2.72.0] - 2026-11-17
 
 **Calidad de la re-auditoría: fuera los eventos de dominio que nadie leía, un solo reloj en
