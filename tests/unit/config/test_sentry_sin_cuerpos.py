@@ -45,6 +45,10 @@ class _Transporte(sentry_sdk.transport.Transport):
 def sentry_de_verdad(monkeypatch):
     """Sentry arrancado como en producción, pero sin salir a la red."""
     opciones: dict = {}
+    # Nunca el Sentry de verdad: con dsn=None el SDK lee SENTRY_DSN del entorno, y el
+    # .env local lleva la de producción (18 nov 2026: los tests siguientes le mandaron
+    # sus errores de prueba)
+    monkeypatch.setenv("SENTRY_DSN", "")
     # sentry_config.sentry_sdk es este mismo módulo: guardar el init de verdad antes
     init_de_verdad = sentry_sdk.init
     monkeypatch.setattr(sentry_config.settings, "SENTRY_DSN", "https://k@o0.ingest.example/1")
@@ -55,7 +59,10 @@ def sentry_de_verdad(monkeypatch):
     _Transporte.enviados = []
     init_de_verdad(**{**opciones, "transport": _Transporte})
     yield _Transporte.enviados
-    init_de_verdad(dsn=None)
+    # Apagado de verdad: dsn vacío (no None, que leería SENTRY_DSN)
+    init_de_verdad(dsn="")
+    # Sin transporte no sale nada a la red
+    assert sentry_sdk.get_client().transport is None
 
 
 def _app() -> FastAPI:
@@ -157,3 +164,16 @@ def test_b1_4_the_rest_of_the_request_is_kept(sentry_de_verdad):
     error = next(e for e in sentry_de_verdad if e.get("type") != "transaction")
     assert error["request"]["method"] == "PATCH"
     assert error["request"]["url"].endswith("/api/v1/users/security")
+
+
+def test_the_test_suite_never_has_the_real_sentry_dsn():
+    """
+    Given: Los tests (conftest.py)
+    When: Se mira SENTRY_DSN y el cliente de Sentry fuera de este fichero
+    Then: Vacía y el cliente sin transporte: un init(dsn=None) no encontraría la de producción
+    """
+    import os
+
+    assert os.environ.get("SENTRY_DSN") == ""
+    # Sin transporte no sale nada a la red
+    assert sentry_sdk.get_client().transport is None
