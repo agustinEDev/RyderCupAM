@@ -450,7 +450,9 @@ async def update_security(
     try:
         # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-        request.ip_address = get_trusted_client_ip(http_request, settings.TRUSTED_PROXIES)
+        request.ip_address = get_trusted_client_ip(
+            http_request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        )
         request.user_agent = get_user_agent(http_request)
 
         # El dispositivo del token, ya comprobado; nunca el que mande el cliente (B-05)
