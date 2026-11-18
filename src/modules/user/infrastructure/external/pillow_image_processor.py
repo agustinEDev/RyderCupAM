@@ -12,7 +12,7 @@ import io
 import math
 from collections.abc import Callable
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
@@ -59,6 +59,9 @@ MAX_JPEG_INPUT_PIXELS = 50_000_000
 # copias. 25 MP son las fotos de 24 MP de cámara (un iPhone de 24 MP guarda
 # 5712x4284 = 24,47 MP), que tienen que seguir entrando (SB-01).
 MAX_INPUT_PIXELS = 25_000_000
+
+# El espacio de color de la salida: el JPEG va sin perfil y sin perfil se lee como sRGB
+_SRGB = ImageCms.createProfile("sRGB")
 
 
 class PillowImageProcessor(IImageProcessor):
@@ -182,7 +185,28 @@ class PillowImageProcessor(IImageProcessor):
         if transposed is not None:
             image = transposed
 
-        return image.convert("RGB")
+        return self._en_srgb(image)
+
+    @staticmethod
+    def _en_srgb(image: Image.Image) -> Image.Image:
+        """
+        La imagen en RGB y con los colores en sRGB.
+
+        El JPEG de salida va sin perfil de color (`_to_jpeg`), y sin perfil se lee como
+        sRGB: una foto de iPhone en Display P3 se vería desaturada si no se convierten
+        antes los píxeles (/code-review de la PR de S-09). Un perfil que no se puede
+        aplicar (roto, o de CMYK) se ignora, como hacen los navegadores.
+        """
+        perfil = image.info.get("icc_profile")
+        rgb = image.convert("RGB")
+        if not perfil:
+            return rgb
+        try:
+            origen = ImageCms.ImageCmsProfile(io.BytesIO(perfil))
+            convertida = ImageCms.profileToProfile(rgb, origen, _SRGB, outputMode="RGB")
+        except (ImageCms.PyCMSError, OSError, ValueError):
+            return rgb
+        return convertida if convertida is not None else rgb
 
     @staticmethod
     def _decodificar_reducido(image: Image.Image, escala: float) -> None:
