@@ -173,22 +173,30 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         if len(name_parts) < self.MIN_NAME_PARTS:
             return None
 
-        # Buscar por primera coincidencia exacta de first_name + last_name
+        # Todas las cuentas activas que casan, con cualquier forma de partir el nombre.
+        # Si hay más de una, «no encontrado»: devolver una podría llevar una invitación
+        # a quien no es (S-16; antes, scalar_one_or_none daba 500 con dos iguales)
+        encontrados: dict[UserId, User] = {}
         for i in range(1, len(name_parts)):
             first_name = " ".join(name_parts[:i])
             last_name = " ".join(name_parts[i:])
 
-            statement = select(User).filter(
-                User._is_active.is_(True),
-                func.lower(User._first_name) == func.lower(first_name),
-                func.lower(User._last_name) == func.lower(last_name),
+            statement = (
+                select(User)
+                .filter(
+                    User._is_active.is_(True),
+                    func.lower(User._first_name) == func.lower(first_name),
+                    func.lower(User._last_name) == func.lower(last_name),
+                )
+                .limit(2)
             )
             result = await self._session.execute(statement)
-            user = result.scalar_one_or_none()
-            if user:
-                return user
+            for user in result.scalars().all():
+                encontrados[user.id] = user
+            if len(encontrados) > 1:
+                return None
 
-        return None
+        return next(iter(encontrados.values()), None)
 
     MIN_SEARCH_LENGTH = 2
 
