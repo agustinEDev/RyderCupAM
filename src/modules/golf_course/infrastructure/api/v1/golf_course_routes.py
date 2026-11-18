@@ -84,6 +84,7 @@ from src.modules.golf_course.application.use_cases.update_golf_course_use_case i
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
+from src.shared.infrastructure.http.paginacion import parametro_offset
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ async def list_golf_courses(
     ),
     name: str | None = Query(None, min_length=1, max_length=200, description="Partial name search"),
     limit: int | None = Query(None, ge=1, le=100, description="Maximum number of courses"),
-    offset: int = Query(0, ge=0, description="Courses to skip"),
+    offset: int = parametro_offset("Courses to skip"),
     lat: float | None = Query(None, ge=-90, le=90, description="Latitude to sort by distance from"),
     lon: float | None = Query(
         None, ge=-180, le=180, description="Longitude to sort by distance from"

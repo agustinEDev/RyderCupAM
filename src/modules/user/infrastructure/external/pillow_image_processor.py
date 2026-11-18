@@ -12,7 +12,7 @@ import io
 import math
 from collections.abc import Callable
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
@@ -60,6 +60,11 @@ MAX_JPEG_INPUT_PIXELS = 50_000_000
 # 5712x4284 = 24,47 MP), que tienen que seguir entrando (SB-01).
 MAX_INPUT_PIXELS = 25_000_000
 
+# El espacio de color de la salida: el JPEG va sin perfil y sin perfil se lee como sRGB
+_SRGB = ImageCms.createProfile("sRGB")
+# Los modos que la conversión de color lee tal cual (el resto se pasa antes a RGB)
+_MODOS_CON_PERFIL = frozenset({"RGB", "L"})
+
 
 class PillowImageProcessor(IImageProcessor):
     """Procesa imágenes de avatar con Pillow: valida formato, crop centrado + resize + compresión."""
@@ -105,6 +110,11 @@ class PillowImageProcessor(IImageProcessor):
 
     @staticmethod
     def _to_jpeg(image: Image.Image) -> bytes:
+        # Sin nada de la foto original más que los píxeles (S-09): Pillow vuelve a
+        # escribir el comentario, el EXIF o el perfil de color que queden en `info`, y
+        # el comentario sobrevivía a la recodificación (cualquiera escondía ahí lo que
+        # quisiera en una foto que se sirve a otros)
+        image.info.clear()
         output = io.BytesIO()
         image.save(output, "JPEG", quality=AVATAR_JPEG_QUALITY, optimize=True)
         return output.getvalue()
@@ -177,7 +187,33 @@ class PillowImageProcessor(IImageProcessor):
         if transposed is not None:
             image = transposed
 
-        return image.convert("RGB")
+        return self._en_srgb(image)
+
+    @staticmethod
+    def _en_srgb(image: Image.Image) -> Image.Image:
+        """
+        La imagen en RGB y con los colores en sRGB.
+
+        El JPEG de salida va sin perfil de color (`_to_jpeg`), y sin perfil se lee como
+        sRGB: una foto de iPhone en Display P3 se vería desaturada si no se convierten
+        antes los píxeles (/code-review de la PR de S-09). Un perfil que no se puede
+        aplicar (roto, o de CMYK) se ignora, como hacen los navegadores.
+        """
+        perfil = image.info.get("icc_profile")
+        rgb = image.convert("RGB")
+        # Solo un perfil binario: un PNG puede traer un TEXTO llamado así (str), que no es
+        # un perfil y rompía la lectura (CodeRabbit)
+        if not isinstance(perfil, bytes) or not perfil:
+            return rgb
+        # Con el modo original si el perfil lo entiende (grises «L», o RGB): pasar antes un
+        # gris a RGB hacía que LittleCMS rechazara su perfil de grises (CodeRabbit)
+        entrada = image if image.mode in _MODOS_CON_PERFIL else rgb
+        try:
+            origen = ImageCms.ImageCmsProfile(io.BytesIO(perfil))
+            convertida = ImageCms.profileToProfile(entrada, origen, _SRGB, outputMode="RGB")
+        except (ImageCms.PyCMSError, OSError, ValueError, TypeError):
+            return rgb
+        return convertida if convertida is not None else rgb
 
     @staticmethod
     def _decodificar_reducido(image: Image.Image, escala: float) -> None:

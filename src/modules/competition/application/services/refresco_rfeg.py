@@ -71,8 +71,8 @@ class RefrescoRfeg:
             handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
         except Exception:
             logger.warning(
-                "RFEG lookup failed for %s before using it in a competition",
-                user.get_full_name(),
+                "RFEG lookup failed for user %s before using it in a competition",
+                user.id,
                 exc_info=True,
             )
             return ResultadoRefresco.FALLIDO
@@ -85,8 +85,8 @@ class RefrescoRfeg:
             await self._user_repo.save(user)
         except Exception:
             logger.error(
-                "Failed to persist RFEG handicap for %s before using it in a competition",
-                user.get_full_name(),
+                "Failed to persist RFEG handicap for user %s before using it in a competition",
+                user.id,
                 exc_info=True,
             )
             return ResultadoRefresco.FALLIDO

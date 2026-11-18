@@ -151,9 +151,9 @@ class RegisterUserUseCase:
             except HandicapServiceError as e:
                 # No falla el registro si no se encuentra el hándicap
                 logger.warning(
-                    "No se pudo obtener hándicap inicial para %s: %s",
-                    new_user.get_full_name(),
-                    e,
+                    "No se pudo obtener hándicap inicial para el usuario %s: %s",
+                    new_user.id,
+                    type(e).__name__,
                 )
 
         # 2.6 Si no se encontró en RFEG, usar hándicap manual si fue proporcionado

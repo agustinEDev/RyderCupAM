@@ -26,6 +26,11 @@ sys.path.insert(0, str(project_root))
 # para que settings.py las cargue correctamente
 os.environ["TESTING"] = "true"
 
+# Los tests NUNCA hablan con el Sentry de verdad: vacía antes de que load_dotenv lea el
+# .env local (que lleva la de producción y no pisa una variable ya puesta). El 18 nov 2026
+# un test que apagaba Sentry con init(dsn=None) le mandó los errores de prueba de los demás
+os.environ["SENTRY_DSN"] = ""
+
 # bcrypt con 4 rondas en los tests (~5 ms por hash frente a ~200 ms con las 12 de
 # producción). Lo lee src/config/contrasenas.py al instalar el hasher; antes lo
 # decidía el dominio mirando TESTING (auditoría de arquitectura del 9 nov 2026, B2)

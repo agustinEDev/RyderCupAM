@@ -49,6 +49,7 @@ from src.modules.social.application.use_cases.set_activity_sharing_use_case impo
     SetActivitySharingUseCase,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.shared.infrastructure.http.paginacion import parametro_page
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -156,7 +157,7 @@ async def block_user(
 async def list_my_friends(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListFriendsUseCase = Depends(get_list_friends_use_case),
-    page: int = Query(1, ge=1),
+    page: int = parametro_page(),
     limit: int = Query(20, ge=1, le=100),
 ):
     return await use_case.execute(str(current_user.id), page=page, limit=limit)
@@ -172,7 +173,7 @@ async def list_my_pending_requests(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListPendingRequestsUseCase = Depends(get_list_pending_requests_use_case),
     direction: str = Query("received", pattern="^(received|sent)$"),
-    page: int = Query(1, ge=1),
+    page: int = parametro_page(),
     limit: int = Query(20, ge=1, le=100),
 ):
     return await use_case.execute(str(current_user.id), direction=direction, page=page, limit=limit)

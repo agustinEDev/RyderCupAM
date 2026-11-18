@@ -2,8 +2,13 @@
 --
 -- Lo ejecuta el DUEÑO de la base (el usuario con el que entran las migraciones), conectado
 -- a la base de la app. Se puede repetir: no falla si ya está hecho. No lleva contraseña:
--- se pone aparte, a mano (en psql, `\password rydercup_app`), y no se guarda en ningún
--- fichero.
+-- se pone aparte, a mano, y no se guarda en ningún fichero. En psql, SIEMPRE así: Render
+-- deja `password_encryption = md5` y sin el SET la contraseña se guardaría en MD5
+-- (DB-R3-02, auditoría del 18 nov 2026; vale igual para n8n_lectura y backup_ro):
+--     SET password_encryption = 'scram-sha-256';
+--     \password rydercup_app
+-- Comprobación: conectar COMO ESE ROL con `require_auth=scram-sha-256` tiene que funcionar
+-- (opción de libpq 16: con psql 15, o la imagen postgres:15, fallaría siempre).
 --
 -- Después, en Render: DATABASE_URL con rydercup_app y MIGRATIONS_DATABASE_URL con la URL
 -- de ahora (la del dueño). Guía: docs/RUNBOOK.md, «Usuario de la API sin permisos de estructura»

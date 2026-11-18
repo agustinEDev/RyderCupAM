@@ -105,16 +105,16 @@ class UpdateMultipleHandicapsUseCase:
                         # Hándicap no encontrado en RFEG (respuesta válida)
                         stats["no_handicap_found"] += 1
                         logger.info(
-                            "No se encontró hándicap en RFEG para %s",
-                            user.get_full_name(),
+                            "No se encontró hándicap en RFEG para el usuario %s",
+                            user.id,
                         )
 
                 except HandicapServiceError as e:
                     stats["errors"] += 1
                     logger.error(
-                        "Error actualizando hándicap para %s: %s",
-                        user.get_full_name(),
-                        e,
+                        "Error actualizando hándicap para el usuario %s: %s",
+                        user.id,
+                        type(e).__name__,
                     )
 
             # El context manager (__aexit__) hace commit automático al final (transacción única)

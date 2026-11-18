@@ -105,11 +105,15 @@ echo "🎯 Iniciando aplicación FastAPI en puerto ${PORT:-8000}..."
 # Sin --proxy-headers a propósito: también reescribiría la IP del cliente con
 # X-Forwarded-For, y esa se decide en la app (ADR-038, cloudflare_client_ip). El esquema
 # https tras el proxy lo pone el middleware EsquemaDelProxy (P-03, 16 nov 2026)
+# La credencial del dueño de la base solo la necesitan las migraciones: la API arranca
+# sin ella (DB-R3-01, auditoría del 18 nov 2026). Con `env -u` desaparece también del
+# entorno del proceso (/proc/1/environ); `unset` no bastaría si alguien la exportara
+# después. La app la borra y lo avisa si aun así le llega (credencial_del_dueno.py)
 # Usar --reload solo en desarrollo para hot-reload de código
 if [ "$ENVIRONMENT" = "development" ]; then
   echo "🔧 Modo DESARROLLO: hot-reload habilitado"
-  exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --reload
+  exec env -u MIGRATIONS_DATABASE_URL uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --reload
 else
   echo "🚀 Modo PRODUCCIÓN: sin hot-reload"
-  exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+  exec env -u MIGRATIONS_DATABASE_URL uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
 fi

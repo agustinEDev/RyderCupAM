@@ -97,8 +97,8 @@ class RefreshOwnHandicapUseCase:
                 await self._uow.users.save(user)
         except Exception:
             logger.error(
-                "Failed to persist RFEG handicap for %s",
-                user.get_full_name(),
+                "Failed to persist RFEG handicap for user %s",
+                user.id,
                 exc_info=True,
             )
             # La entidad ya lleva el valor nuevo, pero no quedó guardado: devolverlo
@@ -119,8 +119,8 @@ class RefreshOwnHandicapUseCase:
             return await self._handicap_service.search_handicap(user.get_full_name())
         except Exception:
             logger.warning(
-                "RFEG lookup failed for %s during handicap refresh",
-                user.get_full_name(),
+                "RFEG lookup failed for user %s during handicap refresh",
+                user.id,
                 exc_info=True,
             )
             return None
