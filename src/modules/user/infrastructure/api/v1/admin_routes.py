@@ -52,6 +52,7 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.http.paginacion import parametro_offset
 
 router = APIRouter()
 
@@ -82,7 +83,7 @@ async def list_users(
     is_active: bool | None = Query(default=None),
     email_verified: bool | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = parametro_offset(),
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: AdminListUsersUseCase = Depends(get_admin_list_users_use_case),
 ):

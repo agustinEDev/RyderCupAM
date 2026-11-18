@@ -432,17 +432,21 @@ jobs:
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
           PATH="$RUNNER_TEMP/gitleaks:$PATH" bash .github/scripts/gitleaks_self_test.sh
 
+      # Todo el historial, no solo los commits de la PR (INF-R3-02, auditoría del 18 nov
+      # 2026: había una clave de Mailgun en commits viejos que nadie volvió a mirar). Con
+      # el binario que acaba de pasar la autoprueba. Lo ya revisado y sin valor está en
+      # .gitleaksignore, huella a huella. Bloquea: un secreto nuevo no entra
       - name: Check for Secrets with Gitleaks
         id: gitleaks
-        if: ${{ !cancelled() }}
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_VERSION: 8.24.3  # la misma que la autoprueba (y la que trae la acción)
-          GITLEAKS_ENABLE_COMMENTS: false
-          GITLEAKS_NOTIFY_USER_LIST: ""
-        # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
+        if: ${{ !cancelled() && steps.gitleaks-self-test.outcome == 'success' }}
+        run: |
+          # --log-opts: todo el historial y TAMBIÉN el cambio que mete cada merge (un
+          # secreto puesto al resolver un conflicto no está en ninguno de los padres; sin
+          # --diff-merges git log no saca parche de los merges). --verbose: commit,
+          # fichero, línea y regla de cada hallazgo, con el valor tapado (--redact)
+          "$RUNNER_TEMP/gitleaks/gitleaks" git . --config .gitleaks.toml \
+            --log-opts="--full-history --all --diff-merges=first-parent" \
+            --no-banner --redact --verbose --exit-code 1
 
       - name: Upload Security Reports
         if: always()
@@ -489,7 +493,7 @@ jobs:
             --what 'Bandit looks for insecure Python patterns in src/, pip-audit for installed dependencies with known vulnerabilities, and Gitleaks for secrets committed to git.' \
             --status "${{ job.status }}" \
             --result "$BANDIT · $AUDIT · $LEAKS" \
-            --if-fails 'Open the failing tool step. Bandit: fix it or add "# nosec <id> - reason" on the line. pip-audit: upgrade the package to the fixed version. Gitleaks: remove the secret and rotate it. Reports are in the security-reports artifact.' || true
+            --if-fails 'Open the failing tool step. Bandit: fix it or add "# nosec <id> - reason" on the line. pip-audit: upgrade the package to the fixed version. Gitleaks (its step lists commit, file, line and rule): rotate the secret first; if the commit is only in your branch, remove it from those commits; if it is already in shared history, the scan keeps seeing it, so after rotating add its exact fingerprint to .gitleaksignore. Reports are in the security-reports artifact.' || true
 
   # ================================
   # JOB 5: LINTING

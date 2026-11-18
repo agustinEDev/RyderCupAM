@@ -47,6 +47,10 @@ from src.config.clave_de_brevo_viva import (  # noqa: E402
 from src.config.codigos_de_error import los_que_llevan_su_codigo, todos_los_codigos  # noqa: E402
 from src.config.correo_verificado import EmailNotVerifiedError  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.credencial_del_dueno import (  # noqa: E402
+    avisa_de_la_credencial_del_dueno,
+    retira_la_credencial_del_dueno,
+)
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
@@ -151,6 +155,19 @@ from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
 )
 
 
+def _vacia_el_log_de_seguridad() -> None:
+    """
+    Escribe lo que el log de seguridad tenga en cola cuando el arranque falla.
+
+    Ese log escribe desde un hilo y su vaciado normal está tras el `yield` del lifespan,
+    al que un arranque fallido no llega: el evento de la credencial del dueño, que se
+    registra justo antes de estas comprobaciones, podía perderse (CodeRabbit, #906).
+    Nunca tapa el error del arranque.
+    """
+    with contextlib.suppress(Exception):
+        get_security_logger().para()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signature
     """
@@ -164,12 +181,21 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
 
+    # La credencial del dueño de la base no se queda en el proceso de la API (DB-R3-01).
+    # Tras Sentry, para que el aviso llegue allí; antes de la comprobación de seguridad
+    retira_la_credencial_del_dueno(
+        os.environ,
+        en_desarrollo=en_desarrollo_declarado(os.environ),
+        avisa=avisa_de_la_credencial_del_dueno,
+    )
+
     # Fuera de desarrollo, ni TESTING ni una SECRET_KEY de ejemplo o corta (F-06,
     # F-12). Tras Sentry, para que un arranque fallido llegue allí
     try:
         comprueba_la_configuracion_de_seguridad(os.environ)
     except RuntimeError:
         logging.getLogger(__name__).exception("Insecure configuration: not starting")
+        _vacia_el_log_de_seguridad()
         raise
 
     # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
@@ -178,6 +204,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         comprueba_el_envio_de_correo(os.environ)
     except RuntimeError:
         logging.getLogger(__name__).exception("Invalid email configuration: not starting")
+        _vacia_el_log_de_seguridad()
         raise
 
     # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)

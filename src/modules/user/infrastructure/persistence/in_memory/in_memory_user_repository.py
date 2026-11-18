@@ -140,14 +140,23 @@ class InMemoryUserRepository(UserRepositoryInterface):
             self._users[user.id] = user
 
     async def find_by_full_name(self, full_name: str) -> User | None:
-        """La cuenta ACTIVA con ese nombre completo, como el repositorio real (F7)."""
-        full_name_lower = full_name.lower().strip()
-        for user in self._users.values():
-            user_full_name = f"{user.first_name} {user.last_name}".lower()
+        """La cuenta ACTIVA con ese nombre completo, como el repositorio real (F7).
+
+        Con dos o más que se llamen igual, None, como el real (S-16).
+        """
+
+        def _normaliza(texto: str) -> str:
+            # Sin mayúsculas ni espacios repetidos, a los dos lados (CodeRabbit)
+            return " ".join(texto.lower().split())
+
+        buscado = _normaliza(full_name)
+        coinciden = [
+            user
+            for user in self._users.values()
             # Solo activas, como el repositorio real (F7)
-            if user.is_active and user_full_name == full_name_lower:
-                return user
-        return None
+            if user.is_active and _normaliza(f"{user.first_name} {user.last_name}") == buscado
+        ]
+        return coinciden[0] if len(coinciden) == 1 else None
 
     MIN_SEARCH_LENGTH = 2
 

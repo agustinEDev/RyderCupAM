@@ -115,6 +115,7 @@ from src.modules.quick_match.application.use_cases.unhide_quick_match_use_case i
     UnhideQuickMatchUseCase,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.shared.infrastructure.http.paginacion import parametro_page
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -646,7 +647,7 @@ async def list_my_quick_matches(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListMyQuickMatchesUseCase = Depends(get_list_my_quick_matches_use_case),
     status_filter: str | None = Query(None, alias="status"),
-    page: int = Query(1, ge=1),
+    page: int = parametro_page(),
     limit: int = Query(20, ge=1, le=100),
     golf_course_id: UUID | None = Query(
         None, description="Only matches on this golf course (latest played first)."

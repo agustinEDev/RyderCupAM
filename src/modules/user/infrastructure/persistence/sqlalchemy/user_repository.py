@@ -1,6 +1,7 @@
 from collections.abc import Collection
+from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user import User
@@ -173,22 +174,28 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         if len(name_parts) < self.MIN_NAME_PARTS:
             return None
 
-        # Buscar por primera coincidencia exacta de first_name + last_name
-        for i in range(1, len(name_parts)):
-            first_name = " ".join(name_parts[:i])
-            last_name = " ".join(name_parts[i:])
+        # Todas las cuentas activas que casan, con cualquier forma de partir el nombre, en
+        # UNA consulta (un mismo instante: entre dos consultas, un cambio de nombre podía
+        # esconder la ambigüedad; CodeRabbit). Si hay más de una, «no encontrado»:
+        # devolver una podría llevar una invitación a quien no es (S-16; antes,
+        # scalar_one_or_none daba 500 con dos iguales). Cada cuenta casa con una sola
+        # forma de partir, así que dos filas son dos personas
 
-            statement = select(User).filter(
-                User._is_active.is_(True),
-                func.lower(User._first_name) == func.lower(first_name),
-                func.lower(User._last_name) == func.lower(last_name),
+        def _normalizado(columna: Any) -> ColumnElement[str]:
+            # Sin mayúsculas ni espacios repetidos, como lo buscado (y como en memoria)
+            return func.regexp_replace(func.lower(func.trim(columna)), r"\s+", " ", "g")
+
+        formas = [
+            and_(
+                _normalizado(User._first_name) == " ".join(name_parts[:i]).lower(),
+                _normalizado(User._last_name) == " ".join(name_parts[i:]).lower(),
             )
-            result = await self._session.execute(statement)
-            user = result.scalar_one_or_none()
-            if user:
-                return user
-
-        return None
+            for i in range(1, len(name_parts))
+        ]
+        statement = select(User).filter(User._is_active.is_(True), or_(*formas)).limit(2)
+        result = await self._session.execute(statement)
+        encontrados = result.scalars().all()
+        return encontrados[0] if len(encontrados) == 1 else None
 
     MIN_SEARCH_LENGTH = 2
 

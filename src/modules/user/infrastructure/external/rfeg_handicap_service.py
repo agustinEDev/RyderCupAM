@@ -158,9 +158,16 @@ class RFEGHandicapService(HandicapService):
             return await self._buscar_en_api(full_name)
 
         except httpx.HTTPError as e:
+            # Solo el tipo y el código: el texto de httpx lleva la URL de la búsqueda, con
+            # el nombre del jugador (`?q=...`), y sin `from None` la traza de cualquier
+            # log con exc_info=True lo escribiría igual (revisión de Q-BE-08, 18 nov 2026)
+            respuesta = (
+                getattr(e, "response", None) if isinstance(e, httpx.HTTPStatusError) else None
+            )
+            codigo = f" {respuesta.status_code}" if respuesta is not None else ""
             raise HandicapServiceUnavailableError(
-                f"Error de conexión con el servicio RFEG: {e}"
-            ) from e
+                f"Error de conexión con el servicio RFEG: {type(e).__name__}{codigo}"
+            ) from None
 
     @staticmethod
     def _extraer_jugadores(datos: object) -> list[dict]:

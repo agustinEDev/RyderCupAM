@@ -278,7 +278,8 @@ pide en su aviso.
 3. **Crear el usuario.** `\set ON_ERROR_STOP on` y luego `\i scripts/db/rol_de_la_api.sql`
    (o `\i /s/rol_de_la_api.sql` con Docker). Va en una transacción: si algo falla no
    cambia nada. Se puede repetir y se niega si la base no está migrada. Después,
-   `\password rydercup_app`. El script también quita a `n8n_lectura` la lectura automática
+   `SET password_encryption = 'scram-sha-256';` y `\password rydercup_app` (sin el SET,
+   Render la guarda en MD5: DB-R3-02). El script también quita a `n8n_lectura` la lectura automática
    de las tablas futuras (DB-03); sus permisos sobre las de hoy los recorta
    `scripts/db/rol_de_n8n.sql` (sección siguiente).
 4. **Render, primero sin cambiar nada:** añadir `MIGRATIONS_DATABASE_URL` con el valor
@@ -349,7 +350,8 @@ Ninguna contraseña va en la línea de órdenes: psql y pg_restore la piden en s
    versión desplegada (los scripts del paso 6 dan permisos sobre columnas que una copia
    vieja puede no tener, y pararían). Si es posterior, la API desplegada no entiende el
    esquema: desplegar la release que corresponde.
-6. **Los usuarios y sus permisos**, en psql como el dueño y con `\set ON_ERROR_STOP on`:
+6. **Los usuarios y sus permisos**, en psql como el dueño, con `\set ON_ERROR_STOP on` y
+   `SET password_encryption = 'scram-sha-256';` antes de cualquier `\password` (DB-R3-02):
    - `\i scripts/db/rol_de_la_api.sql` (sección «Usuario de la API sin permisos de
      estructura»). En una base nueva el usuario no existe y se crea: solo entonces,
      `\password rydercup_app`. En la misma base de antes NO cambiar la contraseña: la
