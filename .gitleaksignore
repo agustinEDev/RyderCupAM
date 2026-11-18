@@ -6,6 +6,8 @@
 # - logs/security_audit.log.4 y .5 (enero 2026): logs de pruebas locales subidos por
 #   error y borrados; solo correos de example.com/test.com y la IP 127.0.0.1.
 # Un hallazgo nuevo NO se añade aquí sin rotar antes el secreto.
+# El CI revisa también los commits de merge (--diff-merges=first-parent): los mismos
+# secretos viejos vuelven a salir en los merges que los llevaron a main, con su huella.
 # La huella lleva la regla, y gitleaks 8.30 da a la clave de Mailgun la regla
 # mailgun-signing-key: van también, para que subir GITLEAKS_VERSION no rompa el CI.
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.4:generic-api-key:10
@@ -14,11 +16,30 @@
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.4:generic-api-key:8
 159e67458aa78f7e480d487efc057f0d661ed7e8:logs/security_audit.log.5:generic-api-key:10
 49bfecdb9f376be80095354a466d7708a6221415:k8s/api-secret.yaml:generic-api-key:51
+549072eaff1cce0f24b533acbbe28ec346a2e812:k8s/api-secret.yaml:generic-api-key:51
+5613189d4b9015fc43ae1bc04b3af1f91a979180:k8s/api-secret.yaml:generic-api-key:37
+5613189d4b9015fc43ae1bc04b3af1f91a979180:k8s/api-secret.yaml:generic-api-key:44
+5613189d4b9015fc43ae1bc04b3af1f91a979180:k8s/api-secret.yaml:generic-api-key:47
+5613189d4b9015fc43ae1bc04b3af1f91a979180:k8s/api-secret.yaml:mailgun-signing-key:47
 70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:generic-api-key:33
 70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:generic-api-key:40
 70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:generic-api-key:43
+70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:mailgun-signing-key:43
+991762fb364b7697e0f1a061366b6c06e684e825:k8s/api-secret.yaml:generic-api-key:37
+991762fb364b7697e0f1a061366b6c06e684e825:k8s/api-secret.yaml:generic-api-key:44
+991762fb364b7697e0f1a061366b6c06e684e825:k8s/api-secret.yaml:generic-api-key:47
+991762fb364b7697e0f1a061366b6c06e684e825:k8s/api-secret.yaml:mailgun-signing-key:47
+9b5e92f25b25242db6d93a339e5368f5bfcb4e27:k8s/api-secret.yaml:generic-api-key:51
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:37
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:44
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:generic-api-key:47
-70a1250d067930fcceb2c2634f16481bca4dc9f1:k8s/api-secret.yaml:mailgun-signing-key:43
 9f180077c95242735b097607ece34e884a2b3c74:k8s/api-secret.yaml:mailgun-signing-key:47
+e9ffdf6b0b149dab5581a9a7e6e183d7e7cdaf17:logs/security_audit.log.4:generic-api-key:10
+e9ffdf6b0b149dab5581a9a7e6e183d7e7cdaf17:logs/security_audit.log.4:generic-api-key:12
+e9ffdf6b0b149dab5581a9a7e6e183d7e7cdaf17:logs/security_audit.log.4:generic-api-key:3
+e9ffdf6b0b149dab5581a9a7e6e183d7e7cdaf17:logs/security_audit.log.4:generic-api-key:8
+e9ffdf6b0b149dab5581a9a7e6e183d7e7cdaf17:logs/security_audit.log.5:generic-api-key:10
+fc166f10f738415d1a7a42c4d34ab7da0d98df35:k8s/api-secret.yaml:generic-api-key:33
+fc166f10f738415d1a7a42c4d34ab7da0d98df35:k8s/api-secret.yaml:generic-api-key:40
+fc166f10f738415d1a7a42c4d34ab7da0d98df35:k8s/api-secret.yaml:generic-api-key:43
+fc166f10f738415d1a7a42c4d34ab7da0d98df35:k8s/api-secret.yaml:mailgun-signing-key:43

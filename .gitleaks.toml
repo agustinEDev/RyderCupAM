@@ -65,10 +65,22 @@ useDefault = true
       '''^\{[^}]+\}$''',
     ]
 
-  # Las bases locales y de los tests (localhost, el servicio «db» de Docker Compose, la
-  # «dummy» del CI): no son la de verdad.
-  # Una de Render (dpg-....render.com) u otro host sigue saltando
+  # La base local (localhost, 127.0.0.1): nunca es la de verdad, valga donde valga
   [[rules.allowlists]]
-    description = "Bases locales, de tests o montadas con variables"
+    description = "Base local"
     regexTarget = "match"
-    regexes = ['''@(?:localhost|127\.0\.0\.1|db|dummy)(?:[:/]|$)''']
+    regexes = ['''@(?:localhost|127\.0\.0\.1)(?:[:/]|$)''']
+
+  # El servicio «db» de Docker Compose y la «dummy» del CI, SOLO en sus ficheros de
+  # ejemplo: un servicio desplegado puede tener un host privado llamado así (CodeRabbit)
+  [[rules.allowlists]]
+    description = "Bases de ejemplo de Compose y del CI, en sus ficheros"
+    condition = "AND"
+    paths = [
+      '''^(?:docker/)?docker-compose\.ya?ml$''',
+      '''^\.github/workflows/[^/]+\.ya?ml$''',
+      '''^\.env\.example$''',
+      '''^DEPLOYMENT\.md$''',
+    ]
+    regexTarget = "match"
+    regexes = ['''@(?:db|dummy)(?:[:/]|$)''']

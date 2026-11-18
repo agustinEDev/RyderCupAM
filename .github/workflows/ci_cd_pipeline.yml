@@ -440,8 +440,13 @@ jobs:
         id: gitleaks
         if: ${{ !cancelled() && steps.gitleaks-self-test.outcome == 'success' }}
         run: |
+          # --log-opts: todo el historial y TAMBIÉN el cambio que mete cada merge (un
+          # secreto puesto al resolver un conflicto no está en ninguno de los padres; sin
+          # --diff-merges git log no saca parche de los merges). --verbose: commit,
+          # fichero, línea y regla de cada hallazgo, con el valor tapado (--redact)
           "$RUNNER_TEMP/gitleaks/gitleaks" git . --config .gitleaks.toml \
-            --no-banner --redact --exit-code 1
+            --log-opts="--full-history --all --diff-merges=first-parent" \
+            --no-banner --redact --verbose --exit-code 1
 
       - name: Upload Security Reports
         if: always()
@@ -488,7 +493,7 @@ jobs:
             --what 'Bandit looks for insecure Python patterns in src/, pip-audit for installed dependencies with known vulnerabilities, and Gitleaks for secrets committed to git.' \
             --status "${{ job.status }}" \
             --result "$BANDIT · $AUDIT · $LEAKS" \
-            --if-fails 'Open the failing tool step. Bandit: fix it or add "# nosec <id> - reason" on the line. pip-audit: upgrade the package to the fixed version. Gitleaks: remove the secret and rotate it. Reports are in the security-reports artifact.' || true
+            --if-fails 'Open the failing tool step. Bandit: fix it or add "# nosec <id> - reason" on the line. pip-audit: upgrade the package to the fixed version. Gitleaks (its step lists commit, file, line and rule): rotate the secret first; if the commit is only in your branch, remove it from those commits; if it is already in shared history, the scan keeps seeing it, so after rotating add its exact fingerprint to .gitleaksignore. Reports are in the security-reports artifact.' || true
 
   # ================================
   # JOB 5: LINTING

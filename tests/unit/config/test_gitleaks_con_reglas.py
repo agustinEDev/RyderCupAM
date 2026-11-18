@@ -128,7 +128,16 @@ def test_b7_1_the_ci_scans_the_whole_history_with_the_tested_binary():
     assert "uses" not in paso, "La acción solo revisa el rango de la PR"
     assert re.search(r'gitleaks"? git \.', paso["run"])
     assert "--config .gitleaks.toml" in paso["run"]
-    assert "--log-opts" not in paso["run"], "Con --log-opts revisaría solo un rango"
+    # Todo el historial y los merges, sin acotar a un rango (CodeRabbit: un secreto
+    # metido al resolver un conflicto solo aparece en el parche del merge)
+    opciones = re.search(r'--log-opts="([^"]*)"', paso["run"])
+    assert opciones, "Sin --log-opts git log no saca el parche de los merges"
+    assert {"--all", "--full-history", "--diff-merges=first-parent"} <= set(
+        opciones.group(1).split()
+    )
+    assert ".." not in opciones.group(1), "Un rango revisaría solo parte del historial"
+    assert "--redact" in paso["run"], "El valor del secreto no puede salir en el log del CI"
+    assert "--verbose" in paso["run"], "Sin --verbose no se sabe dónde está el hallazgo"
     assert "$RUNNER_TEMP/gitleaks" in paso["run"], "Tiene que usar el binario comprobado"
     assert autoprueba["env"]["GITLEAKS_VERSION"] == "8.24.3"
     checkout = next(
@@ -152,7 +161,7 @@ def _regla_de_urls() -> dict:
     return next(r for r in _config()["rules"] if r["id"] == "database-url-with-password")
 
 
-def _salta(regla: dict, texto: str) -> bool:
+def _salta(regla: dict, texto: str, fichero: str = "src/config/settings.py") -> bool:
     """La regla vista en Python: casa, y ninguna de sus allowlists la excluye."""
     coincidencia = re.search(regla["regex"], texto)
     if not coincidencia:
@@ -160,7 +169,13 @@ def _salta(regla: dict, texto: str) -> bool:
     secreto = coincidencia.group(regla["secretGroup"])
     for lista in regla.get("allowlists", []):
         objetivo = coincidencia.group(0) if lista.get("regexTarget") == "match" else secreto
-        if any(re.search(r, objetivo) for r in lista.get("regexes", [])):
+        por_texto = any(re.search(r, objetivo) for r in lista.get("regexes", []))
+        rutas = lista.get("paths", [])
+        por_ruta = any(re.search(r, fichero) for r in rutas)
+        if lista.get("condition") == "AND" and rutas:
+            if por_texto and por_ruta:
+                return False
+        elif por_texto or por_ruta:
             return False
     return True
 
@@ -195,10 +210,24 @@ def test_b7_4_the_rule_skips_examples_and_local_databases():
         "postgresql://user:<clave>@host/db",
         "postgresql://postgres:postgres@localhost:5432/rydercup",
         "postgresql://test:test_password@localhost/test",
-        "postgresql://dummy:dummy@dummy/dummy",
-        "postgresql://postgres:otra-cosa@db:5432/rydercup",
     ):
         assert not _salta(regla, f'URL = "{url}"'), url
+
+
+def test_b7_4_compose_and_ci_hosts_are_only_skipped_in_their_files():
+    """
+    Given: URLs hacia «db» (Compose) y «dummy» (CI)
+    When: están en sus ficheros de ejemplo / en el código
+    Then: en sus ficheros no saltan; en el código, sí (un host privado puede llamarse así)
+    """
+    regla = _regla_de_urls()
+    compose = 'URL = "postgresql://postgres:otra-cosa@db:5432/rydercup"'
+    ci = 'URL = "postgresql://dummy:dummy@dummy/dummy"'
+
+    assert not _salta(regla, compose, "docker/docker-compose.yml")
+    assert not _salta(regla, ci, ".github/workflows/ci_cd_pipeline.yml")
+    assert _salta(regla, compose, "src/config/settings.py")
+    assert _salta(regla, ci, "src/modules/x.py")
 
 
 def test_b7_2_the_history_ignore_list_is_narrow():
