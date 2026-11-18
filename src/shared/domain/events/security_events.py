@@ -1043,3 +1043,47 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
             }
         )
         return base
+
+
+# Los eventos que no nacen de una petición (al arrancar la app) no tienen IP ni navegador
+SIN_PETICION = "startup"
+
+
+@dataclass(frozen=True)
+class OwnerCredentialInAppEnvironmentAuditEvent(SecurityAuditEvent):
+    """
+    La API arrancó con la credencial del dueño de la base en su entorno (DB-R3-01).
+
+    `entrypoint.sh` la quita antes de arrancar uvicorn: si llega, alguien se saltó el
+    entrypoint (otro comando de arranque). La app la borra y deja este evento. Solo el
+    nombre de la variable, nunca su valor: lleva la contraseña del dueño.
+    """
+
+    variable: str = ""
+
+    @classmethod
+    def al_arrancar(cls, variable: str) -> "OwnerCredentialInAppEnvironmentAuditEvent":
+        """El evento del arranque, sin usuario, IP ni navegador."""
+        return cls(
+            user_id=None,
+            ip_address=SIN_PETICION,
+            user_agent=SIN_PETICION,
+            variable=variable,
+        )
+
+    def __post_init__(self) -> None:
+        """Validación y severidad: una credencial de dueño a la vista es HIGH."""
+        super().__post_init__()
+        if not self.variable:
+            raise ValueError("variable es requerido en OwnerCredentialInAppEnvironmentAuditEvent")
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return f"OWNER DB CREDENTIAL IN THE API ENVIRONMENT | {self.variable} removed at startup"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con el nombre de la variable."""
+        base = super().to_dict()
+        base.update({"variable": self.variable})
+        return base

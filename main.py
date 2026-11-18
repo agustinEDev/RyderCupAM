@@ -47,6 +47,10 @@ from src.config.clave_de_brevo_viva import (  # noqa: E402
 from src.config.codigos_de_error import los_que_llevan_su_codigo, todos_los_codigos  # noqa: E402
 from src.config.correo_verificado import EmailNotVerifiedError  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.credencial_del_dueno import (  # noqa: E402
+    avisa_de_la_credencial_del_dueno,
+    retira_la_credencial_del_dueno,
+)
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
@@ -163,6 +167,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # La credencial del dueño de la base no se queda en el proceso de la API (DB-R3-01).
+    # Tras Sentry, para que el aviso llegue allí; antes de la comprobación de seguridad
+    retira_la_credencial_del_dueno(
+        os.environ,
+        en_desarrollo=en_desarrollo_declarado(os.environ),
+        avisa=avisa_de_la_credencial_del_dueno,
+    )
 
     # Fuera de desarrollo, ni TESTING ni una SECRET_KEY de ejemplo o corta (F-06,
     # F-12). Tras Sentry, para que un arranque fallido llegue allí
