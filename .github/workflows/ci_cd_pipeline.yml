@@ -432,17 +432,16 @@ jobs:
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
           PATH="$RUNNER_TEMP/gitleaks:$PATH" bash .github/scripts/gitleaks_self_test.sh
 
+      # Todo el historial, no solo los commits de la PR (INF-R3-02, auditoría del 18 nov
+      # 2026: había una clave de Mailgun en commits viejos que nadie volvió a mirar). Con
+      # el binario que acaba de pasar la autoprueba. Lo ya revisado y sin valor está en
+      # .gitleaksignore, huella a huella. Bloquea: un secreto nuevo no entra
       - name: Check for Secrets with Gitleaks
         id: gitleaks
-        if: ${{ !cancelled() }}
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_VERSION: 8.24.3  # la misma que la autoprueba (y la que trae la acción)
-          GITLEAKS_ENABLE_COMMENTS: false
-          GITLEAKS_NOTIFY_USER_LIST: ""
-        # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
+        if: ${{ !cancelled() && steps.gitleaks-self-test.outcome == 'success' }}
+        run: |
+          "$RUNNER_TEMP/gitleaks/gitleaks" git . --config .gitleaks.toml \
+            --no-banner --redact --exit-code 1
 
       - name: Upload Security Reports
         if: always()

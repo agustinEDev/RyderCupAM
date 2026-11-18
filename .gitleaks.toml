@@ -36,4 +36,39 @@ useDefault = true
     '''^eW91ci1zZWNyZXQta2V5LWNoYW5nZS1tZQ==$''',  # your-secret-key-change-me
     '''^Y2hhbmdlbWUtZG9jcy1hZG1pbjEyMw==$''',      # changeme-docs-admin123
     '''^eW91ci1tYWlsZ3VuLWFwaS1rZXk=$''',          # your-mailgun-api-key
+    # Ejemplos de JWT recortados con «...» en la documentación y los docstrings: el
+    # secreto que se lleva generic-api-key es la cabecera y los tres puntos
+    # (`eyJhbGciOi...`). Un token de verdad no acaba en «...» y lo caza también la regla
+    # «jwt» (auditoría del 18 nov 2026, B7)
+    '''^eyJ[A-Za-z0-9_-]+\.\.\.$''',
   ]
+
+# URLs de base de datos con la contraseña dentro (INF-R3-03, auditoría del 18 nov 2026):
+# las reglas por defecto no las ven (se probó con dos URLs inventadas: 0 hallazgos). Las
+# de ejemplo con marcadores (`USER:PASSWORD`, `${...}`, `<clave>`) no saltan.
+[[rules]]
+  id = "database-url-with-password"
+  description = "URL de base de datos con contraseña"
+  regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?)(?:\+[a-z0-9]+)?://[^:@/\s'"`]+:([^@/\s'"`]+)@[^/\s'"`]+'''
+  secretGroup = 1
+  keywords = ["postgres", "mysql", "mariadb", "mongodb", "redis", "amqp"]
+
+  [[rules.allowlists]]
+    description = "Marcadores de ejemplo, no contraseñas"
+    regexTarget = "secret"
+    regexes = [
+      '''(?i)^(password|passwd|pass|pwd|secret|clave|contrase(ñ|n)a|changeme[\w-]*|your[-_][\w-]*|tu[-_][\w-]*|x{3,}|\*{3,}|\.{3})$''',
+      '''^\$\{[^}]+\}$''',
+      '''^\$[A-Za-z_][A-Za-z0-9_]*$''',
+      '''^\$\([A-Za-z_][A-Za-z0-9_]*\)$''',
+      '''^<[^>]+>$''',
+      '''^\{[^}]+\}$''',
+    ]
+
+  # Las bases locales y de los tests (localhost, el servicio «db» de Docker Compose, la
+  # «dummy» del CI): no son la de verdad.
+  # Una de Render (dpg-....render.com) u otro host sigue saltando
+  [[rules.allowlists]]
+    description = "Bases locales, de tests o montadas con variables"
+    regexTarget = "match"
+    regexes = ['''@(?:localhost|127\.0\.0\.1|db|dummy)(?:[:/]|$)''']

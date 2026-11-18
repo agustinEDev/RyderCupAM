@@ -3,8 +3,8 @@
 # que encontrar un secreto. Hasta entonces `.gitleaks.toml` no cargaba ninguna regla y
 # el escaneo pasaba siempre en verde sin que nadie lo notara.
 #
-# Escribe tres secretos sintéticos en un fichero de src/ (fuera de la allowlist), pasa
-# gitleaks con la config del repo y falla si no encuentra los tres. Los valores se
+# Escribe cuatro secretos sintéticos en un fichero de src/ (fuera de la allowlist), pasa
+# gitleaks con la config del repo y falla si no encuentra los cuatro. Los valores se
 # derivan de un sha256 fijo, así que no hay azar (el mismo resultado en cada ejecución)
 # y ninguno aparece literal en el repo: si estuvieran escritos aquí, el escaneo de los
 # commits los marcaría.
@@ -30,11 +30,14 @@ def de(alfabeto: str, n: int, desde: int) -> str:
 aws = "AKIA" + de("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", 16, 0)
 github = "ghp" + "_" + de("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789", 36, 16)
 generico = de("ABCDEFGHJKLMNPQRSTUVWXYZ0123456789", 40, 52)
+clave_bd = de("abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789", 20, 92)
 
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     f.write(f'AWS_ACCESS_KEY_ID = "{aws}"\n')
     f.write(f'GITHUB_TOKEN = "{github}"\n')
     f.write(f'SECRET_KEY = "{generico}"\n')
+    # Una URL de base de datos con la contraseña dentro, hacia un host de verdad (B7)
+    f.write(f'DATABASE_URL = "postgresql://app:{clave_bd}@dpg-x-a.frankfurt-postgres.render.com/db"\n')
 PY
 
 # Código de salida propio para «hay fugas» (3), distinto del de error (1): un fallo de
@@ -51,7 +54,7 @@ if [ "$codigo" -ne 3 ]; then
 fi
 
 reglas="$(python3 -c 'import json, sys; print(" ".join(sorted({f["RuleID"] for f in json.load(open(sys.argv[1]))})))' "$report")"
-esperadas="aws-access-token generic-api-key github-pat"
+esperadas="aws-access-token database-url-with-password generic-api-key github-pat"
 if [ "$reglas" != "$esperadas" ]; then
   echo "::error::gitleaks encontró [$reglas] y tenía que encontrar [$esperadas]"
   exit 1

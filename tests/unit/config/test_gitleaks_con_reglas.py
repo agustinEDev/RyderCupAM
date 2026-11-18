@@ -99,3 +99,124 @@ def test_the_ci_runs_a_self_test_that_requires_gitleaks_to_find_a_secret():
     script = (RAIZ / ".github" / "scripts" / "gitleaks_self_test.sh").read_text(encoding="utf-8")
     assert "--config .gitleaks.toml" in script
     assert "--exit-code" in script
+
+
+# --- B7, auditoría del 18 nov 2026 ----------------------------------------------------
+
+
+def _paso(identificador: str) -> tuple[dict, dict]:
+    """El paso con ese id y el job que lo contiene."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in workflow["jobs"].values():
+        for paso in job.get("steps", []):
+            if paso.get("id") == identificador:
+                return job, paso
+    raise AssertionError(f"No hay paso {identificador!r}")
+
+
+def test_b7_1_the_ci_scans_the_whole_history_with_the_tested_binary():
+    """
+    Given: el paso «gitleaks» del CI
+    When: se mira cómo escanea
+    Then: `gitleaks git` sobre todo el historial (checkout con fetch-depth 0), con la config
+          del repo y el mismo binario que la autoprueba; ya no la acción, que solo miraba los
+          commits nuevos de la PR (INF-R3-02: el historial tenía una clave de Mailgun)
+    """
+    job, paso = _paso("gitleaks")
+    _, autoprueba = _paso("gitleaks-self-test")
+
+    assert "uses" not in paso, "La acción solo revisa el rango de la PR"
+    assert re.search(r'gitleaks"? git \.', paso["run"])
+    assert "--config .gitleaks.toml" in paso["run"]
+    assert "--log-opts" not in paso["run"], "Con --log-opts revisaría solo un rango"
+    assert "$RUNNER_TEMP/gitleaks" in paso["run"], "Tiene que usar el binario comprobado"
+    assert autoprueba["env"]["GITLEAKS_VERSION"] == "8.24.3"
+    checkout = next(
+        p for p in job["steps"] if str(p.get("uses", "")).startswith("actions/checkout")
+    )
+    assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_b7_3_the_self_test_requires_the_database_url_rule():
+    """
+    Given: la autoprueba del CI
+    When: se mira qué reglas exige
+    Then: también la de URLs de base de datos con contraseña
+    """
+    script = (RAIZ / ".github" / "scripts" / "gitleaks_self_test.sh").read_text(encoding="utf-8")
+
+    assert "database-url-with-password" in script
+
+
+def _regla_de_urls() -> dict:
+    return next(r for r in _config()["rules"] if r["id"] == "database-url-with-password")
+
+
+def _salta(regla: dict, texto: str) -> bool:
+    """La regla vista en Python: casa, y ninguna de sus allowlists la excluye."""
+    coincidencia = re.search(regla["regex"], texto)
+    if not coincidencia:
+        return False
+    secreto = coincidencia.group(regla["secretGroup"])
+    for lista in regla.get("allowlists", []):
+        objetivo = coincidencia.group(0) if lista.get("regexTarget") == "match" else secreto
+        if any(re.search(r, objetivo) for r in lista.get("regexes", [])):
+            return False
+    return True
+
+
+def test_b7_3_the_rule_catches_a_real_database_url():
+    """
+    Given: URLs con la contraseña dentro hacia un host de verdad
+    When: se pasan por la regla
+    Then: salta en todas
+    """
+    regla = _regla_de_urls()
+    for url in (
+        "postgresql://rydercup_app:Zk81hQ2pLmW@dpg-abc-a.frankfurt-postgres.render.com/db",
+        "postgres://dueno:s3cr3t-Larga@db.example.org:5432/rydercup",
+        "postgresql+asyncpg://u:Abc123xyz!@10.0.0.5/base",
+    ):
+        assert _salta(regla, f'DATABASE_URL = "{url}"'), url
+
+
+def test_b7_4_the_rule_skips_examples_and_local_databases():
+    """
+    Given: URLs de ejemplo con marcadores, y las de bases locales o de tests
+    When: se pasan por la regla
+    Then: no salta ninguna
+    """
+    regla = _regla_de_urls()
+    for url in (
+        "postgresql://USER:PASSWORD@host/db",
+        "postgresql://user:${POSTGRES_PASSWORD}@host/db",
+        "postgresql://user:$(POSTGRES_PASSWORD)@$(DATABASE_HOST):5432/db",
+        "postgresql://user:<clave>@host/db",
+        "postgresql://postgres:postgres@localhost:5432/rydercup",
+        "postgresql://test:test_password@localhost/test",
+        "postgresql://dummy:dummy@dummy/dummy",
+        "postgresql://postgres:otra-cosa@db:5432/rydercup",
+    ):
+        assert not _salta(regla, f'URL = "{url}"'), url
+
+
+def test_b7_2_the_history_ignore_list_is_narrow():
+    """
+    Given: .gitleaksignore
+    When: se lee cada línea que no es comentario
+    Then: son huellas exactas (commit:fichero:regla:línea) de los ficheros ya revisados
+          (el k8s/api-secret.yaml antiguo y los logs de pruebas), nunca rutas o comodines
+    """
+    lineas = [
+        linea
+        for linea in (RAIZ / ".gitleaksignore").read_text(encoding="utf-8").splitlines()
+        if linea.strip() and not linea.startswith("#")
+    ]
+
+    assert lineas
+    for linea in lineas:
+        assert re.fullmatch(r"[0-9a-f]{40}:[^:*]+:[a-z0-9-]+:\d+", linea), linea
+        fichero = linea.split(":")[1]
+        assert fichero == "k8s/api-secret.yaml" or fichero.startswith("logs/security_audit.log."), (
+            linea
+        )
