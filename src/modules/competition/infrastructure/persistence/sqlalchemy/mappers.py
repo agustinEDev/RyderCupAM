@@ -27,7 +27,7 @@ from sqlalchemy import (
     inspect,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import composite, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -117,6 +117,10 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import (
+    tipo_de_codigo_de_pais,
+    tipo_de_id,
+)
 
 COUNTRIES_CODE_FK = "countries.code"
 
@@ -125,259 +129,19 @@ COUNTRIES_CODE_FK = "countries.code"
 # =============================================================================
 
 
-class CompetitionIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir CompetitionId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: CompetitionId | str | None, dialect) -> str | None:
-        if isinstance(value, CompetitionId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> CompetitionId | None:
-        if value is None:
-            return None
-        return CompetitionId(uuid.UUID(value))
-
-
-class EnrollmentIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir EnrollmentId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: EnrollmentId | str | None, dialect) -> str | None:
-        if isinstance(value, EnrollmentId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> EnrollmentId | None:
-        if value is None:
-            return None
-        return EnrollmentId(uuid.UUID(value))
-
-
-class InvitationIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir InvitationId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: InvitationId | str | None, dialect) -> str | None:
-        if isinstance(value, InvitationId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> InvitationId | None:
-        if value is None:
-            return None
-        return InvitationId(uuid.UUID(value))
-
-
-class UserIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir UserId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserId | None:
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
-
-
-class CountryCodeDecorator(TypeDecorator):
-    """TypeDecorator para convertir CountryCode (str VO) a/desde VARCHAR(2)."""
-
-    impl = CHAR(2)
-    cache_ok = True
-
-    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
-        if isinstance(value, CountryCode):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> CountryCode | None:
-        if value is None:
-            return None
-        return CountryCode(value)
-
-
-class HoleScoreIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir HoleScoreId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: HoleScoreId | str | None, dialect) -> str | None:
-        if isinstance(value, HoleScoreId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> HoleScoreId | None:
-        if value is None:
-            return None
-        return HoleScoreId(uuid.UUID(value))
-
-
-class CompetitionGolfCourseIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir CompetitionGolfCourseId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: CompetitionGolfCourseId | str | None, dialect
-    ) -> str | None:
-        if isinstance(value, CompetitionGolfCourseId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> CompetitionGolfCourseId | None:
-        if value is None:
-            return None
-        return CompetitionGolfCourseId(uuid.UUID(value))
-
-
-class GolfCourseIdDecorator(TypeDecorator):
-    """
-    TypeDecorator para convertir GolfCourseId (UUID VO) a/desde UUID nativo.
-
-    IMPORTANTE: Debe coincidir con el tipo usado en golf_courses.id (UUID as_uuid=True)
-    """
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: GolfCourseId | uuid.UUID | str | None, dialect
-    ) -> uuid.UUID | None:
-        if value is None:
-            return None
-        if isinstance(value, GolfCourseId):
-            return value.value
-        return uuid.UUID(str(value))
-
-    def process_result_value(self, value: uuid.UUID | None, dialect) -> GolfCourseId | None:
-        if value is None:
-            return None
-        return GolfCourseId(value)
-
-
-class RoundIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir RoundId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: RoundId | str | None, dialect) -> str | None:
-        if isinstance(value, RoundId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> RoundId | None:
-        if value is None:
-            return None
-        return RoundId(uuid.UUID(value))
-
-
-class DraftIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir DraftId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: "DraftId | str | None", dialect) -> str | None:
-        if isinstance(value, DraftId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> "DraftId | None":
-        if value is None:
-            return None
-        return DraftId(uuid.UUID(value))
-
-
-class EnvelopeIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir EnvelopeId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: "EnvelopeId | str | None", dialect) -> str | None:
-        if isinstance(value, EnvelopeId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> "EnvelopeId | None":
-        if value is None:
-            return None
-        return EnvelopeId(uuid.UUID(value))
-
-
-class MatchIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir MatchId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: MatchId | str | None, dialect) -> str | None:
-        if isinstance(value, MatchId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> MatchId | None:
-        if value is None:
-            return None
-        return MatchId(uuid.UUID(value))
-
-
-class TeamAssignmentIdDecorator(TypeDecorator):
-    """TypeDecorator para convertir TeamAssignmentId (UUID VO) a/desde VARCHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: TeamAssignmentId | str | None, dialect) -> str | None:
-        if isinstance(value, TeamAssignmentId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> TeamAssignmentId | None:
-        if value is None:
-            return None
-        return TeamAssignmentId(uuid.UUID(value))
+CompetitionIdDecorator = tipo_de_id(CompetitionId)
+EnrollmentIdDecorator = tipo_de_id(EnrollmentId)
+InvitationIdDecorator = tipo_de_id(InvitationId)
+UserIdDecorator = tipo_de_id(UserId)
+CountryCodeDecorator = tipo_de_codigo_de_pais()
+HoleScoreIdDecorator = tipo_de_id(HoleScoreId)
+CompetitionGolfCourseIdDecorator = tipo_de_id(CompetitionGolfCourseId)
+GolfCourseIdDecorator = tipo_de_id(GolfCourseId, columna="uuid")
+RoundIdDecorator = tipo_de_id(RoundId)
+DraftIdDecorator = tipo_de_id(DraftId)
+EnvelopeIdDecorator = tipo_de_id(EnvelopeId)
+MatchIdDecorator = tipo_de_id(MatchId)
+TeamAssignmentIdDecorator = tipo_de_id(TeamAssignmentId)
 
 
 # =============================================================================

@@ -1,5 +1,4 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
-import uuid
 
 from sqlalchemy import (
     Boolean,
@@ -16,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm import composite
-from sqlalchemy.types import CHAR, TypeDecorator
+from sqlalchemy.types import TypeDecorator
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.avatar_source import AvatarSource
@@ -38,27 +37,11 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     CountryCodeDecorator,
 )
-
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # --- TypeDecorator para UserId ---
 # Le enseña a SQLAlchemy a manejar nuestro ValueObject UserId.
-class UserIdDecorator(TypeDecorator):
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
-        """Convierte el objeto UserId o un string a un string para guardarlo en la BD."""
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserId | None:
-        """Convierte el string de la BD de vuelta a un objeto UserId."""
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+UserIdDecorator = tipo_de_id(UserId)
 
 
 # --- TypeDecorator para Gender ---
@@ -102,25 +85,7 @@ class AvatarSourceDecorator(TypeDecorator):
 
 
 # --- TypeDecorator para UserAvatarUploadId (nullable) ---
-class ActiveAvatarUploadIdDecorator(TypeDecorator):
-    """TypeDecorator para manejar UserAvatarUploadId (nullable) como CHAR(36) en BD."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserAvatarUploadId | str | None, dialect) -> str | None:
-        """Del valor del dominio a la columna."""
-        if isinstance(value, UserAvatarUploadId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserAvatarUploadId | None:
-        """De la columna al valor del dominio."""
-        if value is None:
-            return None
-        return UserAvatarUploadId(uuid.UUID(value))
+ActiveAvatarUploadIdDecorator = tipo_de_id(UserAvatarUploadId)
 
 
 # --- TypeDecorator para Handicap ---

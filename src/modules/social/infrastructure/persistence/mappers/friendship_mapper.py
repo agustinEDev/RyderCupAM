@@ -5,56 +5,25 @@ Tabla:
 - friendships (agregado raiz)
 """
 
-import uuid
 from typing import Any
 
 import sqlalchemy.types
 from sqlalchemy import Column, DateTime, ForeignKey, String, Table, inspect
-from sqlalchemy.types import CHAR
 
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
 from src.modules.social.domain.value_objects.friendship_status import FriendshipStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # ============================================================================
 # TypeDecorators for Value Objects (MUST be before tables)
 # ============================================================================
 
 
-class FriendshipIdType(sqlalchemy.types.TypeDecorator[FriendshipId]):
-    """TypeDecorator para FriendshipId Value Object (compatible con friendships.id CHAR(36))."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: FriendshipId | None, dialect: Any) -> str | None:
-        if value is None:
-            return None
-        return str(value.value)
-
-    def process_result_value(self, value: str | None, dialect: Any) -> FriendshipId | None:
-        if value is None:
-            return None
-        return FriendshipId(uuid.UUID(value))
-
-
-class SocialUserIdType(sqlalchemy.types.TypeDecorator[UserId]):
-    """TypeDecorator para UserId Value Object (compatible con users.id CHAR(36))."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | None, dialect: Any) -> str | None:
-        if value is None:
-            return None
-        return str(value.value)
-
-    def process_result_value(self, value: str | None, dialect: Any) -> UserId | None:
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+FriendshipIdType = tipo_de_id(FriendshipId)
+SocialUserIdType = tipo_de_id(UserId)
 
 
 class FriendshipStatusType(sqlalchemy.types.TypeDecorator[FriendshipStatus]):

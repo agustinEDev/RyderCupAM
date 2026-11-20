@@ -5,60 +5,18 @@ Este mapper es parte del shared domain y se usa en múltiples módulos.
 """
 
 from sqlalchemy import Boolean, Column, ForeignKey, String, Table, inspect
-from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.shared.domain.entities.country import Country
-from src.shared.domain.value_objects.country_code import CountryCode
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
-
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_codigo_de_pais
 
 # --- TypeDecorator para CountryCode ---
-class CountryCodeDecorator(TypeDecorator):
-    """
-    TypeDecorator para convertir CountryCode (Value Object) a/desde VARCHAR(2).
-
-    SQLAlchemy usa esto para:
-    - Guardar: CountryCode -> str (2 chars)
-    - Cargar: str -> CountryCode
-    """
-
-    impl = CHAR(2)
-    cache_ok = True
-
-    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
-        """
-        Convierte CountryCode o str a string para guardar en BD.
-
-        Args:
-            value: CountryCode, str o None
-
-        Returns:
-            str: Código de país (2 chars) o None
-        """
-        if isinstance(value, CountryCode):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> CountryCode | None:
-        """
-        Convierte string de BD a CountryCode.
-
-        Args:
-            value: String de la BD (2 chars)
-
-        Returns:
-            CountryCode: Value Object o None
-        """
-        if value is None:
-            return None
-        return CountryCode(value)
+CountryCodeDecorator = tipo_de_codigo_de_pais()
 
 
 # --- Registro y Metadatos ---
