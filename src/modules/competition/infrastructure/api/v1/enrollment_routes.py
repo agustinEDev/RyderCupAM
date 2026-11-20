@@ -17,6 +17,7 @@ from src.config.dependencies import (
     get_cancel_enrollment_use_case,
     get_change_enrollment_tee_use_case,
     get_current_user,
+    get_enrollment_tees_use_case,
     get_handle_enrollment_use_case,
     get_list_enrollments_use_case,
     get_remove_custom_handicap_use_case,
@@ -36,6 +37,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     ChangeEnrollmentTeeResponseDTO,
     EnrolledUserDTO,
     EnrollmentResponseDTO,
+    EnrollmentTeesResponseDTO,
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
     RemoveCustomHandicapResponseDTO,
@@ -59,6 +61,9 @@ from src.modules.competition.application.use_cases.change_enrollment_tee_use_cas
     EnrollmentNotApprovedError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+)
+from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
+    GetEnrollmentTeesUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -711,6 +716,35 @@ async def change_enrollment_tee(
         EnrollmentNotApprovedError,
         PendingGameNotRecalculableError,
     ) as e:
+        codigo, texto = _NO_SE_CAMBIAN[e.error_code]
+        return JSONResponse(
+            status_code=codigo, content={"detail": texto, "error_code": e.error_code}
+        )
+
+
+@router.get(
+    "/enrollments/{enrollment_id}/tees",
+    response_model=EnrollmentTeesResponseDTO,
+    summary="Barras que se pueden elegir para una inscripción",
+    description=(
+        "Las barras que aceptaría el cambio (PUT .../tee), las de por defecto y las "
+        "elegidas. Las piden los mismos que pueden cambiarlas en ese momento."
+    ),
+)
+async def get_enrollment_tees(
+    enrollment_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetEnrollmentTeesUseCase = Depends(get_enrollment_tees_use_case),
+):
+    """
+    Las barras que se pueden elegir para una inscripción (BE #912): el front no
+    conoce el género de los demás, así que el selector las pide aquí.
+    """
+    try:
+        return await use_case.execute(
+            enrollment_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
+    except (TeeChangeClosedError, EnrollmentNotApprovedError) as e:
         codigo, texto = _NO_SE_CAMBIAN[e.error_code]
         return JSONResponse(
             status_code=codigo, content={"detail": texto, "error_code": e.error_code}

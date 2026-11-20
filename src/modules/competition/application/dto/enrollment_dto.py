@@ -317,6 +317,23 @@ class ChangeEnrollmentTeeResponseDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EnrollmentTeesResponseDTO(BaseModel):
+    """
+    Las barras que se pueden elegir para una inscripción (BE #912): las mismas que
+    aceptaría el cambio. No lleva el género del jugador.
+    """
+
+    tees: list[str] = Field(
+        ..., description="Las barras que se pueden elegir, en el orden de los colores."
+    )
+    default_tee: str | None = Field(
+        None, description="Las que tendría sin elegir, o null si no se puede saber."
+    )
+    current_tee: str | None = Field(
+        None, description="Las elegidas en la inscripción, o null si no eligió."
+    )
+
+
 # ======================================================================================
 # DTO para el Caso de Uso: Eliminar Hándicap Personalizado (revertir al oficial)
 # ======================================================================================
