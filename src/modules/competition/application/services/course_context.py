@@ -11,11 +11,14 @@ rápida, en cambio, ese jugador juega con su Handicap Index.
 
 import logging
 
+from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import (
     StrokeContext,
     StrokeContextBuilder,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 logger = logging.getLogger(__name__)
 
@@ -50,3 +53,26 @@ def course_context_for(golf_course: GolfCourse) -> StrokeContext:
         )
 
     return context
+
+
+async def contexto_del_campo(
+    campos: IGolfCourseRepository,
+    golf_course_id: GolfCourseId,
+    contextos: dict[GolfCourseId, StrokeContext] | None,
+) -> StrokeContext:
+    """
+    El contexto de un campo, leído una sola vez por ejecución si se pasa una caché
+    (BE #912: cambiar unas barras rehace varios partidos del mismo campo).
+
+    Raises:
+        PendingGameNotRecalculableError: Si el campo ya no existe
+    """
+    if contextos is not None and golf_course_id in contextos:
+        return contextos[golf_course_id]
+    campo = await campos.find_by_id(golf_course_id)
+    if campo is None:
+        raise PendingGameNotRecalculableError("El campo de una partida pendiente ya no existe")
+    contexto = course_context_for(campo)
+    if contextos is not None:
+        contextos[golf_course_id] = contexto
+    return contexto

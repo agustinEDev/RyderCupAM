@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_cancel_enrollment_use_case,
+    get_change_enrollment_tee_use_case,
     get_current_user,
     get_handle_enrollment_use_case,
     get_list_enrollments_use_case,
@@ -31,6 +32,8 @@ from src.modules.competition.application.dto.enrollment_dto import (
     TEE_COLOR_PATTERN,
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
+    ChangeEnrollmentTeeRequestDTO,
+    ChangeEnrollmentTeeResponseDTO,
     EnrolledUserDTO,
     EnrollmentResponseDTO,
     HandleEnrollmentRequestDTO,
@@ -46,9 +49,16 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
+from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+    ChangeEnrollmentTeeUseCase,
+    EnrollmentNotApprovedError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -86,6 +96,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.api.v1.correo_de_quien_mira import correo_de_quien_mira
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -632,3 +643,75 @@ async def set_name_preference(
     )
     user_id = UserId(str(current_user.id))
     return await use_case.execute(request_dto, user_id)
+
+
+class ChangeTeeBody(BaseModel):
+    """Las barras nuevas; null vuelve a las habituales de su género (BE #912)."""
+
+    tee_color: TeeColor | None = Field(
+        ..., description="Las barras nuevas, o null para volver a las de por defecto."
+    )
+
+
+# Lo que no deja cambiar las barras: su código HTTP y un texto fijo por código,
+# no el de la excepción (CodeQL)
+_NO_SE_CAMBIAN: dict[str, tuple[int, str]] = {
+    TeeNotAvailableError.error_code: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "That tee is not rated for this player on the courses still to be played.",
+    ),
+    TeeChangeClosedError.error_code: (
+        status.HTTP_409_CONFLICT,
+        "The competition has already finished or was cancelled.",
+    ),
+    PendingGameNotRecalculableError.error_code: (
+        status.HTTP_409_CONFLICT,
+        "A game still to be played cannot be recalculated with the new tee.",
+    ),
+    EnrollmentNotApprovedError.error_code: (
+        status.HTTP_409_CONFLICT,
+        "Only an approved enrollment can change its tee.",
+    ),
+}
+
+
+@router.put(
+    "/enrollments/{enrollment_id}/tee",
+    response_model=ChangeEnrollmentTeeResponseDTO,
+    summary="Cambiar las barras de una inscripción",
+    description=(
+        "Antes de empezar: el propio jugador, el capitán de su equipo, el organizador "
+        "o un admin; ya empezada, solo el capitán de su equipo, el organizador o un "
+        "admin. Sus partidos y partidas generados que aún no han empezado se rehacen "
+        "con las barras nuevas; lo empezado no se toca. Null vuelve a las de por defecto."
+    ),
+)
+async def change_enrollment_tee(
+    enrollment_id: UUID,
+    body: ChangeTeeBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ChangeEnrollmentTeeUseCase = Depends(get_change_enrollment_tee_use_case),
+):
+    """
+    Cambia las barras de una inscripción (BE #912) y rehace con ellas lo que le
+    queda por jugar.
+
+    Con su código en la raíz cuando no se puede, para que la pantalla lo diga en
+    su idioma.
+    """
+    try:
+        return await use_case.execute(
+            ChangeEnrollmentTeeRequestDTO(enrollment_id=enrollment_id, tee_color=body.tee_color),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except (
+        TeeNotAvailableError,
+        TeeChangeClosedError,
+        EnrollmentNotApprovedError,
+        PendingGameNotRecalculableError,
+    ) as e:
+        codigo, texto = _NO_SE_CAMBIAN[e.error_code]
+        return JSONResponse(
+            status_code=codigo, content={"detail": texto, "error_code": e.error_code}
+        )

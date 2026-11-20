@@ -8,6 +8,7 @@ stroke play elijan las barras con la misma regla (RyderCupAM#165): primero
 | Barras de la inscripción | Jugador | Valoradas en el campo        | Resultado               |
 |--------------------------|---------|------------------------------|-------------------------|
 | Ninguna                  | Hombre  | (Amarillas, hombre)          | Amarillas, hombre       |
+| Ninguna                  | Mujer   | (Rojas, mujer)               | Rojas, mujer (BE #912)  |
 | Rojas                    | Mujer   | (Rojas, mujer), (Rojas, —)   | Rojas, mujer            |
 | Rojas                    | Mujer   | (Rojas, —)                   | Rojas, sin género       |
 | Rojas                    | Mujer   | (Rojas, hombre)              | Rojas, sin valoración   |
@@ -150,8 +151,8 @@ class TestLoQueLeFalta:
         pytest.param(
             Gender.FEMALE,
             {},
-            {("YELLOW", "MALE"): object()},
-            (TeeColor.YELLOW, None),
+            {("RED", "MALE"): object()},
+            (TeeColor.RED, None),
             id="la tarjeta es del otro género",
         ),
         pytest.param(
@@ -167,3 +168,120 @@ def test_barra_sin_golpes(genero, valoradas, con_tarjeta, esperado):
     barra = barra_sin_golpes(None, genero, valoradas, con_tarjeta)
 
     assert (barra.tee_color, barra.tee_gender) == esperado
+
+
+AMARILLAS_M = TeeRating(course_rating=Decimal("74.5"), slope_rating=133, par=72)
+AMARILLAS = TeeRating(course_rating=Decimal("71.0"), slope_rating=125, par=72)
+
+
+class TestBarraPorDefecto:
+    """
+    Quien no eligió barras juega desde la habitual de su género, la misma que
+    la partida rápida (BE #912, decidido el 20 nov 2026): amarillas los
+    hombres y rojas las mujeres, de su género o mixtas. Si el campo no las
+    tiene valoradas se quedan sin valorar, y el organizador ve el aviso.
+
+    | #  | Jugador | Valoradas en el campo        | Resultado               |
+    |----|---------|------------------------------|-------------------------|
+    | D1 | Hombre  | (Amarillas, hombre)          | Amarillas, hombre       |
+    | D1 | Hombre  | (Amarillas, —)               | Amarillas, sin género   |
+    | D2 | Mujer   | (Rojas, mujer), (Amarillas, mujer) | Rojas, mujer      |
+    | D2 | Mujer   | (Rojas, —)                   | Rojas, sin género       |
+    | D3 | Mujer   | (Amarillas, mujer)           | Rojas, sin valoración   |
+    | D4 | Hombre  | (Rojas, hombre)              | Amarillas, sin valoración |
+    | D5 | Mujer que eligió azules | (Rojas, mujer) | Azules, sin valoración (las suyas) |
+    | D6 | Sin     | (Amarillas, —)               | Amarillas, sin género   |
+    | D7 | Mujer en scratch | (Rojas, mujer), con tarjeta | Rojas, mujer       |
+    """
+
+    @pytest.mark.parametrize(
+        ("genero", "valoradas", "esperado"),
+        [
+            pytest.param(
+                Gender.MALE,
+                {("YELLOW", "MALE"): AMARILLAS_H},
+                (TeeColor.YELLOW, Gender.MALE, AMARILLAS_H),
+                id="D1 hombre, amarillas de hombre",
+            ),
+            pytest.param(
+                Gender.MALE,
+                {("YELLOW", None): AMARILLAS},
+                (TeeColor.YELLOW, None, AMARILLAS),
+                id="D1 hombre, amarillas mixtas",
+            ),
+            pytest.param(
+                Gender.FEMALE,
+                {("RED", "FEMALE"): ROJAS_M, ("YELLOW", "FEMALE"): AMARILLAS_M},
+                (TeeColor.RED, Gender.FEMALE, ROJAS_M),
+                id="D2 mujer, rojas de mujer aunque haya amarillas de mujer",
+            ),
+            pytest.param(
+                Gender.FEMALE,
+                {("RED", None): ROJAS},
+                (TeeColor.RED, None, ROJAS),
+                id="D2 mujer, rojas mixtas",
+            ),
+            pytest.param(
+                Gender.FEMALE,
+                {("YELLOW", "FEMALE"): AMARILLAS_M},
+                (TeeColor.RED, None, None),
+                id="D3 mujer sin rojas valoradas, rojas sin valorar",
+            ),
+            pytest.param(
+                Gender.MALE,
+                {("RED", "MALE"): ROJAS_H},
+                (TeeColor.YELLOW, None, None),
+                id="D4 hombre sin amarillas valoradas, amarillas sin valorar",
+            ),
+            pytest.param(
+                None,
+                {("YELLOW", None): AMARILLAS},
+                (TeeColor.YELLOW, None, AMARILLAS),
+                id="D6 sin género, amarillas como siempre",
+            ),
+        ],
+    )
+    def test_barra_del_jugador_sin_elegir_da_la_habitual_de_su_genero(
+        self, genero, valoradas, esperado
+    ):
+        """
+        Given un jugador que no eligió barras en su inscripción
+        When se busca desde qué barras juega
+        Then son las habituales de su género, valoradas o no
+        """
+        barra = barra_del_jugador(None, genero, valoradas)
+
+        assert (barra.tee_color, barra.tee_gender, barra.tee_rating) == esperado
+
+    def test_barra_del_jugador_que_eligio_da_la_suya_aunque_no_este_valorada(self):
+        """
+        Given una mujer que eligió azules en un campo con solo rojas de mujer
+        When se busca desde qué barras juega
+        Then son las suyas, sin valorar: la regla por defecto no pisa lo elegido (D5)
+        """
+        barra = barra_del_jugador(TeeColor.BLUE, Gender.FEMALE, {("RED", "FEMALE"): ROJAS_M})
+
+        assert (barra.tee_color, barra.tee_gender, barra.tee_rating) == (TeeColor.BLUE, None, None)
+
+    def test_lo_que_le_falta_mujer_sin_rojas_valoradas_es_su_color(self):
+        """
+        Given una mujer sin barras elegidas en un campo sin rojas valoradas
+        When se mira qué le falta para generar el partido
+        Then es el color rojo (el aviso que ve el organizador)
+        """
+        valoradas = {("YELLOW", "FEMALE"): AMARILLAS_M}
+        barra = barra_del_jugador(None, Gender.FEMALE, valoradas)
+
+        assert lo_que_le_falta(barra, Gender.FEMALE, valoradas) == (MISSING_TEE_COLOR, "RED")
+
+    def test_barra_sin_golpes_sin_elegir_mujer_da_rojas(self):
+        """
+        Given una mujer que juega scratch sin barras elegidas
+        When se buscan sus barras sin golpes
+        Then son las rojas de su género, como con golpes (D7)
+        """
+        valoradas = {("RED", "FEMALE"): ROJAS_M, ("YELLOW", "FEMALE"): AMARILLAS_M}
+
+        barra = barra_sin_golpes(None, Gender.FEMALE, valoradas, valoradas)
+
+        assert (barra.tee_color, barra.tee_gender) == (TeeColor.RED, Gender.FEMALE)

@@ -197,7 +197,9 @@ class _Campos:
 
 
 # Barras de los dos sexos, como Altea: el caso de verdad del 23 sep
-_POR_SEXO = [(TeeColor.YELLOW, Gender.MALE), (TeeColor.YELLOW, Gender.FEMALE)]
+# Las habituales de cada sexo, las que salen sin elegir (BE #912): amarillas de
+# hombre y rojas de mujer
+_POR_SEXO = [(TeeColor.YELLOW, Gender.MALE), (TeeColor.RED, Gender.FEMALE)]
 
 
 class _Torneo:
@@ -699,7 +701,8 @@ class TestLaRevisionLocal:
         [jugadora] = (await torneo.ronda()).match_generation_block.players
         assert jugadora.name == "Bea Dos"
         assert jugadora.missing == "TEE_COLOR"
-        assert jugadora.tee_color == "YELLOW"
+        # Sin elegir, una mujer juega de rojas (BE #912): lo que falta es ese color
+        assert jugadora.tee_color == "RED"
 
     async def test_r3_una_sesion_que_no_espera_partidos_no_revienta_la_apertura(self):
         from src.modules.competition.application.services.envelope_desk import EnvelopeDesk

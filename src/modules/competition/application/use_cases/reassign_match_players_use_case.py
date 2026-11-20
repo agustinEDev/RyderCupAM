@@ -172,17 +172,20 @@ class ReassignMatchPlayersUseCase:
     async def _validate(
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> tuple[Match, Round, Competition]:
-        """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
+        """
+        Busca el partido, su ronda y su competición; comprueba quién lo pide y,
+        con la competición bloqueada, que el partido sigue programado.
+
+        Primero quién, sin bloquear nada: a quien no organiza no se le dice en qué
+        estado está el partido. Después la competición con bloqueo, como generar
+        (que lee la ronda sin bloquearla y bloquea la competición), los sobres, las
+        partidas y el cambio de barras (BE #912); y solo entonces el partido, con
+        el suyo: leer su estado antes del bloqueo dejaba empezarlo en medio.
+        """
         match_id = MatchId(request.match_id)
         match = await self._uow.matches.find_by_id(match_id)
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
-
-        if match.status != MatchStatus.SCHEDULED:
-            raise MatchNotScheduledError(
-                f"Solo se pueden reasignar jugadores en estado SCHEDULED. "
-                f"Estado actual: {match.status.value}"
-            )
 
         round_entity = await self._uow.rounds.find_by_id(match.round_id)
         if not round_entity:
@@ -191,9 +194,22 @@ class ReassignMatchPlayersUseCase:
         competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
         if not competition:
             raise MatchNotFoundError("La competicion asociada no existe")
-
         if not is_admin and not competition.is_creator(user_id):
             raise NotCompetitionCreatorError("Solo el creador puede reasignar jugadores")
+
+        competition = await self._uow.competitions.find_by_id_for_update(
+            round_entity.competition_id
+        )
+        if not competition:
+            raise MatchNotFoundError("La competicion asociada no existe")
+        match = await self._uow.matches.find_by_id_for_update(match_id)
+        if not match:
+            raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
+        if match.status != MatchStatus.SCHEDULED:
+            raise MatchNotScheduledError(
+                f"Solo se pueden reasignar jugadores en estado SCHEDULED. "
+                f"Estado actual: {match.status.value}"
+            )
 
         return match, round_entity, competition
 

@@ -241,7 +241,8 @@ async def test_players_without_tees(client: AsyncClient):
     cuerpo = respuesta.json()
     assert cuerpo["error_code"] == "PLAYERS_WITHOUT_TEE"
     assert [(p["user_id"], p["missing"], p["tee_color"]) for p in cuerpo["players"]] == [
-        (jugadores[0]["user"]["id"], "TEE_COLOR", "YELLOW")
+        # Sin elegir, una mujer juega de rojas (BE #912), que este campo no tiene
+        (jugadores[0]["user"]["id"], "TEE_COLOR", "RED")
     ]
 
 

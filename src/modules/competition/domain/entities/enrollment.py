@@ -380,8 +380,11 @@ class Enrollment:
         self._custom_handicap = None
         self._updated_at = ahora_utc_sin_zona()
 
-    def set_tee_color(self, tee_color: TeeColor) -> None:
-        """Establece o cambia el color de barras del jugador."""
+    def set_tee_color(self, tee_color: TeeColor | None) -> None:
+        """
+        Establece o cambia el color de barras del jugador. Sin color, vuelve a
+        jugar desde las habituales de su género (BE #912).
+        """
         self._tee_color = tee_color
         self._updated_at = ahora_utc_sin_zona()
 

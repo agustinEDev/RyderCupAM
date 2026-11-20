@@ -53,6 +53,9 @@ from src.modules.competition.application.use_cases.cancel_enrollment_use_case im
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
 )
+from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+    ChangeEnrollmentTeeUseCase,
+)
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
 )
@@ -700,6 +703,22 @@ def get_set_name_preference_use_case(
 ) -> SetNamePreferenceUseCase:
     """Proveedor del caso de uso SetNamePreferenceUseCase."""
     return SetNamePreferenceUseCase(uow)
+
+
+def get_change_enrollment_tee_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ChangeEnrollmentTeeUseCase:
+    """Proveedor del caso de uso ChangeEnrollmentTeeUseCase (BE #912)."""
+    return ChangeEnrollmentTeeUseCase(
+        uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+        # Para saber qué partidas ya salieron por su hora (#544)
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=ahora_en_utc,
+    )
 
 
 def get_remove_custom_handicap_use_case(

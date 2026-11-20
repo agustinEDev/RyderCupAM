@@ -1,5 +1,6 @@
 """Tests para ReassignMatchPlayersUseCase."""
 
+import copy
 from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -10,6 +11,7 @@ import pytest
 from src.modules.competition.application.dto.round_match_dto import (
     ReassignMatchPlayersRequestDTO,
 )
+from src.modules.competition.application.exceptions import NotCompetitionCreatorError
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     MatchNotScheduledError,
     PlayerNotInTeamError,
@@ -615,3 +617,197 @@ class TestReassignMatchPlayersUseCase:
             new_match = await uow.matches.find_by_id(MatchId(response.match_id))
         assert new_match.team_a_players[0].playing_handicap == 10
         assert new_match.team_b_players[0].playing_handicap == 10
+
+    async def _partido_programado(self, uow, creator_id, golf_course_id):
+        """Una competición cerrada con equipos y un individual programado (1 contra 3)."""
+        competition = await self._create_closed_competition(uow, creator_id)
+        player1, player2, player3, player4 = await self._setup_teams_and_enrollments(
+            uow, competition
+        )
+        round_entity = Round.create(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        round_entity.mark_teams_assigned()
+        round_entity.mark_matches_generated()
+        jugadores = [
+            MatchPlayer.create(
+                user_id=uid,
+                playing_handicap=0,
+                tee_color=TeeColor.YELLOW,
+                strokes_received=[],
+                tee_gender=Gender.MALE,
+            )
+            for uid in (player1, player3)
+        ]
+        match = Match.create(
+            round_id=round_entity.id,
+            match_number=1,
+            team_a_players=[jugadores[0]],
+            team_b_players=[jugadores[1]],
+        )
+        async with uow:
+            await uow.rounds.add(round_entity)
+            await uow.matches.add(match)
+        peticion = ReassignMatchPlayersRequestDTO(
+            match_id=match.id.value,
+            team_a_player_ids=[player2.value],
+            team_b_player_ids=[player4.value],
+        )
+        return competition, match, peticion
+
+    @staticmethod
+    def _apuntar(uow, orden):
+        """Apunta en `orden` cuándo se bloquea la competición y cuándo se lee el partido."""
+        for repo, nombre in (
+            (uow.competitions, "find_by_id_for_update"),
+            (uow.matches, "find_by_id"),
+            (uow.matches, "find_by_id_for_update"),
+        ):
+            original = getattr(repo, nombre)
+
+            async def espia(*args, _original=original, _nombre=nombre, _repo=repo, **kwargs):
+                orden.append(f"{type(_repo).__name__}.{_nombre}")
+                return await _original(*args, **kwargs)
+
+            setattr(repo, nombre, AsyncMock(side_effect=espia))
+
+    async def test_reassign_reads_the_match_state_only_after_locking_the_competition(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado
+        When el organizador lo reasigna
+        Then el partido cuyo estado se comprueba se lee con bloqueo DESPUÉS de bloquear
+            la competición: sin eso, otro podía empezarlo entre la lectura y el cambio
+        """
+        _, _, peticion = await self._partido_programado(uow, creator_id, golf_course_id)
+        orden: list[str] = []
+        self._apuntar(uow, orden)
+
+        await ReassignMatchPlayersUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        ).execute(peticion, creator_id)
+
+        bloqueo = orden.index("InMemoryCompetitionRepository.find_by_id_for_update")
+        assert "InMemoryMatchRepository.find_by_id_for_update" in orden[bloqueo:]
+
+    async def test_reassign_a_match_that_started_while_locking_is_rejected(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado al leerlo, que otro empieza antes del bloqueo
+        When el organizador lo reasigna
+        Then se rechaza con MatchNotScheduledError (el 400 que da hoy la ruta):
+            cuenta el estado leído con el bloqueo, no el de antes
+        """
+        _, match, peticion = await self._partido_programado(uow, creator_id, golf_course_id)
+        empezado = copy.deepcopy(match)
+        empezado.start()
+        uow.matches.find_by_id_for_update = AsyncMock(return_value=empezado)
+
+        with pytest.raises(MatchNotScheduledError):
+            await ReassignMatchPlayersUseCase(
+                uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+            ).execute(peticion, creator_id)
+
+    async def test_reassign_by_someone_else_is_forbidden_without_locking(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado
+        When alguien que no organiza intenta reasignarlo
+        Then 403 sin llegar a bloquear la competición ni el partido
+        """
+        _, _, peticion = await self._partido_programado(uow, creator_id, golf_course_id)
+        orden: list[str] = []
+        self._apuntar(uow, orden)
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await ReassignMatchPlayersUseCase(
+                uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+            ).execute(peticion, UserId(uuid4()))
+
+        assert not any(llamada.endswith("for_update") for llamada in orden)
+
+    async def test_reassign_locks_the_competition_like_the_other_paths(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado de una competición con equipos
+        When el organizador reasigna sus jugadores
+        Then la competición se lee con bloqueo, como al generar, al abrir los sobres,
+            en las partidas y al cambiar las barras (BE #912): que nadie cambie unas
+            barras o genere otra sesión entre la lectura y la escritura
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        player1, player2, player3, player4 = await self._setup_teams_and_enrollments(
+            uow, competition
+        )
+        round_entity = Round.create(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        round_entity.mark_teams_assigned()
+        round_entity.mark_matches_generated()
+        jugadores = [
+            MatchPlayer.create(
+                user_id=uid,
+                playing_handicap=0,
+                tee_color=TeeColor.YELLOW,
+                strokes_received=[],
+                tee_gender=Gender.MALE,
+            )
+            for uid in (player1, player3)
+        ]
+        match = Match.create(
+            round_id=round_entity.id,
+            match_number=1,
+            team_a_players=[jugadores[0]],
+            team_b_players=[jugadores[1]],
+        )
+        async with uow:
+            await uow.rounds.add(round_entity)
+            await uow.matches.add(match)
+        uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=uow.competitions.find_by_id_for_update
+        )
+
+        await ReassignMatchPlayersUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        ).execute(
+            ReassignMatchPlayersRequestDTO(
+                match_id=match.id.value,
+                team_a_player_ids=[player2.value],
+                team_b_player_ids=[player4.value],
+            ),
+            creator_id,
+        )
+
+        uow.competitions.find_by_id_for_update.assert_awaited_once_with(competition.id)

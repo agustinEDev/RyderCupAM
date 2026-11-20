@@ -19,10 +19,15 @@ from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
 
-from src.modules.competition.application.services.course_context import course_context_for
+from src.modules.competition.application.exceptions import (
+    TeeNotRatedForPlayerError,
+)
+from src.modules.competition.application.services.course_context import (
+    contexto_del_campo,
+    course_context_for,
+)
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -44,6 +49,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -135,7 +141,9 @@ class JugadoresDeLaPartida:
 
         if competition.play_mode == PlayMode.SCRATCH:
             return {
-                u: self._sin_golpes(u, inscripciones[u], fijados[u], generos.get(u), contexto)
+                u: self._sin_golpes(
+                    u, inscripciones[u].tee_color, fijados[u], generos.get(u), contexto
+                )
                 for u in user_ids
             }
 
@@ -213,6 +221,51 @@ class JugadoresDeLaPartida:
             valoracion,
         )
 
+    async def con_otra_barra(
+        self,
+        competition: Competition,
+        franja: Round,
+        foto: JugadorDePartida,
+        tee_color: TeeColor | None,
+        genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext] | None = None,
+    ) -> JugadorDePartida | None:
+        """
+        La foto de un jugador de una partida ya generada con otras barras (BE #912).
+
+        El hándicap es el de su foto, el fijado al cerrar (D14): solo cambian las
+        barras y lo que sale de ellas. Los demás de la partida no dependen de él.
+
+        Returns:
+            La foto nueva, o None si sus barras quedan como las guardadas
+
+        Raises:
+            TeeNotRatedForPlayerError: Si con hándicap no están valoradas en el campo
+            PendingGameNotRecalculableError: Si el campo de la franja ya no existe
+        """
+        contexto = await contexto_del_campo(self._campos, franja.golf_course_id, contextos)
+        if competition.play_mode == PlayMode.SCRATCH:
+            nueva = self._sin_golpes(foto.user_id, tee_color, foto.handicap, genero, contexto)
+        else:
+            barra = barra_del_jugador(tee_color, genero, contexto.tee_ratings)
+            if barra.tee_rating is None:
+                raise TeeNotRatedForPlayerError(
+                    "Sus barras no están valoradas en el campo de esta partida"
+                )
+            nueva = self._foto(
+                competition,
+                franja,
+                contexto,
+                foto.user_id,
+                foto.handicap,
+                barra.tee_color,
+                barra.tee_gender,
+                barra.tee_rating,
+            )
+        if (nueva.tee_color, nueva.tee_gender) == (foto.tee_color, foto.tee_gender):
+            return None
+        return nueva
+
     def _foto(
         self,
         competition: Competition,
@@ -245,7 +298,7 @@ class JugadoresDeLaPartida:
     @staticmethod
     def _sin_golpes(
         user_id: UserId,
-        inscripcion: Enrollment,
+        de_la_inscripcion: TeeColor | None,
         handicap: Decimal,
         genero: Gender | None,
         contexto: StrokeContext,
@@ -254,7 +307,7 @@ class JugadoresDeLaPartida:
         # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
         # género se busca también entre las que la traen (P12)
         barra = barra_sin_golpes(
-            inscripcion.tee_color, genero, contexto.tee_ratings, contexto.pars_by_tee
+            de_la_inscripcion, genero, contexto.tee_ratings, contexto.pars_by_tee
         )
         tee_gender = barra.tee_gender
         return JugadorDePartida(
