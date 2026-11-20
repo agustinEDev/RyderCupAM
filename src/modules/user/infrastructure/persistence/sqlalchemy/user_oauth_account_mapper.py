@@ -4,11 +4,9 @@ User OAuth Account Mapper - Infrastructure Layer
 Mapeo imperativo entre la entidad UserOAuthAccount y la tabla user_oauth_accounts.
 """
 
-import uuid
-
 from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Table, UniqueConstraint, inspect
 from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.types import CHAR, TypeDecorator
+from sqlalchemy.types import TypeDecorator
 
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.value_objects.oauth_account_id import OAuthAccountId
@@ -18,46 +16,14 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
-
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # --- TypeDecorator para OAuthAccountId ---
-class OAuthAccountIdDecorator(TypeDecorator):
-    """TypeDecorator para OAuthAccountId como CHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: OAuthAccountId | str | None, dialect) -> str | None:
-        if isinstance(value, OAuthAccountId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> OAuthAccountId | None:
-        if value is None:
-            return None
-        return OAuthAccountId(uuid.UUID(value))
+OAuthAccountIdDecorator = tipo_de_id(OAuthAccountId)
 
 
 # --- TypeDecorator para UserId ---
-class UserIdDecorator(TypeDecorator):
-    """TypeDecorator para UserId como CHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserId | None:
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+UserIdDecorator = tipo_de_id(UserId)
 
 
 # --- TypeDecorator para OAuthProvider ---

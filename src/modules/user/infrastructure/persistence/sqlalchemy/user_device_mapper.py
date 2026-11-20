@@ -5,8 +5,6 @@ User Device Mapper - Infrastructure Layer
 Mapeo imperativo entre la entidad UserDevice y la tabla user_devices.
 """
 
-import uuid
-
 from sqlalchemy import (
     Boolean,
     Column,
@@ -19,7 +17,6 @@ from sqlalchemy import (
     inspect,
     text,
 )
-from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
@@ -28,46 +25,13 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # --- TypeDecorators ---
 
 
-class UserDeviceIdDecorator(TypeDecorator):
-    """TypeDecorator para UserDeviceId → CHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, UserDeviceId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-        return UserDeviceId(uuid.UUID(value))
-
-
-class UserIdDecorator(TypeDecorator):
-    """TypeDecorator para UserId → CHAR(36)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+UserDeviceIdDecorator = tipo_de_id(UserDeviceId)
+UserIdDecorator = tipo_de_id(UserId)
 
 
 # --- Tabla ---

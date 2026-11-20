@@ -5,11 +5,8 @@ User Avatar Upload Mapper - Infrastructure Layer
 Mapeo imperativo entre la entidad UserAvatarUpload y la tabla user_avatar_uploads.
 """
 
-import uuid
-
 from sqlalchemy import Column, DateTime, ForeignKey, Index, LargeBinary, String, Table, inspect
 from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user_avatar_upload import UserAvatarUpload
 from src.modules.user.domain.value_objects.user_avatar_upload_id import UserAvatarUploadId
@@ -18,44 +15,10 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
-
-class UserAvatarUploadIdDecorator(TypeDecorator):
-    """TypeDecorator para manejar UserAvatarUploadId como CHAR(36) en BD."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserAvatarUploadId | str | None, dialect) -> str | None:
-        if isinstance(value, UserAvatarUploadId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserAvatarUploadId | None:
-        if value is None:
-            return None
-        return UserAvatarUploadId(uuid.UUID(value))
-
-
-class _AvatarUploadUserIdDecorator(TypeDecorator):
-    """TypeDecorator para manejar UserId como CHAR(36) en BD (local a este mapper)."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserId | None:
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+UserAvatarUploadIdDecorator = tipo_de_id(UserAvatarUploadId)
+_AvatarUploadUserIdDecorator = tipo_de_id(UserId)
 
 
 user_avatar_uploads_table = Table(

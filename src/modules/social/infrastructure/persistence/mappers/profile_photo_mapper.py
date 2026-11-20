@@ -6,9 +6,7 @@ Tabla:
 """
 
 import uuid
-from typing import Any
 
-import sqlalchemy.types
 from sqlalchemy import (
     Column,
     DateTime,
@@ -19,7 +17,6 @@ from sqlalchemy import (
     Table,
     inspect,
 )
-from sqlalchemy.dialects import postgresql
 
 from src.modules.social.domain.entities.profile_photo import ProfilePhoto
 from src.modules.social.domain.value_objects.profile_photo_id import ProfilePhotoId
@@ -27,23 +24,9 @@ from src.modules.social.infrastructure.persistence.mappers.friendship_mapper imp
     SocialUserIdType,
 )
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
-
-class ProfilePhotoIdType(sqlalchemy.types.TypeDecorator[ProfilePhotoId]):
-    """TypeDecorator para ProfilePhotoId."""
-
-    impl = postgresql.UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(self, value: ProfilePhotoId | None, dialect: Any) -> uuid.UUID | None:
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(self, value: Any, dialect: Any) -> ProfilePhotoId | None:
-        if value is None:
-            return None
-        return ProfilePhotoId(value)
+ProfilePhotoIdType = tipo_de_id(ProfilePhotoId, columna="uuid")
 
 
 profile_photos_table = Table(

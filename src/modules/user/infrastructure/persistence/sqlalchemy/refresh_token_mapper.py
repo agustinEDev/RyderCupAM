@@ -27,29 +27,14 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     mapper_registry,
     metadata,
 )
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # ============================================================================
 # TypeDecorators para Value Objects
 # ============================================================================
 
 
-class RefreshTokenIdDecorator(TypeDecorator):
-    """TypeDecorator para RefreshTokenId."""
-
-    impl = String(36)
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        """Convierte RefreshTokenId → string para BD."""
-        if isinstance(value, RefreshTokenId):
-            return str(value.value)
-        return value
-
-    def process_result_value(self, value, dialect):
-        """Convierte string → RefreshTokenId desde BD."""
-        if value is None:
-            return None
-        return RefreshTokenId(value)
+RefreshTokenIdDecorator = tipo_de_id(RefreshTokenId, columna="varchar")
 
 
 class TokenHashDecorator(TypeDecorator):
@@ -71,23 +56,7 @@ class TokenHashDecorator(TypeDecorator):
         return TokenHash(value)
 
 
-class UserDeviceIdDecorator(TypeDecorator):
-    """TypeDecorator para UserDeviceId."""
-
-    impl = String(36)
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        """Convierte UserDeviceId → string para BD."""
-        if isinstance(value, UserDeviceId):
-            return str(value.value)
-        return value
-
-    def process_result_value(self, value, dialect):
-        """Convierte string → UserDeviceId desde BD."""
-        if value is None:
-            return None
-        return UserDeviceId(value)
+UserDeviceIdDecorator = tipo_de_id(UserDeviceId, columna="varchar")
 
 
 # ============================================================================
