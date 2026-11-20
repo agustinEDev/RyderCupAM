@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -317,21 +317,60 @@ class ChangeEnrollmentTeeResponseDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class EnrollmentTeesResponseDTO(BaseModel):
+class ChangeEnrollmentCourseTeeRequestDTO(BaseModel):
     """
-    Las barras que se pueden elegir para una inscripción (BE #912): las mismas que
-    aceptaría el cambio. No lleva el género del jugador.
+    DTO de entrada para el cambio propio de barras de una inscripción en un campo
+    (R1, barras por campo). Sin barras (null) se quita el cambio.
     """
 
-    tees: list[str] = Field(
-        ..., description="Las barras que se pueden elegir, en el orden de los colores."
+    enrollment_id: UUID = Field(..., description="ID de la inscripción.")
+    golf_course_id: UUID = Field(..., description="ID del campo de la competición.")
+    tee_color: TeeColor | None = Field(
+        ..., description="Las barras en ese campo, o null para quitar el cambio."
     )
+
+
+class EnrollmentCourseTeeResponseDTO(BaseModel):
+    """DTO de salida del cambio propio de barras en un campo."""
+
+    enrollment_id: UUID = Field(..., description="ID de la inscripción.")
+    golf_course_id: UUID = Field(..., description="ID del campo.")
+    tee_color: str | None = Field(
+        None, description="Su cambio propio en ese campo, o null si no tiene."
+    )
+
+
+class CourseTeesDTO(BaseModel):
+    """Las barras de un jugador en un campo de la competición."""
+
+    golf_course_id: UUID = Field(..., description="ID del campo.")
+    golf_course_name: str = Field(..., description="Nombre del campo.")
+    tee: str | None = Field(
+        None, description="La barra que juega en ese campo, o null si no tiene una válida."
+    )
+    source: Literal["OWN", "COURSE", "GENERAL", "NONE"] = Field(
+        ...,
+        description=(
+            "De dónde sale: su cambio propio (OWN), la del campo para su género (COURSE), "
+            "su barra general (GENERAL), o ninguna válida (NONE)."
+        ),
+    )
+    options: list[str] = Field(
+        ..., description="Las barras que se le pueden fijar en ese campo, en orden de color."
+    )
+
+
+class EnrollmentTeesResponseDTO(BaseModel):
+    """
+    Las barras de una inscripción, campo a campo (barras por campo): las mismas que
+    aceptarían los cambios. No lleva el género del jugador.
+    """
+
+    general_tee: str | None = Field(None, description="Su barra general, o null.")
     default_tee: str | None = Field(
-        None, description="Las que tendría sin elegir, o null si no se puede saber."
+        None, description="La habitual de su género, o null si no se puede saber."
     )
-    current_tee: str | None = Field(
-        None, description="Las elegidas en la inscripción, o null si no eligió."
-    )
+    courses: list[CourseTeesDTO] = Field(..., description="Cada campo de la competición.")
 
 
 # ======================================================================================

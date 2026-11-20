@@ -51,13 +51,13 @@ async def test_get_tees_refused_answers_409_with_its_code_and_a_fixed_text(error
 @pytest.mark.parametrize("is_admin", [False, True])
 async def test_get_tees_passes_who_asks_and_returns_the_tees(is_admin):
     """
-    Given un caso de uso que responde rojas y azules
+    Given un caso de uso que responde rojas por defecto
     When llega la petición
     Then recibe la inscripción, quién lo pide y si es admin, y la respuesta es la suya
     """
     caso = AsyncMock()
     caso.execute.return_value = EnrollmentTeesResponseDTO(
-        tees=["RED", "BLUE"], default_tee="RED", current_tee=None
+        general_tee=None, default_tee="RED", courses=[]
     )
     quien = _quien(is_admin)
     inscripcion = uuid4()
@@ -68,4 +68,4 @@ async def test_get_tees_passes_who_asks_and_returns_the_tees(is_admin):
     assert inscripcion_pedida == inscripcion
     assert str(usuario.value) == str(quien.id)
     assert caso.execute.call_args.kwargs == {"is_admin": is_admin}
-    assert respuesta.tees == ["RED", "BLUE"]
+    assert respuesta.default_tee == "RED"

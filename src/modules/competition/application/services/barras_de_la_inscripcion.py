@@ -75,16 +75,17 @@ class BarrasDeLaInscripcion:
         equipo = equipos.get_player_team(jugador) if equipos else None
         return equipo is not None and ryder_cup.is_captain_of(equipo, quien)
 
-    async def la_tiene_algun_campo(
+    async def vale_en_el_campo(
         self,
         competition: Competition,
+        golf_course_id: GolfCourseId,
         color: TeeColor,
         genero: Gender | None,
         contextos: dict[GolfCourseId, StrokeContext],
     ) -> bool:
         """
-        Si alguno de sus campos tiene esas barras para su género o sin género, con
-        la regla de siempre (`tee_key_for`) y el MISMO contexto que el cálculo
+        Si ese campo tiene esas barras para su género o sin género, con la regla de
+        siempre (`tee_key_for`) y el MISMO contexto que el cálculo
         (`contexto_del_campo`, el de `JugadoresDelPartido` y `JugadoresDeLaPartida`):
         valoradas, y en SCRATCH también con tarjeta propia, que sin golpes no hace
         falta valoración. «Con tarjeta» es lo que mira cada cálculo: la Ryder,
@@ -94,36 +95,44 @@ class BarrasDeLaInscripcion:
         `tee_key_for` encuentra con género None, y nunca las de un solo género. Un
         campo que ya no existe no la tiene.
         """
-        en_scratch = competition.play_mode == PlayMode.SCRATCH
+        try:
+            contexto = await contexto_del_campo(self._campos, golf_course_id, contextos)
+        except PendingGameNotRecalculableError:
+            return False
+        barras: set[TeeKey] = set(contexto.tee_ratings)
+        if competition.play_mode == PlayMode.SCRATCH:
+            con_tarjeta = (
+                contexto.holes_by_tee if competition.ryder_cup is not None else contexto.pars_by_tee
+            )
+            barras |= set(con_tarjeta)
         su_genero = genero.value if genero else None
+        return tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None
+
+    async def la_tiene_algun_campo(
+        self,
+        competition: Competition,
+        color: TeeColor,
+        genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext],
+    ) -> bool:
+        """Si alguno de sus campos tiene esas barras para él (`vale_en_el_campo`)."""
         for del_campo in competition.golf_courses:
-            try:
-                contexto = await contexto_del_campo(
-                    self._campos, del_campo.golf_course_id, contextos
-                )
-            except PendingGameNotRecalculableError:
-                continue
-            barras: set[TeeKey] = set(contexto.tee_ratings)
-            if en_scratch:
-                con_tarjeta = (
-                    contexto.holes_by_tee
-                    if competition.ryder_cup is not None
-                    else contexto.pars_by_tee
-                )
-                barras |= set(con_tarjeta)
-            if tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None:
+            if await self.vale_en_el_campo(
+                competition, del_campo.golf_course_id, color, genero, contextos
+            ):
                 return True
         return False
 
-    async def las_que_valen(
+    async def las_que_valen_en_el_campo(
         self,
         competition: Competition,
+        golf_course_id: GolfCourseId,
         genero: Gender | None,
         contextos: dict[GolfCourseId, StrokeContext],
     ) -> list[TeeColor]:
-        """Las barras que aceptaría el cambio, en el orden de `TeeColor`."""
+        """Las barras que le valen en ese campo, en el orden de `TeeColor`."""
         return [
             color
             for color in TeeColor
-            if await self.la_tiene_algun_campo(competition, color, genero, contextos)
+            if await self.vale_en_el_campo(competition, golf_course_id, color, genero, contextos)
         ]

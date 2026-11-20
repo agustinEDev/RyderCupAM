@@ -5,7 +5,8 @@ Decidido con Agustín el 6-9 oct 2026:
 
 - El hándicap es el **fijado al cerrar** las inscripciones (el personalizado si
   lo tiene), no el del perfil: es la foto del torneo (D14).
-- Las barras, las de su inscripción con la regla de siempre (`barra_del_jugador`).
+- Las barras, las que le tocan en el campo de la franja (`barra_en_el_campo`: su cambio
+  propio, la del campo para su género o su general).
 - Hándicap de juego individual al 95 % (el de la franja), con el tope de la
   competición; en SCRATCH, 0 y ni se mira el campo, como en la Ryder (D7).
 - Los golpes de cada hoyo con signo: un plus los da en los más fáciles.

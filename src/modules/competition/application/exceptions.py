@@ -323,3 +323,9 @@ class TeeNotRatedForPlayerError(Exception):
     Las barras nuevas de un jugador no están valoradas en el campo de un partido o
     una partida suya que queda por jugar (BE #912).
     """
+
+
+class CourseNotInCompetitionError(Exception):
+    """Ese campo no es de la competición: no se le fijan barras (barras por campo)."""
+
+    error_code = "COURSE_NOT_IN_COMPETITION"

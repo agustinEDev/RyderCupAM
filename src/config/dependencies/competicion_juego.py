@@ -33,6 +33,12 @@ from src.modules.competition.application.services.jugadores_de_la_partida import
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     AnotarHoyoDePartidaUseCase,
 )
+from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
+    ChangeEnrollmentCourseTeeUseCase,
+)
+from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+    ChangeEnrollmentTeeUseCase,
+)
 from src.modules.competition.application.use_cases.clasificaciones_use_case import (
     ClasificacionDeLaFranjaUseCase,
     ClasificacionGeneralUseCase,
@@ -59,6 +65,9 @@ from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_u
 )
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
+)
+from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
+    GetEnrollmentTeesUseCase,
 )
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
@@ -117,6 +126,9 @@ from src.modules.competition.application.use_cases.reset_envelopes_use_case impo
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
     RevealEnvelopesUseCase,
+)
+from src.modules.competition.application.use_cases.set_competition_course_tee_use_case import (
+    SetCompetitionCourseTeeUseCase,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     SubmitEnvelopeUseCase,
@@ -829,3 +841,54 @@ def get_withdraw_match_player_use_case(
 ) -> WithdrawMatchPlayerUseCase:
     """Proveedor de WithdrawMatchPlayerUseCase (fourball con un jugador retirado)."""
     return WithdrawMatchPlayerUseCase(uow, scoring_service)
+
+
+def _zonas_y_reloj(
+    uow: CompetitionUnitOfWorkInterface, gc_uow: GolfCourseUnitOfWorkInterface
+) -> tuple[CompetitionTimezoneFromCourse, Callable[[], datetime]]:
+    """Las zonas y el reloj de los cambios de barras: qué partidas ya salieron (#544)."""
+    return CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions), ahora_en_utc
+
+
+def get_change_enrollment_tee_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ChangeEnrollmentTeeUseCase:
+    """Cambiar la barra general de una inscripción (BE #912)."""
+    return ChangeEnrollmentTeeUseCase(
+        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+    )
+
+
+def get_change_enrollment_course_tee_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ChangeEnrollmentCourseTeeUseCase:
+    """El cambio propio de barras en un campo (barras por campo)."""
+    return ChangeEnrollmentCourseTeeUseCase(
+        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+    )
+
+
+def get_set_competition_course_tee_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SetCompetitionCourseTeeUseCase:
+    """La barra de un campo para un género (barras por campo)."""
+    return SetCompetitionCourseTeeUseCase(
+        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+    )
+
+
+def get_enrollment_tees_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetEnrollmentTeesUseCase:
+    """Proveedor del caso de uso GetEnrollmentTeesUseCase (BE #912)."""
+    return GetEnrollmentTeesUseCase(
+        uow, golf_course_repository=gc_uow.golf_courses, user_repository=user_uow.users
+    )

@@ -13,6 +13,8 @@ NOMBRES_DE_ANTES = (
     "_generador_al_abrir",
     "_recent_hole_report_senders",
     "_recent_hole_sample_senders",
+    # Las zonas y el reloj de los cambios de barras (barras por campo, 20 nov 2026)
+    "_zonas_y_reloj",
     # Actividad para la pasada de hándicaps en segundo plano (15 nov 2026)
     "actividad_en_sesion_propia",
     "get_accept_terms_use_case",
@@ -56,6 +58,9 @@ NOMBRES_DE_ANTES = (
     "get_change_enrollment_tee_use_case",
     # Las barras que se pueden elegir (BE #912, 20 nov 2026)
     "get_enrollment_tees_use_case",
+    # Las barras por campo (20 nov 2026)
+    "get_change_enrollment_course_tee_use_case",
+    "get_set_competition_course_tee_use_case",
     "get_cancel_invitation_use_case",
     "get_cancel_quick_match_use_case",
     "get_cerrar_franja_use_case",

@@ -1,19 +1,25 @@
 """
-Caso de Uso: las barras que se pueden elegir para una inscripción (BE #912, 20 nov 2026).
+Caso de Uso: las barras de una inscripción, campo a campo (barras por campo, 20 nov 2026).
 
 El front no conoce el género de los demás inscritos, así que al organizador o al
-capitán el selector de «Cambiar barra» solo podía ofrecer mixtas. Decidido con
-Agustín: las calcula el back, con la MISMA regla que el cambio
-(`BarrasDeLaInscripcion`), para que el selector no ofrezca nada que el cambio
-rechace ni esconda nada que acepte.
+capitán el selector no podía saber qué ofrecer. Decidido con Agustín: lo calcula
+el back, con la MISMA regla que los cambios (`BarrasDeLaInscripcion`). Por cada
+campo de la competición: la barra que juega (su cambio propio, la del campo para
+su género o su general, si ese campo la tiene para él; si no, ninguna), de dónde
+sale y las que se le pueden fijar. Además, su barra general y la habitual de su
+género.
 
 Quién: los mismos que pueden cambiarlas en ese momento, comprobado antes de mirar
 el estado. Es una lectura: no bloquea nada. El género del jugador no sale.
 """
 
+from typing import Literal
 from uuid import UUID
 
-from src.modules.competition.application.dto.enrollment_dto import EnrollmentTeesResponseDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    CourseTeesDTO,
+    EnrollmentTeesResponseDTO,
+)
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     EnrollmentNotFoundError,
@@ -22,18 +28,24 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     SE_PUEDEN_CAMBIAR,
     BarrasDeLaInscripcion,
 )
+from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     EnrollmentNotApprovedError,
     TeeChangeClosedError,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class GetEnrollmentTeesUseCase:
@@ -49,8 +61,10 @@ class GetEnrollmentTeesUseCase:
         user_repository: UserRepositoryInterface,
     ):
         self._uow = uow
+        self._campos = golf_course_repository
         self._usuarios = user_repository
         self._reglas = BarrasDeLaInscripcion(uow, golf_course_repository)
+        self._contextos: dict[GolfCourseId, StrokeContext] = {}
 
     async def execute(
         self, enrollment_id: UUID, quien: UserId, is_admin: bool = False
@@ -85,11 +99,61 @@ class GetEnrollmentTeesUseCase:
 
             usuario = await self._usuarios.find_by_id(enrollment.user_id)
             genero = usuario.gender if usuario else None
-            valen = await self._reglas.las_que_valen(competition, genero, {})
+            campos = [
+                await self._campo(
+                    competition,
+                    del_campo.golf_course_id,
+                    enrollment.user_id,
+                    enrollment.tee_color,
+                    genero,
+                )
+                for del_campo in competition.golf_courses
+            ]
 
         return EnrollmentTeesResponseDTO(
-            tees=[color.value for color in valen],
+            general_tee=enrollment.tee_color.value if enrollment.tee_color else None,
             # Sin usuario no se sabe cuál tendría
             default_tee=barras_por_defecto(genero).value if usuario else None,
-            current_tee=enrollment.tee_color.value if enrollment.tee_color else None,
+            courses=campos,
+        )
+
+    async def _campo(
+        self,
+        competition: Competition,
+        golf_course_id: GolfCourseId,
+        user_id: UserId,
+        general: TeeColor | None,
+        genero: Gender | None,
+    ) -> CourseTeesDTO:
+        """
+        Lo de un campo: la barra que juega (su cambio propio, la del campo para su
+        género o su general, si ese campo la tiene para él), de dónde sale y las
+        que se le pueden fijar. Un campo que ya no existe sale sin opciones.
+        """
+        campo = await self._campos.find_by_id(golf_course_id)
+        if campo is not None and golf_course_id not in self._contextos:
+            self._contextos[golf_course_id] = course_context_for(campo)
+        cambios = await self._uow.barras_por_campo.del_campo(competition.id, golf_course_id)
+        color = cambios.color_de(user_id, general, genero)
+        source: Literal["OWN", "COURSE", "GENERAL", "NONE"]
+        if user_id in cambios.propias:
+            source = "OWN"
+        elif genero is not None and genero in cambios.por_genero:
+            source = "COURSE"
+        else:
+            source = "GENERAL"
+        # La habitual de su género si no tiene ninguna: la que jugaría
+        jugaria = color or barras_por_defecto(genero)
+        valida = await self._reglas.vale_en_el_campo(
+            competition, golf_course_id, jugaria, genero, self._contextos
+        )
+        opciones = await self._reglas.las_que_valen_en_el_campo(
+            competition, golf_course_id, genero, self._contextos
+        )
+        return CourseTeesDTO(
+            golf_course_id=golf_course_id.value,
+            golf_course_name=campo.name if campo is not None else "",
+            tee=jugaria.value if valida else None,
+            source=source if valida else "NONE",
+            options=[c.value for c in opciones],
         )

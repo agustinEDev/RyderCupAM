@@ -126,6 +126,7 @@ def _campo(barras):
         tee.par_total = 72
         tees.append(tee)
     campo = MagicMock()
+    campo.name = "Campo de prueba"
     campo.tees = tees
     campo.reference_card = _tarjeta()
     return campo
