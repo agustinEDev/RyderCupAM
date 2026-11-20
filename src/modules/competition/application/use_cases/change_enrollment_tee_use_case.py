@@ -323,8 +323,9 @@ class ChangeEnrollmentTeeUseCase:
                 if leida.id in salieron:
                     continue
                 partida = await self._uow.partidas.find_by_id_for_update(leida.id)
+                # Con el bloqueo, y con la hora de ahora: pudo llegarle mientras
                 if partida is None or partida.id in await las_que_salieron(
-                    franja, [partida], self._zonas, ahora
+                    franja, [partida], self._zonas, self._reloj()
                 ):
                     continue
                 foto = next((j for j in partida.jugadores if j.user_id == user_id), None)

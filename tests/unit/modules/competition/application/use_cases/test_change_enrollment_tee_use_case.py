@@ -50,20 +50,25 @@ from src.modules.competition.application.use_cases.change_enrollment_tee_use_cas
     TeeChangeClosedError,
     TeeNotAvailableError,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
+from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -73,6 +78,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     create_competition,
@@ -88,12 +94,12 @@ NI_UNA_NI_OTRA = "ni valorada ni con tarjeta"
 SLOPES = {TeeColor.YELLOW: 128, TeeColor.RED: 113, TeeColor.BLUE: 145, TeeColor.WHITE: 130}
 
 
-def _tarjeta():
+def _tarjeta(par=4):
     hoyos = []
     for i in range(1, 19):
         hoyo = MagicMock()
         hoyo.number = i
-        hoyo.par = 4
+        hoyo.par = par
         hoyo.stroke_index = i
         hoyos.append(hoyo)
     return hoyos
@@ -115,7 +121,8 @@ def _campo(barras):
         tee.course_rating = Decimal("71.2")
         # Un Slope por color: así cambiar de barras cambia el hándicap de juego
         tee.slope_rating = SLOPES.get(color, 128) if como == VALORADA else 0
-        tee.holes = _tarjeta() if como == SOLO_TARJETA else []
+        # La tarjeta propia, con pares de 5: así se ve si una foto usa los suyos
+        tee.holes = _tarjeta(par=5) if como == SOLO_TARJETA else []
         tee.par_total = 72
         tees.append(tee)
     campo = MagicMock()
@@ -183,6 +190,7 @@ class _Mundo:
         self.uow = InMemoryUnitOfWork()
         # Antes del día de las rondas de prueba (1 jun 2026): ninguna salió por la hora
         self.ahora = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+        self.horas: list[datetime] = []
         self.campos = _Campos()
         self.usuarios = _Usuarios()
         self.organizador = UserId(uuid4())
@@ -196,9 +204,27 @@ class _Mundo:
         for hombre in (self.capitan_b, self.otro):
             self.usuarios.poner(hombre, Gender.MALE)
 
-    async def montar(self, campos=(ALDEAMAYOR,), play_mode="HANDICAP"):
-        creada = await create_competition(self.uow, self.organizador, play_mode=play_mode)
-        self.competition_id = CompetitionId(creada.id)
+    async def montar(self, campos=(ALDEAMAYOR,), play_mode="HANDICAP", tipo=None):
+        """Una Ryder por defecto; con `tipo` (STABLEFORD o MEDAL), un stroke play abierto."""
+        if tipo is None:
+            creada = await create_competition(self.uow, self.organizador, play_mode=play_mode)
+            self.competition_id = CompetitionId(creada.id)
+        else:
+            self.competition_id = CompetitionId(uuid4())
+            async with self.uow:
+                await self.uow.competitions.add(
+                    Competition(
+                        id=self.competition_id,
+                        creator_id=self.organizador,
+                        name=CompetitionName("Stableford de prueba"),
+                        dates=DateRange(date(2026, 6, 1), date(2026, 6, 1)),
+                        location=Location(CountryCode("ES")),
+                        play_mode=PlayMode(play_mode),
+                        tournament_type=tipo,
+                        status=CompetitionStatus.ACTIVE,
+                    )
+                )
+                await self.uow.commit()
         async with self.uow:
             competicion = await self.uow.competitions.find_by_id(self.competition_id)
             for barras in campos:
@@ -209,7 +235,9 @@ class _Mundo:
             await self.uow.commit()
         self.inscripciones = {}
         for jugador in (self.jugadora, self.capitana, self.capitan_b, self.otro):
-            inscripcion = await create_approved_enrollment(self.uow, creada.id, jugador)
+            inscripcion = await create_approved_enrollment(
+                self.uow, self.competition_id.value, jugador
+            )
             # El hándicap del torneo, fijado al cerrar: lo usan las partidas de stroke play
             inscripcion.congelar_handicap(Decimal("18.0"))
             async with self.uow:
@@ -268,8 +296,14 @@ class _Mundo:
             golf_course_repository=self.campos,
             user_repository=self.usuarios,
             zonas=_Zonas(),
-            reloj=lambda: self.ahora,
+            reloj=self._reloj,
         )
+
+    def _reloj(self) -> datetime:
+        """La hora fija, o la siguiente de `horas` si se dio una lista (un reloj que avanza)."""
+        if self.horas:
+            return self.horas.pop(0)
+        return self.ahora
 
     async def cambiar(self, color, quien=None, is_admin=False, de=None):
         inscripcion = self.inscripciones[de] if de else self.inscripcion
@@ -1213,6 +1247,118 @@ class TestLosBloqueosYLasLecturas:
         await mundo.cambiar(TeeColor.RED)
 
         assert mundo.campos.find_by_id.await_count == 1
+
+
+class TestLosDeCodeRabbit:
+    """Sexta ronda (CodeRabbit en la PR #915)."""
+
+    async def test_change_tee_rechecks_a_tee_group_with_a_fresh_time_after_the_lock(self):
+        """
+        Given una partida suya que no había salido al leerla, cuya hora llega
+            mientras se bloquea (el reloj avanza)
+        When cambia sus barras
+        Then con el bloqueo se mira con la hora nueva, y la partida no se toca
+        """
+        mundo = await _Mundo().montar()
+        partida = await mundo.partida_con(mundo.jugadora)
+        mundo.horas = [
+            datetime(2026, 5, 1, 8, 0, tzinfo=UTC),
+            datetime(2026, 6, 1, 8, 30, tzinfo=UTC),  # 10:30 en Madrid
+        ]
+
+        await mundo.cambiar(TeeColor.RED)
+
+        [ella] = (await mundo.la_partida(partida)).jugadores
+        assert (ella.tee_color, ella.playing_handicap) == (TeeColor.YELLOW, 10)
+
+    async def test_change_tee_to_her_saved_tee_needs_no_saved_handicaps(self):
+        """
+        Given su partido con ella ya en rojas de mujer y un rival sin índice guardado
+        When elige rojas
+        Then no hay nada que rehacer: ni 409 por el índice del rival, el partido
+            queda igual y su inscripción cambia
+        """
+        mundo = await _Mundo().montar()
+        partido = await mundo.partido(
+            [mundo.jugadora],
+            [mundo.otro],
+            barras={mundo.jugadora: (TeeColor.RED, Gender.FEMALE)},
+            handicaps={mundo.otro: None},
+        )
+
+        await mundo.cambiar(TeeColor.RED)
+
+        assert await mundo.barras_guardadas() == TeeColor.RED
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).playing_handicap == 10
+
+    async def test_change_tee_to_her_saved_tee_no_longer_rated_there_is_rejected(self):
+        """
+        Given su partido en un campo que ya no valora las rojas, con ella guardada en
+            rojas mixtas (la misma clave que daría su barra nueva allí)
+        When elige rojas (las tiene el otro campo de la competición)
+        Then 422: aunque la clave sea la guardada, en ese campo ya no está valorada
+        """
+        mundo = await _Mundo().montar(
+            campos=(ALDEAMAYOR, [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)])
+        )
+        await mundo.partido(
+            [mundo.jugadora],
+            [mundo.otro],
+            campo=1,
+            barras={mundo.jugadora: (TeeColor.RED, None)},
+        )
+
+        with pytest.raises(TeeNotAvailableError):
+            await mundo.cambiar(TeeColor.RED)
+
+    async def test_change_tee_in_scratch_keeps_the_others_snapshots_as_they_are(self):
+        """
+        Given una Ryder SCRATCH con un fourball suyo programado y una compañera
+            guardada en blancas, que el campo ya no tiene
+        When la jugadora cambia a rojas
+        Then solo su foto cambia: la de la compañera y las de los rivales quedan tal
+            cual, sin volver a buscarlas en el campo
+        """
+        mundo = await _Mundo().montar(play_mode="SCRATCH")
+        partido = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            barras={mundo.capitana: (TeeColor.WHITE, Gender.FEMALE)},
+        )
+        antes = await mundo.el_partido(partido)
+        otros = [antes.find_player(u) for u in (mundo.capitana, mundo.capitan_b, mundo.otro)]
+
+        await mundo.cambiar(TeeColor.RED)
+
+        rehecho = await mundo.el_partido(partido)
+        assert rehecho.find_player(mundo.jugadora).tee_color == TeeColor.RED
+        assert [rehecho.find_player(u) for u in (mundo.capitana, mundo.capitan_b, mundo.otro)] == (
+            otros
+        )
+
+    @pytest.mark.parametrize("tipo", [TournamentType.STABLEFORD, TournamentType.MEDAL])
+    async def test_change_tee_in_a_scratch_stroke_play_uses_the_pars_of_the_card(self, tipo):
+        """
+        Given un stroke play SCRATCH y un campo con blancas de mujer que solo tienen
+            tarjeta (pares de 5), con una partida suya pendiente
+        When la jugadora elige blancas
+        Then su foto nueva lleva los pares de esa tarjeta (`pars_by_tee`)
+        """
+        mundo = await _Mundo().montar(
+            campos=(
+                [(TeeColor.YELLOW, Gender.MALE), (TeeColor.WHITE, Gender.FEMALE, SOLO_TARJETA)],
+            ),
+            play_mode="SCRATCH",
+            tipo=tipo,
+        )
+        partida = await mundo.partida_con(mundo.jugadora)
+
+        await mundo.cambiar(TeeColor.WHITE)
+
+        [ella] = (await mundo.la_partida(partida)).jugadores
+        assert (ella.tee_color, ella.tee_gender) == (TeeColor.WHITE, Gender.FEMALE)
+        assert ella.par_por_hoyo == (5,) * 18
 
 
 class TestElRastro:
