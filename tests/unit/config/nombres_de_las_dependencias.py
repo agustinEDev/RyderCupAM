@@ -52,6 +52,8 @@ NOMBRES_DE_ANTES = (
     "get_cancel_competition_use_case",
     "get_cancel_email_change_use_case",
     "get_cancel_enrollment_use_case",
+    # Cambiar las barras de una inscripción (BE #912, 20 nov 2026)
+    "get_change_enrollment_tee_use_case",
     "get_cancel_invitation_use_case",
     "get_cancel_quick_match_use_case",
     "get_cerrar_franja_use_case",

@@ -286,6 +286,37 @@ class SetNamePreferenceResponseDTO(BaseModel):
 
 
 # ======================================================================================
+# DTO para el Caso de Uso: Cambiar las barras de una inscripción (BE #912)
+# ======================================================================================
+
+
+class ChangeEnrollmentTeeRequestDTO(BaseModel):
+    """
+    DTO de entrada para cambiar las barras de una inscripción: el propio jugador o
+    el organizador. Sin barras (null) vuelve a las habituales de su género.
+    """
+
+    enrollment_id: UUID = Field(..., description="ID de la inscripción.")
+    tee_color: TeeColor | None = Field(
+        ..., description="Las barras nuevas, o null para volver a las de por defecto."
+    )
+
+
+class ChangeEnrollmentTeeResponseDTO(BaseModel):
+    """DTO de salida tras cambiar las barras de una inscripción."""
+
+    id: UUID = Field(..., description="ID de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del jugador.")
+    tee_color: str | None = Field(
+        None, description="Las barras elegidas, o null si juega desde las de por defecto."
+    )
+    updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
 # DTO para el Caso de Uso: Eliminar Hándicap Personalizado (revertir al oficial)
 # ======================================================================================
 
