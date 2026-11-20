@@ -31,15 +31,13 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CourseNotInCompetitionError,
+    EnrollmentNotApprovedError,
     NotCompetitionCreatorError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
     ChangeEnrollmentCourseTeeUseCase,
-)
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
-    EnrollmentNotApprovedError,
-    TeeChangeClosedError,
-    TeeNotAvailableError,
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId

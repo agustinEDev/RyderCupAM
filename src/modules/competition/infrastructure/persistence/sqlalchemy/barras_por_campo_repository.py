@@ -132,3 +132,7 @@ class SQLAlchemyBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
                 propias.c.enrollment_id.in_(de_la_competicion),
             )
         )
+
+    async def borrar_propias(self, enrollment: Enrollment) -> None:
+        tabla = enrollment_course_tees_table
+        await self._session.execute(delete(tabla).where(tabla.c.enrollment_id == enrollment.id))

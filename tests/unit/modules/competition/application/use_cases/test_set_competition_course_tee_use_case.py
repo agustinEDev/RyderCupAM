@@ -32,8 +32,6 @@ from src.modules.competition.application.exceptions import (
     CourseNotInCompetitionError,
     NotCompetitionCreatorError,
     PendingGameNotRecalculableError,
-)
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     TeeChangeClosedError,
     TeeNotAvailableError,
 )

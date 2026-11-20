@@ -39,19 +39,16 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
     TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
     SE_PUEDEN_CAMBIAR,
     BarrasDeLaInscripcion,
-)
-from src.modules.competition.application.services.jugadores_de_la_partida import (
-    JugadoresDeLaPartida,
-)
-from src.modules.competition.application.services.jugadores_del_partido import (
-    JugadoresDelPartido,
 )
 from src.modules.competition.application.services.lo_pendiente import LoPendiente
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -65,28 +62,6 @@ from src.shared.domain.services.instante_utc import ahora_en_utc
 from src.shared.domain.value_objects.gender import Gender
 
 logger = logging.getLogger(__name__)
-
-
-class TeeNotAvailableError(Exception):
-    """
-    Esas barras no valen para él: ningún campo de la competición las tiene
-    valoradas para su género, o no lo están en el campo de algo que le queda por
-    jugar.
-    """
-
-    error_code = "TEE_NOT_AVAILABLE"
-
-
-class TeeChangeClosedError(Exception):
-    """La competición ya terminó o se canceló: ya no se cambian barras."""
-
-    error_code = "TEE_CHANGE_CLOSED"
-
-
-class EnrollmentNotApprovedError(Exception):
-    """Solo se cambian las barras de una inscripción aprobada."""
-
-    error_code = "ENROLLMENT_NOT_APPROVED"
 
 
 class ChangeEnrollmentTeeUseCase:
@@ -117,9 +92,6 @@ class ChangeEnrollmentTeeUseCase:
         self._reloj = reloj
         # Quién y qué barras: la misma regla que ofrece el selector (GET .../tees)
         self._reglas = BarrasDeLaInscripcion(uow, golf_course_repository)
-        # El mismo cálculo que al generar y al reasignar: sin reglas propias
-        self._del_partido = JugadoresDelPartido(golf_course_repository, user_repository)
-        self._de_la_partida = JugadoresDeLaPartida(golf_course_repository, user_repository)
 
     async def execute(
         self, request: ChangeEnrollmentTeeRequestDTO, quien: UserId, is_admin: bool = False

@@ -10,7 +10,9 @@ sale y las que se le pueden fijar. Además, su barra general y la habitual de su
 género.
 
 Quién: los mismos que pueden cambiarlas en ese momento, comprobado antes de mirar
-el estado. Es una lectura: no bloquea nada. El género del jugador no sale.
+el estado. Es una lectura: no bloquea nada. No devuelve el género del jugador,
+pero las opciones (barras de un género o mixtas) lo dejan ver a quien puede
+cambiar sus barras: por eso solo las ven ellos.
 """
 
 from typing import Literal
@@ -22,17 +24,15 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
+    TeeChangeClosedError,
 )
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
     SE_PUEDEN_CAMBIAR,
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.course_context import course_context_for
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
-    EnrollmentNotApprovedError,
-    TeeChangeClosedError,
-)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,

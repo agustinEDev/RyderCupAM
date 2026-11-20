@@ -1177,6 +1177,7 @@ enrollment_course_tees_table = Table(
     ),
     Column("tee_color", String(20), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Index("ix_enrollment_course_tees_golf_course_id", "golf_course_id"),
 )
 
 competition_course_tees_table = Table(
@@ -1197,6 +1198,8 @@ competition_course_tees_table = Table(
     Column("gender", String(10), primary_key=True),
     Column("tee_color", String(20), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("gender IN ('MALE', 'FEMALE')", name="ck_competition_course_tees_gender"),
+    Index("ix_competition_course_tees_golf_course_id", "golf_course_id"),
 )
 
 # Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:

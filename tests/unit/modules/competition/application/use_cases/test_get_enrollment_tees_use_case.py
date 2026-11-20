@@ -27,16 +27,14 @@ from src.modules.competition.application.dto.enrollment_dto import (
     ChangeEnrollmentCourseTeeRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
+    EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
     ChangeEnrollmentCourseTeeUseCase,
-)
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
-    EnrollmentNotApprovedError,
-    TeeChangeClosedError,
-    TeeNotAvailableError,
 )
 from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
     GetEnrollmentTeesUseCase,

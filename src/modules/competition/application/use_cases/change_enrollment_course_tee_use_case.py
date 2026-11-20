@@ -24,7 +24,10 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     CourseNotInCompetitionError,
+    EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
     TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
@@ -33,11 +36,6 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.lo_pendiente import LoPendiente
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
-    EnrollmentNotApprovedError,
-    TeeChangeClosedError,
-    TeeNotAvailableError,
-)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )

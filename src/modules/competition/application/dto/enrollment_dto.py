@@ -363,7 +363,8 @@ class CourseTeesDTO(BaseModel):
 class EnrollmentTeesResponseDTO(BaseModel):
     """
     Las barras de una inscripción, campo a campo (barras por campo): las mismas que
-    aceptarían los cambios. No lleva el género del jugador.
+    aceptarían los cambios. No devuelve el género del jugador, pero las opciones
+    (barras de un género o mixtas) lo dejan ver a quien puede cambiar sus barras.
     """
 
     general_tee: str | None = Field(None, description="Su barra general, o null.")

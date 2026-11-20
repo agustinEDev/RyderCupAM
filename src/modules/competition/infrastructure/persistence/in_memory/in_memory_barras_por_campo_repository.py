@@ -70,3 +70,10 @@ class InMemoryBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
             for k, v in self._del_campo.items()
             if (k[0], k[1]) != (competition_id, golf_course_id)
         }
+
+    async def borrar_propias(self, enrollment: Enrollment) -> None:
+        self._propias = {
+            k: v
+            for k, v in self._propias.items()
+            if (k[0], k[2]) != (enrollment.competition_id, enrollment.user_id)
+        }

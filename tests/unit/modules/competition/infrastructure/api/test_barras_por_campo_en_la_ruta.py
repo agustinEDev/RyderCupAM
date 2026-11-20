@@ -11,10 +11,9 @@ import pytest
 
 from src.modules.competition.application.exceptions import (
     CourseNotInCompetitionError,
-    PendingGameNotRecalculableError,
-)
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+    CourseTeeNotAvailableError,
     EnrollmentNotApprovedError,
+    PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
 )
@@ -138,3 +137,23 @@ def test_competition_course_tee_body_rejects_an_unknown_gender():
     """
     with pytest.raises(ValueError):
         competition_golf_course_routes.SetCourseTeeBody(gender="OTHER", tee_color=None)
+
+
+@pytest.mark.asyncio
+async def test_course_tee_for_a_gender_not_available_has_its_own_text():
+    """
+    Given la barra del campo para un género que ese campo no tiene
+    When llega a la ruta de la competición
+    Then 422 TEE_NOT_AVAILABLE con el texto del género y el campo, no el del jugador
+    """
+    caso = AsyncMock()
+    caso.execute.side_effect = CourseTeeNotAvailableError("interno")
+
+    respuesta = await _del_campo(caso)
+
+    cuerpo = json.loads(respuesta.body)
+    assert respuesta.status_code == 422
+    assert cuerpo == {
+        "detail": "That tee is not available for this gender on this course.",
+        "error_code": "TEE_NOT_AVAILABLE",
+    }

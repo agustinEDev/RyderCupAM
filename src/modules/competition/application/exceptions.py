@@ -329,3 +329,32 @@ class CourseNotInCompetitionError(Exception):
     """Ese campo no es de la competición: no se le fijan barras (barras por campo)."""
 
     error_code = "COURSE_NOT_IN_COMPETITION"
+
+
+class TeeNotAvailableError(Exception):
+    """
+    Esas barras no valen para él: ningún campo de la competición las tiene
+    valoradas para su género, ESE campo no las tiene, o no lo están en el campo de
+    algo que le queda por jugar.
+    """
+
+    error_code = "TEE_NOT_AVAILABLE"
+
+
+class CourseTeeNotAvailableError(TeeNotAvailableError):
+    """
+    Ese campo no tiene esas barras para ese género (ni mixtas): la barra del campo
+    para un género (R2). Mismo código que el del jugador, con su propio texto.
+    """
+
+
+class TeeChangeClosedError(Exception):
+    """La competición ya terminó o se canceló: ya no se cambian barras."""
+
+    error_code = "TEE_CHANGE_CLOSED"
+
+
+class EnrollmentNotApprovedError(Exception):
+    """Solo se tocan las barras de una inscripción aprobada."""
+
+    error_code = "ENROLLMENT_NOT_APPROVED"

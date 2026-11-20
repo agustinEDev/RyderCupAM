@@ -843,13 +843,6 @@ def get_withdraw_match_player_use_case(
     return WithdrawMatchPlayerUseCase(uow, scoring_service)
 
 
-def _zonas_y_reloj(
-    uow: CompetitionUnitOfWorkInterface, gc_uow: GolfCourseUnitOfWorkInterface
-) -> tuple[CompetitionTimezoneFromCourse, Callable[[], datetime]]:
-    """Las zonas y el reloj de los cambios de barras: qué partidas ya salieron (#544)."""
-    return CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions), ahora_en_utc
-
-
 def get_change_enrollment_tee_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
@@ -857,7 +850,11 @@ def get_change_enrollment_tee_use_case(
 ) -> ChangeEnrollmentTeeUseCase:
     """Cambiar la barra general de una inscripción (BE #912)."""
     return ChangeEnrollmentTeeUseCase(
-        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+        uow,
+        gc_uow.golf_courses,
+        user_uow.users,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        ahora_en_utc,
     )
 
 
@@ -868,7 +865,11 @@ def get_change_enrollment_course_tee_use_case(
 ) -> ChangeEnrollmentCourseTeeUseCase:
     """El cambio propio de barras en un campo (barras por campo)."""
     return ChangeEnrollmentCourseTeeUseCase(
-        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+        uow,
+        gc_uow.golf_courses,
+        user_uow.users,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        ahora_en_utc,
     )
 
 
@@ -879,7 +880,11 @@ def get_set_competition_course_tee_use_case(
 ) -> SetCompetitionCourseTeeUseCase:
     """La barra de un campo para un género (barras por campo)."""
     return SetCompetitionCourseTeeUseCase(
-        uow, gc_uow.golf_courses, user_uow.users, *_zonas_y_reloj(uow, gc_uow)
+        uow,
+        gc_uow.golf_courses,
+        user_uow.users,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        ahora_en_utc,
     )
 
 

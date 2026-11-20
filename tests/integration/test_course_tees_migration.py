@@ -63,6 +63,31 @@ def test_nacen_vacias_con_sus_claves_y_sus_cascadas(base_desechable):  # noqa: F
         "WHERE tc.table_name IN ('enrollment_course_tees', 'competition_course_tees')",
     )
     assert {fila[0] for fila in cascadas} == {"CASCADE"} and len(cascadas) == 4
+    indices = _consulta(
+        base_desechable,
+        "SELECT indexname FROM pg_indexes "
+        "WHERE indexname LIKE 'ix_%_course_tees_golf_course_id' ORDER BY indexname",
+    )
+    assert indices == [
+        ("ix_competition_course_tees_golf_course_id",),
+        ("ix_enrollment_course_tees_golf_course_id",),
+    ]
+
+
+def test_el_genero_de_la_barra_del_campo_solo_es_male_o_female(base_desechable):  # noqa: F811
+    """
+    Given la migración subida
+    When se mira la restricción del género de competition_course_tees
+    Then solo admite MALE o FEMALE
+    """
+    _alembic(base_desechable, "upgrade", BARRAS)
+
+    [(definicion,)] = _consulta(
+        base_desechable,
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+        "WHERE conname = 'ck_competition_course_tees_gender'",
+    )
+    assert "MALE" in definicion and "FEMALE" in definicion
 
 
 def test_bajar_quita_las_dos_tablas(base_desechable):  # noqa: F811

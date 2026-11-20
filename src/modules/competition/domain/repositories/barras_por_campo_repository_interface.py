@@ -45,3 +45,7 @@ class BarrasPorCampoRepositoryInterface(ABC):
         self, competition_id: CompetitionId, golf_course_id: GolfCourseId
     ) -> None:
         """Borra todos los cambios de ese campo: se quita de la competición."""
+
+    @abstractmethod
+    async def borrar_propias(self, enrollment: Enrollment) -> None:
+        """Borra todos los cambios propios de una inscripción: vuelve a entrar."""

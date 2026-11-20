@@ -25,7 +25,10 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     CourseNotInCompetitionError,
+    CourseTeeNotAvailableError,
     NotCompetitionCreatorError,
+    TeeChangeClosedError,
+    TeeNotAvailableError,
     TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
@@ -34,10 +37,6 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.lo_pendiente import LoPendiente
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
-    TeeChangeClosedError,
-    TeeNotAvailableError,
-)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -115,7 +114,7 @@ class SetCompetitionCourseTeeUseCase:
             if request.tee_color is not None and not await self._reglas.vale_en_el_campo(
                 competition, campo, request.tee_color, genero, pendiente.contextos
             ):
-                raise TeeNotAvailableError(
+                raise CourseTeeNotAvailableError(
                     f"Ese campo no tiene barras {request.tee_color.value} para ese género"
                 )
 

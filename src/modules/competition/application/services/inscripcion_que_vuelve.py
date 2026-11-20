@@ -67,6 +67,9 @@ async def guardar_la_inscripcion(
             aprobada=aprobada, tee_color=tee_color, custom_handicap=custom_handicap
         )
         await uow.enrollments.update(vieja)
+        # Sin sus cambios propios de barras por campo (20 nov 2026, conservador): que
+        # no reaparezcan unas barras que nadie le ve fijar al volver
+        await uow.barras_por_campo.borrar_propias(vieja)
         return vieja
 
     if aprobada:

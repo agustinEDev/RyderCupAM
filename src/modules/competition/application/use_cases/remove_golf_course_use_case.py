@@ -77,9 +77,11 @@ class RemoveGolfCourseFromCompetitionUseCase:
             GolfCourseNotAssignedError: Si el campo no esta asociado a la competicion
         """
         async with self._uow:
-            # 1. Buscar la competicion
+            # 1. Buscar la competicion, con bloqueo: un cambio de barras en ese campo
+            #    a la vez (barras por campo) espera, y no deja filas de un campo que
+            #    ya no es de la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(

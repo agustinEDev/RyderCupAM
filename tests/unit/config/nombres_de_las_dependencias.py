@@ -13,8 +13,6 @@ NOMBRES_DE_ANTES = (
     "_generador_al_abrir",
     "_recent_hole_report_senders",
     "_recent_hole_sample_senders",
-    # Las zonas y el reloj de los cambios de barras (barras por campo, 20 nov 2026)
-    "_zonas_y_reloj",
     # Actividad para la pasada de hándicaps en segundo plano (15 nov 2026)
     "actividad_en_sesion_propia",
     "get_accept_terms_use_case",

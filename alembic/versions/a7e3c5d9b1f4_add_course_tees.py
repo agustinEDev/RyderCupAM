@@ -7,7 +7,11 @@ organizador fija en el campo para todos los de un género (R2). Sin ninguno
 cuenta la general (R3), y si el campo no la tiene no se elige otra sola (R4).
 
 - `enrollment_course_tees`: (inscripción, campo) → barra. Clave primaria.
-- `competition_course_tees`: (competición, campo, género) → barra. Clave primaria.
+- `competition_course_tees`: (competición, campo, género) → barra. Clave primaria, y
+  el género solo MALE o FEMALE (CHECK).
+
+Las dos con un índice en `golf_course_id`: borrar un campo (cascada) o quitarlo de
+una competición las busca por él, y la clave primaria no empieza por esa columna.
 
 Las dos se van con su inscripción o su competición, y con el campo (ON DELETE
 CASCADE). Quitar un campo de una competición (que no borra el campo) borra sus
@@ -75,6 +79,9 @@ def upgrade() -> None:
             primary_key=True,
         ),
         sa.Column("gender", sa.String(10), primary_key=True, comment="MALE o FEMALE"),
+        sa.CheckConstraint(
+            "gender IN ('MALE', 'FEMALE')", name="ck_competition_course_tees_gender"
+        ),
         sa.Column(
             "tee_color",
             sa.String(20),
@@ -84,8 +91,15 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
+    op.create_index(
+        "ix_enrollment_course_tees_golf_course_id", "enrollment_course_tees", ["golf_course_id"]
+    )
+    op.create_index(
+        "ix_competition_course_tees_golf_course_id", "competition_course_tees", ["golf_course_id"]
+    )
+
 
 def downgrade() -> None:
-    """Quita las dos tablas: la versión anterior no las conoce."""
+    """Quita las dos tablas (y con ellas sus índices): la versión anterior no las conoce."""
     op.drop_table("competition_course_tees")
     op.drop_table("enrollment_course_tees")

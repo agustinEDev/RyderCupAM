@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import EnrollmentTeesResponseDTO
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
     TeeChangeClosedError,
 )
