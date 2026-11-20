@@ -8,16 +8,22 @@ partidos se bloqueaba sin salida. Decidido con Agustín:
 - Antes de empezar: el propio jugador, el capitán de SU equipo, el organizador
   o un admin. Ya empezada: el capitán de su equipo, el organizador o un admin
   (para desbloquear la sesión 2 de una Ryder, que se genera ya empezada).
-  Terminada o cancelada: nadie. Sin equipos formados no hay capitanes.
-- Solo mientras el jugador no tenga partido ni partida generados: su hándicap
-  de juego ya salió de esas barras.
+  Terminada o cancelada: nadie. Sin equipos formados no hay capitanes, y el
+  subcapitán no cuenta.
+- No se cambia lo ya jugado, pero sí lo que queda por jugar: sus partidos de
+  Ryder y sus partidas de stroke play generados que aún no han empezado se
+  rehacen con las barras nuevas, con el mismo cálculo que al generar y al
+  reasignar (en fourball y foursomes, el partido entero: el reparto del equipo
+  depende de ella). Lo empezado no se toca, y lo que se genere después ya sale
+  con las nuevas. Si en el campo de alguno no están valoradas, se rechaza todo
+  (422) y no cambia nada.
 - Solo barras valoradas para su género, o sin género, en alguno de los campos
-  de la competición; en SCRATCH valen también las que solo tienen tarjeta.
-  Sin género en el perfil, basta con que el color exista.
+  de la competición; en SCRATCH valen también las que solo tienen tarjeta. Sin
+  género en el perfil, solo las mixtas.
 - Sin barras (null) vuelve a las habituales de su género.
 
-A quien no puede se le contesta 403 antes de mirar el estado: no se le dice si
-la competición terminó ni si el jugador tiene partido.
+A quien no puede se le contesta 403 antes de mirar el estado. Los bloqueos, en
+el orden de siempre: la competición, la inscripción y sus partidos.
 """
 
 from src.modules.competition.application.dto.enrollment_dto import (
@@ -29,8 +35,15 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
 )
-from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
-    PlayerHasMatchesError,
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresDeLaPartida,
+    JugadoresSinBarraError,
+)
+from src.modules.competition.application.services.jugadores_del_partido import (
+    JugadoresDelPartido,
+)
+from src.modules.competition.application.services.match_players_builder import (
+    TeeColorNotFoundError,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -39,6 +52,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -86,6 +100,9 @@ class ChangeEnrollmentTeeUseCase:
         self._uow = uow
         self._campos = golf_course_repository
         self._usuarios = user_repository
+        # El mismo cálculo que al generar y al reasignar: sin reglas propias
+        self._del_partido = JugadoresDelPartido(golf_course_repository, user_repository)
+        self._de_la_partida = JugadoresDeLaPartida(golf_course_repository, user_repository)
 
     async def execute(
         self, request: ChangeEnrollmentTeeRequestDTO, quien: UserId, is_admin: bool = False
@@ -104,8 +121,8 @@ class ChangeEnrollmentTeeUseCase:
             NotCompetitionCreatorError: Si no es el jugador, el organizador ni un admin
             EnrollmentNotApprovedError: Si la inscripción no está aprobada
             TeeChangeClosedError: Si la competición ya empezó, acabó o se canceló
-            PlayerHasMatchesError: Si el jugador ya tiene partido o partida generados
-            TeeNotAvailableError: Si ningún campo tiene esas barras para su género
+            TeeNotAvailableError: Si ningún campo tiene esas barras para su género, o
+                si no están valoradas en el campo de un partido que queda por jugar
         """
         enrollment_id = EnrollmentId(request.enrollment_id)
         async with self._uow:
@@ -137,8 +154,6 @@ class ChangeEnrollmentTeeUseCase:
                 raise TeeChangeClosedError(
                     f"No se cambian barras en una competición {competition.status.value}"
                 )
-            if await self._tiene_partido(competition, enrollment.user_id):
-                raise PlayerHasMatchesError("Ya tiene partido generado con sus barras")
             if request.tee_color is not None and not await self._la_tiene_algun_campo(
                 competition, request.tee_color, enrollment.user_id
             ):
@@ -147,8 +162,13 @@ class ChangeEnrollmentTeeUseCase:
                     "valoradas para este jugador"
                 )
 
-            enrollment.set_tee_color(request.tee_color)
-            await self._uow.enrollments.update(enrollment)
+            # Todo o nada: si un partido pendiente no puede salir con ellas, ni la
+            # inscripción ni ningún partido cambian
+            async with self._uow.savepoint():
+                enrollment.set_tee_color(request.tee_color)
+                await self._uow.enrollments.update(enrollment)
+                await self._uow.flush()
+                await self._rehacer_lo_pendiente(competition, enrollment.user_id)
 
         return ChangeEnrollmentTeeResponseDTO(
             id=enrollment.id.value,
@@ -158,16 +178,61 @@ class ChangeEnrollmentTeeUseCase:
             updated_at=enrollment.updated_at,
         )
 
-    async def _tiene_partido(self, competition: Competition, user_id: UserId) -> bool:
-        """Si ya tiene un partido de Ryder o una partida de stroke play generados (C7)."""
-        if await self._uow.partidas.del_jugador(competition.id, user_id):
-            return True
-        rondas = await self._uow.rounds.find_by_competition(competition.id)
-        if not rondas:
-            return False
-        return bool(
-            await self._uow.matches.find_by_rounds_for_player([r.id for r in rondas], user_id)
-        )
+    async def _rehacer_lo_pendiente(self, competition: Competition, user_id: UserId) -> None:
+        """
+        Sus partidos y partidas generados y sin empezar, con las barras nuevas.
+
+        Raises:
+            TeeNotAvailableError: Si en el campo de alguno no están valoradas
+        """
+        rondas = {r.id: r for r in await self._uow.rounds.find_by_competition(competition.id)}
+        if rondas:
+            for leido in await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id):
+                if leido.status != MatchStatus.SCHEDULED:
+                    continue
+                partido = await self._uow.matches.find_by_id_for_update(leido.id)
+                if partido is None or partido.status != MatchStatus.SCHEDULED:
+                    continue
+                try:
+                    team_a, team_b = await self._del_partido.construir(
+                        self._uow,
+                        rondas[partido.round_id],
+                        competition,
+                        [p.user_id for p in partido.team_a_players],
+                        [p.user_id for p in partido.team_b_players],
+                    )
+                except TeeColorNotFoundError as e:
+                    raise TeeNotAvailableError(
+                        "Esas barras no están valoradas en el campo de un partido suyo "
+                        "que queda por jugar"
+                    ) from e
+                partido.recalcular_jugadores(team_a, team_b)
+                await self._uow.matches.update(partido)
+
+        for leida in await self._uow.partidas.del_jugador(competition.id, user_id):
+            if leida.empezada:
+                continue
+            partida = await self._uow.partidas.find_by_id_for_update(leida.id)
+            if partida is None or partida.empezada:
+                continue
+            franja = rondas.get(partida.round_id) or await self._uow.rounds.find_by_id(
+                partida.round_id
+            )
+            if franja is None:
+                continue
+            try:
+                fotos = await self._de_la_partida.construir(
+                    self._uow, competition, franja, [user_id]
+                )
+            except JugadoresSinBarraError as e:
+                raise TeeNotAvailableError(
+                    "Esas barras no están valoradas en el campo de una partida suya "
+                    "que queda por salir"
+                ) from e
+            partida.recalcular(
+                [fotos[user_id] if j.user_id == user_id else j for j in partida.jugadores]
+            )
+            await self._uow.partidas.guardar([partida])
 
     async def _puede(
         self, competition: Competition, enrollment: Enrollment, quien: UserId, is_admin: bool
@@ -198,9 +263,8 @@ class ChangeEnrollmentTeeUseCase:
         la regla de siempre (`tee_key_for`): valoradas, y en SCRATCH también con
         solo tarjeta, que sin golpes no hace falta valoración.
 
-        Sin género en el perfil (o sin usuario) basta con que el color exista para
-        alguno: `tee_key_for` solo buscaría las sin género, y el aviso de género lo
-        verá el organizador al generar.
+        Sin género en el perfil (o sin usuario) solo valen las mixtas: es lo que
+        `tee_key_for` encuentra con género None, y nunca las de un solo género.
         """
         usuario = await self._usuarios.find_by_id(user_id)
         genero: Gender | None = usuario.gender if usuario else None
@@ -213,9 +277,7 @@ class ChangeEnrollmentTeeUseCase:
             barras: set[TeeKey] = set(contexto.tee_ratings)
             if en_scratch:
                 barras |= set(contexto.holes_by_tee)
-            if genero is None:
-                if any(barra == color.value for barra, _ in barras):
-                    return True
-            elif tee_key_for(dict.fromkeys(barras), color.value, genero.value) is not None:
+            su_genero = genero.value if genero else None
+            if tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None:
                 return True
         return False

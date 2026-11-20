@@ -15,9 +15,6 @@ from src.modules.competition.application.use_cases.change_enrollment_tee_use_cas
     TeeChangeClosedError,
     TeeNotAvailableError,
 )
-from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
-    PlayerHasMatchesError,
-)
 from src.modules.competition.infrastructure.api.v1 import enrollment_routes
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -33,7 +30,6 @@ def _quien(is_admin=False) -> UserResponseDTO:
     [
         (TeeNotAvailableError, "TEE_NOT_AVAILABLE", 422),
         (TeeChangeClosedError, "TEE_CHANGE_CLOSED", 409),
-        (PlayerHasMatchesError, "PLAYER_HAS_MATCHES", 409),
         (EnrollmentNotApprovedError, "ENROLLMENT_NOT_APPROVED", 409),
     ],
 )

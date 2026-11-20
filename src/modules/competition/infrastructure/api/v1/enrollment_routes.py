@@ -657,15 +657,11 @@ class ChangeTeeBody(BaseModel):
 _NO_SE_CAMBIAN: dict[str, tuple[int, str]] = {
     TeeNotAvailableError.error_code: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
-        "No course of this competition has that tee rated for this player.",
+        "That tee is not rated for this player on the courses still to be played.",
     ),
     TeeChangeClosedError.error_code: (
         status.HTTP_409_CONFLICT,
         "The competition has already started.",
-    ),
-    PlayerHasMatchesError.error_code: (
-        status.HTTP_409_CONFLICT,
-        "The player already has a generated match or tee group.",
     ),
     EnrollmentNotApprovedError.error_code: (
         status.HTTP_409_CONFLICT,
@@ -681,8 +677,8 @@ _NO_SE_CAMBIAN: dict[str, tuple[int, str]] = {
     description=(
         "Antes de empezar: el propio jugador, el capitán de su equipo, el organizador "
         "o un admin; ya empezada, solo el capitán de su equipo, el organizador o un "
-        "admin. Siempre que no tenga partido ni partida generados. Null vuelve a las "
-        "de por defecto."
+        "admin. Sus partidos y partidas generados que aún no han empezado se rehacen "
+        "con las barras nuevas; lo empezado no se toca. Null vuelve a las de por defecto."
     ),
 )
 async def change_enrollment_tee(
@@ -692,7 +688,8 @@ async def change_enrollment_tee(
     use_case: ChangeEnrollmentTeeUseCase = Depends(get_change_enrollment_tee_use_case),
 ):
     """
-    Cambia las barras de una inscripción (BE #912).
+    Cambia las barras de una inscripción (BE #912) y rehace con ellas lo que le
+    queda por jugar.
 
     Con su código en la raíz cuando no se puede, para que la pantalla lo diga en
     su idioma.
@@ -703,12 +700,7 @@ async def change_enrollment_tee(
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )
-    except (
-        TeeNotAvailableError,
-        TeeChangeClosedError,
-        PlayerHasMatchesError,
-        EnrollmentNotApprovedError,
-    ) as e:
+    except (TeeNotAvailableError, TeeChangeClosedError, EnrollmentNotApprovedError) as e:
         codigo, texto = _NO_SE_CAMBIAN[e.error_code]
         return JSONResponse(
             status_code=codigo, content={"detail": texto, "error_code": e.error_code}
