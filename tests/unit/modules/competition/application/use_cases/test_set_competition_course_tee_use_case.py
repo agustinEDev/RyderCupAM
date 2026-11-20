@@ -155,6 +155,20 @@ class TestLaBarraDelCampo:
 
         assert await _del_campo(mundo, segundo) == {}
 
+    async def test_course_tee_not_rated_for_that_gender_without_games_is_rejected(self):
+        """
+        Given el segundo campo sin rojas de mujer y nada generado todavía
+        When el organizador fija rojas allí para las mujeres
+        Then 422 igualmente: el campo no las tiene, aunque no haya nada que rehacer
+        """
+        mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS))
+        segundo = list(mundo.campos.por_id)[1]
+
+        with pytest.raises(TeeNotAvailableError):
+            await _para_todas(mundo, segundo, TeeColor.RED)
+
+        assert await _del_campo(mundo, segundo) == {}
+
     async def test_course_tee_on_a_course_of_another_competition_is_not_found(self):
         """
         Given un campo que no es de la competición

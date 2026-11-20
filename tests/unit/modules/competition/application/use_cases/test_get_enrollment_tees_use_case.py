@@ -139,6 +139,22 @@ class TestCampoACampo:
 
         assert (campo.tee, campo.source) == ("BLUE", "COURSE")
 
+    async def test_get_tees_with_both_her_own_change_and_the_course_tee_says_own(self):
+        """
+        Given azules para las mujeres en el segundo campo y su cambio propio también
+            a azules allí
+        When pide sus barras
+        Then de origen OWN: su cambio propio gana
+        """
+        mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS))
+        _, segundo = _campos(mundo)
+        await mundo.uow.barras_por_campo.fijar_del_campo(
+            mundo.competition_id, segundo, Gender.FEMALE, TeeColor.BLUE
+        )
+        await _propio(mundo, segundo, TeeColor.BLUE)
+
+        assert (await _barras(mundo)).courses[1].source == "OWN"
+
     async def test_get_tees_after_choosing_shows_her_general_tee(self):
         """
         Given la jugadora, que eligió azules como barra general
