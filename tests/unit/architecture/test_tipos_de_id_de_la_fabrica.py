@@ -71,8 +71,12 @@ def test_ningun_tipo_de_id_ni_de_pais_escrito_a_mano():
     assert hallazgos == []
 
 
-def test_lee_el_codigo():
-    """Si no encontrara ficheros, el test de arriba no probaría nada."""
+def test_leer_src_encuentra_los_ficheros():
+    """
+    Given: la carpeta src
+    When: se buscan ficheros
+    Then: hay cientos y la fábrica existe (si no, el guardián no probaría nada)
+    """
     assert len(list(RAIZ.rglob("*.py"))) > 500
     assert LA_FABRICA.exists()
 
@@ -99,5 +103,10 @@ def test_lee_el_codigo():
         ("class Cualquiera(TypeDecorator):\n    impl = String(360)", False),
     ],
 )
-def test_el_detector_ve_lo_que_tiene_que_ver(codigo, esperado):
+def test_detectar_cada_forma_da_lo_esperado(codigo, esperado):
+    """
+    Given: una forma de escribir un tipo (a mano o con la fábrica)
+    When: se pasa al detector
+    Then: la caza si es un tipo de id o de país a mano
+    """
     assert bool(_decoradores_a_mano(codigo)) is esperado

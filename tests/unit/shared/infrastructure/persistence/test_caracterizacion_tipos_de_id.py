@@ -610,10 +610,20 @@ ESPERADO = {
 
 
 @pytest.mark.parametrize(("modulo", "nombre", "vo"), DECORADORES)
-def test_el_decorador_hace_lo_fijado(modulo, nombre, vo):
+def test_guardar_y_leer_con_cada_decorador_da_lo_fijado(modulo, nombre, vo):
+    """
+    Given: cada uno de los 38 tipos de id y de país
+    When: se guarda y se lee cada entrada
+    Then: lo fijado (develop + los cambios decididos)
+    """
     assert sondea(modulo, nombre, vo) == ESPERADO[f"{modulo}.{nombre}"]
 
 
-def test_estan_todos():
+def test_inventario_con_todos_los_decoradores_esta_completo():
+    """
+    Given: el inventario del 20 nov 2026
+    When: se cuenta
+    Then: 38, y cada uno con lo que se espera de él
+    """
     assert len(DECORADORES) == 38
     assert set(ESPERADO) == {f"{m}.{n}" for m, n, _ in DECORADORES}
