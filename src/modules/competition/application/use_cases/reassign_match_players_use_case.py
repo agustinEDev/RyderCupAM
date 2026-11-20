@@ -177,8 +177,8 @@ class ReassignMatchPlayersUseCase:
         con la competición bloqueada, que el partido sigue programado.
 
         Primero quién, sin bloquear nada: a quien no organiza no se le dice en qué
-        estado está el partido. Después la competición con bloqueo, en el mismo
-        orden que generar (la ronda y luego la competición), los sobres, las
+        estado está el partido. Después la competición con bloqueo, como generar
+        (que lee la ronda sin bloquearla y bloquea la competición), los sobres, las
         partidas y el cambio de barras (BE #912); y solo entonces el partido, con
         el suyo: leer su estado antes del bloqueo dejaba empezarlo en medio.
         """

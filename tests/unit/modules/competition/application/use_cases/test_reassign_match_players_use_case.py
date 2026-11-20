@@ -1,5 +1,6 @@
 """Tests para ReassignMatchPlayersUseCase."""
 
+import copy
 from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -698,6 +699,30 @@ class TestReassignMatchPlayersUseCase:
 
         bloqueo = orden.index("InMemoryCompetitionRepository.find_by_id_for_update")
         assert "InMemoryMatchRepository.find_by_id_for_update" in orden[bloqueo:]
+
+    async def test_reassign_a_match_that_started_while_locking_is_rejected(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado al leerlo, que otro empieza antes del bloqueo
+        When el organizador lo reasigna
+        Then se rechaza con MatchNotScheduledError (el 400 que da hoy la ruta):
+            cuenta el estado leído con el bloqueo, no el de antes
+        """
+        _, match, peticion = await self._partido_programado(uow, creator_id, golf_course_id)
+        empezado = copy.deepcopy(match)
+        empezado.start()
+        uow.matches.find_by_id_for_update = AsyncMock(return_value=empezado)
+
+        with pytest.raises(MatchNotScheduledError):
+            await ReassignMatchPlayersUseCase(
+                uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+            ).execute(peticion, creator_id)
 
     async def test_reassign_by_someone_else_is_forbidden_without_locking(
         self,
