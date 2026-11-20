@@ -17,6 +17,7 @@ La fábrica de tipos de persistencia de ids (`tipo_de_id`).
 
   F1  | cada llamada da un tipo propio (cada módulo, el suyo)
   F2  | el tipo se llama como el id y lleva cache_ok
+  F3  | columna texto: CHAR(36); "varchar": VARCHAR(36), como en la BD
 """
 
 import uuid
@@ -114,6 +115,15 @@ class TestLaFabrica:
         assert TEXTO.impl.length == 36
         assert isinstance(NATIVO.impl, sqlalchemy.types.Uuid)
 
+    def test_f3_columna_varchar_como_en_la_bd(self):
+        # refresh_tokens.* son VARCHAR(36) en las migraciones: se declaran igual
+        variable = tipo_de_id(IdDePrueba, columna="varchar")()
+        assert type(variable.impl) is sqlalchemy.types.String
+        assert variable.impl.length == 36
+        assert type(TEXTO.impl) is sqlalchemy.types.CHAR
+        assert guarda(variable, UN_UUID) == str(UN_UUID)
+        assert lee(variable, str(UN_UUID)).value == UN_UUID
+
 
 class TestCodigoDePais:
     """
@@ -143,3 +153,10 @@ class TestCodigoDePais:
         assert self.PAIS.impl.length == 2
         assert tipo_de_codigo_de_pais() is not tipo_de_codigo_de_pais()
         assert tipo_de_codigo_de_pais().cache_ok is True
+
+    def test_columna_varchar_como_en_la_bd(self):
+        # golf_courses.country_code es VARCHAR(2) en las migraciones
+        variable = tipo_de_codigo_de_pais(columna="varchar")()
+        assert type(variable.impl) is sqlalchemy.types.String
+        assert variable.impl.length == 2
+        assert type(self.PAIS.impl) is sqlalchemy.types.CHAR

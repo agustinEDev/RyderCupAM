@@ -23,7 +23,7 @@ from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de
 PasswordHistoryIdDecorator = tipo_de_id(PasswordHistoryId)
 
 
-# --- TypeDecorator para UserId (reutilizado) ---
+# --- TypeDecorator para UserId (el de este mapper) ---
 UserIdDecorator = tipo_de_id(UserId)
 
 

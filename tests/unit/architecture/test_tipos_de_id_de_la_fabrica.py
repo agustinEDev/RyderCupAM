@@ -8,7 +8,8 @@ con un texto. Ahora salen todos de `tipos_de_id.py` (`tipo_de_id` y
 test lee el código para que no vuelva a aparecer uno a mano: una clase que
 hereda de `TypeDecorator` y se llama `...IdType`, `...IdDecorator` o
 `CountryCode...`, o cuya columna es la de un id o un país (`CHAR(36)`,
-`String(36)`, `UUID(...)`, `CHAR(2)`, `String(2)`).
+`String(36)`, `VARCHAR`, `UUID`, `CHAR(2)`, `String(2)`, también con
+`length=` o anotada).
 """
 
 import ast
@@ -21,7 +22,9 @@ RAIZ = Path(__file__).resolve().parents[3] / "src"
 LA_FABRICA = RAIZ / "shared" / "infrastructure" / "persistence" / "sqlalchemy" / "tipos_de_id.py"
 
 NOMBRE = re.compile(r"(Id(Type|Decorator)|^_?CountryCode\w*)$")
-COLUMNA = re.compile(r"^(?:\w+\.)*(?:CHAR|String)\((?:36|2)\)$|^(?:\w+\.)*(?:UUID|Uuid)\(")
+COLUMNA = re.compile(
+    r"^(?:\w+\.)*(?:CHAR|String|VARCHAR)\((?:length=)?(?:36|2)\)$|^(?:\w+\.)*(?:UUID|Uuid)\b"
+)
 
 
 def _decoradores_a_mano(codigo: str) -> list[str]:
@@ -36,8 +39,15 @@ def _decoradores_a_mano(codigo: str) -> list[str]:
             (
                 ast.unparse(s.value)
                 for s in nodo.body
-                if isinstance(s, ast.Assign)
-                and any(getattr(t, "id", "") == "impl" for t in s.targets)
+                if (
+                    isinstance(s, ast.Assign)
+                    and any(getattr(t, "id", "") == "impl" for t in s.targets)
+                )
+                or (
+                    isinstance(s, ast.AnnAssign)
+                    and getattr(s.target, "id", "") == "impl"
+                    and s.value
+                )
             ),
             "",
         )
@@ -81,6 +91,12 @@ def test_lee_el_codigo():
         ("class MatchResultJsonType(TypeDecorator):\n    impl = JSONB", False),
         ("class XIdDecorator(Base):\n    impl = CHAR(36)", False),
         ("XIdDecorator = tipo_de_id(XId)", False),
+        ("class Cualquiera(TypeDecorator):\n    impl = CHAR(length=36)", True),
+        ("class Cualquiera(TypeDecorator):\n    impl = sa.String(length=2)", True),
+        ("class Cualquiera(TypeDecorator):\n    impl = VARCHAR(36)", True),
+        ("class Cualquiera(TypeDecorator):\n    impl = postgresql.UUID", True),
+        ("class Cualquiera(TypeDecorator):\n    impl: Any = CHAR(36)", True),
+        ("class Cualquiera(TypeDecorator):\n    impl = String(360)", False),
     ],
 )
 def test_el_detector_ve_lo_que_tiene_que_ver(codigo, esperado):

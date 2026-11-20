@@ -52,7 +52,7 @@ from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import (
 
 
 GolfCourseIdType = tipo_de_id(GolfCourseId, columna="uuid")
-CountryCodeType = tipo_de_codigo_de_pais()
+CountryCodeType = tipo_de_codigo_de_pais(columna="varchar")
 UserIdType = tipo_de_id(UserId)
 
 

@@ -34,7 +34,7 @@ from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de
 # ============================================================================
 
 
-RefreshTokenIdDecorator = tipo_de_id(RefreshTokenId)
+RefreshTokenIdDecorator = tipo_de_id(RefreshTokenId, columna="varchar")
 
 
 class TokenHashDecorator(TypeDecorator):
@@ -56,7 +56,7 @@ class TokenHashDecorator(TypeDecorator):
         return TokenHash(value)
 
 
-UserDeviceIdDecorator = tipo_de_id(UserDeviceId)
+UserDeviceIdDecorator = tipo_de_id(UserDeviceId, columna="varchar")
 
 
 # ============================================================================
