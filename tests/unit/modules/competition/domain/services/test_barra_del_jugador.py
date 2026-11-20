@@ -189,7 +189,9 @@ class TestBarraPorDefecto:
     | D2 | Mujer   | (Rojas, —)                   | Rojas, sin género       |
     | D3 | Mujer   | (Amarillas, mujer)           | Rojas, sin valoración   |
     | D4 | Hombre  | (Rojas, hombre)              | Amarillas, sin valoración |
+    | D5 | Mujer que eligió azules | (Rojas, mujer) | Azules, sin valoración (las suyas) |
     | D6 | Sin     | (Amarillas, —)               | Amarillas, sin género   |
+    | D7 | Mujer en scratch | (Rojas, mujer), con tarjeta | Rojas, mujer       |
     """
 
     @pytest.mark.parametrize(
@@ -250,6 +252,16 @@ class TestBarraPorDefecto:
         barra = barra_del_jugador(None, genero, valoradas)
 
         assert (barra.tee_color, barra.tee_gender, barra.tee_rating) == esperado
+
+    def test_barra_del_jugador_que_eligio_da_la_suya_aunque_no_este_valorada(self):
+        """
+        Given una mujer que eligió azules en un campo con solo rojas de mujer
+        When se busca desde qué barras juega
+        Then son las suyas, sin valorar: la regla por defecto no pisa lo elegido (D5)
+        """
+        barra = barra_del_jugador(TeeColor.BLUE, Gender.FEMALE, {("RED", "FEMALE"): ROJAS_M})
+
+        assert (barra.tee_color, barra.tee_gender, barra.tee_rating) == (TeeColor.BLUE, None, None)
 
     def test_lo_que_le_falta_mujer_sin_rojas_valoradas_es_su_color(self):
         """

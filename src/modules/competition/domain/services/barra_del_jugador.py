@@ -20,10 +20,12 @@ from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 
-# Las habituales de cada género, las mismas que la partida rápida (BE #912,
-# decidido el 20 nov 2026): amarillas los hombres y rojas las mujeres. Sin
-# género, amarillas, como siempre. Si el campo no las tiene valoradas se quedan
-# sin valorar y el organizador ve el aviso al generar.
+# Las habituales de cada género (BE #912, decidido el 20 nov 2026): la misma
+# regla que ya usaba el front al crear una partida rápida
+# (RyderCupWeb/src/utils/barraPorDefecto.js, FE #1025): amarillas los hombres y
+# rojas las mujeres, de su género o mixtas. Sin género, amarillas, como siempre.
+# Si el campo no las tiene valoradas se quedan sin valorar y el organizador ve
+# el aviso al generar.
 BARRAS_HABITUALES = {Gender.MALE: TeeColor.YELLOW, Gender.FEMALE: TeeColor.RED}
 BARRAS_SIN_GENERO = TeeColor.YELLOW
 
