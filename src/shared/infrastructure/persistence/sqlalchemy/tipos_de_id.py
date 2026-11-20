@@ -30,7 +30,7 @@ def tipo_de_id(clase: type, *, columna: Literal["texto", "uuid"] = "texto") -> t
     Un tipo de persistencia para los ids de `clase`.
 
     Cada llamada da un tipo nuevo: cada módulo define el suyo con esta fábrica
-    (comparten dominio, no tablas; ver CLAUDE.md).
+    (los módulos comparten dominio, no tablas).
     """
     en_texto = columna == "texto"
 
