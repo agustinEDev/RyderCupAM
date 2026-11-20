@@ -12,13 +12,17 @@ podía reventar.
 """
 
 from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeNotRatedForPlayerError,
 )
-from src.modules.competition.application.services.course_context import course_context_for
+from src.modules.competition.application.services.course_context import (
+    contexto_del_campo,
+    course_context_for,
+)
 from src.modules.competition.application.services.match_players_builder import (
     MatchPlayersBuilder,
     TeeColorNotFoundError,
@@ -34,6 +38,8 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -120,6 +126,7 @@ class JugadoresDelPartido:
         user_id: UserId,
         tee_color: TeeColor | None,
         genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext] | None = None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]] | None:
         """
         Los dos bandos de un partido ya generado cuando un jugador cambia de barras
@@ -132,6 +139,10 @@ class JugadoresDelPartido:
         de él y lo que dependa de él (la diferencia en individual, el reparto
         frente al más bajo en fourball, el del equipo en foursomes).
 
+        Args:
+            contextos: El contexto de cada campo ya leído en esta ejecución, para
+                no leer el mismo campo una vez por partido
+
         Returns:
             Los dos bandos nuevos, o None si su barra queda igual que la guardada:
             entonces no se toca nada de nadie
@@ -142,10 +153,7 @@ class JugadoresDelPartido:
                 hándicap índice, o la barra guardada de otro ya no está valorada
         """
         is_scratch = competition.play_mode == PlayMode.SCRATCH
-        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-        if golf_course is None:
-            raise PendingGameNotRecalculableError("El campo de la sesión ya no existe")
-        contexto = course_context_for(golf_course)
+        contexto = await contexto_del_campo(self._gc_repo, round_entity.golf_course_id, contextos)
 
         # Cada uno con su foto: la barra guardada (con su género, para que se busque
         # la misma) y su índice guardado; él, con la barra nueva y su género
@@ -186,7 +194,7 @@ class JugadoresDelPartido:
             )
 
         try:
-            return self._match_players.build(
+            team_a, team_b = self._match_players.build(
                 round_entity.match_format,
                 [p.user_id for p in partido.team_a_players],
                 [p.user_id for p in partido.team_b_players],
@@ -206,6 +214,22 @@ class JugadoresDelPartido:
             raise PendingGameNotRecalculableError(
                 "La barra guardada de otro jugador del partido ya no está valorada"
             ) from e
+
+        # En SCRATCH quien no tenía índice guardado sigue sin él: el reparto lo
+        # cuenta como 0, pero eso no es una foto nueva (/code-review)
+        sin_indice = {
+            foto.user_id
+            for foto in (*partido.team_a_players, *partido.team_b_players)
+            if foto.player_handicap is None
+        }
+
+        def como_estaba(jugadores: list[MatchPlayer]) -> list[MatchPlayer]:
+            return [
+                replace(j, player_handicap=None) if j.user_id in sin_indice else j
+                for j in jugadores
+            ]
+
+        return como_estaba(team_a), como_estaba(team_b)
 
     async def _datos_de_handicap(
         self, round_entity: Round, is_scratch: bool, player_ids: list[UserId]

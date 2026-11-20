@@ -20,10 +20,12 @@ from dataclasses import replace
 from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
-    PendingGameNotRecalculableError,
     TeeNotRatedForPlayerError,
 )
-from src.modules.competition.application.services.course_context import course_context_for
+from src.modules.competition.application.services.course_context import (
+    contexto_del_campo,
+    course_context_for,
+)
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
@@ -47,6 +49,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -225,6 +228,7 @@ class JugadoresDeLaPartida:
         foto: JugadorDePartida,
         tee_color: TeeColor | None,
         genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext] | None = None,
     ) -> JugadorDePartida | None:
         """
         La foto de un jugador de una partida ya generada con otras barras (BE #912).
@@ -239,10 +243,7 @@ class JugadoresDeLaPartida:
             TeeNotRatedForPlayerError: Si con hándicap no están valoradas en el campo
             PendingGameNotRecalculableError: Si el campo de la franja ya no existe
         """
-        campo = await self._campos.find_by_id(franja.golf_course_id)
-        if campo is None:
-            raise PendingGameNotRecalculableError("El campo de la franja ya no existe")
-        contexto = course_context_for(campo)
+        contexto = await contexto_del_campo(self._campos, franja.golf_course_id, contextos)
         if competition.play_mode == PlayMode.SCRATCH:
             nueva = self._sin_golpes(foto.user_id, tee_color, foto.handicap, genero, contexto)
         else:
