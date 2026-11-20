@@ -64,6 +64,45 @@ class BarrasDeLaInscripcion:
             "Solo el jugador, el capitán de su equipo o el organizador cambian sus barras"
         )
 
+    async def comprobar_quien_consulta(
+        self, competition: Competition, enrollment: Enrollment, quien: UserId, is_admin: bool
+    ) -> str:
+        """
+        Como qué consulta sus barras: lo mismo que quien las cambia, pero en
+        cualquier estado de la competición (es una lectura). El propio jugador
+        siempre: son sus datos.
+
+        Raises:
+            NotCompetitionCreatorError: Si no es el jugador, el capitán de su
+                equipo, el organizador ni un admin
+        """
+        if is_admin:
+            return "admin"
+        if competition.is_creator(quien):
+            return "organizer"
+        if enrollment.user_id == quien:
+            return "player"
+        if await self._es_su_capitan(competition, enrollment.user_id, quien):
+            return "captain"
+        raise NotCompetitionCreatorError(
+            "Solo el jugador, el capitán de su equipo o el organizador ven sus barras"
+        )
+
+    @staticmethod
+    def comprobar_organizador(competition: Competition, quien: UserId, is_admin: bool) -> str:
+        """
+        La barra de un campo para todos los de un género: solo el organizador o un
+        admin (barras por campo).
+
+        Raises:
+            NotCompetitionCreatorError: Si no es ninguno de los dos
+        """
+        if is_admin:
+            return "admin"
+        if competition.is_creator(quien):
+            return "organizer"
+        raise NotCompetitionCreatorError("Solo el organizador fija la barra de un campo")
+
     async def _es_su_capitan(
         self, competition: Competition, jugador: UserId, quien: UserId
     ) -> bool:

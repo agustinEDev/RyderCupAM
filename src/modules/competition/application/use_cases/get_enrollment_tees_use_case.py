@@ -9,8 +9,9 @@ su género o su general, si ese campo la tiene para él; si no, ninguna), de dó
 sale y las que se le pueden fijar. Además, su barra general y la habitual de su
 género.
 
-Quién: los mismos que pueden cambiarlas en ese momento, comprobado antes de mirar
-el estado. Es una lectura: no bloquea nada. No devuelve el género del jugador,
+Quién: el propio jugador, el capitán de su equipo, el organizador o un admin, en
+cualquier estado de la competición (consultar es una lectura); comprobado antes
+de mirar nada más. Es una lectura: no bloquea nada. No devuelve el género del jugador,
 pero las opciones (barras de un género o mixtas) lo dejan ver a quien puede
 cambiar sus barras: por eso solo las ven ellos.
 """
@@ -26,10 +27,8 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
-    TeeChangeClosedError,
 )
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
-    SE_PUEDEN_CAMBIAR,
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.course_context import course_context_for
@@ -75,9 +74,9 @@ class GetEnrollmentTeesUseCase:
         Raises:
             EnrollmentNotFoundError: Si la inscripción no existe
             CompetitionNotFoundError: Si su competición no existe
-            NotCompetitionCreatorError: Si no puede cambiarlas ahora
+            NotCompetitionCreatorError: Si no es el jugador, el capitán de su equipo, el
+                organizador ni un admin
             EnrollmentNotApprovedError: Si la inscripción no está aprobada
-            TeeChangeClosedError: Si la competición terminó o se canceló
         """
         async with self._uow:
             enrollment = await self._uow.enrollments.find_by_id(EnrollmentId(enrollment_id))
@@ -88,15 +87,12 @@ class GetEnrollmentTeesUseCase:
                 raise CompetitionNotFoundError(
                     f"Competición no encontrada: {enrollment.competition_id}"
                 )
-            # Primero quién: a quien no puede no se le dice nada más
-            await self._reglas.comprobar_quien(competition, enrollment, quien, is_admin)
+            # Primero quién: a quien no puede no se le dice nada más. Consultar es
+            # una lectura: vale en cualquier estado (la competición cerrada no
+            # cambia lo que juega cada uno), y el propio jugador puede siempre
+            await self._reglas.comprobar_quien_consulta(competition, enrollment, quien, is_admin)
             if not enrollment.is_approved():
                 raise EnrollmentNotApprovedError("La inscripción no está aprobada")
-            if competition.status not in SE_PUEDEN_CAMBIAR:
-                raise TeeChangeClosedError(
-                    f"No se cambian barras en una competición {competition.status.value}"
-                )
-
             usuario = await self._usuarios.find_by_id(enrollment.user_id)
             genero = usuario.gender if usuario else None
             campos = [
@@ -135,13 +131,16 @@ class GetEnrollmentTeesUseCase:
             self._contextos[golf_course_id] = course_context_for(campo)
         cambios = await self._uow.barras_por_campo.del_campo(competition.id, golf_course_id)
         color = cambios.color_de(user_id, general, genero)
-        source: Literal["OWN", "COURSE", "GENERAL", "NONE"]
+        source: Literal["OWN", "COURSE", "GENERAL", "DEFAULT", "NONE"]
         if user_id in cambios.propias:
             source = "OWN"
         elif genero is not None and genero in cambios.por_genero:
             source = "COURSE"
-        else:
+        elif general is not None:
             source = "GENERAL"
+        else:
+            # Ni cambios ni barra general: la habitual de su género
+            source = "DEFAULT"
         # La habitual de su género si no tiene ninguna: la que jugaría
         jugaria = color or barras_por_defecto(genero)
         valida = await self._reglas.vale_en_el_campo(

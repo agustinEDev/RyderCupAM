@@ -701,10 +701,12 @@ async def change_enrollment_tee(
 @router.get(
     "/enrollments/{enrollment_id}/tees",
     response_model=EnrollmentTeesResponseDTO,
-    summary="Barras que se pueden elegir para una inscripción",
+    summary="Barras de una inscripción, campo a campo",
     description=(
-        "Las barras que aceptaría el cambio (PUT .../tee), las de por defecto y las "
-        "elegidas. Las piden los mismos que pueden cambiarlas en ese momento."
+        "Por cada campo: la barra que juega, de dónde sale y las que se le pueden fijar "
+        "(las mismas que aceptarían los cambios); y su barra general y la habitual de su "
+        "género. La consultan el propio jugador, el capitán de su equipo, el organizador "
+        "o un admin, en cualquier estado de la competición."
     ),
 )
 async def get_enrollment_tees(

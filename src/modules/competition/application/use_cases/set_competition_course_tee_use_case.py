@@ -26,7 +26,6 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     CourseNotInCompetitionError,
     CourseTeeNotAvailableError,
-    NotCompetitionCreatorError,
     TeeChangeClosedError,
     TeeNotAvailableError,
     TeeNotRatedForPlayerError,
@@ -97,7 +96,7 @@ class SetCompetitionCourseTeeUseCase:
             competition = await self._uow.competitions.find_by_id(competition_id)
             if competition is None:
                 raise CompetitionNotFoundError(f"Competición no encontrada: {competition_id}")
-            como = self._comprobar_quien(competition.is_creator(quien), is_admin)
+            como = self._reglas.comprobar_organizador(competition, quien, is_admin)
 
             competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if competition is None:
@@ -179,12 +178,3 @@ class SetCompetitionCourseTeeUseCase:
             gender=genero.value,
             tee_color=request.tee_color.value if request.tee_color else None,
         )
-
-    @staticmethod
-    def _comprobar_quien(es_organizador: bool, is_admin: bool) -> str:
-        """Solo el organizador o un admin."""
-        if is_admin:
-            return "admin"
-        if es_organizador:
-            return "organizer"
-        raise NotCompetitionCreatorError("Solo el organizador fija la barra de un campo")

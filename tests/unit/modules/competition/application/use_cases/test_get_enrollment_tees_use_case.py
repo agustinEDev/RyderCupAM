@@ -7,7 +7,8 @@ competición: la barra que juega (o null), de dónde sale y las que se pueden el
 
 | Caso                                               | Campo                                |
 |----------------------------------------------------|--------------------------------------|
-| Sin cambios, con las habituales en el campo        | tee RED, source GENERAL              |
+| Sin cambios ni barra general (las habituales)      | tee RED, source DEFAULT              |
+| Con su barra general                               | source GENERAL                       |
 | Sin cambios, sin su barra en el campo              | tee null, source NONE (R4)           |
 | Con un cambio propio                               | source OWN                           |
 | Con la del campo para su género                    | source COURSE                        |
@@ -30,7 +31,6 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
-    TeeChangeClosedError,
     TeeNotAvailableError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
@@ -90,7 +90,7 @@ class TestCampoACampo:
         Given la jugadora sin barra elegida, en Aldeamayor (rojas y azules de mujer) y en
             un campo sin rojas de mujer
         When pide sus barras
-        Then en Aldeamayor juega rojas (las habituales, GENERAL), en el otro ninguna
+        Then en Aldeamayor juega rojas (las habituales de su género, DEFAULT), en el otro ninguna
             (NONE) y solo puede elegir azules; general null y por defecto rojas
         """
         mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS))
@@ -103,7 +103,7 @@ class TestCampoACampo:
             (c.golf_course_id, c.golf_course_name, c.tee, c.source, c.options)
             for c in respuesta.courses
         ] == [
-            (primero.value, "Campo 1", "RED", "GENERAL", ["RED", "BLUE"]),
+            (primero.value, "Campo 1", "RED", "DEFAULT", ["RED", "BLUE"]),
             (segundo.value, "Campo 2", None, "NONE", ["BLUE"]),
         ]
 
@@ -166,7 +166,10 @@ class TestCampoACampo:
         respuesta = await _barras(mundo)
 
         assert respuesta.general_tee == "BLUE"
-        assert [c.tee for c in respuesta.courses] == ["BLUE", "BLUE"]
+        assert [(c.tee, c.source) for c in respuesta.courses] == [
+            ("BLUE", "GENERAL"),
+            ("BLUE", "GENERAL"),
+        ]
 
     async def test_get_tees_of_a_player_without_gender_offers_only_mixed_tees(self):
         """
@@ -322,45 +325,47 @@ class TestQuien:
         with pytest.raises(NotCompetitionCreatorError):
             await _barras(mundo, quien=getattr(mundo, quien))
 
-    async def test_get_tees_in_progress_by_the_player_is_forbidden(self):
+    @pytest.mark.parametrize("estado", ["en curso", "terminada", "cancelada"])
+    async def test_get_tees_by_the_player_in_any_state_answers(self, estado):
         """
-        Given la competición en curso
-        When la propia jugadora (no capitana) pide sus barras
-        Then 403: ya no las puede cambiar
-        """
-        mundo = await (await _Mundo().montar()).con_equipos()
-        await mundo.empezar()
-
-        with pytest.raises(NotCompetitionCreatorError):
-            await _barras(mundo)
-
-    @pytest.mark.parametrize("final", ["terminar", "cancelar"])
-    async def test_get_tees_once_finished_is_closed_for_the_organizer(self, final):
-        """
-        Given una competición terminada o cancelada
-        When el organizador pide las barras
-        Then 409 TEE_CHANGE_CLOSED
+        Given la competición en curso, terminada o cancelada
+        When la propia jugadora pide sus barras
+        Then responde: es una lectura de sus datos (aunque ya no pueda cambiarlas)
         """
         mundo = await (await _Mundo().montar()).con_equipos()
-        if final == "terminar":
+        if estado != "cancelada":
             await mundo.empezar()
-        await getattr(mundo, final)()
+        if estado == "terminada":
+            await mundo.terminar()
+        if estado == "cancelada":
+            await mundo.cancelar()
 
-        with pytest.raises(TeeChangeClosedError):
-            await _barras(mundo, quien=mundo.organizador)
+        assert (await _barras(mundo)).courses[0].options == ["RED", "BLUE"]
 
-    async def test_get_tees_once_finished_by_the_player_is_forbidden(self):
+    @pytest.mark.parametrize("quien", ["organizador", "capitana"])
+    async def test_get_tees_once_finished_by_the_organizer_or_her_captain_answers(self, quien):
         """
         Given una competición terminada
-        When la propia jugadora pide sus barras
-        Then 403, sin decirle nada del estado
+        When el organizador o la capitana de su equipo piden sus barras
+        Then responden: consultar no está cerrado
         """
         mundo = await (await _Mundo().montar()).con_equipos()
         await mundo.empezar()
         await mundo.terminar()
 
+        assert (await _barras(mundo, quien=getattr(mundo, quien))).courses
+
+    async def test_get_tees_by_a_player_of_the_other_team_is_forbidden_in_progress(self):
+        """
+        Given la competición en curso
+        When un jugador del otro equipo pide las barras de la jugadora
+        Then 403
+        """
+        mundo = await (await _Mundo().montar()).con_equipos()
+        await mundo.empezar()
+
         with pytest.raises(NotCompetitionCreatorError):
-            await _barras(mundo)
+            await _barras(mundo, quien=mundo.otro)
 
     @pytest.mark.parametrize(
         "estado",
