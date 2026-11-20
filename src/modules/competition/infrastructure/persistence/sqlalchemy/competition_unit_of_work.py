@@ -11,6 +11,9 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.competition.domain.repositories.barras_por_campo_repository_interface import (
+    BarrasPorCampoRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
@@ -55,6 +58,9 @@ from src.modules.competition.domain.repositories.round_repository_interface impo
 )
 from src.modules.competition.domain.repositories.team_assignment_repository_interface import (
     TeamAssignmentRepositoryInterface,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.barras_por_campo_repository import (
+    SQLAlchemyBarrasPorCampoRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
@@ -130,6 +136,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._partidas = SQLAlchemyPartidaRepository(session)
         self._golpes_de_partida = SQLAlchemyGolpeDePartidaRepository(session)
         self._esperas = SQLAlchemyEsperaEnFranjaRepository(session)
+        self._barras_por_campo = SQLAlchemyBarrasPorCampoRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -174,6 +181,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
         return self._handicap_updates
+
+    @property
+    def barras_por_campo(self) -> BarrasPorCampoRepositoryInterface:
+        return self._barras_por_campo
 
     @property
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:

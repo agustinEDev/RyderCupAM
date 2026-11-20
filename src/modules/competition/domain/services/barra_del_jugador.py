@@ -11,11 +11,13 @@ stroke play elijan igual.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_GENDER,
     MISSING_TEE_COLOR,
 )
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
@@ -87,6 +89,39 @@ def barra_sin_golpes(
     if clave is None or clave[1] is None:
         return barra
     return BarraDelJugador(barra.tee_color, genero, barra.tee_rating)
+
+
+def barra_en_el_campo(
+    user_id: UserId,
+    general: TeeColor | None,
+    genero: Gender | None,
+    cambios: BarrasDelCampo,
+    valoradas: Mapping[TeeKey, TeeRating],
+    con_tarjeta: Mapping[TeeKey, object] | None = None,
+) -> BarraDelJugador:
+    """
+    Desde qué barras juega un jugador en un campo (barras por campo, 20 nov 2026).
+
+    La única regla para todo lo que elige barras (generar, sobres, partidas,
+    reasignar, rehacer lo pendiente, el aviso de generar): gana su cambio propio
+    en ese campo (R1), si no la del campo para su género (R2), si no su barra
+    general (R3, o la habitual de su género). Con ese color, la búsqueda de
+    siempre: valoradas para su género o sin género, y en SCRATCH (`con_tarjeta`)
+    también las que solo tienen tarjeta. Si el campo no la tiene, se queda sin
+    valorar y el organizador ve el aviso (R4): no se elige otra sola.
+
+    Args:
+        user_id: El jugador
+        general: Su barra general (la de la inscripción), o None
+        genero: El del jugador
+        cambios: Los cambios de barras de ese campo
+        valoradas: Las barras valoradas del campo por (color, género)
+        con_tarjeta: En SCRATCH, las barras con tarjeta por (color, género)
+    """
+    color = cambios.color_de(user_id, general, genero)
+    if con_tarjeta is None:
+        return barra_del_jugador(color, genero, valoradas)
+    return barra_sin_golpes(color, genero, valoradas, con_tarjeta)
 
 
 def lo_que_le_falta(

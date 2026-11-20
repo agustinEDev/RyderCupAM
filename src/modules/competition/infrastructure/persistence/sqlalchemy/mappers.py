@@ -1156,6 +1156,49 @@ handicap_update_emails_table = Table(
     Column("sent_at", DateTime(timezone=True), nullable=False),
 )
 
+# Los cambios de barras por campo (barras por campo, 20 nov 2026). El propio de
+# una inscripción en un campo (R1) y el del campo para todos los de un género
+# (R2): únicos por su clave, y fuera con la inscripción, la competición o el
+# campo. Quitar un campo de la competición borra los suyos desde el caso de uso.
+enrollment_course_tees_table = Table(
+    "enrollment_course_tees",
+    metadata,
+    Column(
+        "enrollment_id",
+        EnrollmentIdDecorator,
+        ForeignKey("enrollments.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "golf_course_id",
+        GolfCourseIdDecorator,
+        ForeignKey("golf_courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("tee_color", String(20), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+competition_course_tees_table = Table(
+    "competition_course_tees",
+    metadata,
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "golf_course_id",
+        GolfCourseIdDecorator,
+        ForeignKey("golf_courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("gender", String(10), primary_key=True),
+    Column("tee_color", String(20), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 # Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:
 # sale de la hoja de salidas por el número. Los únicos se comprueban al final de
 # la transacción: un intercambio o un reordenado repite a medias un jugador o un

@@ -13,6 +13,7 @@ from src.shared.domain.repositories.country_repository_interface import (
 )
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
+from .barras_por_campo_repository_interface import BarrasPorCampoRepositoryInterface
 from .competition_repository_interface import CompetitionRepositoryInterface
 from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
@@ -125,6 +126,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
         """Las actualizaciones de hándicaps con la RFEG y sus resultados (#251)."""
+        pass
+
+    @property
+    @abstractmethod
+    def barras_por_campo(self) -> BarrasPorCampoRepositoryInterface:
+        """Los cambios de barras por campo: propios y para todos los de un género."""
         pass
 
     @abstractmethod
