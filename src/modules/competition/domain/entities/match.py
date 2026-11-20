@@ -418,6 +418,34 @@ class Match:
                 "SCORECARD_SUBMITTED", "A scorecard has already been submitted in this match"
             )
 
+    def recalcular_jugadores(
+        self, team_a_players: Sequence[MatchPlayer], team_b_players: Sequence[MatchPlayer]
+    ) -> None:
+        """
+        Los mismos jugadores con su foto nueva (BE #912): al cambiar unas barras, lo
+        que queda por jugar sale con ellas; lo empezado no se toca.
+
+        Rehace la ventaja con el reparto nuevo. Ni el id ni los marcadores cambian:
+        juegan los mismos.
+
+        Raises:
+            ValueError: Si ya empezó, o si cambia quién juega en algún bando
+        """
+        if self._status != MatchStatus.SCHEDULED:
+            raise ValueError("Un partido empezado no se recalcula")
+        for antes, despues in (
+            (self._team_a_players, team_a_players),
+            (self._team_b_players, team_b_players),
+        ):
+            if [p.user_id for p in antes] != [p.user_id for p in despues]:
+                raise ValueError("Recalcular no cambia quién juega")
+        self._team_a_players = tuple(team_a_players)
+        self._team_b_players = tuple(team_b_players)
+        self._handicap_strokes_given, self._strokes_given_to_team = self._ventaja(
+            team_a_players, team_b_players
+        )
+        self._updated_at = ahora_utc_sin_zona()
+
     def completar_genero_de_las_barras(
         self, genero_de: Callable[[MatchPlayer], Gender | None]
     ) -> int:
