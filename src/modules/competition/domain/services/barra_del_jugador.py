@@ -2,8 +2,8 @@
 barra_del_jugador - Desde qué barras juega cada uno (#251, PR 4).
 
 La regla es la de RyderCupAM#165: las barras que eligió en su inscripción
-(amarillas si no eligió), valoradas para su género y, si el campo no las tiene
-así, las mismas sin género. Nunca las del otro género. Sale de
+(si no eligió, las habituales de su género), valoradas para su género y, si el
+campo no las tiene así, las mismas sin género. Nunca las del otro género. Sale de
 `MatchPlayersBuilder.resolve_player_data` para que la Ryder y las partidas de
 stroke play elijan igual.
 """
@@ -20,7 +20,17 @@ from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 
-BARRAS_POR_DEFECTO = TeeColor.YELLOW
+# Las habituales de cada género, las mismas que la partida rápida (BE #912,
+# decidido el 20 nov 2026): amarillas los hombres y rojas las mujeres. Sin
+# género, amarillas, como siempre. Si el campo no las tiene valoradas se quedan
+# sin valorar y el organizador ve el aviso al generar.
+BARRAS_HABITUALES = {Gender.MALE: TeeColor.YELLOW, Gender.FEMALE: TeeColor.RED}
+BARRAS_SIN_GENERO = TeeColor.YELLOW
+
+
+def barras_por_defecto(genero: Gender | None) -> TeeColor:
+    """Las barras de quien no eligió: las habituales de su género."""
+    return BARRAS_SIN_GENERO if genero is None else BARRAS_HABITUALES[genero]
 
 
 @dataclass(frozen=True)
@@ -48,7 +58,7 @@ def barra_del_jugador(
         genero: El del jugador
         valoradas: Las barras del campo por (color, género)
     """
-    tee_color = de_la_inscripcion or BARRAS_POR_DEFECTO
+    tee_color = de_la_inscripcion or barras_por_defecto(genero)
     clave = tee_key_for(valoradas, tee_color.value, genero.value if genero else None)
     if clave is None:
         return BarraDelJugador(tee_color, None, None)
