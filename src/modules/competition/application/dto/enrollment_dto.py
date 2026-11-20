@@ -292,8 +292,9 @@ class SetNamePreferenceResponseDTO(BaseModel):
 
 class ChangeEnrollmentTeeRequestDTO(BaseModel):
     """
-    DTO de entrada para cambiar las barras de una inscripción: el propio jugador o
-    el organizador. Sin barras (null) vuelve a las habituales de su género.
+    DTO de entrada para cambiar las barras de una inscripción: el propio jugador
+    (antes de empezar), el capitán de su equipo, el organizador o un admin. Sin
+    barras (null) vuelve a las habituales de su género.
     """
 
     enrollment_id: UUID = Field(..., description="ID de la inscripción.")

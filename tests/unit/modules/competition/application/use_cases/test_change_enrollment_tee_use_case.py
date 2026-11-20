@@ -27,7 +27,8 @@ valoración). Sin género en el perfil (o sin usuario), solo las mixtas. Sin
 barras (null) vuelve a las habituales de su género.
 """
 
-from datetime import date
+import logging
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -40,6 +41,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
+    PendingGameNotRecalculableError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     ChangeEnrollmentTeeUseCase,
@@ -53,8 +55,10 @@ from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -152,6 +156,13 @@ class _Usuarios:
         return [self.por_id[u] for u in user_ids if u in self.por_id]
 
 
+class _Zonas:
+    """Todos los campos en Madrid."""
+
+    async def for_course(self, golf_course_id):
+        return "Europe/Madrid"
+
+
 # Aldeamayor: amarillas de hombre y azules y rojas de mujer
 ALDEAMAYOR = [
     (TeeColor.YELLOW, Gender.MALE),
@@ -169,6 +180,8 @@ class _Mundo:
 
     def __init__(self):
         self.uow = InMemoryUnitOfWork()
+        # Antes del día de las rondas de prueba (1 jun 2026): ninguna salió por la hora
+        self.ahora = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
         self.campos = _Campos()
         self.usuarios = _Usuarios()
         self.organizador = UserId(uuid4())
@@ -250,7 +263,11 @@ class _Mundo:
 
     def caso(self) -> ChangeEnrollmentTeeUseCase:
         return ChangeEnrollmentTeeUseCase(
-            self.uow, golf_course_repository=self.campos, user_repository=self.usuarios
+            self.uow,
+            golf_course_repository=self.campos,
+            user_repository=self.usuarios,
+            zonas=_Zonas(),
+            reloj=lambda: self.ahora,
         )
 
     async def cambiar(self, color, quien=None, is_admin=False, de=None):
@@ -280,21 +297,34 @@ class _Mundo:
             await self.uow.commit()
         return ronda
 
-    async def partido(self, team_a, team_b, formato=MatchFormat.SINGLES, campo=0, empezado=False):
+    async def partido(
+        self,
+        team_a,
+        team_b,
+        formato=MatchFormat.SINGLES,
+        campo=0,
+        empezado=False,
+        handicaps=None,
+        barras=None,
+        ronda=None,
+    ):
         """
-        Un partido generado con todos en amarillas de hombre y 10 golpes: lo que
-        cuenta es si al cambiar las barras se rehace o no.
+        Un partido generado. La foto de cada uno: amarillas de hombre (o la de
+        `barras`), hándicap índice 18 (o el de `handicaps`) y 10 golpes de juego.
         """
-        ronda = await self.ronda(formato, campo)
+        ronda = ronda or await self.ronda(formato, campo)
+        handicaps = handicaps or {}
+        barras = barras or {}
 
         def jugadores(ids):
             return [
                 MatchPlayer.create(
                     user_id=j,
                     playing_handicap=10,
-                    tee_color=TeeColor.YELLOW,
-                    tee_gender=Gender.MALE,
+                    tee_color=barras.get(j, (TeeColor.YELLOW, Gender.MALE))[0],
+                    tee_gender=barras.get(j, (TeeColor.YELLOW, Gender.MALE))[1],
                     strokes_received=list(range(1, 11)),
+                    player_handicap=handicaps.get(j, Decimal("18.0")),
                 )
                 for j in ids
             ]
@@ -315,12 +345,25 @@ class _Mundo:
     async def el_partido(self, match_id) -> Match:
         return await self.uow.matches.find_by_id(match_id)
 
-    async def partida_con(self, jugador: UserId, empezada=False):
-        """Una partida de stroke play generada con ella en amarillas y 10 golpes."""
-        ronda = await self.ronda()
+    async def partida_con(self, jugador: UserId, empezada=False, sin_franja=False):
+        """
+        Una partida de stroke play generada con ella en amarillas, hándicap 18 y 10
+        golpes, la primera de una franja que sale a las 09:00 (Madrid) del 1 jun.
+        """
+        franja = Round.create_franja(
+            competition_id=self.competition_id,
+            golf_course_id=next(iter(self.campos.por_id)),
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(11, 0), 10, 4),
+        )
+        if not sin_franja:
+            async with self.uow:
+                await self.uow.rounds.add(franja)
+                await self.uow.commit()
         partida = Partida.crear(
             self.competition_id,
-            ronda.id,
+            franja.id,
             1,
             [
                 JugadorDePartida(
@@ -775,23 +818,37 @@ class TestCuando:
 class TestLoQueQuedaPorJugar:
     """
     No se cambia lo ya jugado, pero sí lo que queda por jugar (Agustín, 20 nov):
-    sus partidos y partidas generados sin empezar se rehacen con las barras nuevas.
+    en sus partidos y partidas generados sin empezar cambia SU barra y lo que
+    depende de ella. Los demás se quedan como se generaron.
     """
 
-    async def test_change_tee_recalculates_her_scheduled_match(self):
+    async def test_change_tee_recalculates_her_scheduled_match_with_her_saved_handicap(self):
         """
-        Given la jugadora con un individual programado en amarillas
-        When cambia a rojas (Slope 113)
-        Then su partido la lleva en rojas de mujer, con el hándicap de juego de ellas
+        Given la jugadora con un individual programado en amarillas, con su hándicap
+            índice guardado en el partido (12) distinto del de su perfil (18)
+        When cambia a rojas
+        Then su partido la lleva en rojas de mujer, con el hándicap de juego que sale
+            de su índice GUARDADO; el rival conserva su barra y su índice
         """
         mundo = await _Mundo().montar()
-        partido = await mundo.partido([mundo.jugadora], [mundo.otro])
+        partido = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], handicaps={mundo.jugadora: Decimal("12.0")}
+        )
 
         await mundo.cambiar(TeeColor.RED)
 
-        ella = (await mundo.el_partido(partido)).find_player(mundo.jugadora)
+        rehecho = await mundo.el_partido(partido)
+        ella = rehecho.find_player(mundo.jugadora)
         assert (ella.tee_color, ella.tee_gender) == (TeeColor.RED, Gender.FEMALE)
-        assert ella.playing_handicap != 10
+        assert ella.player_handicap == Decimal("12.0")
+        # 12 con Slope 113 y CR 71,2 sobre par 72 al 100 %: 11
+        assert ella.playing_handicap == 11
+        rival = rehecho.find_player(mundo.otro)
+        assert (rival.tee_color, rival.tee_gender, rival.player_handicap) == (
+            TeeColor.YELLOW,
+            Gender.MALE,
+            Decimal("18.0"),
+        )
 
     async def test_change_tee_leaves_a_started_match_alone(self):
         """
@@ -808,28 +865,61 @@ class TestLoQueQuedaPorJugar:
         assert (ella.tee_color, ella.playing_handicap) == (TeeColor.YELLOW, 10)
         assert await mundo.barras_guardadas() == TeeColor.RED
 
-    async def test_change_tee_in_fourball_recalculates_the_whole_match(self):
+    async def test_change_tee_in_fourball_keeps_the_others_and_moves_the_allocation(self):
         """
-        Given un fourball programado en el que la jugadora tiene el hándicap más bajo
-        When cambia a rojas
-        Then se rehace el partido entero: el reparto de los demás sale de la diferencia
-            con el más bajo, y cambia con ella
+        Given un fourball programado en el que la jugadora tiene el índice más bajo
+        When cambia a azules y luego a rojas
+        Then la pareja y los rivales conservan su barra y su índice guardados, pero
+            el reparto (sale de la diferencia con el más bajo) se mueve con ella
         """
         mundo = await _Mundo().montar()
-        mundo.usuarios.poner(mundo.jugadora, Gender.FEMALE, Decimal("2.0"))
         partido = await mundo.partido(
             [mundo.jugadora, mundo.capitana],
             [mundo.capitan_b, mundo.otro],
             formato=MatchFormat.FOURBALL,
+            handicaps={mundo.jugadora: Decimal("2.0")},
         )
 
+        await mundo.cambiar(TeeColor.BLUE)
+        con_azules = (await mundo.el_partido(partido)).find_player(mundo.capitana)
+        await mundo.cambiar(TeeColor.RED)
+        rehecho = await mundo.el_partido(partido)
+
+        for user_id in (mundo.capitana, mundo.capitan_b, mundo.otro):
+            foto = rehecho.find_player(user_id)
+            assert (foto.tee_color, foto.tee_gender, foto.player_handicap) == (
+                TeeColor.YELLOW,
+                Gender.MALE,
+                Decimal("18.0"),
+            )
+        companera = rehecho.find_player(mundo.capitana)
+        assert companera.playing_handicap != con_azules.playing_handicap
+        assert companera.strokes_received != con_azules.strokes_received
+
+    async def test_change_tee_to_the_same_tee_again_changes_nothing(self):
+        """
+        Given la jugadora ya en rojas de mujer en su partido programado (su foto)
+        When elige rojas
+        Then el partido queda idéntico: ni ella ni nadie cambia
+        """
+        mundo = await _Mundo().montar()
+        partido = await mundo.partido(
+            [mundo.jugadora],
+            [mundo.otro],
+            barras={mundo.jugadora: (TeeColor.RED, Gender.FEMALE)},
+        )
+        antes = await mundo.el_partido(partido)
+        fotos = (antes.team_a_players, antes.team_b_players, antes.handicap_strokes_given)
+
+        await mundo.cambiar(TeeColor.RED)
         await mundo.cambiar(TeeColor.RED)
 
-        rehecho = await mundo.el_partido(partido)
-        assert rehecho.find_player(mundo.jugadora).tee_color == TeeColor.RED
-        companera = rehecho.find_player(mundo.capitana)
-        assert (companera.tee_color, companera.tee_gender) == (TeeColor.RED, Gender.FEMALE)
-        assert companera.playing_handicap != 10
+        despues = await mundo.el_partido(partido)
+        assert (
+            despues.team_a_players,
+            despues.team_b_players,
+            despues.handicap_strokes_given,
+        ) == fotos
 
     async def test_change_tee_back_to_default_recalculates_with_her_usual_tee(self):
         """
@@ -851,8 +941,7 @@ class TestLoQueQuedaPorJugar:
         Given dos campos: el primero con rojas de mujer, el segundo sin ellas, y su
             partido programado en el segundo
         When la jugadora elige rojas
-        Then se rechaza (422 TEE_NOT_AVAILABLE) y no cambia nada: ni su inscripción
-            ni su partido
+        Then se rechaza (422 TEE_NOT_AVAILABLE, por SU barra) y no cambia nada
         """
         mundo = await _Mundo().montar(
             campos=(ALDEAMAYOR, [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)])
@@ -865,6 +954,59 @@ class TestLoQueQuedaPorJugar:
         assert await mundo.barras_guardadas() is None
         ella = (await mundo.el_partido(partido)).find_player(mundo.jugadora)
         assert ella.tee_color == TeeColor.YELLOW
+
+    async def test_change_tee_with_a_rival_tee_no_longer_rated_is_a_conflict(self):
+        """
+        Given su partido programado con un rival en blancas, que el campo ya no tiene
+        When la jugadora elige rojas
+        Then 409 PENDING_GAME_NOT_RECALCULABLE (no un 422 por la barra de otro) y no
+            cambia nada
+        """
+        mundo = await _Mundo().montar()
+        partido = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.otro: (TeeColor.WHITE, Gender.MALE)}
+        )
+
+        with pytest.raises(PendingGameNotRecalculableError) as error:
+            await mundo.cambiar(TeeColor.RED)
+
+        assert error.value.error_code == "PENDING_GAME_NOT_RECALCULABLE"
+        assert await mundo.barras_guardadas() is None
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).playing_handicap == 10
+
+    async def test_change_tee_with_a_match_on_a_missing_course_is_a_conflict(self):
+        """
+        Given su partido programado en una sesión cuyo campo ya no existe
+        When la jugadora elige rojas
+        Then 409 PENDING_GAME_NOT_RECALCULABLE, no un 500
+        """
+        mundo = await _Mundo().montar()
+        ronda = Round.create(
+            competition_id=mundo.competition_id,
+            golf_course_id=GolfCourseId(uuid4()),
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        async with mundo.uow:
+            await mundo.uow.rounds.add(ronda)
+            await mundo.uow.commit()
+        await mundo.partido([mundo.jugadora], [mundo.otro], ronda=ronda)
+
+        with pytest.raises(PendingGameNotRecalculableError):
+            await mundo.cambiar(TeeColor.RED)
+
+    async def test_change_tee_with_a_match_without_saved_handicap_is_a_conflict(self):
+        """
+        Given su partido programado de antes de guardar el hándicap índice (sin foto)
+        When la jugadora elige rojas
+        Then 409: no se rehace con el del perfil, que no llega a lo ya generado
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partido([mundo.jugadora], [mundo.otro], handicaps={mundo.otro: None})
+
+        with pytest.raises(PendingGameNotRecalculableError):
+            await mundo.cambiar(TeeColor.RED)
 
     async def test_change_tee_in_progress_by_her_captain_recalculates_session_two(self):
         """
@@ -884,9 +1026,11 @@ class TestLoQueQuedaPorJugar:
 
     async def test_change_tee_recalculates_her_scheduled_tee_group(self):
         """
-        Given la jugadora en una partida de stroke play generada y sin salir
+        Given la jugadora en una partida de stroke play generada, sin golpes y antes
+            de su hora
         When cambia a rojas
-        Then la partida la lleva en rojas de mujer, con su hándicap de juego nuevo
+        Then la partida la lleva en rojas de mujer, con el hándicap del torneo de su
+            foto (18)
         """
         mundo = await _Mundo().montar()
         partida = await mundo.partida_con(mundo.jugadora)
@@ -895,11 +1039,12 @@ class TestLoQueQuedaPorJugar:
 
         [ella] = (await mundo.la_partida(partida)).jugadores
         assert (ella.tee_color, ella.tee_gender) == (TeeColor.RED, Gender.FEMALE)
+        assert ella.handicap == Decimal("18.0")
         assert ella.playing_handicap != 10
 
     async def test_change_tee_leaves_a_started_tee_group_alone(self):
         """
-        Given la jugadora en una partida que ya salió
+        Given la jugadora en una partida con golpes
         When cambia a rojas
         Then la partida sigue como se generó
         """
@@ -910,6 +1055,33 @@ class TestLoQueQuedaPorJugar:
 
         [ella] = (await mundo.la_partida(partida)).jugadores
         assert (ella.tee_color, ella.playing_handicap) == (TeeColor.YELLOW, 10)
+
+    async def test_change_tee_leaves_a_tee_group_whose_time_has_come_alone(self):
+        """
+        Given la jugadora en una partida sin golpes cuya hora (09:00 en Madrid) ya pasó
+        When cambia a rojas
+        Then la partida no se toca: ya salió (#544, «tiene golpes o le llegó su hora»)
+        """
+        mundo = await _Mundo().montar()
+        partida = await mundo.partida_con(mundo.jugadora)
+        mundo.ahora = datetime(2026, 6, 1, 8, 30, tzinfo=UTC)  # 10:30 en Madrid
+
+        await mundo.cambiar(TeeColor.RED)
+
+        [ella] = (await mundo.la_partida(partida)).jugadores
+        assert (ella.tee_color, ella.playing_handicap) == (TeeColor.YELLOW, 10)
+
+    async def test_change_tee_with_a_tee_group_of_a_missing_session_is_a_conflict(self):
+        """
+        Given una partida suya de una franja que ya no existe
+        When cambia sus barras
+        Then 409 PENDING_GAME_NOT_RECALCULABLE: no se salta en silencio
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partida_con(mundo.jugadora, sin_franja=True)
+
+        with pytest.raises(PendingGameNotRecalculableError):
+            await mundo.cambiar(TeeColor.RED)
 
     async def test_change_tee_leaves_matches_of_others_alone(self):
         """
@@ -923,3 +1095,106 @@ class TestLoQueQuedaPorJugar:
         await mundo.cambiar(TeeColor.RED)
 
         assert (await mundo.el_partido(partido)).find_player(mundo.capitana).playing_handicap == 10
+
+
+class TestElRastro:
+    async def test_change_tee_logs_who_what_and_how_many(self, caplog):
+        """
+        Given la jugadora con un partido y una partida pendientes
+        When la capitana de su equipo le cambia las barras a rojas
+        Then queda en el log quién, de qué inscripción, la barra antes y después,
+            como qué lo hizo y cuántos partidos y partidas se rehicieron; con ids,
+            sin nombres
+        """
+        mundo = await (await _Mundo().montar()).con_equipos()
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+        await mundo.partida_con(mundo.jugadora)
+
+        with caplog.at_level(logging.INFO):
+            await mundo.cambiar(TeeColor.RED, quien=mundo.capitana)
+
+        [registro] = [r for r in caplog.records if "Tee change" in r.getMessage()]
+        mensaje = registro.getMessage()
+        for trozo in (
+            str(mundo.capitana.value),
+            str(mundo.inscripcion.id.value),
+            "as=captain",
+            "from=None",
+            "to=RED",
+            "matches=1",
+            "tee_groups=1",
+        ):
+            assert trozo in mensaje
+
+
+class TestQuienPuedeMas:
+    async def test_change_tee_by_a_captain_of_another_competition_is_forbidden(self):
+        """
+        Given la capitana de otra competición, que no juega en esta
+        When intenta cambiar las barras de la jugadora
+        Then 403
+        """
+        mundo = await (await _Mundo().montar()).con_equipos()
+        otra = await (await _Mundo().montar()).con_equipos()
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await mundo.cambiar(TeeColor.RED, quien=otra.capitana)
+
+    async def test_change_tee_by_the_vice_captain_is_forbidden(self):
+        """
+        Given la jugadora, subcapitana del equipo A
+        When intenta cambiar las barras de su capitana, de su mismo equipo
+        Then 403: el subcapitán no cuenta como capitán (Agustín, 20 nov)
+        """
+        mundo = await (await _Mundo().montar()).con_equipos()
+        await mundo._competicion(
+            lambda c: c.name_vice_captain(
+                "A", mundo.jugadora, [mundo.capitana, mundo.jugadora], has_teams=True
+            )
+        )
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await mundo.cambiar(TeeColor.RED, quien=mundo.jugadora, de=mundo.capitana)
+
+    async def test_change_tee_unauthorized_locks_nothing(self):
+        """
+        Given una jugadora inscrita
+        When otro jugador intenta cambiarle las barras
+        Then 403 sin llegar a bloquear la competición
+        """
+        mundo = await _Mundo().montar()
+        mundo.uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=mundo.uow.competitions.find_by_id_for_update
+        )
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await mundo.cambiar(TeeColor.RED, quien=mundo.otro)
+
+        mundo.uow.competitions.find_by_id_for_update.assert_not_awaited()
+
+    async def test_change_tee_rechecks_who_can_after_the_lock(self):
+        """
+        Given la jugadora, con la competición abierta al leerla y ya en curso al
+            bloquearla
+        When cambia sus barras
+        Then 403: con la competición en curso ella ya no puede
+        """
+        mundo = await (await _Mundo().montar()).con_equipos()
+        en_curso = await mundo.uow.competitions.find_by_id(mundo.competition_id)
+        en_curso.start()
+        mundo.uow.competitions.find_by_id_for_update = AsyncMock(return_value=en_curso)
+        mundo.uow.competitions.find_by_id = AsyncMock(
+            side_effect=lambda _id: _abierta(mundo, en_curso)
+        )
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await mundo.cambiar(TeeColor.RED)
+
+
+def _abierta(mundo, en_curso):
+    """Una copia de la competición antes de empezar."""
+    import copy
+
+    abierta = copy.deepcopy(en_curso)
+    abierta._status = CompetitionStatus.CLOSED
+    return abierta

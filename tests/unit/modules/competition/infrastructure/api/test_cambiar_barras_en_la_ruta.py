@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     EnrollmentNotApprovedError,
     TeeChangeClosedError,
@@ -31,6 +32,7 @@ def _quien(is_admin=False) -> UserResponseDTO:
         (TeeNotAvailableError, "TEE_NOT_AVAILABLE", 422),
         (TeeChangeClosedError, "TEE_CHANGE_CLOSED", 409),
         (EnrollmentNotApprovedError, "ENROLLMENT_NOT_APPROVED", 409),
+        (PendingGameNotRecalculableError, "PENDING_GAME_NOT_RECALCULABLE", 409),
     ],
 )
 async def test_change_tee_refused_answers_its_code_and_a_fixed_text(error, codigo, estado):

@@ -712,7 +712,12 @@ def get_change_enrollment_tee_use_case(
 ) -> ChangeEnrollmentTeeUseCase:
     """Proveedor del caso de uso ChangeEnrollmentTeeUseCase (BE #912)."""
     return ChangeEnrollmentTeeUseCase(
-        uow, golf_course_repository=gc_uow.golf_courses, user_repository=user_uow.users
+        uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+        # Para saber qué partidas ya salieron por su hora (#544)
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=ahora_en_utc,
     )
 
 

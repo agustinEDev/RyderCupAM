@@ -49,6 +49,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
+from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
@@ -661,7 +662,11 @@ _NO_SE_CAMBIAN: dict[str, tuple[int, str]] = {
     ),
     TeeChangeClosedError.error_code: (
         status.HTTP_409_CONFLICT,
-        "The competition has already started.",
+        "The competition has already finished or was cancelled.",
+    ),
+    PendingGameNotRecalculableError.error_code: (
+        status.HTTP_409_CONFLICT,
+        "A game still to be played cannot be recalculated with the new tee.",
     ),
     EnrollmentNotApprovedError.error_code: (
         status.HTTP_409_CONFLICT,
@@ -700,7 +705,12 @@ async def change_enrollment_tee(
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )
-    except (TeeNotAvailableError, TeeChangeClosedError, EnrollmentNotApprovedError) as e:
+    except (
+        TeeNotAvailableError,
+        TeeChangeClosedError,
+        EnrollmentNotApprovedError,
+        PendingGameNotRecalculableError,
+    ) as e:
         codigo, texto = _NO_SE_CAMBIAN[e.error_code]
         return JSONResponse(
             status_code=codigo, content={"detail": texto, "error_code": e.error_code}
