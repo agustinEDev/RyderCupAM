@@ -12,21 +12,22 @@ import pytest
 
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     EnrollmentNotApprovedError,
-    PlayerHasMatchesError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+)
+from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
+    PlayerHasMatchesError,
 )
 from src.modules.competition.infrastructure.api.v1 import enrollment_routes
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-
-pytestmark = pytest.mark.asyncio
 
 
 def _quien(is_admin=False) -> UserResponseDTO:
     return UserResponseDTO.model_construct(id=uuid4(), email="j@test.com", is_admin=is_admin)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("error", "codigo", "estado"),
     [
@@ -56,6 +57,7 @@ async def test_change_tee_refused_answers_its_code_and_a_fixed_text(error, codig
     assert "texto interno" not in cuerpo["detail"]
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("is_admin", [False, True])
 async def test_change_tee_passes_who_asks_and_the_tee(is_admin):
     """

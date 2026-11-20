@@ -3,14 +3,21 @@ Caso de Uso: cambiar las barras de una inscripción (BE #912, 20 nov 2026).
 
 Una jugadora invitada se quedaba en las barras por defecto aunque el campo no
 las tuviera valoradas para ella, y nadie podía cambiárselas: la generación de
-partidos se bloqueaba sin salida. Ahora las cambian el propio jugador y el
-organizador (o un admin):
+partidos se bloqueaba sin salida. Decidido con Agustín:
 
-- Solo antes de empezar, y mientras el jugador no tenga partido ni partida
-  generados: su hándicap de juego ya salió de esas barras.
-- Solo barras valoradas para su género (o sin género) en alguno de los campos
-  de la competición. Sin género en su perfil, basta con que el color exista.
+- Antes de empezar: el propio jugador, el capitán de SU equipo, el organizador
+  o un admin. Ya empezada: el capitán de su equipo, el organizador o un admin
+  (para desbloquear la sesión 2 de una Ryder, que se genera ya empezada).
+  Terminada o cancelada: nadie. Sin equipos formados no hay capitanes.
+- Solo mientras el jugador no tenga partido ni partida generados: su hándicap
+  de juego ya salió de esas barras.
+- Solo barras valoradas para su género, o sin género, en alguno de los campos
+  de la competición; en SCRATCH valen también las que solo tienen tarjeta.
+  Sin género en el perfil, basta con que el color exista.
 - Sin barras (null) vuelve a las habituales de su género.
+
+A quien no puede se le contesta 403 antes de mirar el estado: no se le dice si
+la competición terminó ni si el jugador tiene partido.
 """
 
 from src.modules.competition.application.dto.enrollment_dto import (
@@ -26,6 +33,7 @@ from src.modules.competition.application.use_cases.remove_enrolled_player_use_ca
     PlayerHasMatchesError,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -36,21 +44,16 @@ from src.modules.golf_course.domain.services.stroke_context import StrokeContext
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.play_mode import PlayMode
 
-# Se reexporta: la ruta lo traduce a su código (409)
-__all__ = [
-    "ChangeEnrollmentTeeUseCase",
-    "EnrollmentNotApprovedError",
-    "PlayerHasMatchesError",
-    "TeeChangeClosedError",
-    "TeeNotAvailableError",
-]
-
-# Antes de empezar: en juego las barras ya están en los partidos
-_SE_PUEDEN_CAMBIAR = frozenset(
+# Antes de empezar las cambia también el propio jugador
+_ANTES_DE_EMPEZAR = frozenset(
     {CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED}
 )
+# Empezada, solo quien gestiona: su capitán, el organizador o un admin
+_SE_PUEDEN_CAMBIAR = _ANTES_DE_EMPEZAR | {CompetitionStatus.IN_PROGRESS}
 
 
 class TeeNotAvailableError(Exception):
@@ -123,10 +126,10 @@ class ChangeEnrollmentTeeUseCase:
             if enrollment is None:
                 raise EnrollmentNotFoundError(f"Inscripción no encontrada: {enrollment_id}")
 
-            es_suya = enrollment.user_id == quien
-            if not (es_suya or is_admin or competition.is_creator(quien)):
+            # Primero quién: a quien no puede no se le dice nada del estado
+            if not await self._puede(competition, enrollment, quien, is_admin):
                 raise NotCompetitionCreatorError(
-                    "Solo el jugador o el organizador cambian sus barras"
+                    "Solo el jugador, el capitán de su equipo o el organizador cambian sus barras"
                 )
             if not enrollment.is_approved():
                 raise EnrollmentNotApprovedError("La inscripción no está aprobada")
@@ -166,24 +169,53 @@ class ChangeEnrollmentTeeUseCase:
             await self._uow.matches.find_by_rounds_for_player([r.id for r in rondas], user_id)
         )
 
+    async def _puede(
+        self, competition: Competition, enrollment: Enrollment, quien: UserId, is_admin: bool
+    ) -> bool:
+        """Si quien lo pide puede cambiar esas barras en el estado de la competición."""
+        if is_admin or competition.is_creator(quien):
+            return True
+        if await self._es_su_capitan(competition, enrollment.user_id, quien):
+            return True
+        return competition.status in _ANTES_DE_EMPEZAR and enrollment.user_id == quien
+
+    async def _es_su_capitan(
+        self, competition: Competition, jugador: UserId, quien: UserId
+    ) -> bool:
+        """Si `quien` capitanea el equipo del jugador. Sin equipos formados, nadie."""
+        ryder_cup = competition.ryder_cup
+        if ryder_cup is None:
+            return False
+        equipos = await self._uow.team_assignments.find_by_competition(competition.id)
+        equipo = equipos.get_player_team(jugador) if equipos else None
+        return equipo is not None and ryder_cup.is_captain_of(equipo, quien)
+
     async def _la_tiene_algun_campo(
         self, competition: Competition, color: TeeColor, user_id: UserId
     ) -> bool:
         """
-        Si alguno de sus campos tiene esas barras valoradas para su género o sin
-        género (C4). Sin género en el perfil, basta con que exista el color: el
-        aviso de género lo verá el organizador al generar.
+        Si alguno de sus campos tiene esas barras para su género o sin género, con
+        la regla de siempre (`tee_key_for`): valoradas, y en SCRATCH también con
+        solo tarjeta, que sin golpes no hace falta valoración.
+
+        Sin género en el perfil (o sin usuario) basta con que el color exista para
+        alguno: `tee_key_for` solo buscaría las sin género, y el aviso de género lo
+        verá el organizador al generar.
         """
         usuario = await self._usuarios.find_by_id(user_id)
         genero: Gender | None = usuario.gender if usuario else None
+        en_scratch = competition.play_mode == PlayMode.SCRATCH
         for del_campo in competition.golf_courses:
             campo = await self._campos.find_by_id(del_campo.golf_course_id)
             if campo is None:
                 continue
-            valoradas = StrokeContextBuilder.build(campo).tee_ratings
-            for barra, su_genero in valoradas:
-                if barra != color.value:
-                    continue
-                if genero is None or su_genero is None or su_genero == genero.value:
+            contexto = StrokeContextBuilder.build(campo)
+            barras: set[TeeKey] = set(contexto.tee_ratings)
+            if en_scratch:
+                barras |= set(contexto.holes_by_tee)
+            if genero is None:
+                if any(barra == color.value for barra, _ in barras):
                     return True
+            elif tee_key_for(dict.fromkeys(barras), color.value, genero.value) is not None:
+                return True
         return False

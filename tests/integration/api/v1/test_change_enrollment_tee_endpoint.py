@@ -97,6 +97,11 @@ async def _cambiar(client: AsyncClient, quien: dict, inscripcion: str, color):
 
 
 async def test_the_player_changes_to_a_rated_tee(client: AsyncClient):
+    """
+    Given una jugadora invitada en un campo con rojas de mujer
+    When cambia sus barras a rojas
+    Then 200 con RED
+    """
     _, jugadora, _, inscripcion = await _montar(client)
 
     respuesta = await _cambiar(client, jugadora, inscripcion, "RED")
@@ -106,6 +111,11 @@ async def test_the_player_changes_to_a_rated_tee(client: AsyncClient):
 
 
 async def test_a_tee_not_rated_for_her_is_refused_with_its_code(client: AsyncClient):
+    """
+    Given un campo sin azules de mujer
+    When la jugadora elige azules
+    Then 422 con TEE_NOT_AVAILABLE
+    """
     _, jugadora, _, inscripcion = await _montar(client)
 
     respuesta = await _cambiar(client, jugadora, inscripcion, "BLUE")
@@ -115,6 +125,11 @@ async def test_a_tee_not_rated_for_her_is_refused_with_its_code(client: AsyncCli
 
 
 async def test_another_player_cannot_change_it(client: AsyncClient):
+    """
+    Given una jugadora inscrita
+    When otro jugador intenta cambiarle las barras
+    Then 403
+    """
     _, _, otro, inscripcion = await _montar(client)
 
     respuesta = await _cambiar(client, otro, inscripcion, "RED")
@@ -123,8 +138,14 @@ async def test_another_player_cannot_change_it(client: AsyncClient):
 
 
 async def test_the_organizer_goes_back_to_the_default(client: AsyncClient):
+    """
+    Given una jugadora que eligió rojas
+    When el organizador las devuelve a las de por defecto (null)
+    Then 200 sin barras
+    """
     organizador, jugadora, _, inscripcion = await _montar(client)
-    await _cambiar(client, jugadora, inscripcion, "RED")
+    primera = await _cambiar(client, jugadora, inscripcion, "RED")
+    assert primera.status_code == 200, primera.text
 
     respuesta = await _cambiar(client, organizador, inscripcion, None)
 
@@ -133,6 +154,11 @@ async def test_the_organizer_goes_back_to_the_default(client: AsyncClient):
 
 
 async def test_an_unknown_colour_is_a_validation_error(client: AsyncClient):
+    """
+    Given un color que no es de las barras
+    When la jugadora lo pide
+    Then 422 de validación
+    """
     _, jugadora, _, inscripcion = await _montar(client)
 
     respuesta = await _cambiar(client, jugadora, inscripcion, "PURPLE")

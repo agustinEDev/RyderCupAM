@@ -679,8 +679,10 @@ _NO_SE_CAMBIAN: dict[str, tuple[int, str]] = {
     response_model=ChangeEnrollmentTeeResponseDTO,
     summary="Cambiar las barras de una inscripción",
     description=(
-        "El propio jugador o el organizador cambia sus barras, antes de empezar y "
-        "mientras no tenga partido generado. Null vuelve a las de por defecto."
+        "Antes de empezar: el propio jugador, el capitán de su equipo, el organizador "
+        "o un admin; ya empezada, solo el capitán de su equipo, el organizador o un "
+        "admin. Siempre que no tenga partido ni partida generados. Null vuelve a las "
+        "de por defecto."
     ),
 )
 async def change_enrollment_tee(

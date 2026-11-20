@@ -64,7 +64,10 @@ USUARIOS_CON_GENERO = UsuariosConGenero()
 
 
 async def create_competition(
-    uow: InMemoryUnitOfWork, creator_id: UserId, enrollment_opens_days_before: int | None = None
+    uow: InMemoryUnitOfWork,
+    creator_id: UserId,
+    enrollment_opens_days_before: int | None = None,
+    play_mode: str = "SCRATCH",
 ):
     """Crea una competición.
 
@@ -77,7 +80,7 @@ async def create_competition(
         start_date=date(2026, 6, 1),
         end_date=date(2026, 6, 3),
         main_country="ES",
-        play_mode="SCRATCH",
+        play_mode=play_mode,
         max_players=24,
         enrollment_opens_days_before=enrollment_opens_days_before,
     )
