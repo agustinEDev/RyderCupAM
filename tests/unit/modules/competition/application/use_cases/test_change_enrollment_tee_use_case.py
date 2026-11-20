@@ -381,14 +381,14 @@ class _Mundo:
     async def el_partido(self, match_id) -> Match:
         return await self.uow.matches.find_by_id(match_id)
 
-    async def partida_con(self, jugador: UserId, empezada=False, sin_franja=False):
+    async def partida_con(self, jugador: UserId, empezada=False, sin_franja=False, campo=0):
         """
         Una partida de stroke play generada con ella en amarillas, hándicap 18 y 10
         golpes, la primera de una franja que sale a las 09:00 (Madrid) del 1 jun.
         """
         franja = Round.create_franja(
             competition_id=self.competition_id,
-            golf_course_id=next(iter(self.campos.por_id)),
+            golf_course_id=list(self.campos.por_id)[campo],
             round_date=date(2026, 6, 1),
             session_type=SessionType.MORNING,
             hoja_de_salidas=HojaDeSalidas(time(9, 0), time(11, 0), 10, 4),

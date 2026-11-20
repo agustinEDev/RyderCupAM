@@ -107,21 +107,29 @@ class TestLaBarraDelCampo:
 
     async def test_course_tee_for_women_leaves_men_and_own_changes_alone(self):
         """
-        Given el fourball de las dos mujeres y la jugadora con su cambio propio a
-            azules en el segundo campo (ya aplicado a su partido)
-        When el organizador fija azules allí para las mujeres
-        Then la jugadora no se rehace otra vez (R1 gana; su foto queda igual), la
-            capitana sí, y los hombres siguen en sus amarillas
+        Given un segundo campo con azules y blancas de mujer, el fourball de las dos
+            mujeres allí, y la jugadora con su cambio propio a BLANCAS en ese campo
+        When el organizador fija AZULES allí para las mujeres
+        Then la jugadora sigue en blancas (R1 gana a R2, aunque sea otro color), la
+            capitana pasa a azules y los hombres siguen en sus amarillas
         """
-        mundo, segundo, partido = await _con_fourball()
-        await _fijar(mundo, segundo, TeeColor.BLUE)
-        antes = (await mundo.el_partido(partido)).find_player(mundo.jugadora)
+        mundo = await _Mundo().montar(
+            campos=(ALDEAMAYOR, [*SIN_ROJAS, (TeeColor.WHITE, Gender.FEMALE)])
+        )
+        segundo = list(mundo.campos.por_id)[1]
+        partido = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            campo=1,
+        )
+        await _fijar(mundo, segundo, TeeColor.WHITE)
 
         await _para_todas(mundo, segundo, TeeColor.BLUE)
 
         rehecho = await mundo.el_partido(partido)
+        assert rehecho.find_player(mundo.jugadora).tee_color == TeeColor.WHITE
         assert rehecho.find_player(mundo.capitana).tee_color == TeeColor.BLUE
-        assert rehecho.find_player(mundo.jugadora).tee_color == antes.tee_color
         for hombre in (mundo.capitan_b, mundo.otro):
             assert rehecho.find_player(hombre).tee_color == TeeColor.YELLOW
 
