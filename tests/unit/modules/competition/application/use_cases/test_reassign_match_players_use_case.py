@@ -615,3 +615,67 @@ class TestReassignMatchPlayersUseCase:
             new_match = await uow.matches.find_by_id(MatchId(response.match_id))
         assert new_match.team_a_players[0].playing_handicap == 10
         assert new_match.team_b_players[0].playing_handicap == 10
+
+    async def test_reassign_locks_the_competition_like_the_other_paths(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given un partido programado de una competición con equipos
+        When el organizador reasigna sus jugadores
+        Then la competición se lee con bloqueo, como al generar, al abrir los sobres,
+            en las partidas y al cambiar las barras (BE #912): que nadie cambie unas
+            barras o genere otra sesión entre la lectura y la escritura
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        player1, player2, player3, player4 = await self._setup_teams_and_enrollments(
+            uow, competition
+        )
+        round_entity = Round.create(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        round_entity.mark_teams_assigned()
+        round_entity.mark_matches_generated()
+        jugadores = [
+            MatchPlayer.create(
+                user_id=uid,
+                playing_handicap=0,
+                tee_color=TeeColor.YELLOW,
+                strokes_received=[],
+                tee_gender=Gender.MALE,
+            )
+            for uid in (player1, player3)
+        ]
+        match = Match.create(
+            round_id=round_entity.id,
+            match_number=1,
+            team_a_players=[jugadores[0]],
+            team_b_players=[jugadores[1]],
+        )
+        async with uow:
+            await uow.rounds.add(round_entity)
+            await uow.matches.add(match)
+        uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=uow.competitions.find_by_id_for_update
+        )
+
+        await ReassignMatchPlayersUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        ).execute(
+            ReassignMatchPlayersRequestDTO(
+                match_id=match.id.value,
+                team_a_player_ids=[player2.value],
+                team_b_player_ids=[player4.value],
+            ),
+            creator_id,
+        )
+
+        uow.competitions.find_by_id_for_update.assert_awaited_once_with(competition.id)

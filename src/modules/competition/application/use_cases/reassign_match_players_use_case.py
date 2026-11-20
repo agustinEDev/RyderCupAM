@@ -188,7 +188,12 @@ class ReassignMatchPlayersUseCase:
         if not round_entity:
             raise MatchNotFoundError("La ronda asociada no existe")
 
-        competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+        # Con la fila bloqueada, en el mismo orden que generar (la ronda y luego la
+        # competición), los sobres, las partidas y el cambio de barras (BE #912):
+        # que nadie cambie unas barras o genere otra sesión mientras se reasigna
+        competition = await self._uow.competitions.find_by_id_for_update(
+            round_entity.competition_id
+        )
         if not competition:
             raise MatchNotFoundError("La competicion asociada no existe")
 
