@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.75.0] - 2026-11-20
+
+**Los tipos de id y de país de la persistencia salen de una sola fábrica** (#909). Para el
+jugador no cambia nada. Sin migraciones ni cambio de contrato: el DDL de las 426 columnas es
+idéntico. Va con el frontend 2.89.0, que no depende de él. Probado en el Kind con `develop`:
+un Ryder de punta a punta por la API, sesiones, refresco del token y dispositivos por el
+navegador, y la anotación en el iPhone.
+
+### Changed
+
+- **Los 38 decoradores de ids (35) y de `CountryCode` (3), escritos a mano y casi iguales,
+  salen ahora de `tipo_de_id()` y `tipo_de_codigo_de_pais()`**
+  (`src/shared/infrastructure/persistence/sqlalchemy/tipos_de_id.py`). Cada módulo sigue
+  declarando los suyos con una línea; un guardián impide volver a escribirlos a mano.
+
+### Fixed
+
+- **Todos guardan igual**: el id, un texto o un `uuid.UUID` se guardan; `None` es NULL; otra
+  cosa es un `TypeError`. Antes había cinco comportamientos: 24 guardaban NULL sin avisar si
+  les llegaba un `uuid.UUID`, y 11 fallaban con un texto.
+- **El id del dispositivo que se lee de `refresh_tokens` lleva un UUID**, como el de
+  `user_devices`: antes llevaba un texto y nunca era igual al otro.
+
 ## [2.74.0] - 2026-11-18
 
 **Seguridad de la auditoría del 18 nov: la credencial del dueño de la base fuera de la API y
