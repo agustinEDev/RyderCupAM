@@ -233,3 +233,41 @@ async def test_su_cambio_propio_rehace_y_guarda_lo_pendiente(db_session, jugador
     assert (suya.tee_color, suya.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
     cambios = await leer.barras_por_campo.del_campo(competicion.id, campo)
     assert cambios.propias == {jugadora: TeeColor.BLUE}
+
+
+async def test_los_cambios_propios_de_una_inscripcion_retirada_no_salen(db_session, jugadores):  # noqa: F811
+    """
+    Given una inscripción con un cambio propio en un campo, que después se retira
+    When se piden los cambios de ese campo en Postgres
+    Then su cambio propio no sale, como en el repositorio en memoria
+    """
+    organizador, jugadora, _, _ = jugadores
+    campo = await _insert_course(db_session, organizador)
+    competicion = Competition.create(
+        id=CompetitionId(uuid4()),
+        creator_id=organizador,
+        name=CompetitionName(f"Retirada {uuid4().hex[:6]}"),
+        dates=DateRange(start_date=BASE_DATE, end_date=BASE_DATE),
+        location=Location(main_country=CountryCode("ES")),
+        play_mode=PlayMode.HANDICAP,
+        team_1_name="A",
+        team_2_name="B",
+    )
+    competicion.add_golf_course(campo, CountryCode("ES"))
+    inscripcion = Enrollment.direct_enroll(
+        id=EnrollmentId.generate(), competition_id=competicion.id, user_id=jugadora
+    )
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    async with uow:
+        await uow.competitions.add(competicion)
+        await uow.enrollments.add(inscripcion)
+        await uow.barras_por_campo.fijar_propia(inscripcion, campo, TeeColor.BLUE)
+    assert (await uow.barras_por_campo.del_campo(competicion.id, campo)).propias == {
+        jugadora: TeeColor.BLUE
+    }
+
+    async with uow:
+        inscripcion.withdraw()
+        await uow.enrollments.update(inscripcion)
+
+    assert (await uow.barras_por_campo.del_campo(competicion.id, campo)).propias == {}

@@ -95,7 +95,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._partidas = InMemoryPartidaRepository()
         self._golpes_de_partida = InMemoryGolpeDePartidaRepository()
         self._esperas = InMemoryEsperaEnFranjaRepository()
-        self._barras_por_campo = InMemoryBarrasPorCampoRepository()
+        self._barras_por_campo = InMemoryBarrasPorCampoRepository(self._enrollments)
         self.committed = False
 
     @property

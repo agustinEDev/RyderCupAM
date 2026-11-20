@@ -4,8 +4,12 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.barras_por_campo_repository_interface import (
     BarrasPorCampoRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.enrollment_repository_interface import (
+    EnrollmentRepositoryInterface,
+)
 from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -13,21 +17,31 @@ from src.shared.domain.value_objects.gender import Gender
 
 
 class InMemoryBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
-    """Las propias guardan su competición y su jugador, que en SQL salen de la inscripción."""
+    """
+    Como en Postgres: las propias se guardan por (inscripción, campo), y al leerlas
+    solo cuentan las de inscripciones aprobadas (las mira en el repositorio de
+    inscripciones de la misma unidad de trabajo).
+    """
 
-    def __init__(self) -> None:
-        self._propias: dict[tuple[CompetitionId, GolfCourseId, UserId], TeeColor] = {}
+    def __init__(self, enrollments: EnrollmentRepositoryInterface) -> None:
+        self._enrollments = enrollments
+        self._propias: dict[
+            tuple[EnrollmentId, GolfCourseId], tuple[CompetitionId, UserId, TeeColor]
+        ] = {}
         self._del_campo: dict[tuple[CompetitionId, GolfCourseId, Gender], TeeColor] = {}
 
     async def del_campo(
         self, competition_id: CompetitionId, golf_course_id: GolfCourseId
     ) -> BarrasDelCampo:
+        propias: dict[UserId, TeeColor] = {}
+        for (enrollment_id, campo), (competicion, user_id, tee) in self._propias.items():
+            if (competicion, campo) != (competition_id, golf_course_id):
+                continue
+            inscripcion = await self._enrollments.find_by_id(enrollment_id)
+            if inscripcion is not None and inscripcion.is_approved():
+                propias[user_id] = tee
         return BarrasDelCampo(
-            propias={
-                u: t
-                for (c, g, u), t in self._propias.items()
-                if (c, g) == (competition_id, golf_course_id)
-            },
+            propias=propias,
             por_genero={
                 s: t
                 for (c, g, s), t in self._del_campo.items()
@@ -38,11 +52,11 @@ class InMemoryBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
     async def fijar_propia(
         self, enrollment: Enrollment, golf_course_id: GolfCourseId, tee_color: TeeColor | None
     ) -> None:
-        clave = (enrollment.competition_id, golf_course_id, enrollment.user_id)
+        clave = (enrollment.id, golf_course_id)
         if tee_color is None:
             self._propias.pop(clave, None)
         else:
-            self._propias[clave] = tee_color
+            self._propias[clave] = (enrollment.competition_id, enrollment.user_id, tee_color)
 
     async def fijar_del_campo(
         self,
@@ -63,7 +77,7 @@ class InMemoryBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
         self._propias = {
             k: v
             for k, v in self._propias.items()
-            if (k[0], k[1]) != (competition_id, golf_course_id)
+            if (v[0], k[1]) != (competition_id, golf_course_id)
         }
         self._del_campo = {
             k: v
@@ -72,8 +86,4 @@ class InMemoryBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
         }
 
     async def borrar_propias(self, enrollment: Enrollment) -> None:
-        self._propias = {
-            k: v
-            for k, v in self._propias.items()
-            if (k[0], k[2]) != (enrollment.competition_id, enrollment.user_id)
-        }
+        self._propias = {k: v for k, v in self._propias.items() if k[0] != enrollment.id}

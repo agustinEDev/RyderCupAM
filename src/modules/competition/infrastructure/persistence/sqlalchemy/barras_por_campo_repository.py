@@ -10,6 +10,7 @@ from src.modules.competition.domain.repositories.barras_por_campo_repository_int
 )
 from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     competition_course_tees_table,
     enrollment_course_tees_table,
@@ -39,6 +40,8 @@ class SQLAlchemyBarrasPorCampoRepository(BarrasPorCampoRepositoryInterface):
                 .where(
                     inscripciones.c.competition_id == competition_id,
                     propias.c.golf_course_id == golf_course_id,
+                    # Solo las de inscripciones aprobadas: una retirada no juega
+                    inscripciones.c.status == EnrollmentStatus.APPROVED.value,
                 )
             )
         ).all()
