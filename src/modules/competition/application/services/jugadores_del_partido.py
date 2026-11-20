@@ -134,10 +134,11 @@ class JugadoresDelPartido:
 
         Parte de la foto guardada de cada uno (su barra y su hándicap índice, que
         es el de entonces: el perfil no llega a lo ya generado, como al refrescar
-        hándicaps) y solo cambia la barra de quien la cambia. Con eso se vuelve a
-        hacer el reparto de siempre (`MatchPlayersBuilder`): el hándicap de juego
+        hándicaps) y solo cambia la barra de quien la cambia. Con golpes se vuelve
+        a hacer el reparto de siempre (`MatchPlayersBuilder`): el hándicap de juego
         de él y lo que dependa de él (la diferencia en individual, el reparto
-        frente al más bajo en fourball, el del equipo en foursomes).
+        frente al más bajo en fourball, el del equipo en foursomes). En SCRATCH no
+        hay reparto: solo cambia su foto y las de los demás quedan tal cual.
 
         Args:
             contextos: El contexto de cada campo ya leído en esta ejecución, para
@@ -154,47 +155,72 @@ class JugadoresDelPartido:
         """
         is_scratch = competition.play_mode == PlayMode.SCRATCH
         contexto = await contexto_del_campo(self._gc_repo, round_entity.golf_course_id, contextos)
-
-        # Cada uno con su foto: la barra guardada (con su género, para que se busque
-        # la misma) y su índice guardado; él, con la barra nueva y su género
-        inscripciones: dict[str, Enrollment] = {}
-        indices: dict[str, Decimal] = {}
-        generos: dict[str, Gender | None] = {}
-        for foto in (*partido.team_a_players, *partido.team_b_players):
-            clave = str(foto.user_id.value)
-            es_el = foto.user_id == user_id
-            if foto.player_handicap is None and not is_scratch:
-                raise PendingGameNotRecalculableError(
-                    "Un jugador del partido no tiene guardado su hándicap índice"
-                )
-            inscripciones[clave] = Enrollment(
-                id=EnrollmentId.generate(),
-                competition_id=competition.id,
-                user_id=foto.user_id,
-                status=EnrollmentStatus.APPROVED,
-                tee_color=tee_color if es_el else foto.tee_color,
-            )
-            if foto.player_handicap is not None:
-                indices[clave] = foto.player_handicap
-            generos[clave] = genero if es_el else foto.tee_gender
-
-        con_tarjeta = contexto.holes_by_tee if is_scratch else None
-        color, su_genero, valoracion, _ = self._match_players.resolve_player_data(
-            user_id, inscripciones, contexto.tee_ratings, indices, generos, con_tarjeta
-        )
         guardada = partido.find_player(user_id)
-        if guardada is not None and (color, su_genero) == (
-            guardada.tee_color,
-            guardada.tee_gender,
-        ):
+        if guardada is None:
             return None
+
+        # Primero su barra, que solo necesita la suya: así lo de los demás (sus
+        # índices) solo se exige si de verdad hay que rehacer
+        suya = Enrollment(
+            id=EnrollmentId.generate(),
+            competition_id=competition.id,
+            user_id=user_id,
+            status=EnrollmentStatus.APPROVED,
+            tee_color=tee_color,
+        )
+        clave = str(user_id.value)
+        color, su_genero, valoracion, _ = self._match_players.resolve_player_data(
+            user_id,
+            {clave: suya},
+            contexto.tee_ratings,
+            {},
+            {clave: genero},
+            contexto.holes_by_tee if is_scratch else None,
+        )
+        # Con golpes, la valoración antes que nada: la misma barra que la guardada
+        # que el campo ya no valora tampoco vale
         if valoracion is None and not is_scratch:
             raise TeeNotRatedForPlayerError(
                 "Sus barras no están valoradas en el campo de este partido"
             )
+        if (color, su_genero) == (guardada.tee_color, guardada.tee_gender):
+            return None
+
+        if is_scratch:
+            # Sin golpes no hay nada que repartir: los demás, tal cual estaban (sin
+            # volver a buscarlos en el campo), y él con sus barras nuevas
+            def con_la_suya(jugadores: Sequence[MatchPlayer]) -> list[MatchPlayer]:
+                return [
+                    replace(j, tee_color=color, tee_gender=su_genero) if j.user_id == user_id else j
+                    for j in jugadores
+                ]
+
+            return con_la_suya(partido.team_a_players), con_la_suya(partido.team_b_players)
+
+        # Con golpes, cada uno con su foto: la barra guardada (con su género, para
+        # que se busque la misma) y su índice guardado; él, con la barra nueva
+        inscripciones: dict[str, Enrollment] = {clave: suya}
+        indices: dict[str, Decimal] = {}
+        generos: dict[str, Gender | None] = {clave: genero}
+        for foto in (*partido.team_a_players, *partido.team_b_players):
+            if foto.player_handicap is None:
+                raise PendingGameNotRecalculableError(
+                    "Un jugador del partido no tiene guardado su hándicap índice"
+                )
+            indices[str(foto.user_id.value)] = foto.player_handicap
+            if foto.user_id == user_id:
+                continue
+            inscripciones[str(foto.user_id.value)] = Enrollment(
+                id=EnrollmentId.generate(),
+                competition_id=competition.id,
+                user_id=foto.user_id,
+                status=EnrollmentStatus.APPROVED,
+                tee_color=foto.tee_color,
+            )
+            generos[str(foto.user_id.value)] = foto.tee_gender
 
         try:
-            team_a, team_b = self._match_players.build(
+            return self._match_players.build(
                 round_entity.match_format,
                 [p.user_id for p in partido.team_a_players],
                 [p.user_id for p in partido.team_b_players],
@@ -214,22 +240,6 @@ class JugadoresDelPartido:
             raise PendingGameNotRecalculableError(
                 "La barra guardada de otro jugador del partido ya no está valorada"
             ) from e
-
-        # En SCRATCH quien no tenía índice guardado sigue sin él: el reparto lo
-        # cuenta como 0, pero eso no es una foto nueva (/code-review)
-        sin_indice = {
-            foto.user_id
-            for foto in (*partido.team_a_players, *partido.team_b_players)
-            if foto.player_handicap is None
-        }
-
-        def como_estaba(jugadores: list[MatchPlayer]) -> list[MatchPlayer]:
-            return [
-                replace(j, player_handicap=None) if j.user_id in sin_indice else j
-                for j in jugadores
-            ]
-
-        return como_estaba(team_a), como_estaba(team_b)
 
     async def _datos_de_handicap(
         self, round_entity: Round, is_scratch: bool, player_ids: list[UserId]
