@@ -20,8 +20,7 @@ from sqlalchemy import (
     Table,
     inspect,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.types import CHAR
+from sqlalchemy.dialects.postgresql import JSONB
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -42,99 +41,18 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # ============================================================================
 # TypeDecorators for Value Objects (MUST be before tables)
 # ============================================================================
 
 
-class QuickMatchIdType(sqlalchemy.types.TypeDecorator[QuickMatchId]):
-    """TypeDecorator para QuickMatchId Value Object."""
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(self, value: QuickMatchId | None, dialect: Any) -> uuid.UUID | None:
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> QuickMatchId | None:
-        if value is None:
-            return None
-        return QuickMatchId(value)
-
-
-class QuickMatchHoleScoreIdType(sqlalchemy.types.TypeDecorator[QuickMatchHoleScoreId]):
-    """TypeDecorator para QuickMatchHoleScoreId Value Object."""
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: QuickMatchHoleScoreId | None, dialect: Any
-    ) -> uuid.UUID | None:
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(
-        self, value: uuid.UUID | None, dialect: Any
-    ) -> QuickMatchHoleScoreId | None:
-        if value is None:
-            return None
-        return QuickMatchHoleScoreId(value)
-
-
-class ParticipantIdType(sqlalchemy.types.TypeDecorator[ParticipantId]):
-    """TypeDecorator para ParticipantId Value Object."""
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(self, value: ParticipantId | None, dialect: Any) -> uuid.UUID | None:
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> ParticipantId | None:
-        if value is None:
-            return None
-        return ParticipantId(value)
-
-
-class QuickMatchUserIdType(sqlalchemy.types.TypeDecorator[UserId]):
-    """TypeDecorator para UserId Value Object (compatible con users.id CHAR(36))."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | None, dialect: Any) -> str | None:
-        if value is None:
-            return None
-        return str(value.value)
-
-    def process_result_value(self, value: str | None, dialect: Any) -> UserId | None:
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
-
-
-class QuickMatchGolfCourseIdType(sqlalchemy.types.TypeDecorator[GolfCourseId]):
-    """TypeDecorator local para GolfCourseId (compatible con golf_courses.id UUID)."""
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(self, value: GolfCourseId | None, dialect: Any) -> uuid.UUID | None:
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> GolfCourseId | None:
-        if value is None:
-            return None
-        return GolfCourseId(value)
+QuickMatchIdType = tipo_de_id(QuickMatchId, columna="uuid")
+QuickMatchHoleScoreIdType = tipo_de_id(QuickMatchHoleScoreId, columna="uuid")
+ParticipantIdType = tipo_de_id(ParticipantId, columna="uuid")
+QuickMatchUserIdType = tipo_de_id(UserId)
+QuickMatchGolfCourseIdType = tipo_de_id(GolfCourseId, columna="uuid")
 
 
 class QuickMatchStatusType(sqlalchemy.types.TypeDecorator[QuickMatchStatus]):

@@ -7,7 +7,6 @@ Tablas:
 - golf_course_tee_holes (tarjeta de cada salida)
 """
 
-import uuid
 from typing import Any
 
 import sqlalchemy.types
@@ -28,9 +27,7 @@ from sqlalchemy import (
     inspect,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import column_property, relationship
-from sqlalchemy.types import CHAR
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
@@ -42,70 +39,21 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
-from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import (
+    tipo_de_codigo_de_pais,
+    tipo_de_id,
+)
 
 # ============================================================================
 # TypeDecorators for Value Objects (MUST be before tables)
 # ============================================================================
 
 
-class GolfCourseIdType(sqlalchemy.types.TypeDecorator[GolfCourseId]):
-    """TypeDecorator para GolfCourseId Value Object."""
-
-    impl = UUID(as_uuid=True)
-    cache_ok = True
-
-    def process_bind_param(self, value: GolfCourseId | None, dialect: Any) -> uuid.UUID | None:
-        """Convierte GolfCourseId → UUID para persistencia."""
-        if value is None:
-            return None
-        return value.value  # value.value ya es uuid.UUID object
-
-    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> GolfCourseId | None:
-        """Convierte UUID → GolfCourseId al hidratar."""
-        if value is None:
-            return None
-        return GolfCourseId(value)  # GolfCourseId acepta uuid.UUID object
-
-
-class CountryCodeType(sqlalchemy.types.TypeDecorator[CountryCode]):
-    """TypeDecorator para CountryCode Value Object."""
-
-    impl = String(2)
-    cache_ok = True
-
-    def process_bind_param(self, value: CountryCode | None, dialect: Any) -> str | None:
-        """Convierte CountryCode → str para persistencia."""
-        if value is None:
-            return None
-        return value.value
-
-    def process_result_value(self, value: str | None, dialect: Any) -> CountryCode | None:
-        """Convierte str → CountryCode al hidratar."""
-        if value is None:
-            return None
-        return CountryCode(value)
-
-
-class UserIdType(sqlalchemy.types.TypeDecorator[UserId]):
-    """TypeDecorator para UserId Value Object (compatible con users.id CHAR(36))."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | None, dialect: Any) -> str | None:
-        """Convierte UserId → str para persistencia."""
-        if value is None:
-            return None
-        return str(value.value)
-
-    def process_result_value(self, value: str | None, dialect: Any) -> UserId | None:
-        """Convierte str → UserId al hidratar."""
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+GolfCourseIdType = tipo_de_id(GolfCourseId, columna="uuid")
+CountryCodeType = tipo_de_codigo_de_pais()
+UserIdType = tipo_de_id(UserId)
 
 
 class GenderType(sqlalchemy.types.TypeDecorator[Gender]):

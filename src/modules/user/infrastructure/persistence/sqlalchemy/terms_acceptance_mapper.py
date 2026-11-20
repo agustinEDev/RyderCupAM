@@ -4,8 +4,6 @@ Terms Acceptance Mapper - Infrastructure Layer
 Mapeo imperativo entre TermsAcceptance y la tabla terms_acceptances.
 """
 
-import uuid
-
 from sqlalchemy import (
     DDL,
     Column,
@@ -19,7 +17,6 @@ from sqlalchemy import (
     inspect,
 )
 from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.terms_acceptance import (
     IP_ADDRESS_MAX_LENGTH,
@@ -36,25 +33,9 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
-
-class TermsAcceptanceIdDecorator(TypeDecorator):
-    """TermsAcceptanceId como CHAR(36) en BD."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: TermsAcceptanceId | str | None, dialect) -> str | None:
-        if isinstance(value, TermsAcceptanceId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> TermsAcceptanceId | None:
-        if value is None:
-            return None
-        return TermsAcceptanceId(uuid.UUID(value))
+TermsAcceptanceIdDecorator = tipo_de_id(TermsAcceptanceId)
 
 
 # Historial que sobrevive al borrado de la cuenta (TERMS_ACCEPTANCE_RETENTION_YEARS):

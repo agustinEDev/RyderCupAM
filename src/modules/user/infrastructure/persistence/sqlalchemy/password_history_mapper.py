@@ -5,11 +5,8 @@ Password History Mapper - Infrastructure Layer
 Mapeo imperativo entre la entidad PasswordHistory y la tabla password_history.
 """
 
-import uuid
-
 from sqlalchemy import Column, DateTime, ForeignKey, String, Table, inspect
 from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.value_objects.password_history_id import PasswordHistoryId
@@ -20,50 +17,14 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import (
     mapper_registry,
     metadata,
 )
-
+from src.shared.infrastructure.persistence.sqlalchemy.tipos_de_id import tipo_de_id
 
 # --- TypeDecorator para PasswordHistoryId ---
-class PasswordHistoryIdDecorator(TypeDecorator):
-    """TypeDecorator para manejar PasswordHistoryId como CHAR(36) en BD."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: PasswordHistoryId | str | None, dialect) -> str | None:
-        """Convierte PasswordHistoryId o string a string para BD."""
-        if isinstance(value, PasswordHistoryId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> PasswordHistoryId | None:
-        """Convierte el string de BD de vuelta a PasswordHistoryId."""
-        if value is None:
-            return None
-        return PasswordHistoryId(uuid.UUID(value))
+PasswordHistoryIdDecorator = tipo_de_id(PasswordHistoryId)
 
 
 # --- TypeDecorator para UserId (reutilizado) ---
-class UserIdDecorator(TypeDecorator):
-    """TypeDecorator para manejar UserId como CHAR(36) en BD."""
-
-    impl = CHAR(36)
-    cache_ok = True
-
-    def process_bind_param(self, value: UserId | str | None, dialect) -> str | None:
-        """Convierte UserId o string a string para BD."""
-        if isinstance(value, UserId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> UserId | None:
-        """Convierte el string de BD de vuelta a UserId."""
-        if value is None:
-            return None
-        return UserId(uuid.UUID(value))
+UserIdDecorator = tipo_de_id(UserId)
 
 
 # --- Definición de la Tabla ---
