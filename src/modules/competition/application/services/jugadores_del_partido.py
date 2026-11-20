@@ -102,6 +102,10 @@ class JugadoresDelPartido:
             holes_by_tee,
         ) = await self._datos_de_handicap(round_entity, is_scratch, [*team_a_ids, *team_b_ids])
 
+        # Los cambios de barras de su campo (R1 y R2)
+        cambios = await uow.barras_por_campo.del_campo(
+            round_entity.competition_id, round_entity.golf_course_id
+        )
         return self._match_players.build(
             round_entity.match_format,
             list(team_a_ids),
@@ -116,6 +120,7 @@ class JugadoresDelPartido:
             user_gender_map,
             competition.max_playing_handicap,
             holes_by_tee,
+            cambios,
         )
 
     async def con_otra_barra(

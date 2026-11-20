@@ -120,6 +120,9 @@ class RemoveGolfCourseFromCompetitionUseCase:
 
             # 5. Guardar la competicion actualizada
             await self._uow.competitions.update(competition)
+            # Y sin los cambios de barras de ese campo (barras por campo, 20 nov
+            # 2026): quitarlo no borra el campo, así que no se van solos
+            await self._uow.barras_por_campo.borrar_del_campo(competition.id, golf_course_id)
 
         # 6. Construir respuesta
         return RemoveGolfCourseResponseDTO(

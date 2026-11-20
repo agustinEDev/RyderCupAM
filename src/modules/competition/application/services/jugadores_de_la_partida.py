@@ -33,9 +33,12 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.barra_del_jugador import (
-    barra_del_jugador,
-    barra_sin_golpes,
+    barra_en_el_campo,
     lo_que_le_falta,
+)
+from src.modules.competition.domain.value_objects.barras_del_campo import (
+    SIN_CAMBIOS,
+    BarrasDelCampo,
 )
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     HOYOS,
@@ -138,11 +141,13 @@ class JugadoresDeLaPartida:
         if campo is None:
             raise ValueError(f"No existe el campo de la franja {franja.id}")
         contexto = course_context_for(campo)
+        # Los cambios de barras del campo de la franja (R1 y R2)
+        cambios = await uow.barras_por_campo.del_campo(competition.id, franja.golf_course_id)
 
         if competition.play_mode == PlayMode.SCRATCH:
             return {
                 u: self._sin_golpes(
-                    u, inscripciones[u].tee_color, fijados[u], generos.get(u), contexto
+                    u, inscripciones[u].tee_color, fijados[u], generos.get(u), contexto, cambios
                 )
                 for u in user_ids
             }
@@ -152,7 +157,9 @@ class JugadoresDeLaPartida:
         for user_id in user_ids:
             inscripcion = inscripciones[user_id]
             genero = generos.get(user_id)
-            barra = barra_del_jugador(inscripcion.tee_color, genero, contexto.tee_ratings)
+            barra = barra_en_el_campo(
+                user_id, inscripcion.tee_color, genero, cambios, contexto.tee_ratings
+            )
             if barra.tee_rating is None:
                 falta = lo_que_le_falta(barra, genero, contexto.tee_ratings)
                 # Sin valoración siempre falta algo: el `if` es para mypy
@@ -247,7 +254,10 @@ class JugadoresDeLaPartida:
         if competition.play_mode == PlayMode.SCRATCH:
             nueva = self._sin_golpes(foto.user_id, tee_color, foto.handicap, genero, contexto)
         else:
-            barra = barra_del_jugador(tee_color, genero, contexto.tee_ratings)
+            # El color ya es el que juega en este campo: sin más cambios
+            barra = barra_en_el_campo(
+                foto.user_id, tee_color, genero, SIN_CAMBIOS, contexto.tee_ratings
+            )
             if barra.tee_rating is None:
                 raise TeeNotRatedForPlayerError(
                     "Sus barras no están valoradas en el campo de esta partida"
@@ -302,12 +312,13 @@ class JugadoresDeLaPartida:
         handicap: Decimal,
         genero: Gender | None,
         contexto: StrokeContext,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> JugadorDePartida:
         """SCRATCH: todos juegan con 0, y las barras no hace falta que estén valoradas."""
         # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
         # género se busca también entre las que la traen (P12)
-        barra = barra_sin_golpes(
-            de_la_inscripcion, genero, contexto.tee_ratings, contexto.pars_by_tee
+        barra = barra_en_el_campo(
+            user_id, de_la_inscripcion, genero, cambios, contexto.tee_ratings, contexto.pars_by_tee
         )
         tee_gender = barra.tee_gender
         return JugadorDePartida(
