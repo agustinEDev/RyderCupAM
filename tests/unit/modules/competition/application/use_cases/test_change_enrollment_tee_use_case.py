@@ -27,6 +27,7 @@ valoración). Sin género en el perfil (o sin usuario), solo las mixtas. Sin
 barras (null) vuelve a las habituales de su género.
 """
 
+import copy
 import logging
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
@@ -1095,6 +1096,123 @@ class TestLoQueQuedaPorJugar:
         await mundo.cambiar(TeeColor.RED)
 
         assert (await mundo.el_partido(partido)).find_player(mundo.capitana).playing_handicap == 10
+
+
+class TestLosBloqueosYLasLecturas:
+    """Quinta ronda (/code-review): sin 500, sin bloquear lo que está en juego, sin N+1."""
+
+    async def test_change_tee_skips_a_tee_group_she_left_before_the_lock(self):
+        """
+        Given una partida suya que, al bloquearla, ya no la tiene (la movieron)
+        When cambia sus barras
+        Then esa partida se salta, sin un 500, y su inscripción cambia
+        """
+        mundo = await _Mundo().montar()
+        partida_id = await mundo.partida_con(mundo.jugadora)
+        sin_ella = copy.deepcopy(await mundo.la_partida(partida_id))
+        sin_ella.acompanar(
+            JugadorDePartida(
+                user_id=mundo.capitana,
+                handicap=Decimal("18.0"),
+                playing_handicap=10,
+                tee_color=TeeColor.YELLOW,
+                tee_gender=Gender.MALE,
+                golpes_por_hoyo=(1,) * 10 + (0,) * 8,
+                par_por_hoyo=(4,) * 18,
+            )
+        )
+        sin_ella.quitar(mundo.jugadora)
+        mundo.uow.partidas.find_by_id_for_update = AsyncMock(return_value=sin_ella)
+
+        await mundo.cambiar(TeeColor.RED)
+
+        assert await mundo.barras_guardadas() == TeeColor.RED
+
+    async def test_change_tee_in_scratch_keeps_a_missing_saved_handicap_missing(self):
+        """
+        Given una Ryder SCRATCH con un individual programado en el que ni ella ni el
+            rival tienen hándicap índice guardado
+        When cambia a rojas
+        Then los dos siguen sin él: no se reescribe a 0
+        """
+        mundo = await _Mundo().montar(play_mode="SCRATCH")
+        partido = await mundo.partido(
+            [mundo.jugadora],
+            [mundo.otro],
+            handicaps={mundo.jugadora: None, mundo.otro: None},
+        )
+
+        await mundo.cambiar(TeeColor.RED)
+
+        rehecho = await mundo.el_partido(partido)
+        assert rehecho.find_player(mundo.jugadora).tee_color == TeeColor.RED
+        assert rehecho.find_player(mundo.jugadora).player_handicap is None
+        assert rehecho.find_player(mundo.otro).player_handicap is None
+
+    async def test_change_tee_does_not_lock_a_tee_group_that_already_left(self):
+        """
+        Given una partida suya cuya hora ya pasó
+        When cambia sus barras
+        Then ni se bloquea: solo se bloquea lo que queda por salir
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partida_con(mundo.jugadora)
+        mundo.ahora = datetime(2026, 6, 1, 8, 30, tzinfo=UTC)
+        mundo.uow.partidas.find_by_id_for_update = AsyncMock(
+            wraps=mundo.uow.partidas.find_by_id_for_update
+        )
+
+        await mundo.cambiar(TeeColor.RED)
+
+        mundo.uow.partidas.find_by_id_for_update.assert_not_awaited()
+
+    async def test_change_tee_does_not_lock_a_started_match(self):
+        """
+        Given un partido suyo ya empezado
+        When cambia sus barras
+        Then ni se bloquea
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partido([mundo.jugadora], [mundo.otro], empezado=True)
+        mundo.uow.matches.find_by_id_for_update = AsyncMock(
+            wraps=mundo.uow.matches.find_by_id_for_update
+        )
+
+        await mundo.cambiar(TeeColor.RED)
+
+        mundo.uow.matches.find_by_id_for_update.assert_not_awaited()
+
+    async def test_change_tee_skips_a_tee_group_that_left_while_locking(self):
+        """
+        Given una partida suya sin salir al leerla, con golpes al bloquearla
+        When cambia sus barras
+        Then se salta: cuenta lo leído con el bloqueo
+        """
+        mundo = await _Mundo().montar()
+        partida_id = await mundo.partida_con(mundo.jugadora)
+        en_juego = copy.deepcopy(await mundo.la_partida(partida_id))
+        en_juego.empezar()
+        mundo.uow.partidas.find_by_id_for_update = AsyncMock(return_value=en_juego)
+
+        await mundo.cambiar(TeeColor.RED)
+
+        [ella] = (await mundo.la_partida(partida_id)).jugadores
+        assert ella.tee_color == TeeColor.YELLOW
+
+    async def test_change_tee_reads_each_course_once(self):
+        """
+        Given dos partidos suyos pendientes en el mismo campo
+        When cambia sus barras
+        Then el campo se lee una sola vez en toda la ejecución
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+        await mundo.partido([mundo.jugadora], [mundo.capitan_b])
+        mundo.campos.find_by_id = AsyncMock(wraps=mundo.campos.find_by_id)
+
+        await mundo.cambiar(TeeColor.RED)
+
+        assert mundo.campos.find_by_id.await_count == 1
 
 
 class TestElRastro:

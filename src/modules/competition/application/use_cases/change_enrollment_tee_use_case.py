@@ -45,6 +45,7 @@ from src.modules.competition.application.exceptions import (
     TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.course_context import contexto_del_campo
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
@@ -64,8 +65,10 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
-from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
+from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -196,8 +199,11 @@ class ChangeEnrollmentTeeUseCase:
                 )
             usuario = await self._usuarios.find_by_id(enrollment.user_id)
             genero: Gender | None = usuario.gender if usuario else None
+            # Cada campo, leído una vez en toda la ejecución, y el mismo contexto para
+            # comprobar y para calcular: que no diverjan
+            contextos: dict[GolfCourseId, StrokeContext] = {}
             if request.tee_color is not None and not await self._la_tiene_algun_campo(
-                competition, request.tee_color, genero
+                competition, request.tee_color, genero, contextos
             ):
                 raise TeeNotAvailableError(
                     f"Ningún campo de la competición tiene barras {request.tee_color.value} "
@@ -207,10 +213,10 @@ class ChangeEnrollmentTeeUseCase:
             # Todo calculado antes de escribir nada
             try:
                 partidos = await self._partidos_rehechos(
-                    competition, enrollment.user_id, request.tee_color, genero
+                    competition, enrollment.user_id, request.tee_color, genero, contextos
                 )
                 partidas = await self._partidas_rehechas(
-                    competition, enrollment.user_id, request.tee_color, genero
+                    competition, enrollment.user_id, request.tee_color, genero, contextos
                 )
             except TeeNotRatedForPlayerError as e:
                 raise TeeNotAvailableError(
@@ -254,8 +260,13 @@ class ChangeEnrollmentTeeUseCase:
         user_id: UserId,
         tee_color: TeeColor | None,
         genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext],
     ) -> list[_PartidoRehecho]:
-        """Sus partidos de Ryder sin empezar, con su barra nueva; cada uno, bloqueado."""
+        """
+        Sus partidos de Ryder sin empezar, con su barra nueva. Se filtran con la
+        lectura sin bloqueo, se bloquean solo esos y se vuelve a mirar con el
+        bloqueo: lo que esté en juego ni se bloquea.
+        """
         rondas = {r.id: r for r in await self._uow.rounds.find_by_competition(competition.id)}
         if not rondas:
             return []
@@ -267,7 +278,13 @@ class ChangeEnrollmentTeeUseCase:
             if partido is None or partido.status != MatchStatus.SCHEDULED:
                 continue
             bandos = await self._del_partido.con_otra_barra(
-                rondas[partido.round_id], competition, partido, user_id, tee_color, genero
+                rondas[partido.round_id],
+                competition,
+                partido,
+                user_id,
+                tee_color,
+                genero,
+                contextos,
             )
             if bandos is not None:
                 rehechos.append((partido, *bandos))
@@ -279,32 +296,51 @@ class ChangeEnrollmentTeeUseCase:
         user_id: UserId,
         tee_color: TeeColor | None,
         genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext],
     ) -> list[_PartidaRehecha]:
         """
-        Sus partidas de stroke play que aún no salieron, con su foto nueva; cada una,
-        bloqueada. «Salió» es la regla única: tiene golpes o le llegó su hora (#544).
+        Sus partidas de stroke play que aún no salieron, con su foto nueva. «Salió»
+        es la regla única: tiene golpes o le llegó su hora (#544).
+
+        Se filtran con la lectura sin bloqueo (una lectura de franja y de zona por
+        franja, no por partida), se bloquean solo las que quedan y se vuelve a
+        mirar con el bloqueo: si ya salió o ella ya no está, se salta.
         """
         ahora = self._reloj()
-        rehechas: list[_PartidaRehecha] = []
+        por_franja: dict[RoundId, list[Partida]] = {}
         for leida in await self._uow.partidas.del_jugador(competition.id, user_id):
-            partida = await self._uow.partidas.find_by_id_for_update(leida.id)
-            if partida is None:
-                continue
-            franja = await self._uow.rounds.find_by_id(partida.round_id)
+            por_franja.setdefault(leida.round_id, []).append(leida)
+
+        rehechas: list[_PartidaRehecha] = []
+        for round_id, leidas in por_franja.items():
+            franja = await self._uow.rounds.find_by_id(round_id)
             if franja is None:
                 # Una partida sin su franja no se puede ni fechar: mejor decirlo que
                 # dejarla con las barras viejas sin que nadie lo sepa
                 raise PendingGameNotRecalculableError("La franja de una partida ya no existe")
-            if partida.id in await las_que_salieron(franja, [partida], self._zonas, ahora):
-                continue
-            foto = next(j for j in partida.jugadores if j.user_id == user_id)
-            nueva = await self._de_la_partida.con_otra_barra(
-                competition, franja, foto, tee_color, genero
-            )
-            if nueva is not None:
-                rehechas.append(
-                    (partida, [nueva if j.user_id == user_id else j for j in partida.jugadores])
+            salieron = await las_que_salieron(franja, leidas, self._zonas, ahora)
+            for leida in leidas:
+                if leida.id in salieron:
+                    continue
+                partida = await self._uow.partidas.find_by_id_for_update(leida.id)
+                if partida is None or partida.id in await las_que_salieron(
+                    franja, [partida], self._zonas, ahora
+                ):
+                    continue
+                foto = next((j for j in partida.jugadores if j.user_id == user_id), None)
+                if foto is None:
+                    # La movieron o la quitaron mientras tanto: esta ya no es suya
+                    continue
+                nueva = await self._de_la_partida.con_otra_barra(
+                    competition, franja, foto, tee_color, genero, contextos
                 )
+                if nueva is not None:
+                    rehechas.append(
+                        (
+                            partida,
+                            [nueva if j.user_id == user_id else j for j in partida.jugadores],
+                        )
+                    )
         return rehechas
 
     async def _comprobar_quien(
@@ -341,26 +377,41 @@ class ChangeEnrollmentTeeUseCase:
         return equipo is not None and ryder_cup.is_captain_of(equipo, quien)
 
     async def _la_tiene_algun_campo(
-        self, competition: Competition, color: TeeColor, genero: Gender | None
+        self,
+        competition: Competition,
+        color: TeeColor,
+        genero: Gender | None,
+        contextos: dict[GolfCourseId, StrokeContext],
     ) -> bool:
         """
         Si alguno de sus campos tiene esas barras para su género o sin género, con
-        la regla de siempre (`tee_key_for`): valoradas, y en SCRATCH también con
-        solo tarjeta, que sin golpes no hace falta valoración.
+        la regla de siempre (`tee_key_for`) y el MISMO contexto que el cálculo
+        (`contexto_del_campo`, el de `JugadoresDelPartido` y `JugadoresDeLaPartida`):
+        valoradas, y en SCRATCH también con tarjeta propia, que sin golpes no hace
+        falta valoración. «Con tarjeta» es lo que mira cada cálculo: la Ryder,
+        `holes_by_tee`; el stroke play, `pars_by_tee` (salen juntas del campo).
 
         Sin género en el perfil (o sin usuario) solo valen las mixtas: es lo que
-        `tee_key_for` encuentra con género None, y nunca las de un solo género.
+        `tee_key_for` encuentra con género None, y nunca las de un solo género. Un
+        campo que ya no existe no la tiene.
         """
         en_scratch = competition.play_mode == PlayMode.SCRATCH
+        su_genero = genero.value if genero else None
         for del_campo in competition.golf_courses:
-            campo = await self._campos.find_by_id(del_campo.golf_course_id)
-            if campo is None:
+            try:
+                contexto = await contexto_del_campo(
+                    self._campos, del_campo.golf_course_id, contextos
+                )
+            except PendingGameNotRecalculableError:
                 continue
-            contexto = StrokeContextBuilder.build(campo)
             barras: set[TeeKey] = set(contexto.tee_ratings)
             if en_scratch:
-                barras |= set(contexto.holes_by_tee)
-            su_genero = genero.value if genero else None
+                con_tarjeta = (
+                    contexto.holes_by_tee
+                    if competition.ryder_cup is not None
+                    else contexto.pars_by_tee
+                )
+                barras |= set(con_tarjeta)
             if tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None:
                 return True
         return False
