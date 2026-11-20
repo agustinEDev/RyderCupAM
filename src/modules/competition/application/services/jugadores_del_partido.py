@@ -14,18 +14,27 @@ podía reventar.
 from collections.abc import Sequence
 from decimal import Decimal
 
+from src.modules.competition.application.exceptions import (
+    PendingGameNotRecalculableError,
+    TeeNotRatedForPlayerError,
+)
 from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.match_players_builder import (
     MatchPlayersBuilder,
+    TeeColorNotFoundError,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import (
@@ -102,6 +111,101 @@ class JugadoresDelPartido:
             competition.max_playing_handicap,
             holes_by_tee,
         )
+
+    async def con_otra_barra(
+        self,
+        round_entity: Round,
+        competition: Competition,
+        partido: Match,
+        user_id: UserId,
+        tee_color: TeeColor | None,
+        genero: Gender | None,
+    ) -> tuple[list[MatchPlayer], list[MatchPlayer]] | None:
+        """
+        Los dos bandos de un partido ya generado cuando un jugador cambia de barras
+        (BE #912). Decidido con Agustín: los demás se quedan como se generaron.
+
+        Parte de la foto guardada de cada uno (su barra y su hándicap índice, que
+        es el de entonces: el perfil no llega a lo ya generado, como al refrescar
+        hándicaps) y solo cambia la barra de quien la cambia. Con eso se vuelve a
+        hacer el reparto de siempre (`MatchPlayersBuilder`): el hándicap de juego
+        de él y lo que dependa de él (la diferencia en individual, el reparto
+        frente al más bajo en fourball, el del equipo en foursomes).
+
+        Returns:
+            Los dos bandos nuevos, o None si su barra queda igual que la guardada:
+            entonces no se toca nada de nadie
+
+        Raises:
+            TeeNotRatedForPlayerError: Si SUS barras no están valoradas en este campo
+            PendingGameNotRecalculableError: Si falta el campo, una foto no tiene su
+                hándicap índice, o la barra guardada de otro ya no está valorada
+        """
+        is_scratch = competition.play_mode == PlayMode.SCRATCH
+        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+        if golf_course is None:
+            raise PendingGameNotRecalculableError("El campo de la sesión ya no existe")
+        contexto = course_context_for(golf_course)
+
+        # Cada uno con su foto: la barra guardada (con su género, para que se busque
+        # la misma) y su índice guardado; él, con la barra nueva y su género
+        inscripciones: dict[str, Enrollment] = {}
+        indices: dict[str, Decimal] = {}
+        generos: dict[str, Gender | None] = {}
+        for foto in (*partido.team_a_players, *partido.team_b_players):
+            clave = str(foto.user_id.value)
+            es_el = foto.user_id == user_id
+            if foto.player_handicap is None and not is_scratch:
+                raise PendingGameNotRecalculableError(
+                    "Un jugador del partido no tiene guardado su hándicap índice"
+                )
+            inscripciones[clave] = Enrollment(
+                id=EnrollmentId.generate(),
+                competition_id=competition.id,
+                user_id=foto.user_id,
+                status=EnrollmentStatus.APPROVED,
+                tee_color=tee_color if es_el else foto.tee_color,
+            )
+            if foto.player_handicap is not None:
+                indices[clave] = foto.player_handicap
+            generos[clave] = genero if es_el else foto.tee_gender
+
+        con_tarjeta = contexto.holes_by_tee if is_scratch else None
+        color, su_genero, valoracion, _ = self._match_players.resolve_player_data(
+            user_id, inscripciones, contexto.tee_ratings, indices, generos, con_tarjeta
+        )
+        guardada = partido.find_player(user_id)
+        if guardada is not None and (color, su_genero) == (
+            guardada.tee_color,
+            guardada.tee_gender,
+        ):
+            return None
+        if valoracion is None and not is_scratch:
+            raise TeeNotRatedForPlayerError(
+                "Sus barras no están valoradas en el campo de este partido"
+            )
+
+        try:
+            return self._match_players.build(
+                round_entity.match_format,
+                [p.user_id for p in partido.team_a_players],
+                [p.user_id for p in partido.team_b_players],
+                inscripciones,
+                contexto.tee_ratings,
+                self._calculator,
+                round_entity.get_effective_allowance(),
+                is_scratch,
+                indices,
+                contexto.holes_by_stroke_index,
+                generos,
+                competition.max_playing_handicap,
+                contexto.holes_by_tee,
+            )
+        except TeeColorNotFoundError as e:
+            # La suya ya está comprobada: es la guardada de otro la que falta
+            raise PendingGameNotRecalculableError(
+                "La barra guardada de otro jugador del partido ya no está valorada"
+            ) from e
 
     async def _datos_de_handicap(
         self, round_entity: Round, is_scratch: bool, player_ids: list[UserId]

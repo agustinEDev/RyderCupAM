@@ -305,3 +305,21 @@ class CompetitionAlreadyExistsError(Exception):
     """Ya existe una competición del mismo organizador con ese nombre (sin mayúsculas, #540)."""
 
     pass
+
+
+class PendingGameNotRecalculableError(Exception):
+    """
+    Un partido o una partida pendiente no se puede rehacer con unas barras nuevas
+    por algo que no son esas barras (BE #912): la barra guardada de otro que el
+    campo ya no valora, un campo o una franja que ya no existen, una foto sin
+    hándicap índice. Nunca un 500, y sin datos de otros jugadores.
+    """
+
+    error_code = "PENDING_GAME_NOT_RECALCULABLE"
+
+
+class TeeNotRatedForPlayerError(Exception):
+    """
+    Las barras nuevas de un jugador no están valoradas en el campo de un partido o
+    una partida suya que queda por jugar (BE #912).
+    """
