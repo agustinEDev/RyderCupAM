@@ -251,7 +251,7 @@ class RequestEnrollmentUseCase:
             except ValueError as e:
                 raise InvalidTeeColorError(
                     f"Valor de tee_color no válido: '{request.tee_color}'. "
-                    f"Valores permitidos: {[c.value for c in TeeColor]}"
+                    f"Valores permitidos: {[c.value for c in TeeColor if se_puede_elegir(c)]}"
                 ) from e
             if tee_color is not None and not se_puede_elegir(tee_color):
                 raise TeeNotSelectableError(f"Las barras {tee_color.value} no se eligen")

@@ -28,6 +28,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
+    InvalidTeeColorError,
     TeeNotAvailableError,
     TeeNotSelectableError,
 )
@@ -233,3 +234,27 @@ class TestOpciones:
         ).execute(mundo.inscripcion.id.value, mundo.jugadora)
 
         assert respuesta.courses[0].options == ["RED", "BLUE"]
+
+
+async def test_an_unknown_tee_lists_the_allowed_ones_without_other():
+    """
+    Given una petición de inscripción con un color que no existe (saltándose la
+        validación del DTO)
+    When se apunta
+    Then InvalidTeeColorError, cuyo texto lista los colores que se eligen, sin OTHER
+    """
+    uow = InMemoryUnitOfWork()
+    competicion = await _publica(uow, empieza=_hoy() + timedelta(days=3))
+    peticion = RequestEnrollmentRequestDTO.model_construct(
+        competition_id=competicion.id.value,
+        user_id=uuid4(),
+        tee_color="PURPLE",
+        round_id=None,
+        waiting_list=False,
+    )
+
+    with pytest.raises(InvalidTeeColorError) as error:
+        await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(peticion)
+
+    assert "OTHER" not in str(error.value)
+    assert "YELLOW" in str(error.value)

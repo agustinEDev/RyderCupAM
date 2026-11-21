@@ -343,7 +343,8 @@ async def request_enrollment(
         )
 
     except TeeNotSelectableError as e:
-        # OTHER no se elige (21 nov 2026, C): el mismo código y texto que al cambiarla
+        # OTHER no se elige (21 nov 2026, C): 422 TEE_NOT_AVAILABLE con el texto fijo de
+        # `TeeNotSelectableError`, el mismo que dan los cambios de barra
         return respuesta_de_barras(e)
 
 
