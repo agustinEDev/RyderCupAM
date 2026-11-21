@@ -18,7 +18,11 @@ from src.modules.competition.application.services.handicaps_de_la_competicion im
     para_jugar_la_ryder,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+from src.modules.competition.domain.services.barra_del_jugador import (
+    BarraDelJugador,
+    barra_en_el_campo,
+    lo_que_le_falta,
+)
 from src.modules.competition.domain.value_objects.barras_del_campo import (
     SIN_CAMBIOS,
     BarrasDelCampo,
@@ -92,6 +96,38 @@ class MatchPlayersBuilder:
         if match_format == MatchFormat.FOURSOMES:
             return self._build_foursomes_match_players(team_a_ids, team_b_ids, *args)
         raise ValueError(f"Formato de partido no soportado: {match_format.value}")
+
+    def sin_barras(
+        self,
+        jugadores: list[UserId],
+        enrollment_map: Mapping[str, Enrollment],
+        tee_ratings: Mapping[TeeKey, TeeRating],
+        user_gender_map: Mapping[str, Gender | None],
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
+        con_tarjeta: Mapping[TeeKey, object] | None = None,
+    ) -> list[tuple[UserId, str, str | None]]:
+        """
+        Los que no tienen barras en el campo, y qué le falta a cada uno
+        (`lo_que_le_falta`): con golpes, sin valorar; en SCRATCH (`con_tarjeta`),
+        ni valoradas ni con tarjeta.
+
+        Returns:
+            (jugador, clave de lo que falta, color o None), en el orden recibido
+        """
+        faltan = []
+        for uid in jugadores:
+            tee_color, _, tee_rating, _ = self.resolve_player_data(
+                uid, enrollment_map, tee_ratings, {}, user_gender_map, cambios=cambios
+            )
+            falta = lo_que_le_falta(
+                BarraDelJugador(tee_color, None, tee_rating),
+                user_gender_map.get(str(uid.value)),
+                tee_ratings,
+                con_tarjeta,
+            )
+            if falta is not None:
+                faltan.append((uid, *falta))
+        return faltan
 
     def resolve_player_data(
         self,

@@ -410,3 +410,100 @@ class TestBarraEnElCampo:
         )
 
         assert (barra.tee_color, barra.tee_gender) == (TeeColor.WHITE, Gender.FEMALE)
+
+
+class TestLoQueLeFaltaEnScratch:
+    """
+    En SCRATCH le vale también una barra con tarjeta (la de su género o mixta):
+    el mismo criterio que el selector y que `GET /enrollments/{id}/tees`. Sin ella
+    hay que elegirla y la generación se bloquea con el aviso de siempre (R4).
+    """
+
+    TARJETA = object()
+
+    @pytest.mark.parametrize(
+        ("color", "genero", "valoradas", "con_tarjeta", "esperado"),
+        [
+            pytest.param(
+                TeeColor.RED,
+                Gender.FEMALE,
+                {("RED", "FEMALE"): ROJAS_M},
+                {("RED", "FEMALE"): TARJETA},
+                None,
+                id="D1 valorada de su género",
+            ),
+            pytest.param(
+                TeeColor.RED,
+                Gender.FEMALE,
+                {},
+                {("RED", "FEMALE"): TARJETA},
+                None,
+                id="D2 sin valorar con tarjeta de su género",
+            ),
+            pytest.param(
+                TeeColor.RED,
+                Gender.FEMALE,
+                {},
+                {("RED", None): TARJETA},
+                None,
+                id="D3 con tarjeta mixta",
+            ),
+            pytest.param(
+                TeeColor.YELLOW,
+                Gender.FEMALE,
+                {("YELLOW", "MALE"): AMARILLAS_H},
+                {("YELLOW", "MALE"): TARJETA},
+                (MISSING_TEE_COLOR, "YELLOW"),
+                id="D4 solo la del otro género",
+            ),
+            pytest.param(
+                TeeColor.GREEN,
+                Gender.FEMALE,
+                {("YELLOW", "MALE"): AMARILLAS_H},
+                {("YELLOW", "MALE"): TARJETA},
+                (MISSING_TEE_COLOR, "GREEN"),
+                id="D5 el color no existe",
+            ),
+            pytest.param(
+                TeeColor.RED,
+                None,
+                {},
+                {("RED", "MALE"): TARJETA},
+                (MISSING_GENDER, None),
+                id="D6 sin género y el color solo con género",
+            ),
+        ],
+    )
+    def test_lo_que_le_falta_en_scratch(self, color, genero, valoradas, con_tarjeta, esperado):
+        barra = barra_sin_golpes(color, genero, valoradas, con_tarjeta)
+
+        assert lo_que_le_falta(barra, genero, valoradas, con_tarjeta) == esperado
+
+    def test_d7_con_golpes_la_tarjeta_no_basta(self):
+        """
+        Given HANDICAP y unas rojas de mujer con tarjeta pero sin valorar
+        When se mira qué le falta sin `con_tarjeta`
+        Then su color, como hasta ahora
+        """
+        barra = barra_del_jugador(TeeColor.RED, Gender.FEMALE, {})
+
+        assert lo_que_le_falta(barra, Gender.FEMALE, {}) == (MISSING_TEE_COLOR, "RED")
+
+    @pytest.mark.parametrize(
+        ("color", "genero", "valoradas", "con_tarjeta", "vale"),
+        [
+            pytest.param(TeeColor.RED, Gender.FEMALE, {("RED", "FEMALE"): ROJAS_M}, None, True),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {("RED", None): ROJAS}, None, True),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {("RED", "MALE"): ROJAS_H}, None, False),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {}, {("RED", "FEMALE"): TARJETA}, True),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {}, {("RED", None): TARJETA}, True),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {}, {("RED", "MALE"): TARJETA}, False),
+            pytest.param(TeeColor.RED, None, {}, {("RED", "FEMALE"): TARJETA}, False),
+            pytest.param(TeeColor.RED, None, {}, {("RED", None): TARJETA}, True),
+            pytest.param(TeeColor.RED, Gender.FEMALE, {}, None, False),
+        ],
+    )
+    def test_d8_la_barra_vale(self, color, genero, valoradas, con_tarjeta, vale):
+        from src.modules.competition.domain.services.barra_del_jugador import la_barra_vale
+
+        assert la_barra_vale(color, genero, valoradas, con_tarjeta) is vale

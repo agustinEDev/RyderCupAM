@@ -124,23 +124,57 @@ def barra_en_el_campo(
     return barra_sin_golpes(color, genero, valoradas, con_tarjeta)
 
 
+def la_barra_vale(
+    color: TeeColor,
+    genero: Gender | None,
+    valoradas: Mapping[TeeKey, TeeRating],
+    con_tarjeta: Mapping[TeeKey, object] | None = None,
+) -> bool:
+    """
+    Si el campo tiene esas barras para él: la regla de siempre (`tee_key_for`, de
+    su género o sin género, nunca las del otro) entre las valoradas y, en SCRATCH
+    (`con_tarjeta`), también entre las que traen tarjeta: sin golpes no hace falta
+    valoración. Sin género solo valen las mixtas.
+
+    El único criterio de «tiene barra válida en ese campo»: el del selector y el
+    de `GET /enrollments/{id}/tees`, y el del aviso al generar (`lo_que_le_falta`).
+
+    Args:
+        con_tarjeta: En SCRATCH, las barras con tarjeta por (color, género)
+    """
+    barras = set(valoradas) | set(con_tarjeta or {})
+    su_genero = genero.value if genero else None
+    return tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None
+
+
 def lo_que_le_falta(
     barra: BarraDelJugador,
     genero: Gender | None,
     valoradas: Mapping[TeeKey, TeeRating],
+    con_tarjeta: Mapping[TeeKey, object] | None = None,
 ) -> tuple[str, str | None] | None:
     """
     Qué le falta a quien no tiene barras en el campo (BE #360, #361).
 
+    Con golpes, le falta si no están valoradas; en SCRATCH (`con_tarjeta`), si
+    tampoco traen tarjeta (`la_barra_vale`): sin ellas no se genera (R4).
+
     Solo es su género si de verdad no lo tiene y el color existe para alguno: con
     género, lo que falta es su color para él.
+
+    Args:
+        con_tarjeta: En SCRATCH, las barras con tarjeta por (color, género)
 
     Returns:
         None si tiene barras; si no, (clave de lo que falta, color o None)
     """
     if barra.tee_rating is not None:
         return None
-    existe_el_color = any(color == barra.tee_color.value for color, _ in valoradas)
+    if con_tarjeta is not None and la_barra_vale(barra.tee_color, genero, valoradas, con_tarjeta):
+        return None
+    existe_el_color = any(
+        color == barra.tee_color.value for color, _ in (*valoradas, *(con_tarjeta or {}))
+    )
     if existe_el_color and genero is None:
         return MISSING_GENDER, None
     return MISSING_TEE_COLOR, barra.tee_color.value

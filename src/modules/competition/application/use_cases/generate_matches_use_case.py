@@ -47,10 +47,6 @@ from src.modules.competition.domain.entities.team_assignment import TeamAssignme
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.barra_del_jugador import (
-    BarraDelJugador,
-    lo_que_le_falta,
-)
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.barras_del_campo import (
     SIN_CAMBIOS,
@@ -353,16 +349,19 @@ class GenerateMatchesUseCase:
             await self._comprobar_inscripciones(pairings, enrollment_map, competition)
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
-        # arreglar a doce jugadores eran doce viajes (BE #360)
-        if not is_scratch:
+        # arreglar a doce jugadores eran doce viajes (BE #360). También en
+        # SCRATCH, donde basta la tarjeta (21 nov 2026: se generaban partidos
+        # con quien no tenía barra en el campo). Un SCRATCH sin campo se genera
+        # como siempre: no hay barras que mirar
+        if golf_course is not None or not is_scratch:
             await self._comprobar_que_todos_tienen_barras(
                 self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team),
                 competition=competition,
                 enrollment_map=enrollment_map,
                 tee_ratings=tee_ratings,
-                user_handicap_map=user_handicap_map,
                 user_gender_map=user_gender_map,
                 cambios=cambios,
+                con_tarjeta=holes_by_tee if is_scratch else None,
             )
 
         # 11. Eliminar partidos existentes (re-generación)
@@ -503,32 +502,21 @@ class GenerateMatchesUseCase:
         competition: Competition,
         enrollment_map: Mapping[str, Enrollment],
         tee_ratings: Mapping[TeeKey, TeeRating],
-        user_handicap_map: Mapping[str, Decimal],
         user_gender_map: Mapping[str, Gender | None],
         cambios: BarrasDelCampo = SIN_CAMBIOS,
+        con_tarjeta: Mapping[TeeKey, object] | None = None,
     ) -> None:
         """
+        Args:
+            con_tarjeta: En SCRATCH, las barras con tarjeta: allí también valen
+
         Raises:
             PlayersWithoutTeeError: Con TODOS los que no tienen barras en el
                 campo, y lo que le falta a cada uno
         """
-        sin_barras = []
-        for uid in jugadores:
-            tee_color, _, tee_rating, _ = self._match_players.resolve_player_data(
-                uid,
-                enrollment_map,
-                tee_ratings,
-                user_handicap_map,
-                user_gender_map,
-                cambios=cambios,
-            )
-            falta = lo_que_le_falta(
-                BarraDelJugador(tee_color, None, tee_rating),
-                user_gender_map.get(str(uid.value)),
-                tee_ratings,
-            )
-            if falta is not None:
-                sin_barras.append((uid, *falta))
+        sin_barras = self._match_players.sin_barras(
+            jugadores, enrollment_map, tee_ratings, user_gender_map, cambios, con_tarjeta
+        )
         if not sin_barras:
             return
 

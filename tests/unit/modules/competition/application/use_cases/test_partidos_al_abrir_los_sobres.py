@@ -627,13 +627,30 @@ class TestCasosDeBorde:
 
         assert len(await torneo.partidos()) == 2
 
-    async def test_p16_en_scratch_el_sexo_da_igual(self):
-        torneo = await _montar(modo=PlayMode.SCRATCH, sexos=[None] * 4)
+    async def test_p16_en_scratch_sin_sexo_valen_las_barras_mixtas(self):
+        torneo = await _montar(
+            modo=PlayMode.SCRATCH, sexos=[None] * 4, barras=[(TeeColor.YELLOW, None)]
+        )
         await torneo.entregan_los_dos()
 
         await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
 
         assert len(await torneo.partidos()) == 2
+
+    async def test_p16_en_scratch_sin_sexo_y_solo_barras_con_sexo_se_bloquea(self):
+        """
+        El mismo criterio que el selector (21 nov 2026): sin sexo solo valen las
+        mixtas. Antes en SCRATCH no se miraba y se generaban sin barra en el campo.
+        """
+        torneo = await _montar(modo=PlayMode.SCRATCH, sexos=[None] * 4)
+        await torneo.entregan_los_dos()
+
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+
+        assert await torneo.partidos() == []
+        bloqueo = (await torneo.ronda()).match_generation_block
+        assert {p.missing for p in bloqueo.players} == {"GENDER"}
+        assert len(bloqueo.players) == 4
 
 
 class TestElCableado:
