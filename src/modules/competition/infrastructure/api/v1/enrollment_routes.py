@@ -715,7 +715,8 @@ async def change_enrollment_tee(
         "Por cada campo: la barra que juega, de dónde sale y las que se le pueden fijar "
         "(las mismas que aceptarían los cambios); y su barra general y la habitual de su "
         "género. La consultan el propio jugador, el capitán de su equipo, el organizador "
-        "o un admin, en cualquier estado de la competición."
+        "o un admin, en cualquier estado de la competición. Terminada o cancelada, sin "
+        "opciones, y donde jugó la barra de su partido o su partida (PLAYED)."
     ),
 )
 async def get_enrollment_tees(

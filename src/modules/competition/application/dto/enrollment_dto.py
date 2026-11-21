@@ -348,16 +348,22 @@ class CourseTeesDTO(BaseModel):
     tee: str | None = Field(
         None, description="La barra que juega en ese campo, o null si no tiene una válida."
     )
-    source: Literal["OWN", "COURSE", "GENERAL", "DEFAULT", "NONE"] = Field(
+    source: Literal["OWN", "COURSE", "GENERAL", "DEFAULT", "NONE", "PLAYED"] = Field(
         ...,
         description=(
             "De dónde sale: su cambio propio (OWN), la del campo para su género (COURSE), "
             "su barra general (GENERAL), la habitual de su género si no tiene general "
-            "(DEFAULT), o ninguna válida en ese campo (NONE)."
+            "(DEFAULT), o ninguna válida en ese campo (NONE). Con la competición "
+            "terminada o cancelada, la que jugó allí (PLAYED): la de su partido o su "
+            "partida empezados, de la última ronda en ese campo."
         ),
     )
     options: list[str] = Field(
-        ..., description="Las barras que se le pueden fijar en ese campo, en orden de color."
+        ...,
+        description=(
+            "Las barras que se le pueden fijar en ese campo, en orden de color; vacío con "
+            "la competición terminada o cancelada."
+        ),
     )
 
 

@@ -330,7 +330,8 @@ class TestQuien:
         """
         Given la competición en curso, terminada o cancelada
         When la propia jugadora pide sus barras
-        Then responde: es una lectura de sus datos (aunque ya no pueda cambiarlas)
+        Then responde: es una lectura de sus datos; terminada o cancelada, sin
+            opciones, que ya no se cambian (tabla del 21 nov 2026, B10)
         """
         mundo = await (await _Mundo().montar()).con_equipos()
         if estado != "cancelada":
@@ -340,7 +341,9 @@ class TestQuien:
         if estado == "cancelada":
             await mundo.cancelar()
 
-        assert (await _barras(mundo)).courses[0].options == ["RED", "BLUE"]
+        campo = (await _barras(mundo)).courses[0]
+        assert campo.tee == "RED"
+        assert campo.options == (["RED", "BLUE"] if estado == "en curso" else [])
 
     @pytest.mark.parametrize("quien", ["organizador", "capitana"])
     async def test_get_tees_once_finished_by_the_organizer_or_her_captain_answers(self, quien):
