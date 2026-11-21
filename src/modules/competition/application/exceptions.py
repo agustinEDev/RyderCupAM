@@ -333,9 +333,18 @@ class CourseNotInCompetitionError(Exception):
 
 class TeeNotAvailableError(Exception):
     """
-    Esas barras no valen para él: ningún campo de la competición las tiene
-    valoradas para su género, ESE campo no las tiene, o no lo están en el campo de
-    algo que le queda por jugar.
+    Esas barras no valen (422 TEE_NOT_AVAILABLE):
+
+    - Ese campo no tiene la barra que se fija en él: el cambio propio de una
+      inscripción (R1) o la del campo para un género (R2,
+      `CourseTeeNotAvailableError`, con su propio texto).
+    - En un campo donde le queda algo por jugar, la barra fijada allí para él (su
+      cambio propio o la del campo para su género) ya no vale, o con golpes no
+      está valorada en lo que se rehace.
+    - Con la general (o la habitual) en un campo así: la subclase
+      `TeeNotOnPendingCourseError`, con su propio código.
+    - Al quitar una fijada, la que quedaría no vale en un campo así: la subclase
+      `TeeRemovalLeavesNoValidTeeError`, con su propio texto.
     """
 
     error_code = "TEE_NOT_AVAILABLE"
@@ -345,6 +354,25 @@ class CourseTeeNotAvailableError(TeeNotAvailableError):
     """
     Ese campo no tiene esas barras para ese género (ni mixtas): la barra del campo
     para un género (R2). Mismo código que el del jugador, con su propio texto.
+    """
+
+
+class TeeNotOnPendingCourseError(TeeNotAvailableError):
+    """
+    La barra general nueva no vale en un campo donde le queda algo por jugar y no
+    tiene ni cambio propio ni barra del campo para su género: antes hay que fijar
+    la de ese campo. Nada pendiente queda sin barra válida (21 nov 2026).
+    """
+
+    error_code = "TEE_NOT_ON_PENDING_COURSE"
+
+
+class TeeRemovalLeavesNoValidTeeError(TeeNotAvailableError):
+    """
+    Al quitar una barra fijada en un campo (el cambio propio, R1, o la del campo
+    para un género, R2), la que pasaría a jugar allí (la del campo, la general o
+    la habitual) no vale y le queda algo por jugar en él. Mismo código que
+    `TeeNotAvailableError`, con su propio texto.
     """
 
 

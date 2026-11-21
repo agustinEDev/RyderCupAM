@@ -17,6 +17,8 @@ que el cambio de la barra general (#912):
 | Terminada                                             | 409 TEE_CHANGE_CLOSED                     |
 | Inscripción no aprobada                               | 409 ENROLLMENT_NOT_APPROVED               |
 | Cambiar luego la general no toca ese campo            | R1 gana                                   |
+| null con algo pendiente allí y la general sin valer    | 422 TEE_NOT_AVAILABLE, texto de quitarla (también SCRATCH) |
+| null con la del campo para su género sin valer         | 422 TEE_NOT_AVAILABLE (la fijada no vale) |
 | El log                                                | ids, sin nombres                          |
 """
 
@@ -35,6 +37,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
     ChangeEnrollmentCourseTeeUseCase,
@@ -45,12 +48,18 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.test_change_enrollment_tee_use_case import (
     ALDEAMAYOR,
+    SOLO_TARJETA,
     _Mundo,
 )
 
 pytestmark = pytest.mark.asyncio
 
 SIN_ROJAS = [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)]
+# Un campo sin azules: blancas de mujer (en SCRATCH, solo con tarjeta) y amarillas
+BLANCAS_DE_MUJER = {
+    "HANDICAP": [(TeeColor.WHITE, Gender.FEMALE), (TeeColor.YELLOW, Gender.MALE)],
+    "SCRATCH": [(TeeColor.WHITE, Gender.FEMALE, SOLO_TARJETA), (TeeColor.YELLOW, Gender.MALE)],
+}
 
 
 async def _fijar(mundo, campo, color, quien=None, is_admin=False, inscripcion=None):
@@ -191,6 +200,89 @@ class TestElCambio:
             "to=BLUE",
         ):
             assert trozo in mensaje
+
+
+class TestQuitarloConAlgoPendiente:
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_course_tee_null_with_pending_where_the_general_is_not_valid_is_rejected(
+        self, play_mode
+    ):
+        """
+        Given un campo con blancas de mujer solo con tarjeta (sin azules), su
+            general en azules, su cambio propio allí en blancas y un partido suyo
+            pendiente en ese campo
+        When se quita su cambio propio (null)
+        Then 422 TEE_NOT_AVAILABLE con el texto de quitarla (en SCRATCH también,
+            aunque sin golpes no se valore nada): pasaría a jugar azules, que allí
+            no hay; y no cambia nada
+        """
+        mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
+        campo = next(iter(mundo.campos.por_id))
+        await mundo.cambiar(TeeColor.BLUE)
+        await _fijar(mundo, campo, TeeColor.WHITE)
+        partido = await mundo.partido(
+            [mundo.jugadora],
+            [mundo.otro],
+            barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)},
+        )
+
+        with pytest.raises(TeeRemovalLeavesNoValidTeeError) as error:
+            await _fijar(mundo, campo, None)
+
+        assert error.value.error_code == "TEE_NOT_AVAILABLE"
+        assert await _propia(mundo, campo) == TeeColor.WHITE
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.WHITE
+        )
+
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_course_tee_null_with_a_course_tee_no_longer_valid_is_not_available(
+        self, play_mode
+    ):
+        """
+        Given su cambio propio en blancas y, fijada para las mujeres en ese campo,
+            una barra que ya no vale allí (verdes), con un partido suyo pendiente
+        When se quita su cambio propio (null)
+        Then 422 TEE_NOT_AVAILABLE, pero no el de quitarla: lo que no vale es la
+            del campo, que pasaría a jugar
+        """
+        mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
+        campo = next(iter(mundo.campos.por_id))
+        await _fijar(mundo, campo, TeeColor.WHITE)
+        await mundo.uow.barras_por_campo.fijar_del_campo(
+            mundo.competition_id, campo, Gender.FEMALE, TeeColor.GREEN
+        )
+        await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)}
+        )
+
+        with pytest.raises(TeeNotAvailableError) as error:
+            await _fijar(mundo, campo, None)
+
+        assert type(error.value) is TeeNotAvailableError
+        assert await _propia(mundo, campo) == TeeColor.WHITE
+
+    async def test_course_tee_null_with_pending_where_the_general_is_valid_removes_it(self):
+        """
+        Given su cambio propio en azules en Aldeamayor, su general en rojas (que
+            allí hay de mujer) y un partido suyo pendiente allí
+        When se quita su cambio propio (null)
+        Then se quita, y su partido pasa a rojas
+        """
+        mundo = await _Mundo().montar()
+        campo = next(iter(mundo.campos.por_id))
+        await mundo.cambiar(TeeColor.RED)
+        await _fijar(mundo, campo, TeeColor.BLUE)
+        partido = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.BLUE, Gender.FEMALE)}
+        )
+
+        await _fijar(mundo, campo, None)
+
+        assert await _propia(mundo, campo) is None
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.RED
+        )
 
 
 class TestQuien:

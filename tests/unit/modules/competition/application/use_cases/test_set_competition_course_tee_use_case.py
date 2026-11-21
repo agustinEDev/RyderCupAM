@@ -20,6 +20,7 @@ Solo el organizador o un admin, también con la competición en curso:
 | Las dos mujeres de un fourball con barras ya sin valorar | Las dos a la nueva, de una vez          |
 | Y un tercero no afectado con barras ya sin valorar       | 409 (todo o nada)                       |
 | Lo mismo en SCRATCH                                      | Las dos a la nueva; los demás, igual    |
+| null con algo pendiente y su general sin valer allí      | 422 TEE_NOT_AVAILABLE, texto de quitarla (también SCRATCH) |
 | El log                                                   | ids, sin nombres                        |
 """
 
@@ -37,6 +38,7 @@ from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.application.use_cases.set_competition_course_tee_use_case import (
     SetCompetitionCourseTeeUseCase,
@@ -47,6 +49,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.test_change_enrollment_course_tee_use_case import (
+    BLANCAS_DE_MUJER,
     SIN_ROJAS,
     _fijar,
 )
@@ -324,6 +327,57 @@ class TestLaBarraDelCampo:
             "matches=1",
         ):
             assert trozo in mensaje
+
+
+class TestQuitarlaConAlgoPendiente:
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_course_tee_null_with_pending_where_her_general_is_not_valid_is_rejected(
+        self, play_mode
+    ):
+        """
+        Given un campo con blancas de mujer (en SCRATCH solo con tarjeta) y sin
+            azules, la general de la jugadora en azules, la barra del campo para
+            las mujeres en blancas y un partido suyo pendiente allí
+        When el organizador quita la barra del campo para las mujeres (null)
+        Then 422 TEE_NOT_AVAILABLE con el texto de quitarla: la jugadora pasaría a
+            azules, que allí no hay; y no cambia nada
+        """
+        mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
+        campo = next(iter(mundo.campos.por_id))
+        await mundo.cambiar(TeeColor.BLUE)
+        await _para_todas(mundo, campo, TeeColor.WHITE)
+        partido = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)}
+        )
+
+        with pytest.raises(TeeRemovalLeavesNoValidTeeError) as error:
+            await _para_todas(mundo, campo, None)
+
+        assert error.value.error_code == "TEE_NOT_AVAILABLE"
+        assert await _del_campo(mundo, campo) == {Gender.FEMALE: TeeColor.WHITE}
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.WHITE
+        )
+
+    async def test_course_tee_null_with_pending_and_her_own_tee_there_removes_it(self):
+        """
+        Given lo mismo en SCRATCH, pero la jugadora con su cambio propio allí en
+            blancas
+        When el organizador quita la barra del campo para las mujeres (null)
+        Then se quita: ella sigue con su cambio propio, que vale
+        """
+        mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER["SCRATCH"],), play_mode="SCRATCH")
+        campo = next(iter(mundo.campos.por_id))
+        await mundo.cambiar(TeeColor.BLUE)
+        await _para_todas(mundo, campo, TeeColor.WHITE)
+        await _fijar(mundo, campo, TeeColor.WHITE)
+        await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)}
+        )
+
+        await _para_todas(mundo, campo, None)
+
+        assert await _del_campo(mundo, campo) == {}
 
 
 class TestQuien:
