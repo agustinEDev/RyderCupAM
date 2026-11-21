@@ -11,8 +11,11 @@ género.
 
 Con la competición terminada o cancelada (tabla del 21 nov 2026, B), en cada campo
 donde jugó, la barra de la foto de su partido (Ryder) o su partida (stroke play), de
-la última ronda allí por fecha y sesión, con origen PLAYED. Jugó = su partido o su
-partida empezaron; donde no, la configuración de siempre. Ya no se cambia nada: sin
+la última ronda allí por fecha y sesión, con origen PLAYED. Solo si jugó de verdad
+(decidido el 21 nov 2026): en la Ryder, su partido empezó (un WO cuenta solo con
+algún hoyo apuntado: el que se declara sin empezar, no); en stroke play, está en
+`quienes_jugaron` de su partida (no un NO_PRESENTADO). Donde no, la configuración de
+siempre. Ya no se cambia nada: sin
 opciones en ningún campo.
 
 Quién: el propio jugador, el capitán de su equipo, el organizador o un admin, en
@@ -57,6 +60,8 @@ from src.shared.domain.value_objects.gender import Gender
 
 # Ya no se juega ni se cambia nada: cada campo dice la barra que jugó (B)
 ACABADA = frozenset({CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED})
+# Un partido en estos estados empezó: se jugó en el campo (el WO se mira aparte)
+SE_JUGO = frozenset({MatchStatus.IN_PROGRESS, MatchStatus.COMPLETED, MatchStatus.CONCEDED})
 
 
 class GetEnrollmentTeesUseCase:
@@ -141,20 +146,30 @@ class GetEnrollmentTeesUseCase:
     ) -> dict[GolfCourseId, TeeColor]:
         """
         La barra que jugó en cada campo: la de la foto de su partido (Ryder) o su
-        partida (stroke play) empezados, de la última ronda en ese campo por fecha y
-        sesión. Los campos donde no llegó a jugar no salen.
+        partida (stroke play) donde jugó de verdad, de la última ronda en ese campo
+        por fecha y sesión. Los campos donde no llegó a jugar no salen.
         """
         rondas = {r.id: r for r in await self._uow.rounds.find_by_competition(competition.id)}
+        partidos = await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id)
+        # Un WO no dice si empezó: cuenta si alguien apuntó algún hoyo
+        con_hoyos = {
+            match_id
+            for match_id, _ in await self._uow.hole_scores.played_holes(
+                [p.id for p in partidos if p.status == MatchStatus.WALKOVER]
+            )
+        }
         fotos = [
             (partido.round_id, jugador.tee_color)
-            for partido in await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id)
-            if partido.status != MatchStatus.SCHEDULED
+            for partido in partidos
+            if (partido.status in SE_JUGO or partido.id in con_hoyos)
             and (jugador := partido.find_player(user_id)) is not None
         ]
+        partidas = await self._uow.partidas.del_jugador(competition.id, user_id)
+        golpes = await self._uow.golpes_de_partida.de_las_partidas([p.id for p in partidas])
         fotos += [
             (partida.round_id, jugador.tee_color)
-            for partida in await self._uow.partidas.del_jugador(competition.id, user_id)
-            if partida.empezada
+            for partida in partidas
+            if user_id in partida.quienes_jugaron(golpes)
             for jugador in partida.jugadores
             if jugador.user_id == user_id
         ]

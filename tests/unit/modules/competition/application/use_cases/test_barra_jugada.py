@@ -3,7 +3,9 @@ La barra jugada (barras por campo, tabla del 21 nov 2026, B).
 
 `GET /enrollments/{id}/tees` con la competición terminada o cancelada: en un
 campo donde jugó, la barra de la foto guardada en su partido (Ryder) o su partida
-(stroke play), con origen PLAYED. Jugó = su partido o su partida empezaron.
+(stroke play), con origen PLAYED. Jugó de verdad (decidido el 21 nov): en la
+Ryder, su partido empezó (un WO desde SCHEDULED no cuenta: un WO cuenta solo si
+se apuntó algún hoyo); en stroke play, está en `quienes_jugaron` de su partida.
 
 | Caso                                                      | Ese campo                       |
 |-----------------------------------------------------------|---------------------------------|
@@ -12,11 +14,15 @@ campo donde jugó, la barra de la foto guardada en su partido (Ryder) o su parti
 | B7 Dos rondas en el campo con barras distintas            | la de la última (fecha, sesión) |
 | B8 Cancelada, campo donde no llegó a jugar                | la configuración, como ahora    |
 | B8 Cancelada, su partido generado sin empezar             | la configuración, como ahora    |
+| B8 WO declarado sin empezar                               | la configuración, como ahora    |
+| B6 WO tras empezar, con algún hoyo apuntado               | PLAYED                          |
+| B8 Su partida cerrada sin que ella jugara (NO_PRESENTADO) | la configuración, como ahora    |
+| B6 Su partida con algo en su tarjeta (en papel)           | PLAYED                          |
 | B9 En curso, con su partido empezado                      | nada cambia                     |
 | B10 Terminada o cancelada                                 | options vacío en todos          |
 """
 
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
 import pytest
@@ -24,6 +30,8 @@ import pytest
 from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
     GetEnrollmentTeesUseCase,
 )
+from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
@@ -210,15 +218,69 @@ class TestRyder:
         assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", ["RED", "BLUE"])]
 
 
+class TestWalkover:
+    async def test_a_walkover_declared_before_starting_gives_the_current_setup(self):
+        """
+        Given su partido en azules, sin empezar, cerrado con WO, y la Ryder terminada
+        When pide sus barras
+        Then la configuración actual (rojas por defecto): no llegó a jugar
+        """
+        mundo = await _Mundo().montar()
+        partido_id = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: AZULES}
+        )
+        partido = await mundo.el_partido(partido_id)
+        partido.declare_walkover("A")
+        async with mundo.uow:
+            await mundo.uow.matches.update(partido)
+            await mundo.uow.commit()
+        await _acabar(mundo, "terminada")
+
+        assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
+
+    async def test_a_walkover_after_some_hole_was_scored_counts_as_played(self):
+        """
+        Given su partido en azules, empezado, con el hoyo 1 apuntado por su rival y
+            cerrado con WO, y la Ryder terminada
+        When pide sus barras
+        Then azules, PLAYED: el partido se jugó
+        """
+        mundo = await _Mundo().montar()
+        partido_id = await mundo.partido(
+            [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
+        )
+        partido = await mundo.el_partido(partido_id)
+        hoyo = HoleScore.create(partido_id, 1, mundo.otro, "B", 0)
+        hoyo.set_own_score(4)
+        partido.declare_walkover("A")
+        async with mundo.uow:
+            await mundo.uow.hole_scores.add(hoyo)
+            await mundo.uow.matches.update(partido)
+            await mundo.uow.commit()
+        await _acabar(mundo, "terminada")
+
+        assert _campos(await _barras(mundo)) == [("BLUE", "PLAYED", [])]
+
+
+async def _jugo(mundo, partida_id, *quienes):
+    partida = await mundo.la_partida(partida_id)
+    for quien in quienes:
+        partida.marcar_que_jugo(quien)
+    async with mundo.uow:
+        await mundo.uow.partidas.guardar([partida])
+        await mundo.uow.commit()
+
+
 class TestStrokePlay:
     async def test_played_course_gives_the_tee_of_her_group(self):
         """
-        Given un Stableford con su partida empezada en amarillas, y terminado
+        Given un Stableford con su partida empezada en amarillas, donde jugó, y terminado
         When pide sus barras
         Then allí amarillas, de origen PLAYED, sin opciones
         """
         mundo = await _Mundo().montar(tipo=TournamentType.STABLEFORD)
-        await mundo.partida_con(mundo.jugadora, empezada=True)
+        partida_id = await mundo.partida_con(mundo.jugadora, empezada=True)
+        await _jugo(mundo, partida_id, mundo.jugadora)
         await _acabar(mundo, "terminada")
 
         assert _campos(await _barras(mundo)) == [("YELLOW", "PLAYED", [])]
@@ -245,6 +307,8 @@ class TestStrokePlay:
             [_jugador(mundo.jugadora, TeeColor.RED), _jugador(mundo.capitana, TeeColor.BLUE)],
         )
         partida.empezar()
+        partida.marcar_que_jugo(mundo.jugadora)
+        partida.marcar_que_jugo(mundo.capitana)
         async with mundo.uow:
             await mundo.uow.rounds.add(franja)
             await mundo.uow.partidas.anadir([partida])
@@ -264,3 +328,43 @@ class TestStrokePlay:
         await _acabar(mundo, "cancelada")
 
         assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
+
+    async def test_a_group_closed_without_her_playing_gives_the_current_setup(self):
+        """
+        Given un Stableford con su partida empezada en amarillas, cerrada sin que
+            ella jugara (NO_PRESENTADO), y terminado
+        When pide sus barras
+        Then la configuración actual (rojas por defecto): no salió al campo
+        """
+        mundo = await _Mundo().montar(tipo=TournamentType.STABLEFORD)
+        partida_id = await mundo.partida_con(mundo.jugadora, empezada=True)
+        partida = await mundo.la_partida(partida_id)
+        partida.cerrar(completas=())
+        async with mundo.uow:
+            await mundo.uow.partidas.guardar([partida])
+            await mundo.uow.commit()
+        await _acabar(mundo, "terminada")
+
+        assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
+
+    async def test_something_on_her_card_counts_as_played(self):
+        """
+        Given un Stableford con su partida empezada en amarillas, sin su marca de
+            «ha jugado» pero con el hoyo 1 apuntado en su tarjeta (en papel), y terminado
+        When pide sus barras
+        Then amarillas, PLAYED
+        """
+        mundo = await _Mundo().montar(tipo=TournamentType.STABLEFORD)
+        partida_id = await mundo.partida_con(mundo.jugadora, empezada=True)
+        partida = await mundo.la_partida(partida_id)
+        momento = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+        golpe = GolpeDePartida.crear(
+            partida_id, partida.round_id, mundo.competition_id, mundo.jugadora, 1, momento
+        )
+        golpe.anotar_propio(4, acepta_raya=True, quien=mundo.organizador, momento=momento)
+        async with mundo.uow:
+            await mundo.uow.golpes_de_partida.guardar(golpe)
+            await mundo.uow.commit()
+        await _acabar(mundo, "terminada")
+
+        assert _campos(await _barras(mundo)) == [("YELLOW", "PLAYED", [])]
