@@ -76,6 +76,15 @@ class LoPendiente:
         self._partidas: dict[PartidaId, tuple[Partida, Partida]] = {}
         self._partidos_cambiados: set[MatchId] = set()
         self._partidas_cambiadas: set[PartidaId] = set()
+        # Los campos donde a cada uno le queda algo por jugar (visto con el bloqueo)
+        self._campos_con_algo: dict[UserId, set[GolfCourseId]] = {}
+
+    def campos_con_algo(self, user_id: UserId) -> set[GolfCourseId]:
+        """
+        Los campos donde, en lo rehecho hasta ahora, le queda algo por jugar: sus
+        partidos sin empezar y sus partidas que aún no salieron.
+        """
+        return set(self._campos_con_algo.get(user_id, set()))
 
     async def cambios_del_campo(
         self, competition: Competition, golf_course_id: GolfCourseId
@@ -192,6 +201,8 @@ class LoPendiente:
                 continue
             nuevas: dict[UserId, tuple[TeeColor | None, Gender | None]] = {}
             for user_id in suyos:
+                if copia.find_player(user_id) is not None:
+                    self._campos_con_algo.setdefault(user_id, set()).add(ronda.golf_course_id)
                 genero, general = jugadores[user_id]
                 color = await self._color_en(
                     competition, ronda.golf_course_id, user_id, genero, general, cambios
@@ -254,6 +265,7 @@ class LoPendiente:
                 if foto is None:
                     # Lo movieron o lo quitaron mientras tanto: esta ya no es suya
                     continue
+                self._campos_con_algo.setdefault(user_id, set()).add(franja.golf_course_id)
                 color = await self._color_en(
                     competition, franja.golf_course_id, user_id, genero, general, cambios
                 )

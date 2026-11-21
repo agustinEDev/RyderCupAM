@@ -4,7 +4,7 @@ Cambiar las barras de una inscripción por la API (BE #912, 20 nov 2026).
 | Caso                                                   | Respuesta                        |
 |--------------------------------------------------------|----------------------------------|
 | La jugadora, rojas de mujer que el campo tiene          | 200 con RED                      |
-| La jugadora, azules que el campo no tiene para mujer    | 422 TEE_NOT_AVAILABLE            |
+| La jugadora, azules que el campo no tiene, sin pendiente | 200: su barra de siempre         |
 | Otro jugador                                           | 403                              |
 | El organizador vuelve a las de por defecto (null)      | 200 sin barras                   |
 | Un color que no existe                                 | 422 de validación                |
@@ -112,18 +112,18 @@ async def test_the_player_changes_to_a_rated_tee(client: AsyncClient):
     assert respuesta.json()["tee_color"] == "RED"
 
 
-async def test_a_tee_not_rated_for_her_is_refused_with_its_code(client: AsyncClient):
+async def test_a_tee_no_course_has_for_her_without_pending_is_saved(client: AsyncClient):
     """
-    Given un campo sin azules de mujer
+    Given un campo sin azules de mujer y nada pendiente
     When la jugadora elige azules
-    Then 422 con TEE_NOT_AVAILABLE
+    Then 200: la general es su barra de siempre, como al inscribirse
     """
     _, jugadora, _, inscripcion = await _montar(client)
 
     respuesta = await _cambiar(client, jugadora, inscripcion, "BLUE")
 
-    assert respuesta.status_code == 422, respuesta.text
-    assert respuesta.json()["error_code"] == "TEE_NOT_AVAILABLE"
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["tee_color"] == "BLUE"
 
 
 async def test_another_player_cannot_change_it(client: AsyncClient):

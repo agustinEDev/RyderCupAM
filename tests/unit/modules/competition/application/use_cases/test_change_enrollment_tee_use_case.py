@@ -18,13 +18,23 @@ del reparto) no hay capitanes. El subcapitán no cuenta.
 
 Lo ya jugado no se cambia, pero sí lo que queda por jugar: sus partidos y
 partidas generados que aún no han empezado se rehacen con las barras nuevas (en
-fourball y foursomes, el partido entero). Si en el campo de alguno no están
-valoradas, se rechaza todo con 422 y no cambia nada.
+fourball y foursomes, el partido entero).
 
-Qué barras: valoradas para su género o sin género en alguno de los campos; en
-SCRATCH también las que solo tienen tarjeta (sin golpes no hace falta
-valoración). Sin género en el perfil (o sin usuario), solo las mixtas. Sin
-barras (null) vuelve a las habituales de su género.
+Qué barras (21 nov 2026): la general es «su barra de siempre», cualquier color,
+como al inscribirse; no hace falta que algún campo la tenga. Pero nada pendiente
+puede quedar sin barra válida: en cada campo donde tiene algo por jugar y no
+tiene ni cambio propio (R1) ni barra del campo para su género (R2), la nueva
+tiene que valer allí (valorada para su género o mixta; en SCRATCH basta la
+tarjeta). Si no, 422 TEE_NOT_ON_PENDING_COURSE y no cambia nada. Sin barras
+(null) vuelve a las habituales de su género, con la misma regla.
+
+| Caso                                                         | Resultado                    |
+|--------------------------------------------------------------|------------------------------|
+| Un color que ningún campo tiene, sin nada pendiente          | Se guarda (el GET: NONE)     |
+| El mismo, con un partido pendiente en un campo que no la tiene | 422 TEE_NOT_ON_PENDING_COURSE |
+| Igual, con una partida de stroke play pendiente              | 422 TEE_NOT_ON_PENDING_COURSE |
+| Con su cambio propio (R1) o la del campo (R2) allí           | Se guarda: no le afecta      |
+| null con algo pendiente donde la habitual no vale            | 422 TEE_NOT_ON_PENDING_COURSE |
 """
 
 import copy
@@ -46,9 +56,13 @@ from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+    TeeNotOnPendingCourseError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
     ChangeEnrollmentTeeUseCase,
+)
+from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
+    GetEnrollmentTeesUseCase,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -88,6 +102,8 @@ pytestmark = pytest.mark.asyncio
 
 VALORADA = "valorada"
 SOLO_TARJETA = "solo tarjeta"
+# Un campo sin las habituales de mujer (rojas), con azules de mujer
+SIN_ROJAS_DE_MUJER = [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)]
 NI_UNA_NI_OTRA = "ni valorada ni con tarjeta"
 
 
@@ -648,25 +664,30 @@ class TestQuienPuedeYaEmpezada:
 
 
 class TestQueBarras:
-    async def test_change_tee_to_one_not_rated_for_her_gender_is_rejected(self):
+    async def test_change_tee_to_one_no_course_has_for_her_without_pending_saves_it(self):
         """
-        Given Aldeamayor, sin amarillas de mujer
+        Given Aldeamayor, sin amarillas de mujer, y nada pendiente
         When la jugadora elige amarillas
-        Then se rechaza (422 TEE_NOT_AVAILABLE) y se quedan como estaban
+        Then se guardan: es su barra de siempre; en ese campo no tiene barra válida
+            (el GET lo dirá con NONE) hasta que se fije la de ese campo
         """
         mundo = await _Mundo().montar()
 
-        with pytest.raises(TeeNotAvailableError) as error:
-            await mundo.cambiar(TeeColor.YELLOW)
+        await mundo.cambiar(TeeColor.YELLOW)
 
-        assert error.value.error_code == "TEE_NOT_AVAILABLE"
-        assert await mundo.barras_guardadas() is None
+        assert await mundo.barras_guardadas() == TeeColor.YELLOW
+        [campo] = (
+            await GetEnrollmentTeesUseCase(mundo.uow, mundo.campos, mundo.usuarios).execute(
+                mundo.inscripcion.id.value, mundo.jugadora
+            )
+        ).courses
+        assert (campo.tee, campo.source) == (None, "NONE")
 
     async def test_change_tee_rated_only_on_the_second_course_saves_it(self):
         """
         Given una competición con dos campos, y amarillas de mujer solo en el segundo
         When la jugadora elige amarillas
-        Then valen: basta con alguno de los campos
+        Then valen
         """
         mundo = await _Mundo().montar(campos=(ALDEAMAYOR, [(TeeColor.YELLOW, Gender.FEMALE)]))
 
@@ -674,58 +695,75 @@ class TestQueBarras:
 
         assert await mundo.barras_guardadas() == TeeColor.YELLOW
 
-    async def test_change_tee_to_a_mixed_one_saves_it(self):
+    @pytest.mark.parametrize("color", [TeeColor.OTHER, TeeColor.GREEN])
+    async def test_change_tee_to_any_colour_without_pending_saves_it(self, color):
         """
-        Given un campo con blancas sin género
-        When la jugadora elige blancas
-        Then valen (valoradas sin género)
+        Given nada pendiente
+        When la jugadora elige un color que no tiene ningún campo (también OTHER,
+            que acepta igual la inscripción)
+        Then se guarda
         """
-        mundo = await _Mundo().montar(campos=([(TeeColor.WHITE, None)],))
+        mundo = await _Mundo().montar()
 
-        await mundo.cambiar(TeeColor.WHITE)
+        await mundo.cambiar(color)
 
-        assert await mundo.barras_guardadas() == TeeColor.WHITE
+        assert await mundo.barras_guardadas() == color
 
-    async def test_change_tee_of_a_player_without_gender_rejects_a_gendered_tee(self):
+    @pytest.mark.parametrize("sin", ["genero", "usuario"])
+    async def test_change_tee_of_a_player_without_gender_saves_a_gendered_tee(self, sin):
         """
-        Given un jugador sin género en su perfil
-        When elige rojas, que solo están valoradas para mujer
-        Then se rechaza: sin género solo valen las mixtas
+        Given un jugador sin género en su perfil (o cuyo usuario ya no está) y nada
+            pendiente
+        When eligen rojas, que solo están valoradas para mujer
+        Then se guardan: sin nada pendiente no se comprueba ningún campo
+        """
+        mundo = await _Mundo().montar()
+        if sin == "genero":
+            mundo.usuarios.poner(mundo.jugadora, None)
+        else:
+            mundo.usuarios.quitar(mundo.jugadora)
+
+        await mundo.cambiar(TeeColor.RED, quien=mundo.organizador)
+
+        assert await mundo.barras_guardadas() == TeeColor.RED
+
+    async def test_change_tee_of_a_player_without_gender_with_pending_rejects_a_gendered_tee(
+        self,
+    ):
+        """
+        Given un jugador sin género con un partido pendiente en Aldeamayor
+        When elige rojas, que allí solo están valoradas para mujer
+        Then 422 TEE_NOT_ON_PENDING_COURSE: sin género solo le valen las mixtas
         """
         mundo = await _Mundo().montar()
         mundo.usuarios.poner(mundo.jugadora, None)
+        await mundo.partido([mundo.jugadora], [mundo.otro])
 
-        with pytest.raises(TeeNotAvailableError):
+        with pytest.raises(TeeNotOnPendingCourseError):
             await mundo.cambiar(TeeColor.RED)
+
+        assert await mundo.barras_guardadas() is None
 
     async def test_change_tee_of_a_player_without_gender_accepts_a_mixed_tee(self):
         """
-        Given un jugador sin género en su perfil y un campo con blancas mixtas
+        Given un jugador sin género, un campo con blancas mixtas y un partido allí
         When elige blancas
         Then valen
         """
         mundo = await _Mundo().montar(campos=([(TeeColor.WHITE, None)],))
         mundo.usuarios.poner(mundo.jugadora, None)
+        await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.otro: (TeeColor.WHITE, None)}
+        )
 
         await mundo.cambiar(TeeColor.WHITE)
 
         assert await mundo.barras_guardadas() == TeeColor.WHITE
 
-    async def test_change_tee_of_an_unknown_user_is_treated_as_without_gender(self):
-        """
-        Given una inscripción cuyo usuario ya no se encuentra
-        When el organizador elige rojas, valoradas solo para mujer
-        Then se rechaza, como sin género
-        """
-        mundo = await _Mundo().montar()
-        mundo.usuarios.quitar(mundo.jugadora)
-
-        with pytest.raises(TeeNotAvailableError):
-            await mundo.cambiar(TeeColor.RED, quien=mundo.organizador)
-
     async def test_change_tee_in_scratch_of_a_player_without_gender_accepts_a_mixed_card(self):
         """
-        Given una competición SCRATCH y blancas mixtas con tarjeta, sin valorar
+        Given una competición SCRATCH, blancas mixtas con tarjeta sin valorar y un
+            partido pendiente allí
         When un jugador sin género elige blancas
         Then valen
         """
@@ -733,6 +771,7 @@ class TestQueBarras:
             campos=([(TeeColor.WHITE, None, SOLO_TARJETA)],), play_mode="SCRATCH"
         )
         mundo.usuarios.poner(mundo.jugadora, None)
+        await mundo.partido([mundo.jugadora], [mundo.otro])
 
         await mundo.cambiar(TeeColor.WHITE)
 
@@ -740,57 +779,138 @@ class TestQueBarras:
 
     async def test_change_tee_in_scratch_accepts_a_tee_with_card_but_no_rating(self):
         """
-        Given una competición SCRATCH y un campo con blancas de mujer con tarjeta
-            pero sin valoración posible
+        Given una competición SCRATCH, blancas de mujer con tarjeta pero sin
+            valoración posible, y un partido pendiente allí
         When la jugadora elige blancas
         Then valen: sin golpes no hace falta valorarlas
         """
         mundo = await _Mundo().montar(
             campos=([(TeeColor.WHITE, Gender.FEMALE, SOLO_TARJETA)],), play_mode="SCRATCH"
         )
+        await mundo.partido([mundo.jugadora], [mundo.otro])
 
         await mundo.cambiar(TeeColor.WHITE)
 
         assert await mundo.barras_guardadas() == TeeColor.WHITE
 
-    async def test_change_tee_with_handicap_rejects_a_tee_with_card_but_no_rating(self):
+    async def test_change_tee_with_handicap_and_pending_rejects_a_tee_with_card_but_no_rating(
+        self,
+    ):
         """
-        Given una competición con hándicap y las mismas blancas sin valoración
+        Given una competición con hándicap, las mismas blancas sin valoración y un
+            partido pendiente allí
         When la jugadora elige blancas
-        Then se rechaza: con golpes hace falta la valoración
+        Then 422 TEE_NOT_ON_PENDING_COURSE: con golpes hace falta la valoración
         """
         mundo = await _Mundo().montar(
             campos=([(TeeColor.WHITE, Gender.FEMALE, SOLO_TARJETA)],), play_mode="HANDICAP"
         )
+        await mundo.partido([mundo.jugadora], [mundo.otro])
 
-        with pytest.raises(TeeNotAvailableError):
+        with pytest.raises(TeeNotOnPendingCourseError) as error:
             await mundo.cambiar(TeeColor.WHITE)
 
-    async def test_change_tee_in_scratch_rejects_a_tee_without_card_nor_rating(self):
+        assert error.value.error_code == "TEE_NOT_ON_PENDING_COURSE"
+        assert await mundo.barras_guardadas() is None
+
+    @pytest.mark.parametrize(
+        "barras",
+        [
+            (TeeColor.WHITE, Gender.FEMALE, NI_UNA_NI_OTRA),
+            (TeeColor.WHITE, Gender.MALE, SOLO_TARJETA),
+        ],
+    )
+    async def test_change_tee_in_scratch_with_pending_rejects_a_tee_not_valid_there(self, barras):
         """
-        Given una competición SCRATCH y unas blancas de mujer sin tarjeta ni valoración
+        Given una competición SCRATCH con un partido pendiente en un campo cuyas
+            blancas no tienen ni tarjeta ni valoración, o solo son de hombre
         When la jugadora elige blancas
-        Then se rechaza
+        Then 422 TEE_NOT_ON_PENDING_COURSE y no cambia nada (nunca las del otro
+            género, y sin tarjeta no hay con qué jugar)
         """
-        mundo = await _Mundo().montar(
-            campos=([(TeeColor.WHITE, Gender.FEMALE, NI_UNA_NI_OTRA)],), play_mode="SCRATCH"
+        mundo = await _Mundo().montar(campos=([barras],), play_mode="SCRATCH")
+        partido = await mundo.partido([mundo.jugadora], [mundo.otro])
+
+        with pytest.raises(TeeNotOnPendingCourseError):
+            await mundo.cambiar(TeeColor.WHITE)
+
+        assert await mundo.barras_guardadas() is None
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.YELLOW
         )
 
-        with pytest.raises(TeeNotAvailableError):
-            await mundo.cambiar(TeeColor.WHITE)
+    @pytest.mark.parametrize(
+        ("play_mode", "tipo"),
+        [("HANDICAP", TournamentType.STABLEFORD), ("SCRATCH", TournamentType.MEDAL)],
+    )
+    async def test_change_tee_with_a_pending_tee_group_where_it_is_not_rejects_it(
+        self, play_mode, tipo
+    ):
+        """
+        Given un stroke play (con golpes o SCRATCH) con una partida suya que aún no
+            salió en Aldeamayor
+        When la jugadora elige amarillas, que allí no hay de mujer
+        Then 422 TEE_NOT_ON_PENDING_COURSE y no cambia nada
+        """
+        mundo = await _Mundo().montar(play_mode=play_mode, tipo=tipo)
+        await mundo.partida_con(mundo.jugadora)
 
-    async def test_change_tee_in_scratch_rejects_a_card_of_the_other_gender(self):
+        with pytest.raises(TeeNotOnPendingCourseError):
+            await mundo.cambiar(TeeColor.YELLOW)
+
+        assert await mundo.barras_guardadas() is None
+
+    async def test_change_tee_with_her_own_tee_on_the_pending_course_saves_it(self):
         """
-        Given una competición SCRATCH y blancas con tarjeta solo de hombre
-        When la jugadora elige blancas
-        Then se rechaza: nunca las del otro género
+        Given un partido pendiente en Aldeamayor y su cambio propio allí (R1, rojas)
+        When la jugadora elige amarillas, que allí no hay de mujer
+        Then se guardan: en ese campo juega su cambio propio, no la general
         """
-        mundo = await _Mundo().montar(
-            campos=([(TeeColor.WHITE, Gender.MALE, SOLO_TARJETA)],), play_mode="SCRATCH"
+        mundo = await _Mundo().montar()
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+        await mundo.uow.barras_por_campo.fijar_propia(
+            mundo.inscripcion, next(iter(mundo.campos.por_id)), TeeColor.RED
         )
 
-        with pytest.raises(TeeNotAvailableError):
-            await mundo.cambiar(TeeColor.WHITE)
+        await mundo.cambiar(TeeColor.YELLOW)
+
+        assert await mundo.barras_guardadas() == TeeColor.YELLOW
+
+    async def test_change_tee_with_the_course_tee_for_her_gender_saves_it(self):
+        """
+        Given un partido pendiente en Aldeamayor y la barra del campo para las
+            mujeres allí (R2, azules)
+        When la jugadora elige amarillas, que allí no hay de mujer
+        Then se guardan: en ese campo juega la del campo
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+        await mundo.uow.barras_por_campo.fijar_del_campo(
+            mundo.competition_id, next(iter(mundo.campos.por_id)), Gender.FEMALE, TeeColor.BLUE
+        )
+
+        await mundo.cambiar(TeeColor.YELLOW)
+
+        assert await mundo.barras_guardadas() == TeeColor.YELLOW
+
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_change_tee_to_none_with_pending_where_the_default_is_not_rejects_it(
+        self, play_mode
+    ):
+        """
+        Given su partido pendiente (con golpes o SCRATCH) en un campo sin rojas de
+            mujer (sus habituales) y azules como su general
+        When pide volver a las habituales (null)
+        Then 422 TEE_NOT_ON_PENDING_COURSE: la misma regla, y se queda en azules
+        """
+        mundo = await _Mundo().montar(campos=(SIN_ROJAS_DE_MUJER,), play_mode=play_mode)
+        await mundo.cambiar(TeeColor.BLUE)
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+
+        with pytest.raises(TeeNotOnPendingCourseError):
+            await mundo.cambiar(None)
+
+        assert await mundo.barras_guardadas() == TeeColor.BLUE
 
     async def test_change_tee_to_none_goes_back_to_the_default(self):
         """

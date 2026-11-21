@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+    TeeNotOnPendingCourseError,
 )
 from src.modules.competition.infrastructure.api.v1 import enrollment_routes
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -30,6 +31,7 @@ def _quien(is_admin=False) -> UserResponseDTO:
     ("error", "codigo", "estado"),
     [
         (TeeNotAvailableError, "TEE_NOT_AVAILABLE", 422),
+        (TeeNotOnPendingCourseError, "TEE_NOT_ON_PENDING_COURSE", 422),
         (TeeChangeClosedError, "TEE_CHANGE_CLOSED", 409),
         (EnrollmentNotApprovedError, "ENROLLMENT_NOT_APPROVED", 409),
         (PendingGameNotRecalculableError, "PENDING_GAME_NOT_RECALCULABLE", 409),
@@ -86,3 +88,25 @@ def test_change_tee_body_rejects_an_unknown_colour():
     """
     with pytest.raises(ValueError):
         enrollment_routes.ChangeTeeBody(tee_color="PURPLE")
+
+
+@pytest.mark.asyncio
+async def test_change_tee_not_on_a_pending_course_answers_its_own_text():
+    """
+    Given un caso de uso que rechaza la general porque no vale en un campo con algo
+        pendiente
+    When llega la petición
+    Then 422 TEE_NOT_ON_PENDING_COURSE con su texto: que antes fije la de ese campo
+    """
+    caso = AsyncMock()
+    caso.execute.side_effect = TeeNotOnPendingCourseError("texto interno")
+
+    respuesta = await enrollment_routes.change_enrollment_tee(
+        uuid4(), enrollment_routes.ChangeTeeBody(tee_color=TeeColor.RED), _quien(), caso
+    )
+
+    assert json.loads(respuesta.body) == {
+        "detail": "That tee is not available on a course with games still to play; "
+        "set that course's tee first.",
+        "error_code": "TEE_NOT_ON_PENDING_COURSE",
+    }

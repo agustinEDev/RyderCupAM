@@ -672,7 +672,9 @@ class ChangeTeeBody(BaseModel):
         "Antes de empezar: el propio jugador, el capitán de su equipo, el organizador "
         "o un admin; ya empezada, solo el capitán de su equipo, el organizador o un "
         "admin. Sus partidos y partidas generados que aún no han empezado se rehacen "
-        "con las barras nuevas; lo empezado no se toca. Null vuelve a las de por defecto."
+        "con las barras nuevas; lo empezado no se toca. Null vuelve a las de por defecto. "
+        "Cualquier color, como al inscribirse, salvo que no valga en un campo donde le "
+        "queda algo por jugar sin barra propia ni del campo: 422 TEE_NOT_ON_PENDING_COURSE."
     ),
 )
 async def change_enrollment_tee(

@@ -333,9 +333,9 @@ class CourseNotInCompetitionError(Exception):
 
 class TeeNotAvailableError(Exception):
     """
-    Esas barras no valen para él: ningún campo de la competición las tiene
-    valoradas para su género, ESE campo no las tiene, o no lo están en el campo de
-    algo que le queda por jugar.
+    Esas barras no valen para él: ESE campo no las tiene (su cambio propio o la
+    del campo para un género), o no lo están en el campo de algo que le queda por
+    jugar (`TeeNotOnPendingCourseError`, con la general).
     """
 
     error_code = "TEE_NOT_AVAILABLE"
@@ -346,6 +346,16 @@ class CourseTeeNotAvailableError(TeeNotAvailableError):
     Ese campo no tiene esas barras para ese género (ni mixtas): la barra del campo
     para un género (R2). Mismo código que el del jugador, con su propio texto.
     """
+
+
+class TeeNotOnPendingCourseError(TeeNotAvailableError):
+    """
+    La barra general nueva no vale en un campo donde le queda algo por jugar y no
+    tiene ni cambio propio ni barra del campo para su género: antes hay que fijar
+    la de ese campo. Nada pendiente queda sin barra válida (21 nov 2026).
+    """
+
+    error_code = "TEE_NOT_ON_PENDING_COURSE"
 
 
 class TeeChangeClosedError(Exception):

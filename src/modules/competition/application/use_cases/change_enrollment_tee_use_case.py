@@ -15,12 +15,16 @@ partidos se bloqueaba sin salida. Decidido con Agustín:
   golpes o les llegó su hora», #544) cambia SU barra y lo que depende de ella;
   los demás se quedan como se generaron (su barra y su hándicap índice
   guardados). Lo que se genere después ya sale con las nuevas.
-- Si sus barras nuevas no están valoradas en el campo de algo pendiente: 422,
-  y no cambia nada. Si lo que falla es de otro (su barra guardada, el campo, la
-  franja), 409 con un código fijo, sin datos de nadie.
-- Solo barras valoradas para su género, o sin género, en alguno de los campos
-  de la competición; en SCRATCH valen también las que solo tienen tarjeta. Sin
-  género en el perfil, solo las mixtas.
+- La general es «su barra de siempre» (21 nov 2026): cualquier color, como al
+  inscribirse, aunque ningún campo la tenga; donde no la haya se elige la de ese
+  campo (su cambio propio, R1) o el organizador fija la del campo (R2).
+- Pero nada pendiente queda sin barra válida: en cada campo donde le queda algo
+  por jugar y no tiene ni R1 ni R2, la nueva (o, con null, la habitual de su
+  género) tiene que valer allí: valorada para su género o mixta; en SCRATCH
+  basta la tarjeta; sin género, solo las mixtas. Si no, 422
+  TEE_NOT_ON_PENDING_COURSE y no cambia nada. Si lo que falla es de otro (su
+  barra guardada, el campo, la franja), 409 con un código fijo, sin datos de
+  nadie.
 - Sin barras (null) vuelve a las habituales de su género.
 
 Quién se comprueba antes de bloquear nada, y otra vez tras bloquear (el estado
@@ -42,7 +46,7 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
     TeeChangeClosedError,
-    TeeNotAvailableError,
+    TeeNotOnPendingCourseError,
     TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
@@ -51,11 +55,14 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.lo_pendiente import LoPendiente
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.instante_utc import ahora_en_utc
@@ -111,7 +118,8 @@ class ChangeEnrollmentTeeUseCase:
                 capitán de su equipo, el organizador ni un admin
             EnrollmentNotApprovedError: Si la inscripción no está aprobada
             TeeChangeClosedError: Si la competición terminó o se canceló
-            TeeNotAvailableError: Si esas barras no valen para él
+            TeeNotOnPendingCourseError: Si esas barras no valen en un campo donde le
+                queda algo por jugar y no tiene ni cambio propio ni barra del campo
             PendingGameNotRecalculableError: Si algo pendiente no se puede rehacer
                 por otra cosa que sus barras
         """
@@ -155,23 +163,18 @@ class ChangeEnrollmentTeeUseCase:
             pendiente = LoPendiente(
                 self._uow, self._campos, self._usuarios, self._zonas, self._reloj
             )
-            if request.tee_color is not None and not await self._reglas.la_tiene_algun_campo(
-                competition, request.tee_color, genero, pendiente.contextos
-            ):
-                raise TeeNotAvailableError(
-                    f"Ningún campo de la competición tiene barras {request.tee_color.value} "
-                    "valoradas para este jugador"
-                )
-
             # Todo calculado antes de escribir nada: en cada campo su barra efectiva
             # (su cambio propio, la del campo para su género, o esta general)
             try:
                 await pendiente.rehacer(competition, enrollment.user_id, genero, request.tee_color)
             except TeeNotRatedForPlayerError as e:
-                raise TeeNotAvailableError(
+                raise TeeNotOnPendingCourseError(
                     "Sus barras nuevas no están valoradas en el campo de algo que le "
                     "queda por jugar"
                 ) from e
+            await self._vale_donde_le_queda_algo(
+                competition, enrollment.user_id, genero, request.tee_color, pendiente
+            )
 
             antes = enrollment.tee_color
             enrollment.set_tee_color(request.tee_color)
@@ -197,3 +200,33 @@ class ChangeEnrollmentTeeUseCase:
             tee_color=enrollment.tee_color.value if enrollment.tee_color else None,
             updated_at=enrollment.updated_at,
         )
+
+    async def _vale_donde_le_queda_algo(
+        self,
+        competition: Competition,
+        user_id: UserId,
+        genero: Gender | None,
+        general: TeeColor | None,
+        pendiente: LoPendiente,
+    ) -> None:
+        """
+        Que nada pendiente quede sin barra válida: en cada campo donde le queda algo
+        por jugar y la que juega es la general (sin cambio propio ni la del campo
+        para su género), la nueva tiene que valer allí, la misma regla que ofrece el
+        selector. Con golpes, `rehacer` ya lo habrá rechazado; en SCRATCH (y en lo
+        que no se rehace por quedar igual) se mira aquí.
+
+        Raises:
+            TeeNotOnPendingCourseError: Si en alguno no vale
+        """
+        jugaria = general or barras_por_defecto(genero)
+        for golf_course_id in pendiente.campos_con_algo(user_id):
+            cambios = await pendiente.cambios_del_campo(competition, golf_course_id)
+            if user_id in cambios.propias or (genero is not None and genero in cambios.por_genero):
+                continue
+            if not await self._reglas.vale_en_el_campo(
+                competition, golf_course_id, jugaria, genero, pendiente.contextos
+            ):
+                raise TeeNotOnPendingCourseError(
+                    f"Las barras {jugaria.value} no valen en un campo donde le queda algo por jugar"
+                )

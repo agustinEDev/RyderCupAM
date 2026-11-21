@@ -147,21 +147,6 @@ class BarrasDeLaInscripcion:
         su_genero = genero.value if genero else None
         return tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None
 
-    async def la_tiene_algun_campo(
-        self,
-        competition: Competition,
-        color: TeeColor,
-        genero: Gender | None,
-        contextos: dict[GolfCourseId, StrokeContext],
-    ) -> bool:
-        """Si alguno de sus campos tiene esas barras para él (`vale_en_el_campo`)."""
-        for del_campo in competition.golf_courses:
-            if await self.vale_en_el_campo(
-                competition, del_campo.golf_course_id, color, genero, contextos
-            ):
-                return True
-        return False
-
     async def las_que_valen_en_el_campo(
         self,
         competition: Competition,
