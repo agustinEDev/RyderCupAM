@@ -4,8 +4,8 @@ La barra jugada (barras por campo, tabla del 21 nov 2026, B).
 `GET /enrollments/{id}/tees` con la competición terminada o cancelada: en un
 campo donde jugó, la barra de la foto guardada en su partido (Ryder) o su partida
 (stroke play), con origen PLAYED. Jugó de verdad (decidido el 21 nov): en la
-Ryder, su partido empezó (un WO desde SCHEDULED no cuenta: un WO cuenta solo si
-se apuntó algún hoyo); en stroke play, está en `quienes_jugaron` de su partida.
+Ryder, ELLA tiene algún hoyo apuntado en ese partido y no está retirada, sea cual
+sea su estado; en stroke play, está en `quienes_jugaron` de su partida.
 
 | Caso                                                      | Ese campo                       |
 |-----------------------------------------------------------|---------------------------------|
@@ -15,7 +15,10 @@ se apuntó algún hoyo); en stroke play, está en `quienes_jugaron` de su partid
 | B8 Cancelada, campo donde no llegó a jugar                | la configuración, como ahora    |
 | B8 Cancelada, su partido generado sin empezar             | la configuración, como ahora    |
 | B8 WO declarado sin empezar                               | la configuración, como ahora    |
-| B6 WO tras empezar, con algún hoyo apuntado               | PLAYED                          |
+| B8 WO con hoyos solo de su rival                          | la configuración, como ahora    |
+| B6 WO con algún hoyo suyo                                 | PLAYED                          |
+| B8 Empezado sin ningún hoyo                               | la configuración, como ahora    |
+| B8 Retirada de un fourball, aunque apuntara algún hoyo     | la configuración, como ahora    |
 | B8 Su partida cerrada sin que ella jugara (NO_PRESENTADO) | la configuración, como ahora    |
 | B6 Su partida con algo en su tarjeta (en papel)           | PLAYED                          |
 | B9 En curso, con su partido empezado                      | nada cambia                     |
@@ -98,6 +101,22 @@ async def _ronda(mundo, dia, sesion, campo=0):
     return ronda
 
 
+async def _hoyo(mundo, partido_id, quien, equipo="A"):
+    """El hoyo 1 de `quien` en ese partido, apuntado."""
+    hoyo = HoleScore.create(partido_id, 1, quien, equipo, 0)
+    hoyo.set_own_score(4)
+    async with mundo.uow:
+        await mundo.uow.hole_scores.add(hoyo)
+        await mundo.uow.commit()
+
+
+async def _jugado(mundo, **kwargs):
+    """Un partido de ella contra `otro`, empezado y con un hoyo suyo apuntado."""
+    partido_id = await mundo.partido([mundo.jugadora], [mundo.otro], empezado=True, **kwargs)
+    await _hoyo(mundo, partido_id, mundo.jugadora)
+    return partido_id
+
+
 class TestRyder:
     @pytest.mark.parametrize("como", ["terminada", "cancelada"])
     async def test_played_course_gives_the_tee_of_her_match(self, como):
@@ -107,9 +126,7 @@ class TestRyder:
         Then allí azules, de origen PLAYED, sin opciones
         """
         mundo = await _Mundo().montar()
-        await mundo.partido(
-            [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
-        )
+        await _jugado(mundo, barras={mundo.jugadora: AZULES})
         await _acabar(mundo, como)
 
         assert _campos(await _barras(mundo)) == [("BLUE", "PLAYED", [])]
@@ -126,13 +143,7 @@ class TestRyder:
         ultima = await _ronda(mundo, date(2026, 6, 2), SessionType.MORNING)
         manana = await _ronda(mundo, date(2026, 6, 1), SessionType.MORNING)
         for ronda, barra in ((tarde, AZULES), (ultima, ROJAS), (manana, AZULES)):
-            await mundo.partido(
-                [mundo.jugadora],
-                [mundo.otro],
-                empezado=True,
-                barras={mundo.jugadora: barra},
-                ronda=ronda,
-            )
+            await _jugado(mundo, barras={mundo.jugadora: barra}, ronda=ronda)
         await _acabar(mundo, "terminada")
 
         assert _campos(await _barras(mundo)) == [("RED", "PLAYED", [])]
@@ -147,13 +158,7 @@ class TestRyder:
         noche = await _ronda(mundo, date(2026, 6, 1), SessionType.EVENING)
         tarde = await _ronda(mundo, date(2026, 6, 1), SessionType.AFTERNOON)
         for ronda, barra in ((noche, ROJAS), (tarde, AZULES)):
-            await mundo.partido(
-                [mundo.jugadora],
-                [mundo.otro],
-                empezado=True,
-                barras={mundo.jugadora: barra},
-                ronda=ronda,
-            )
+            await _jugado(mundo, barras={mundo.jugadora: barra}, ronda=ronda)
         await _acabar(mundo, "terminada")
 
         assert _campos(await _barras(mundo)) == [("RED", "PLAYED", [])]
@@ -166,9 +171,7 @@ class TestRyder:
         Then el primero PLAYED; el segundo, rojas por defecto como ahora, sin opciones
         """
         mundo = await _Mundo().montar(campos=(ALDEAMAYOR, ALDEAMAYOR))
-        await mundo.partido(
-            [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
-        )
+        await _jugado(mundo, barras={mundo.jugadora: AZULES})
         await _acabar(mundo, "cancelada")
 
         assert _campos(await _barras(mundo)) == [
@@ -195,9 +198,10 @@ class TestRyder:
         Then la configuración actual: ella no jugó
         """
         mundo = await _Mundo().montar()
-        await mundo.partido(
+        partido_id = await mundo.partido(
             [mundo.capitana], [mundo.otro], empezado=True, barras={mundo.capitana: AZULES}
         )
+        await _hoyo(mundo, partido_id, mundo.capitana)
         await _acabar(mundo, "terminada")
 
         assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
@@ -209,9 +213,7 @@ class TestRyder:
         Then como hoy: rojas por defecto, con sus opciones
         """
         mundo = await _Mundo().montar()
-        await mundo.partido(
-            [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
-        )
+        await _jugado(mundo, barras={mundo.jugadora: AZULES})
         await mundo.cerrar()
         await mundo.empezar()
 
@@ -238,28 +240,78 @@ class TestWalkover:
 
         assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
 
-    async def test_a_walkover_after_some_hole_was_scored_counts_as_played(self):
+    @pytest.mark.parametrize(("de_quien", "esperado"), [("rival", "config"), ("ella", "jugada")])
+    async def test_a_walkover_counts_only_with_a_hole_of_hers(self, de_quien, esperado):
         """
-        Given su partido en azules, empezado, con el hoyo 1 apuntado por su rival y
-            cerrado con WO, y la Ryder terminada
+        Given su partido en azules, empezado, con el hoyo 1 apuntado solo por su
+            rival (o por ella) y cerrado con WO, y la Ryder terminada
         When pide sus barras
-        Then azules, PLAYED: el partido se jugó
+        Then con el de su rival, la configuración actual; con el suyo, azules PLAYED
         """
         mundo = await _Mundo().montar()
         partido_id = await mundo.partido(
             [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
         )
+        if de_quien == "rival":
+            await _hoyo(mundo, partido_id, mundo.otro, "B")
+        else:
+            await _hoyo(mundo, partido_id, mundo.jugadora)
         partido = await mundo.el_partido(partido_id)
-        hoyo = HoleScore.create(partido_id, 1, mundo.otro, "B", 0)
-        hoyo.set_own_score(4)
         partido.declare_walkover("A")
         async with mundo.uow:
-            await mundo.uow.hole_scores.add(hoyo)
             await mundo.uow.matches.update(partido)
             await mundo.uow.commit()
         await _acabar(mundo, "terminada")
 
-        assert _campos(await _barras(mundo)) == [("BLUE", "PLAYED", [])]
+        assert _campos(await _barras(mundo)) == (
+            [("RED", "DEFAULT", [])] if esperado == "config" else [("BLUE", "PLAYED", [])]
+        )
+
+
+class TestSinHoyosOAusente:
+    async def test_a_started_match_without_any_hole_gives_the_current_setup(self):
+        """
+        Given su partido en azules empezado sin ningún hoyo apuntado, y la Ryder cancelada
+        When pide sus barras
+        Then la configuración actual: no llegó a jugar
+        """
+        mundo = await _Mundo().montar()
+        await mundo.partido(
+            [mundo.jugadora], [mundo.otro], empezado=True, barras={mundo.jugadora: AZULES}
+        )
+        await _acabar(mundo, "cancelada")
+
+        assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
+
+    async def test_the_withdrawn_player_of_a_fourball_gives_the_current_setup(self):
+        """
+        Given un fourball en azules donde ella apuntó el hoyo 1 y luego la retiraron
+            (su pareja sigue), y la Ryder terminada
+        When pide sus barras
+        Then la configuración actual: no jugó ese partido; y su pareja, sí
+        """
+        mundo = await _Mundo().montar()
+        partido_id = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            empezado=True,
+            barras={mundo.jugadora: AZULES, mundo.capitana: AZULES},
+        )
+        await _hoyo(mundo, partido_id, mundo.jugadora)
+        await _hoyo(mundo, partido_id, mundo.capitana)
+        partido = await mundo.el_partido(partido_id)
+        partido.withdraw_player(mundo.jugadora, MatchFormat.FOURBALL)
+        async with mundo.uow:
+            await mundo.uow.matches.update(partido)
+            await mundo.uow.commit()
+        await _acabar(mundo, "terminada")
+
+        assert _campos(await _barras(mundo)) == [("RED", "DEFAULT", [])]
+        de_la_pareja = await GetEnrollmentTeesUseCase(
+            mundo.uow, golf_course_repository=mundo.campos, user_repository=mundo.usuarios
+        ).execute(mundo.inscripciones[mundo.capitana].id.value, mundo.capitana)
+        assert _campos(de_la_pareja) == [("BLUE", "PLAYED", [])]
 
 
 async def _jugo(mundo, partida_id, *quienes):

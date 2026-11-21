@@ -12,11 +12,11 @@ género.
 Con la competición terminada o cancelada (tabla del 21 nov 2026, B), en cada campo
 donde jugó, la barra de la foto de su partido (Ryder) o su partida (stroke play), de
 la última ronda allí por fecha y sesión, con origen PLAYED. Solo si jugó de verdad
-(decidido el 21 nov 2026): en la Ryder, su partido empezó (un WO cuenta solo con
-algún hoyo apuntado: el que se declara sin empezar, no); en stroke play, está en
-`quienes_jugaron` de su partida (no un NO_PRESENTADO). Donde no, la configuración de
-siempre. Ya no se cambia nada: sin
-opciones en ningún campo.
+(decidido el 21 nov 2026): en la Ryder, tiene algún hoyo apuntado en ese partido y
+no está retirada, sea cual sea su estado (un WO sin empezar o un partido sin hoyos,
+no); en stroke play, está en `quienes_jugaron` de su partida (no un NO_PRESENTADO).
+Donde no, la configuración de siempre. Ya no se cambia nada: sin opciones en ningún
+campo.
 
 Quién: el propio jugador, el capitán de su equipo, el organizador o un admin, en
 cualquier estado de la competición (consultar es una lectura); comprobado antes
@@ -49,7 +49,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -60,8 +59,6 @@ from src.shared.domain.value_objects.gender import Gender
 
 # Ya no se juega ni se cambia nada: cada campo dice la barra que jugó (B)
 ACABADA = frozenset({CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED})
-# Un partido en estos estados empezó: se jugó en el campo (el WO se mira aparte)
-SE_JUGO = frozenset({MatchStatus.IN_PROGRESS, MatchStatus.COMPLETED, MatchStatus.CONCEDED})
 
 
 class GetEnrollmentTeesUseCase:
@@ -151,17 +148,15 @@ class GetEnrollmentTeesUseCase:
         """
         rondas = {r.id: r for r in await self._uow.rounds.find_by_competition(competition.id)}
         partidos = await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id)
-        # Un WO no dice si empezó: cuenta si alguien apuntó algún hoyo
-        con_hoyos = {
-            match_id
-            for match_id, _ in await self._uow.hole_scores.played_holes(
-                [p.id for p in partidos if p.status == MatchStatus.WALKOVER]
-            )
-        }
+        # Ella, no el partido: algún hoyo suyo apuntado (en foursomes se apunta en
+        # las filas de los dos de la pareja) y sin estar retirada, sea cual sea el
+        # estado (un WO sin empezar, un partido empezado y cancelado sin hoyos)
+        con_hoyos = await self._uow.hole_scores.played_holes([p.id for p in partidos])
         fotos = [
             (partido.round_id, jugador.tee_color)
             for partido in partidos
-            if (partido.status in SE_JUGO or partido.id in con_hoyos)
+            if (partido.id, user_id) in con_hoyos
+            and user_id not in partido.withdrawn_player_ids
             and (jugador := partido.find_player(user_id)) is not None
         ]
         partidas = await self._uow.partidas.del_jugador(competition.id, user_id)
