@@ -11,6 +11,7 @@ el campo tal cual, pero nadie sabe qué barra es al elegirla.
 | C12 Cambio propio a OTHER en un campo que la tiene      | TeeNotSelectableError, sin cambio |
 | C12 La del campo para un género a OTHER, aunque la tenga | TeeNotSelectableError, sin cambio |
 | C13 Los demás colores                                   | como hoy                        |
+| Opciones de GET /enrollments/{id}/tees                  | nunca OTHER                     |
 | Todas son TEE_NOT_AVAILABLE                             | subclase de TeeNotAvailableError |
 """
 
@@ -32,6 +33,9 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
     ChangeEnrollmentCourseTeeUseCase,
+)
+from src.modules.competition.application.use_cases.get_enrollment_tees_use_case import (
+    GetEnrollmentTeesUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
@@ -213,3 +217,19 @@ class TestEnUnCampo:
         fijado = await self._fijado(mundo)
         assert fijado.propias == {mundo.jugadora: TeeColor.BLUE}
         assert fijado.por_genero == {Gender.FEMALE: TeeColor.BLUE}
+
+
+class TestOpciones:
+    async def test_options_never_offer_other_even_if_the_course_has_it(self):
+        """
+        Given un campo con OTHER valoradas para mujer, y la competición abierta
+        When la jugadora pide sus barras
+        Then sus opciones no traen OTHER: el cambio la rechazaría (decidido el 21 nov)
+        """
+        mundo = await _Mundo().montar(campos=(CON_OTHER,))
+
+        respuesta = await GetEnrollmentTeesUseCase(
+            mundo.uow, golf_course_repository=mundo.campos, user_repository=mundo.usuarios
+        ).execute(mundo.inscripcion.id.value, mundo.jugadora)
+
+        assert respuesta.courses[0].options == ["RED", "BLUE"]
