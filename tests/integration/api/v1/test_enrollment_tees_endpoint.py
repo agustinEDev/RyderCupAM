@@ -122,7 +122,8 @@ async def test_other_is_refused_as_general_own_and_course_tee(client: AsyncClien
     Given una jugadora inscrita (tabla del 21 nov 2026, C)
     When ella pide OTHER como barra general y como cambio propio, y el organizador
         como barra del campo para las mujeres
-    Then las tres, 422 TEE_NOT_AVAILABLE
+    Then las tres, 422 TEE_NOT_AVAILABLE con el texto de OTHER (no el de una
+        barra que el campo no tiene)
     """
     organizador, jugadora, _, inscripcion = await _montar(client)
     campo = await _campo(client, jugadora, inscripcion)
@@ -140,4 +141,7 @@ async def test_other_is_refused_as_general_own_and_course_tee(client: AsyncClien
 
     for respuesta in (general, propia, del_campo):
         assert respuesta.status_code == 422, respuesta.text
-        assert respuesta.json()["error_code"] == "TEE_NOT_AVAILABLE"
+        assert respuesta.json() == {
+            "detail": "That tee cannot be chosen: pick one of the course's tee colors.",
+            "error_code": "TEE_NOT_AVAILABLE",
+        }

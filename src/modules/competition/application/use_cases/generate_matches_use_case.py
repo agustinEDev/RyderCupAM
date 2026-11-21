@@ -349,27 +349,10 @@ class GenerateMatchesUseCase:
         if pairings:
             await self._comprobar_inscripciones(pairings, enrollment_map, competition)
             # Los del organizador, cada uno en el lado de su equipo (21 nov 2026,
-            # D). Los de los sobres no cambian: los entregó el capitán de cada uno
+            # D; antes, la #918 dejaba emparejar a quien no estaba en ninguno). Los
+            # de los sobres no cambian: cada capitán solo entrega a los de su equipo
             if manual_pairings:
                 self._comprobar_lados(manual_pairings, team_a_ids, team_b_ids)
-            # Quien no esté en ningún equipo se lee como los demás (CodeRabbit, #918)
-            en_los_equipos = {*team_a_ids, *team_b_ids}
-            de_fuera = [
-                uid
-                for uid in dict.fromkeys(
-                    self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team)
-                )
-                if uid not in en_los_equipos
-            ]
-            if de_fuera and (golf_course is not None or not is_scratch):
-                await self._leer_jugadores(
-                    de_fuera,
-                    is_scratch,
-                    enrollment_map,
-                    refrescar_handicap_rfeg,
-                    user_handicap_map,
-                    user_gender_map,
-                )
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360). También en
