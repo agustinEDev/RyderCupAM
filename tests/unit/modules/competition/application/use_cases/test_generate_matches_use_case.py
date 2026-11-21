@@ -2088,9 +2088,13 @@ class TestEmparejadosEnSuEquipo:
         lado_a = [team_a[0], de_fuera] if lado == "A" else team_a[:2]
         lado_b = team_b[:2] if lado == "A" else [team_b[0], de_fuera]
 
+        use_case._build_handicap_data = AsyncMock(wraps=use_case._build_handicap_data)
+
         with pytest.raises(PairingPlayerNotInTeamError):
             await use_case.execute(self._pedir(ronda, lado_a, lado_b), creator_id)
         await self._nada_generado(uow, ronda)
+        # Antes de leer hándicaps: ni la RFEG con la competición bloqueada
+        use_case._build_handicap_data.assert_not_awaited()
 
     @pytest.mark.parametrize("cruzado", ["A en el lado B", "B en el lado A"])
     async def test_a_player_on_the_other_team_side_is_refused(self, cruzado):
@@ -2106,9 +2110,13 @@ class TestEmparejadosEnSuEquipo:
         else:
             lado_a, lado_b = [team_a[0], team_b[2]], team_b[:2]
 
+        use_case._build_handicap_data = AsyncMock(wraps=use_case._build_handicap_data)
+
         with pytest.raises(PairingPlayerNotInTeamError):
             await use_case.execute(self._pedir(ronda, lado_a, lado_b), creator_id)
         await self._nada_generado(uow, ronda)
+        # Antes de leer hándicaps: ni la RFEG con la competición bloqueada
+        use_case._build_handicap_data.assert_not_awaited()
 
     async def test_everyone_on_their_side_generates_as_today(self):
         """

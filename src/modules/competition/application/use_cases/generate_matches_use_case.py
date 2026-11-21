@@ -320,6 +320,27 @@ class GenerateMatchesUseCase:
         allowance = round_entity.get_effective_allowance()
         calculator = self._calculator
 
+        players_per_team = round_entity.players_per_team_in_match()
+        team_a_ids = list(team_assignment.team_a_player_ids)
+        team_b_ids = list(team_assignment.team_b_player_ids)
+
+        max_playing_handicap = competition.max_playing_handicap
+
+        # Los sobres de los capitanes deciden, si los hay (FE #655). Lo que manda
+        # quien genera se comprueba antes de leer hándicaps (y de preguntar a la
+        # RFEG con la competición bloqueada): primero la inscripción, luego los lados
+        pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
+
+        # Quien no tiene la inscripcion aprobada, antes que las barras: sin
+        # inscripcion su color sale del defecto y su falta pareceria otra
+        if pairings:
+            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
+            # Los del organizador, cada uno en el lado de su equipo (21 nov 2026,
+            # D; antes, la #918 dejaba emparejar a quien no estaba en ninguno). Los
+            # de los sobres no cambian: cada capitán solo entrega a los de su equipo
+            if manual_pairings:
+                self._comprobar_lados(manual_pairings, team_a_ids, team_b_ids)
+
         # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
         (
             tee_ratings,
@@ -334,25 +355,6 @@ class GenerateMatchesUseCase:
             enrollment_map,
             refrescar_handicap_rfeg,
         )
-
-        players_per_team = round_entity.players_per_team_in_match()
-        team_a_ids = list(team_assignment.team_a_player_ids)
-        team_b_ids = list(team_assignment.team_b_player_ids)
-
-        max_playing_handicap = competition.max_playing_handicap
-
-        # Los sobres de los capitanes deciden, si los hay (FE #655)
-        pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
-
-        # Quien no tiene la inscripcion aprobada, antes que las barras: sin
-        # inscripcion su color sale del defecto y su falta pareceria otra
-        if pairings:
-            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
-            # Los del organizador, cada uno en el lado de su equipo (21 nov 2026,
-            # D; antes, la #918 dejaba emparejar a quien no estaba en ninguno). Los
-            # de los sobres no cambian: cada capitán solo entrega a los de su equipo
-            if manual_pairings:
-                self._comprobar_lados(manual_pairings, team_a_ids, team_b_ids)
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360). También en
