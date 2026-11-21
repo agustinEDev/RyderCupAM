@@ -347,6 +347,25 @@ class GenerateMatchesUseCase:
         # inscripcion su color sale del defecto y su falta pareceria otra
         if pairings:
             await self._comprobar_inscripciones(pairings, enrollment_map, competition)
+            # Emparejar a mano solo exige la inscripción, no estar en un equipo:
+            # quien no esté en ninguno se lee como los demás (CodeRabbit, #918)
+            en_los_equipos = {*team_a_ids, *team_b_ids}
+            de_fuera = [
+                uid
+                for uid in dict.fromkeys(
+                    self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team)
+                )
+                if uid not in en_los_equipos
+            ]
+            if de_fuera and (golf_course is not None or not is_scratch):
+                await self._leer_jugadores(
+                    de_fuera,
+                    is_scratch,
+                    enrollment_map,
+                    refrescar_handicap_rfeg,
+                    user_handicap_map,
+                    user_gender_map,
+                )
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360). También en
@@ -572,24 +591,14 @@ class GenerateMatchesUseCase:
             holes_by_tee = context.holes_by_tee
 
         if golf_course or not is_scratch:
-            all_player_ids = list(team_assignment.team_a_player_ids) + list(
-                team_assignment.team_b_player_ids
+            await self._leer_jugadores(
+                list(team_assignment.team_a_player_ids) + list(team_assignment.team_b_player_ids),
+                is_scratch,
+                enrollment_map,
+                refrescar_handicap_rfeg,
+                user_handicap_map,
+                user_gender_map,
             )
-            # De uno en uno: son consultas sobre la misma sesión, y SQLAlchemy
-            # no admite dos operaciones a la vez en una sesión (era un gather)
-            users = [await self._user_repo.find_by_id(pid) for pid in all_player_ids]
-            for pid, user in zip(all_player_ids, users, strict=True):
-                if user:
-                    enrollment = enrollment_map.get(str(pid.value))
-                    has_custom_handicap = (
-                        enrollment is not None and enrollment.has_custom_handicap()
-                    )
-                    if not is_scratch and not has_custom_handicap and refrescar_handicap_rfeg:
-                        await self._refresco_rfeg.si_toca(user)
-                    # En SCRATCH solo el género: el hándicap no cuenta
-                    if not is_scratch and user.handicap is not None:
-                        user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
-                    user_gender_map[str(pid.value)] = user.gender
 
         return (
             tee_ratings,
@@ -598,6 +607,30 @@ class GenerateMatchesUseCase:
             user_gender_map,
             holes_by_tee,
         )
+
+    async def _leer_jugadores(
+        self,
+        player_ids: list[UserId],
+        is_scratch: bool,
+        enrollment_map: Mapping[str, Enrollment],
+        refrescar_handicap_rfeg: bool,
+        user_handicap_map: dict[str, Decimal],
+        user_gender_map: dict[str, Gender | None],
+    ) -> None:
+        """El género de cada jugador y, con golpes, su hándicap (refrescado de la RFEG si toca)."""
+        # De uno en uno: son consultas sobre la misma sesión, y SQLAlchemy
+        # no admite dos operaciones a la vez en una sesión (era un gather)
+        users = [await self._user_repo.find_by_id(pid) for pid in player_ids]
+        for pid, user in zip(player_ids, users, strict=True):
+            if user:
+                enrollment = enrollment_map.get(str(pid.value))
+                has_custom_handicap = enrollment is not None and enrollment.has_custom_handicap()
+                if not is_scratch and not has_custom_handicap and refrescar_handicap_rfeg:
+                    await self._refresco_rfeg.si_toca(user)
+                # En SCRATCH solo el género: el hándicap no cuenta
+                if not is_scratch and user.handicap is not None:
+                    user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                user_gender_map[str(pid.value)] = user.gender
 
     async def _generate_auto(
         self,

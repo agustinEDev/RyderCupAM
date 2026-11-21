@@ -2014,3 +2014,97 @@ class TestGenerateMatchesUseCase:
             await GenerateMatchesUseCase(
                 uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
             ).execute(GenerateMatchesRequestDTO(round_id=franja.id.value), creator_id)
+
+
+class TestEmparejadosFueraDeLosEquipos:
+    """
+    Los emparejamientos a mano solo exigen la inscripción aprobada, no estar en un
+    equipo (CodeRabbit en la #918). Quien está emparejado sin equipo se lee como los
+    de los equipos: con su género (y con golpes, su hándicap). Si no, sin género no
+    encontraba barras y se bloqueaba con GENDER aunque tuviera una válida.
+    """
+
+    async def _montar(self, play_mode, genero_del_de_fuera, campo):
+        base = TestGenerateMatchesUseCase()
+        uow = InMemoryUnitOfWork()
+        creator_id = UserId(uuid4())
+        if play_mode == PlayMode.SCRATCH:
+            competition = await base._create_closed_competition(uow, creator_id)
+        else:
+            competition = await base._create_handicap_competition(uow, creator_id)
+        round_entity = await base._create_round_pending_matches(
+            uow, competition, GolfCourseId(uuid4()), MatchFormat.SINGLES
+        )
+        team_a, team_b = await base._create_teams_and_enrollments(uow, competition, 1, 1)
+        de_fuera = UserId(uuid4())
+        async with uow:
+            await uow.enrollments.add(
+                Enrollment(
+                    id=EnrollmentId.generate(),
+                    competition_id=competition.id,
+                    user_id=de_fuera,
+                    status=EnrollmentStatus.APPROVED,
+                )
+            )
+        gc_repo = AsyncMock()
+        gc_repo.find_by_id = AsyncMock(return_value=base._build_mock_golf_course(campo))
+        usuarios = {
+            uid: base._build_mock_user(uid, 12.0, Gender.MALE) for uid in (*team_a, *team_b)
+        }
+        usuarios[de_fuera] = base._build_mock_user(de_fuera, 10.0, genero_del_de_fuera)
+        for usuario in usuarios.values():
+            usuario.display_name_or_legal.return_value = "Test Player"
+        user_repo = AsyncMock()
+        user_repo.find_by_id = AsyncMock(side_effect=usuarios.get)
+        user_repo.find_by_ids = AsyncMock(
+            side_effect=lambda uids: [usuarios[u] for u in uids if u in usuarios]
+        )
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(
+            round_id=round_entity.id.value,
+            manual_pairings=[
+                ManualPairingDTO(
+                    team_a_player_ids=[team_a[0].value], team_b_player_ids=[de_fuera.value]
+                )
+            ],
+        )
+        return uow, use_case, request, creator_id, round_entity, de_fuera
+
+    async def test_en_scratch_se_lee_su_genero(self):
+        """
+        Given una Ryder SCRATCH con rojas de mujer y amarillas de hombre, y una
+              jugadora aprobada emparejada a mano sin estar en ningún equipo
+        When se generan los partidos
+        Then se generan, y ella en rojas de mujer (no se bloquea por GENDER)
+        """
+        uow, use_case, request, creator_id, round_entity, ella = await self._montar(
+            PlayMode.SCRATCH,
+            Gender.FEMALE,
+            [(TeeColor.YELLOW, Gender.MALE), (TeeColor.RED, Gender.FEMALE)],
+        )
+
+        await use_case.execute(request, creator_id)
+
+        [partido] = await uow.matches.find_by_round(round_entity.id)
+        foto = partido.find_player(ella)
+        assert (foto.tee_color, foto.tee_gender) == (TeeColor.RED, Gender.FEMALE)
+
+    async def test_con_golpes_se_lee_su_genero_y_su_handicap(self):
+        """
+        Given una Ryder con hándicap y un jugador aprobado (10.0) emparejado a mano
+              sin estar en ningún equipo
+        When se generan los partidos
+        Then juega en amarillas de hombre y con su hándicap, no con cero
+        """
+        uow, use_case, request, creator_id, round_entity, el = await self._montar(
+            PlayMode.HANDICAP, Gender.MALE, [(TeeColor.YELLOW, Gender.MALE)]
+        )
+
+        await use_case.execute(request, creator_id)
+
+        [partido] = await uow.matches.find_by_round(round_entity.id)
+        foto = partido.find_player(el)
+        assert (foto.tee_color, foto.tee_gender) == (TeeColor.YELLOW, Gender.MALE)
+        assert foto.player_handicap == Decimal("10.0")
