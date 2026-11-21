@@ -376,6 +376,14 @@ class TeeRemovalLeavesNoValidTeeError(TeeNotAvailableError):
     """
 
 
+class TeeNotSelectableError(TeeNotAvailableError):
+    """
+    OTHER no se elige (tabla del 21 nov 2026, C): ni al inscribirse, ni como barra
+    general, ni en un campo (la propia o la de un género), aunque el campo la tenga.
+    Mismo código que `TeeNotAvailableError`, con su propio texto.
+    """
+
+
 class TeeChangeClosedError(Exception):
     """La competición ya terminó o se canceló: ya no se cambian barras."""
 

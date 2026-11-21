@@ -54,6 +54,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
+from src.modules.competition.application.exceptions import TeeNotSelectableError
 from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
@@ -313,7 +314,8 @@ async def request_enrollment(
     - 409: Ya inscrito; o la franja: `TEE_WINDOW_FULL`, `TEE_WINDOW_HAS_ROOM`; o
       `TEAMS_FORMED`: con los equipos formados nadie entra por su cuenta
     - 404: `TEE_WINDOW_NOT_FOUND`: la franja no es de esta competición
-    - 422: `TEE_WINDOW_REQUIRED`: con franjas hay que elegir una
+    - 422: `TEE_WINDOW_REQUIRED`: con franjas hay que elegir una; `TEE_NOT_AVAILABLE`:
+      las barras OTHER no se eligen
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(
@@ -339,6 +341,10 @@ async def request_enrollment(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
+
+    except TeeNotSelectableError as e:
+        # OTHER no se elige (21 nov 2026, C): el mismo código y texto que al cambiarla
+        return respuesta_de_barras(e)
 
 
 @router.get(
@@ -673,8 +679,9 @@ class ChangeTeeBody(BaseModel):
         "o un admin; ya empezada, solo el capitán de su equipo, el organizador o un "
         "admin. Sus partidos y partidas generados que aún no han empezado se rehacen "
         "con las barras nuevas; lo empezado no se toca. Null vuelve a las de por defecto. "
-        "Cualquier color, como al inscribirse, salvo que no valga en un campo donde le "
-        "queda algo por jugar sin barra propia ni del campo: 422 TEE_NOT_ON_PENDING_COURSE."
+        "Cualquier color salvo OTHER (422 TEE_NOT_AVAILABLE), como al inscribirse, salvo "
+        "que no valga en un campo donde le queda algo por jugar sin barra propia ni del "
+        "campo: 422 TEE_NOT_ON_PENDING_COURSE."
     ),
 )
 async def change_enrollment_tee(
@@ -744,7 +751,7 @@ class ChangeCourseTeeBody(BaseModel):
         "El cambio propio de un jugador en un campo de la competición: gana a la barra "
         "del campo para su género y a su barra general. Mismos permisos y plazos que "
         "el cambio de la barra general. Rehace lo que le queda por jugar en ese campo. "
-        "422 TEE_NOT_AVAILABLE si ese campo no tiene esa barra para él, si al quitarlo "
+        "422 TEE_NOT_AVAILABLE si es OTHER, si ese campo no tiene esa barra para él, si al quitarlo "
         "(null) la que quedaría no vale allí y le queda algo por jugar (texto propio), "
         "o si la del campo para su género ya no vale allí."
     ),

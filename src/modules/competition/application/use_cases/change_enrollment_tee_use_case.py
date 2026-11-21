@@ -46,6 +46,7 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
     TeeChangeClosedError,
+    TeeNotSelectableError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -56,6 +57,7 @@ from src.modules.competition.application.services.lo_pendiente import LoPendient
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import se_puede_elegir
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
@@ -113,6 +115,7 @@ class ChangeEnrollmentTeeUseCase:
                 capitán de su equipo, el organizador ni un admin
             EnrollmentNotApprovedError: Si la inscripción no está aprobada
             TeeChangeClosedError: Si la competición terminó o se canceló
+            TeeNotSelectableError: Si son OTHER, que no se eligen
             TeeNotOnPendingCourseError: Si esas barras no valen en un campo donde le
                 queda algo por jugar y no tiene ni cambio propio ni barra del campo
             TeeNotAvailableError: Si en un campo así la que no vale es la fijada
@@ -153,6 +156,8 @@ class ChangeEnrollmentTeeUseCase:
                 raise TeeChangeClosedError(
                     f"No se cambian barras en una competición {competition.status.value}"
                 )
+            if request.tee_color is not None and not se_puede_elegir(request.tee_color):
+                raise TeeNotSelectableError(f"Las barras {request.tee_color.value} no se eligen")
             usuario = await self._usuarios.find_by_id(enrollment.user_id)
             genero: Gender | None = usuario.gender if usuario else None
             # Cada campo, leído una vez en toda la ejecución, y el mismo contexto para
