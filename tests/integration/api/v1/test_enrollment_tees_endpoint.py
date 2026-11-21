@@ -3,7 +3,7 @@ Las barras por campo, por la API (20 nov 2026).
 
 | Caso                                                   | Respuesta                                  |
 |--------------------------------------------------------|--------------------------------------------|
-| GET de la jugadora (campo con amarillas H y rojas M)   | 200: rojas, GENERAL, opciones [RED]        |
+| GET de la jugadora (campo con amarillas H y rojas M)   | 200: rojas, DEFAULT, opciones [RED]        |
 | GET de otro jugador                                    | 403                                        |
 | PUT de su cambio propio a rojas en ese campo           | 200; el GET dice OWN                       |
 | PUT de su cambio propio a azules (el campo no las tiene) | 422 TEE_NOT_AVAILABLE                    |
@@ -51,7 +51,7 @@ async def test_the_player_gets_each_course_with_her_tee_and_options(client: Asyn
     cuerpo = respuesta.json()
     assert (cuerpo["general_tee"], cuerpo["default_tee"]) == (None, "RED")
     [campo] = cuerpo["courses"]
-    assert (campo["tee"], campo["source"], campo["options"]) == ("RED", "GENERAL", ["RED"])
+    assert (campo["tee"], campo["source"], campo["options"]) == ("RED", "DEFAULT", ["RED"])
     assert "gender" not in respuesta.text
 
 

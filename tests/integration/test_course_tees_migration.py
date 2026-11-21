@@ -65,8 +65,10 @@ def test_nacen_vacias_con_sus_claves_y_sus_cascadas(base_desechable):  # noqa: F
     assert {fila[0] for fila in cascadas} == {"CASCADE"} and len(cascadas) == 4
     indices = _consulta(
         base_desechable,
+        # Solo las dos tablas nuevas: golf_course_tees ya tenía su propio índice
         "SELECT indexname FROM pg_indexes "
-        "WHERE indexname LIKE 'ix_%_course_tees_golf_course_id' ORDER BY indexname",
+        "WHERE tablename IN ('enrollment_course_tees', 'competition_course_tees') "
+        "AND indexname LIKE 'ix_%' ORDER BY indexname",
     )
     assert indices == [
         ("ix_competition_course_tees_golf_course_id",),

@@ -208,6 +208,9 @@ async def test_su_cambio_propio_rehace_y_guarda_lo_pendiente(db_session, jugador
         await uow.enrollments.add(inscripcion)
         await uow.rounds.add(ronda)
         await uow.rounds.add(franja)
+    # Como en la app, partidos y partidas nacen sobre rondas ya guardadas: el flush no
+    # ordena matches tras rounds (no hay relación mapeada) y las partidas van por Core
+    async with uow:
         await uow.matches.add(partido)
         await uow.partidas.anadir([partida])
 
@@ -222,16 +225,18 @@ async def test_su_cambio_propio_rehace_y_guarda_lo_pendiente(db_session, jugador
         jugadora,
     )
 
+    # Los ids, antes de expirar: después leerlos cargaría de la BD fuera del bucle
+    id_partido, id_competicion = partido.id, competicion.id
     db_session.expire_all()
     leer = SQLAlchemyCompetitionUnitOfWork(db_session)
-    guardado = await leer.matches.find_by_id(partido.id)
+    guardado = await leer.matches.find_by_id(id_partido)
     ella = guardado.find_player(jugadora)
     assert (ella.tee_color, ella.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
     otro = guardado.find_player(rival)
     assert (otro.tee_color, otro.player_handicap) == (TeeColor.YELLOW, Decimal("18.0"))
     [suya] = (await leer.partidas.find_by_id(partida.id)).jugadores
     assert (suya.tee_color, suya.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
-    cambios = await leer.barras_por_campo.del_campo(competicion.id, campo)
+    cambios = await leer.barras_por_campo.del_campo(id_competicion, campo)
     assert cambios.propias == {jugadora: TeeColor.BLUE}
 
 
@@ -261,6 +266,8 @@ async def test_los_cambios_propios_de_una_inscripcion_retirada_no_salen(db_sessi
     async with uow:
         await uow.competitions.add(competicion)
         await uow.enrollments.add(inscripcion)
+    # El cambio propio se escribe por Core: la inscripción va guardada antes, como en la app
+    async with uow:
         await uow.barras_por_campo.fijar_propia(inscripcion, campo, TeeColor.BLUE)
     assert (await uow.barras_por_campo.del_campo(competicion.id, campo)).propias == {
         jugadora: TeeColor.BLUE
