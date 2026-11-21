@@ -11,6 +11,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     ManualPairingDTO,
 )
+from src.modules.competition.application.exceptions import PairingPlayerNotInTeamError
 from src.modules.competition.application.services.bloqueos_al_generar import NoTeamAssignmentError
 from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
@@ -2016,26 +2017,28 @@ class TestGenerateMatchesUseCase:
             ).execute(GenerateMatchesRequestDTO(round_id=franja.id.value), creator_id)
 
 
-class TestEmparejadosFueraDeLosEquipos:
+class TestEmparejadosEnSuEquipo:
     """
-    Los emparejamientos a mano solo exigen la inscripción aprobada, no estar en un
-    equipo (CodeRabbit en la #918). Quien está emparejado sin equipo se lee como los
-    de los equipos: con su género (y con golpes, su hándicap). Si no, sin género no
-    encontraba barras y se bloqueaba con GENDER aunque tuviera una válida.
+    Emparejamientos a mano en la Ryder (tabla del 21 nov 2026, D): cada jugador, en
+    el lado de su equipo. Sustituye a lo de la #918, que dejaba emparejar a quien no
+    estaba en ningún equipo.
+
+    | Caso                                          | Resultado                          |
+    |-----------------------------------------------|------------------------------------|
+    | D14 Uno aprobado que no está en ningún equipo | PairingPlayerNotInTeamError, nada  |
+    | D15 Uno del equipo A en el lado B             | el mismo error, nada               |
+    | D16 Todos en su lado                          | se genera como hoy                 |
     """
 
-    async def _montar(self, play_mode, genero_del_de_fuera, campo):
+    async def _montar(self):
         base = TestGenerateMatchesUseCase()
         uow = InMemoryUnitOfWork()
         creator_id = UserId(uuid4())
-        if play_mode == PlayMode.SCRATCH:
-            competition = await base._create_closed_competition(uow, creator_id)
-        else:
-            competition = await base._create_handicap_competition(uow, creator_id)
+        competition = await base._create_closed_competition(uow, creator_id)
         round_entity = await base._create_round_pending_matches(
-            uow, competition, GolfCourseId(uuid4()), MatchFormat.SINGLES
+            uow, competition, GolfCourseId(uuid4()), MatchFormat.FOURBALL
         )
-        team_a, team_b = await base._create_teams_and_enrollments(uow, competition, 1, 1)
+        team_a, team_b = await base._create_teams_and_enrollments(uow, competition, 3, 3)
         de_fuera = UserId(uuid4())
         async with uow:
             await uow.enrollments.add(
@@ -2047,64 +2050,85 @@ class TestEmparejadosFueraDeLosEquipos:
                 )
             )
         gc_repo = AsyncMock()
-        gc_repo.find_by_id = AsyncMock(return_value=base._build_mock_golf_course(campo))
-        usuarios = {
-            uid: base._build_mock_user(uid, 12.0, Gender.MALE) for uid in (*team_a, *team_b)
-        }
-        usuarios[de_fuera] = base._build_mock_user(de_fuera, 10.0, genero_del_de_fuera)
-        for usuario in usuarios.values():
-            usuario.display_name_or_legal.return_value = "Test Player"
+        gc_repo.find_by_id = AsyncMock(return_value=None)
         user_repo = AsyncMock()
-        user_repo.find_by_id = AsyncMock(side_effect=usuarios.get)
-        user_repo.find_by_ids = AsyncMock(
-            side_effect=lambda uids: [usuarios[u] for u in uids if u in usuarios]
-        )
+        user_repo.find_by_id = AsyncMock(return_value=None)
         use_case = GenerateMatchesUseCase(
             uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
         )
-        request = GenerateMatchesRequestDTO(
+        return uow, use_case, creator_id, round_entity, team_a, team_b, de_fuera
+
+    @staticmethod
+    def _pedir(round_entity, lado_a, lado_b):
+        return GenerateMatchesRequestDTO(
             round_id=round_entity.id.value,
             manual_pairings=[
                 ManualPairingDTO(
-                    team_a_player_ids=[team_a[0].value], team_b_player_ids=[de_fuera.value]
+                    team_a_player_ids=[u.value for u in lado_a],
+                    team_b_player_ids=[u.value for u in lado_b],
                 )
             ],
         )
-        return uow, use_case, request, creator_id, round_entity, de_fuera
 
-    async def test_en_scratch_se_lee_su_genero(self):
+    async def _nada_generado(self, uow, round_entity):
+        assert await uow.matches.find_by_round(round_entity.id) == []
+        guardada = await uow.rounds.find_by_id(round_entity.id)
+        assert guardada.status == RoundStatus.PENDING_MATCHES
+        # Es lo que manda el organizador, no un motivo de la sesión
+        assert guardada.match_generation_block is None
+
+    @pytest.mark.parametrize("lado", ["A", "B"])
+    async def test_a_player_in_no_team_is_refused_and_nothing_is_generated(self, lado):
         """
-        Given una Ryder SCRATCH con rojas de mujer y amarillas de hombre, y una
-              jugadora aprobada emparejada a mano sin estar en ningún equipo
-        When se generan los partidos
-        Then se generan, y ella en rojas de mujer (no se bloquea por GENDER)
+        Given una Ryder con equipos 3 contra 3 y una jugadora aprobada sin equipo
+        When el organizador la empareja a mano en cualquiera de los dos lados
+        Then PairingPlayerNotInTeamError y no se genera nada
         """
-        uow, use_case, request, creator_id, round_entity, ella = await self._montar(
-            PlayMode.SCRATCH,
-            Gender.FEMALE,
-            [(TeeColor.YELLOW, Gender.MALE), (TeeColor.RED, Gender.FEMALE)],
-        )
+        uow, use_case, creator_id, ronda, team_a, team_b, de_fuera = await self._montar()
+        lado_a = [team_a[0], de_fuera] if lado == "A" else team_a[:2]
+        lado_b = team_b[:2] if lado == "A" else [team_b[0], de_fuera]
 
-        await use_case.execute(request, creator_id)
+        use_case._build_handicap_data = AsyncMock(wraps=use_case._build_handicap_data)
 
-        [partido] = await uow.matches.find_by_round(round_entity.id)
-        foto = partido.find_player(ella)
-        assert (foto.tee_color, foto.tee_gender) == (TeeColor.RED, Gender.FEMALE)
+        with pytest.raises(PairingPlayerNotInTeamError):
+            await use_case.execute(self._pedir(ronda, lado_a, lado_b), creator_id)
+        await self._nada_generado(uow, ronda)
+        # Antes de leer hándicaps: ni la RFEG con la competición bloqueada
+        use_case._build_handicap_data.assert_not_awaited()
 
-    async def test_con_golpes_se_lee_su_genero_y_su_handicap(self):
+    @pytest.mark.parametrize("cruzado", ["A en el lado B", "B en el lado A"])
+    async def test_a_player_on_the_other_team_side_is_refused(self, cruzado):
         """
-        Given una Ryder con hándicap y un jugador aprobado (10.0) emparejado a mano
-              sin estar en ningún equipo
-        When se generan los partidos
-        Then juega en amarillas de hombre y con su hándicap, no con cero
+        Given una Ryder con equipos 3 contra 3
+        When el organizador pone a uno del equipo A en el lado del B (el lado A,
+            bien), o a uno del B en el lado del A (el B, bien)
+        Then PairingPlayerNotInTeamError y no se genera nada
         """
-        uow, use_case, request, creator_id, round_entity, el = await self._montar(
-            PlayMode.HANDICAP, Gender.MALE, [(TeeColor.YELLOW, Gender.MALE)]
-        )
+        uow, use_case, creator_id, ronda, team_a, team_b, _ = await self._montar()
+        if cruzado == "A en el lado B":
+            lado_a, lado_b = team_a[:2], [team_b[0], team_a[2]]
+        else:
+            lado_a, lado_b = [team_a[0], team_b[2]], team_b[:2]
 
-        await use_case.execute(request, creator_id)
+        use_case._build_handicap_data = AsyncMock(wraps=use_case._build_handicap_data)
 
-        [partido] = await uow.matches.find_by_round(round_entity.id)
-        foto = partido.find_player(el)
-        assert (foto.tee_color, foto.tee_gender) == (TeeColor.YELLOW, Gender.MALE)
-        assert foto.player_handicap == Decimal("10.0")
+        with pytest.raises(PairingPlayerNotInTeamError):
+            await use_case.execute(self._pedir(ronda, lado_a, lado_b), creator_id)
+        await self._nada_generado(uow, ronda)
+        # Antes de leer hándicaps: ni la RFEG con la competición bloqueada
+        use_case._build_handicap_data.assert_not_awaited()
+
+    async def test_everyone_on_their_side_generates_as_today(self):
+        """
+        Given una Ryder con equipos 3 contra 3
+        When el organizador empareja a dos de cada uno en el lado de su equipo
+        Then se genera el fourball con ellos
+        """
+        uow, use_case, creator_id, ronda, team_a, team_b, _ = await self._montar()
+
+        respuesta = await use_case.execute(self._pedir(ronda, team_a[:2], team_b[:2]), creator_id)
+
+        assert respuesta.matches_generated == 1
+        [partido] = await uow.matches.find_by_round(ronda.id)
+        assert [p.user_id for p in partido.team_a_players] == team_a[:2]
+        assert [p.user_id for p in partido.team_b_players] == team_b[:2]

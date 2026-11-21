@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_add_golf_course_to_competition_use_case,
+    get_competition_course_tees_use_case,
     get_competition_uow,
     get_current_user,
     get_remove_golf_course_from_competition_use_case,
@@ -21,6 +22,8 @@ from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseResponseDTO,
     CompetitionCourseTeeResponseDTO,
     CompetitionGolfCourseResponseDTO,
+    CourseTeeForGenderDTO,
+    GetCompetitionCourseTeesRequestDTO,
     GolfCourseDetailDTO,
     HoleResponseDTO,
     RemoveGolfCourseRequestDTO,
@@ -40,6 +43,9 @@ from src.modules.competition.application.use_cases.add_golf_course_use_case impo
     GolfCourseAlreadyAssignedError,
     GolfCourseNotApprovedError,
     IncompatibleCountryError,
+)
+from src.modules.competition.application.use_cases.get_competition_course_tees_use_case import (
+    GetCompetitionCourseTeesUseCase,
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
@@ -281,7 +287,7 @@ class SetCourseTeeBody(BaseModel):
         "Solo el organizador o un admin, también con la competición en curso. Pisa la "
         "barra general de los de ese género, no el cambio propio de nadie, y rehace lo "
         "que les queda por jugar en ese campo: todo o nada. 422 TEE_NOT_AVAILABLE si "
-        "ese campo no tiene esa barra para ese género, o si al quitarla (null) a alguno "
+        "es OTHER, si ese campo no tiene esa barra para ese género, o si al quitarla (null) a alguno "
         "con algo por jugar allí no le valdría la que quedaría (texto propio)."
     ),
     tags=["Competitions - Golf Courses"],
@@ -307,3 +313,27 @@ async def set_competition_course_tee(
         )
     except ERRORES_DE_BARRAS as e:
         return respuesta_de_barras(e)
+
+
+@router.get(
+    "/{competition_id}/course-tees",
+    response_model=list[CourseTeeForGenderDTO],
+    summary="La barra fijada en cada campo para cada género",
+    description=(
+        "Lo que el organizador fijó en cada campo de la competición para todos los de un "
+        "género, en el orden de los campos; vacío si no hay nada. Solo el organizador o un "
+        "admin (403 a los demás), en cualquier estado de la competición."
+    ),
+    tags=["Competitions - Golf Courses"],
+)
+async def get_competition_course_tees(
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetCompetitionCourseTeesUseCase = Depends(get_competition_course_tees_use_case),
+):
+    """Lo fijado por campo y género (barras por campo, tabla del 21 nov 2026, A)."""
+    return await use_case.execute(
+        GetCompetitionCourseTeesRequestDTO(competition_id=competition_id),
+        UserId(str(current_user.id)),
+        is_admin=current_user.is_admin,
+    )

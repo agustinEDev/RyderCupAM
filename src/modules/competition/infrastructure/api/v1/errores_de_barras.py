@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     TeeChangeClosedError,
     TeeNotAvailableError,
     TeeNotOnPendingCourseError,
+    TeeNotSelectableError,
     TeeRemovalLeavesNoValidTeeError,
 )
 
@@ -32,6 +33,10 @@ _NO_SE_CAMBIAN: dict[type[Exception], tuple[int, str]] = {
     CourseTeeNotAvailableError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "That tee is not available for this gender on this course.",
+    ),
+    TeeNotSelectableError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "That tee cannot be chosen: pick one of the course's tee colors.",
     ),
     TeeNotOnPendingCourseError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,

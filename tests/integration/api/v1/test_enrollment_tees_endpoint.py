@@ -115,3 +115,33 @@ async def test_the_organizer_sets_the_course_tee_for_women(client: AsyncClient):
     assert del_organizador.status_code == 200, del_organizador.text
     campo_de_ella = (await _barras(client, jugadora, inscripcion)).json()["courses"][0]
     assert campo_de_ella["source"] == "COURSE"
+
+
+async def test_other_is_refused_as_general_own_and_course_tee(client: AsyncClient):
+    """
+    Given una jugadora inscrita (tabla del 21 nov 2026, C)
+    When ella pide OTHER como barra general y como cambio propio, y el organizador
+        como barra del campo para las mujeres
+    Then las tres, 422 TEE_NOT_AVAILABLE con el texto de OTHER (no el de una
+        barra que el campo no tiene)
+    """
+    organizador, jugadora, _, inscripcion = await _montar(client)
+    campo = await _campo(client, jugadora, inscripcion)
+
+    set_auth_cookies(client, jugadora["cookies"])
+    general = await client.put(
+        f"/api/v1/enrollments/{inscripcion}/tee", json={"tee_color": "OTHER"}
+    )
+    propia = await _propia(client, jugadora, inscripcion, campo, "OTHER")
+    set_auth_cookies(client, organizador["cookies"])
+    del_campo = await client.put(
+        f"/api/v1/competitions/{organizador['competition_id']}/courses/{campo}/tee",
+        json={"gender": "FEMALE", "tee_color": "OTHER"},
+    )
+
+    for respuesta in (general, propia, del_campo):
+        assert respuesta.status_code == 422, respuesta.text
+        assert respuesta.json() == {
+            "detail": "That tee cannot be chosen: pick one of the course's tee colors.",
+            "error_code": "TEE_NOT_AVAILABLE",
+        }

@@ -16,6 +16,7 @@ from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
+    TeeNotSelectableError,
 )
 from src.modules.competition.infrastructure.api.v1 import (
     competition_golf_course_routes,
@@ -155,5 +156,61 @@ async def test_course_tee_for_a_gender_not_available_has_its_own_text():
     assert respuesta.status_code == 422
     assert cuerpo == {
         "detail": "That tee is not available for this gender on this course.",
+        "error_code": "TEE_NOT_AVAILABLE",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_admin", [False, True])
+async def test_competition_course_tees_passes_the_competition_and_who_asks(is_admin):
+    """
+    Given una petición de lo fijado por campo (tabla del 21 nov 2026, A)
+    When llega a la ruta
+    Then el caso de uso recibe la competición, quién y si es admin, y se devuelve lo suyo
+    """
+    caso = AsyncMock()
+    caso.execute.return_value = []
+    quien = _quien(is_admin)
+    competicion = uuid4()
+
+    respuesta = await competition_golf_course_routes.get_competition_course_tees(
+        competicion, quien, caso
+    )
+
+    pedida, usuario = caso.execute.call_args.args
+    assert pedida.competition_id == competicion
+    assert str(usuario.value) == str(quien.id)
+    assert caso.execute.call_args.kwargs == {"is_admin": is_admin}
+    assert respuesta == []
+
+
+async def _general(caso, quien=None):
+    return await enrollment_routes.change_enrollment_tee(
+        uuid4(), enrollment_routes.ChangeTeeBody(tee_color=TeeColor.OTHER), quien or _quien(), caso
+    )
+
+
+async def _apuntarse(caso, quien=None):
+    return await enrollment_routes.request_enrollment(
+        uuid4(), enrollment_routes.RequestEnrollmentBody(tee_color="OTHER"), quien or _quien(), caso
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ruta", [_apuntarse, _general, _propia, _del_campo])
+async def test_other_tee_answers_422_tee_not_available_with_its_own_text(ruta):
+    """
+    Given un caso de uso que rechaza OTHER (tabla del 21 nov 2026, C)
+    When llega a inscribirse, a la barra general o a cualquiera de las de un campo
+    Then 422 TEE_NOT_AVAILABLE con su texto fijo, no el de la excepción
+    """
+    caso = AsyncMock()
+    caso.execute.side_effect = TeeNotSelectableError("texto interno")
+
+    respuesta = await ruta(caso)
+
+    assert respuesta.status_code == 422
+    assert json.loads(respuesta.body) == {
+        "detail": "That tee cannot be chosen: pick one of the course's tee colors.",
         "error_code": "TEE_NOT_AVAILABLE",
     }

@@ -694,12 +694,12 @@ class TestQueBarras:
 
         assert await mundo.barras_guardadas() == TeeColor.YELLOW
 
-    @pytest.mark.parametrize("color", [TeeColor.OTHER, TeeColor.GREEN])
+    @pytest.mark.parametrize("color", [TeeColor.GREEN, TeeColor.GOLD])
     async def test_change_tee_to_any_colour_without_pending_saves_it(self, color):
         """
         Given nada pendiente
-        When la jugadora elige un color que no tiene ningún campo (también OTHER,
-            que acepta igual la inscripción)
+        When la jugadora elige un color que no tiene ningún campo (OTHER no: no se
+            elige, tabla del 21 nov 2026, C)
         Then se guarda
         """
         mundo = await _Mundo().montar()

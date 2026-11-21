@@ -27,6 +27,7 @@ from src.modules.competition.application.exceptions import (
     CourseNotInCompetitionError,
     CourseTeeNotAvailableError,
     TeeChangeClosedError,
+    TeeNotSelectableError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -37,6 +38,7 @@ from src.modules.competition.application.services.lo_pendiente import LoPendient
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import se_puede_elegir
 from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
@@ -81,6 +83,7 @@ class SetCompetitionCourseTeeUseCase:
             NotCompetitionCreatorError: Si no es el organizador ni un admin
             CourseNotInCompetitionError: Si el campo no es de la competición
             TeeChangeClosedError: Si la competición terminó o se canceló
+            TeeNotSelectableError: Si son OTHER, que no se eligen aunque el campo las tenga
             TeeNotAvailableError: Si ese campo no tiene esas barras para ese género,
                 o a alguno no le valen en el campo de algo pendiente
             PendingGameNotRecalculableError: Si a alguno no se le puede rehacer lo
@@ -105,6 +108,8 @@ class SetCompetitionCourseTeeUseCase:
                 raise TeeChangeClosedError(
                     f"No se cambian barras en una competición {competition.status.value}"
                 )
+            if request.tee_color is not None and not se_puede_elegir(request.tee_color):
+                raise TeeNotSelectableError(f"Las barras {request.tee_color.value} no se eligen")
             pendiente = LoPendiente(
                 self._uow, self._campos, self._usuarios, self._zonas, self._reloj
             )

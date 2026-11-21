@@ -9,6 +9,15 @@ su género o su general, si ese campo la tiene para él; si no, ninguna), de dó
 sale y las que se le pueden fijar. Además, su barra general y la habitual de su
 género.
 
+Con la competición terminada o cancelada (tabla del 21 nov 2026, B), en cada campo
+donde jugó, la barra de la foto de su partido (Ryder) o su partida (stroke play), de
+la última ronda allí por fecha y sesión, con origen PLAYED. Solo si jugó de verdad
+(decidido el 21 nov 2026): en la Ryder, tiene algún hoyo apuntado en ese partido y
+no está retirada, sea cual sea su estado (un WO sin empezar o un partido sin hoyos,
+no); en stroke play, está en `quienes_jugaron` de su partida (no un NO_PRESENTADO).
+Donde no, la configuración de siempre. Ya no se cambia nada: sin opciones en ningún
+campo.
+
 Quién: el propio jugador, el capitán de su equipo, el organizador o un admin, en
 cualquier estado de la competición (consultar es una lectura); comprobado antes
 de mirar nada más. Es una lectura: no bloquea nada. No devuelve el género del jugador,
@@ -32,11 +41,13 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.course_context import course_context_for
+from src.modules.competition.application.services.envelope_desk import ORDEN_DE_SESION
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
@@ -45,6 +56,9 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+
+# Ya no se juega ni se cambia nada: cada campo dice la barra que jugó (B)
+ACABADA = frozenset({CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED})
 
 
 class GetEnrollmentTeesUseCase:
@@ -95,13 +109,24 @@ class GetEnrollmentTeesUseCase:
                 raise EnrollmentNotApprovedError("La inscripción no está aprobada")
             usuario = await self._usuarios.find_by_id(enrollment.user_id)
             genero = usuario.gender if usuario else None
+            acabada = competition.status in ACABADA
+            jugadas = await self._jugadas(competition, enrollment.user_id) if acabada else {}
             campos = [
-                await self._campo(
+                CourseTeesDTO(
+                    golf_course_id=del_campo.golf_course_id.value,
+                    golf_course_name=await self._nombre(del_campo.golf_course_id),
+                    tee=jugadas[del_campo.golf_course_id].value,
+                    source="PLAYED",
+                    options=[],
+                )
+                if del_campo.golf_course_id in jugadas
+                else await self._campo(
                     competition,
                     del_campo.golf_course_id,
                     enrollment.user_id,
                     enrollment.tee_color,
                     genero,
+                    con_opciones=not acabada,
                 )
                 for del_campo in competition.golf_courses
             ]
@@ -113,6 +138,53 @@ class GetEnrollmentTeesUseCase:
             courses=campos,
         )
 
+    async def _jugadas(
+        self, competition: Competition, user_id: UserId
+    ) -> dict[GolfCourseId, TeeColor]:
+        """
+        La barra que jugó en cada campo: la de la foto de su partido (Ryder) o su
+        partida (stroke play) donde jugó de verdad, de la última ronda en ese campo
+        por fecha y sesión. Los campos donde no llegó a jugar no salen.
+        """
+        rondas = {r.id: r for r in await self._uow.rounds.find_by_competition(competition.id)}
+        partidos = await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id)
+        # Ella, no el partido: algún hoyo suyo apuntado (en foursomes se apunta en
+        # las filas de los dos de la pareja) y sin estar retirada, sea cual sea el
+        # estado (un WO sin empezar, un partido empezado y cancelado sin hoyos)
+        con_hoyos = await self._uow.hole_scores.played_holes([p.id for p in partidos])
+        fotos = [
+            (partido.round_id, jugador.tee_color)
+            for partido in partidos
+            if (partido.id, user_id) in con_hoyos
+            and user_id not in partido.withdrawn_player_ids
+            and (jugador := partido.find_player(user_id)) is not None
+        ]
+        partidas = await self._uow.partidas.del_jugador(competition.id, user_id)
+        golpes = await self._uow.golpes_de_partida.de_las_partidas([p.id for p in partidas])
+        fotos += [
+            (partida.round_id, jugador.tee_color)
+            for partida in partidas
+            if user_id in partida.quienes_jugaron(golpes)
+            for jugador in partida.jugadores
+            if jugador.user_id == user_id
+        ]
+        jugadas: dict[GolfCourseId, TeeColor] = {}
+        # De la primera a la última: cada una pisa la de antes en su campo
+        for round_id, color in sorted(
+            ((r, c) for r, c in fotos if r in rondas),
+            key=lambda foto: (
+                rondas[foto[0]].round_date,
+                ORDEN_DE_SESION[rondas[foto[0]].session_type],
+            ),
+        ):
+            jugadas[rondas[round_id].golf_course_id] = color
+        return jugadas
+
+    async def _nombre(self, golf_course_id: GolfCourseId) -> str:
+        """El nombre del campo, o vacío si ya no existe."""
+        campo = await self._campos.find_by_id(golf_course_id)
+        return campo.name if campo is not None else ""
+
     async def _campo(
         self,
         competition: Competition,
@@ -120,11 +192,13 @@ class GetEnrollmentTeesUseCase:
         user_id: UserId,
         general: TeeColor | None,
         genero: Gender | None,
+        con_opciones: bool = True,
     ) -> CourseTeesDTO:
         """
         Lo de un campo: la barra que juega (su cambio propio, la del campo para su
         género o su general, si ese campo la tiene para él), de dónde sale y las
-        que se le pueden fijar. Un campo que ya no existe sale sin opciones.
+        que se le pueden fijar (`con_opciones`; acabada, ninguna). Un campo que ya
+        no existe sale sin opciones.
         """
         campo = await self._campos.find_by_id(golf_course_id)
         if campo is not None and golf_course_id not in self._contextos:
@@ -146,8 +220,12 @@ class GetEnrollmentTeesUseCase:
         valida = await self._reglas.vale_en_el_campo(
             competition, golf_course_id, jugaria, genero, self._contextos
         )
-        opciones = await self._reglas.las_que_valen_en_el_campo(
-            competition, golf_course_id, genero, self._contextos
+        opciones = (
+            await self._reglas.las_que_valen_en_el_campo(
+                competition, golf_course_id, genero, self._contextos
+            )
+            if con_opciones
+            else []
         )
         return CourseTeesDTO(
             golf_course_id=golf_course_id.value,

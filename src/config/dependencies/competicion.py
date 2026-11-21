@@ -68,6 +68,9 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
 )
+from src.modules.competition.application.use_cases.get_competition_course_tees_use_case import (
+    GetCompetitionCourseTeesUseCase,
+)
 from src.modules.competition.application.use_cases.get_competition_summary_use_case import (
     GetCompetitionSummaryUseCase,
 )
@@ -326,6 +329,13 @@ def get_competition_summary_use_case(
 ) -> GetCompetitionSummaryUseCase:
     """El resumen público de una competición (release social 3, L5)."""
     return GetCompetitionSummaryUseCase(uow)
+
+
+def get_competition_course_tees_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetCompetitionCourseTeesUseCase:
+    """Lo fijado por campo y género en una competición (tabla del 21 nov 2026, A)."""
+    return GetCompetitionCourseTeesUseCase(uow)
 
 
 def get_delete_competition_use_case(

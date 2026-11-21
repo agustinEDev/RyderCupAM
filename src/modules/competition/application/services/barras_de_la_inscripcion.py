@@ -19,7 +19,10 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.barra_del_jugador import la_barra_vale
+from src.modules.competition.domain.services.barra_del_jugador import (
+    la_barra_vale,
+    se_puede_elegir,
+)
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
@@ -155,9 +158,13 @@ class BarrasDeLaInscripcion:
         genero: Gender | None,
         contextos: dict[GolfCourseId, StrokeContext],
     ) -> list[TeeColor]:
-        """Las barras que le valen en ese campo, en el orden de `TeeColor`."""
+        """
+        Las barras que le valen en ese campo, en el orden de `TeeColor`. Nunca las
+        que no se eligen (OTHER, 21 nov 2026): el cambio las rechazaría.
+        """
         return [
             color
             for color in TeeColor
-            if await self.vale_en_el_campo(competition, golf_course_id, color, genero, contextos)
+            if se_puede_elegir(color)
+            and await self.vale_en_el_campo(competition, golf_course_id, color, genero, contextos)
         ]

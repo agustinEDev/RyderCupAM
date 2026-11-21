@@ -17,6 +17,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionFullError,
     CompetitionNotFoundError,
     InvalidTeeColorError,
+    TeeNotSelectableError,
 )
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
@@ -71,6 +72,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import se_puede_elegir
 from src.modules.competition.domain.services.competition_policy import (
     MAX_ENROLLMENTS_PER_USER,
     CompetitionPolicy,
@@ -178,6 +180,7 @@ class RequestEnrollmentUseCase:
             CompetitionNotFoundError, CompetitionIsPrivateError,
             CompetitionNotActiveError, CompetitionFullError, AlreadyEnrolledError,
             EnrollmentClosedError, TooManyEnrollmentsError, InvalidTeeColorError,
+            TeeNotSelectableError (OTHER no se elige),
             TeeWindowRequiredError, TeeWindowNotFoundError, TeeWindowFullError,
             TeeWindowHasRoomError, TeamsFormedError, EnrollmentDeadlinePassedError
         """
@@ -248,8 +251,10 @@ class RequestEnrollmentUseCase:
             except ValueError as e:
                 raise InvalidTeeColorError(
                     f"Valor de tee_color no válido: '{request.tee_color}'. "
-                    f"Valores permitidos: {[c.value for c in TeeColor]}"
+                    f"Valores permitidos: {[c.value for c in TeeColor if se_puede_elegir(c)]}"
                 ) from e
+            if tee_color is not None and not se_puede_elegir(tee_color):
+                raise TeeNotSelectableError(f"Las barras {tee_color.value} no se eligen")
 
             espera = False
             if franja is not None:

@@ -32,6 +32,16 @@ BARRAS_HABITUALES = {Gender.MALE: TeeColor.YELLOW, Gender.FEMALE: TeeColor.RED}
 BARRAS_SIN_GENERO = TeeColor.YELLOW
 
 
+# OTHER cubre las salidas cuyo nombre no es un color: guarda el campo tal cual, pero
+# nadie sabe qué barra es al elegirla. No se elige en ningún sitio (21 nov 2026, C)
+NO_SE_ELIGEN = frozenset({TeeColor.OTHER})
+
+
+def se_puede_elegir(color: TeeColor) -> bool:
+    """Si esa barra se puede elegir: al inscribirse, como general o en un campo."""
+    return color not in NO_SE_ELIGEN
+
+
 def barras_por_defecto(genero: Gender | None) -> TeeColor:
     """Las barras de quien no eligió: las habituales de su género."""
     return BARRAS_SIN_GENERO if genero is None else BARRAS_HABITUALES[genero]

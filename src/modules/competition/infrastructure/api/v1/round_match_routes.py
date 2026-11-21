@@ -72,6 +72,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 )
 from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError as ReassignNotCreatorError,
+    PairingPlayerNotInTeamError,
 )
 from src.modules.competition.application.services.baja_de_la_competicion import (
     DraftInProgressError,
@@ -681,6 +682,8 @@ async def generate_matches(
       con la misma forma que en la agenda, y queda apuntado en la sesión
       (BE #360)
     - 404: Ronda no encontrada
+    - 422: `PAIRING_PLAYER_NOT_IN_TEAM`: un emparejado a mano no está en ningún
+      equipo, o está en el lado del contrario; no se genera nada
     """
     try:
         current_user_id = UserId(current_user.id)
@@ -689,6 +692,16 @@ async def generate_matches(
             manual_pairings=body.manual_pairings,
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
+
+    except PairingPlayerNotInTeamError as e:
+        # Texto fijo, no el de la excepción (CodeQL); no se apunta en la sesión
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": "Each paired player must be on their own team's side.",
+                "error_code": e.error_code,
+            },
+        )
 
     except (
         GenMatchesInsufficientError,

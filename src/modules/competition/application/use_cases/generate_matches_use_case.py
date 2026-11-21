@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InsufficientPlayersError,
     NotCompetitionCreatorError,
+    PairingPlayerNotInTeamError,
     RoundNotFoundError,
 )
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
@@ -319,6 +320,27 @@ class GenerateMatchesUseCase:
         allowance = round_entity.get_effective_allowance()
         calculator = self._calculator
 
+        players_per_team = round_entity.players_per_team_in_match()
+        team_a_ids = list(team_assignment.team_a_player_ids)
+        team_b_ids = list(team_assignment.team_b_player_ids)
+
+        max_playing_handicap = competition.max_playing_handicap
+
+        # Los sobres de los capitanes deciden, si los hay (FE #655). Lo que manda
+        # quien genera se comprueba antes de leer hándicaps (y de preguntar a la
+        # RFEG con la competición bloqueada): primero la inscripción, luego los lados
+        pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
+
+        # Quien no tiene la inscripcion aprobada, antes que las barras: sin
+        # inscripcion su color sale del defecto y su falta pareceria otra
+        if pairings:
+            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
+            # Los del organizador, cada uno en el lado de su equipo (21 nov 2026,
+            # D; antes, la #918 dejaba emparejar a quien no estaba en ninguno). Los
+            # de los sobres no cambian: cada capitán solo entrega a los de su equipo
+            if manual_pairings:
+                self._comprobar_lados(manual_pairings, team_a_ids, team_b_ids)
+
         # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
         (
             tee_ratings,
@@ -333,39 +355,6 @@ class GenerateMatchesUseCase:
             enrollment_map,
             refrescar_handicap_rfeg,
         )
-
-        players_per_team = round_entity.players_per_team_in_match()
-        team_a_ids = list(team_assignment.team_a_player_ids)
-        team_b_ids = list(team_assignment.team_b_player_ids)
-
-        max_playing_handicap = competition.max_playing_handicap
-
-        # Los sobres de los capitanes deciden, si los hay (FE #655)
-        pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
-
-        # Quien no tiene la inscripcion aprobada, antes que las barras: sin
-        # inscripcion su color sale del defecto y su falta pareceria otra
-        if pairings:
-            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
-            # Emparejar a mano solo exige la inscripción, no estar en un equipo:
-            # quien no esté en ninguno se lee como los demás (CodeRabbit, #918)
-            en_los_equipos = {*team_a_ids, *team_b_ids}
-            de_fuera = [
-                uid
-                for uid in dict.fromkeys(
-                    self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team)
-                )
-                if uid not in en_los_equipos
-            ]
-            if de_fuera and (golf_course is not None or not is_scratch):
-                await self._leer_jugadores(
-                    de_fuera,
-                    is_scratch,
-                    enrollment_map,
-                    refrescar_handicap_rfeg,
-                    user_handicap_map,
-                    user_gender_map,
-                )
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360). También en
@@ -492,6 +481,26 @@ class GenerateMatchesUseCase:
                 for uid in sin_inscripcion
             ]
         )
+
+    @staticmethod
+    def _comprobar_lados(
+        pairings: list[ManualPairingDTO], team_a_ids: list[UserId], team_b_ids: list[UserId]
+    ) -> None:
+        """Cada emparejado a mano, en el lado de su equipo.
+
+        Raises:
+            PairingPlayerNotInTeamError: Si uno no está en ningún equipo, o está
+                en el lado del contrario. Sin nombres: lo mandó el organizador
+        """
+        equipo_a = {uid.value for uid in team_a_ids}
+        equipo_b = {uid.value for uid in team_b_ids}
+        for pairing in pairings:
+            if not set(pairing.team_a_player_ids) <= equipo_a or not (
+                set(pairing.team_b_player_ids) <= equipo_b
+            ):
+                raise PairingPlayerNotInTeamError(
+                    "Cada jugador emparejado tiene que ir en el lado de su equipo"
+                )
 
     @staticmethod
     def _jugadores_que_juegan(
