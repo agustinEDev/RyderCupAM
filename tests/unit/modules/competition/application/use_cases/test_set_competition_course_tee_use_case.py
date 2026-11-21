@@ -17,6 +17,9 @@ Solo el organizador o un admin, también con la competición en curso:
 | En curso                                                 | Sí                                      |
 | Terminada                                                | 409 TEE_CHANGE_CLOSED                   |
 | Uno que no se puede rehacer                              | 409, y no cambia nada de nadie          |
+| Las dos mujeres de un fourball con barras ya sin valorar | Las dos a la nueva, de una vez          |
+| Y un tercero no afectado con barras ya sin valorar       | 409 (todo o nada)                       |
+| Lo mismo en SCRATCH                                      | Las dos a la nueva; los demás, igual    |
 | El log                                                   | ids, sin nombres                        |
 """
 
@@ -207,6 +210,95 @@ class TestLaBarraDelCampo:
         assert await _del_campo(mundo, segundo) == {}
         assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
             TeeColor.YELLOW
+        )
+
+    async def test_course_tee_rebuilds_two_affected_partners_whose_saved_tee_is_gone(self):
+        """
+        Given un fourball en el segundo campo con las dos mujeres en el mismo bando,
+            guardadas las dos con blancas de mujer, que el campo ya no tiene
+        When el organizador fija azules allí para las mujeres
+        Then el partido se rehace de una vez con las dos en azules (ninguna se
+            resuelve con la barra guardada de la otra), y los hombres siguen igual
+        """
+        mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS))
+        segundo = list(mundo.campos.por_id)[1]
+        sin_valorar = (TeeColor.WHITE, Gender.FEMALE)
+        partido = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            campo=1,
+            barras={mundo.jugadora: sin_valorar, mundo.capitana: sin_valorar},
+        )
+
+        await _para_todas(mundo, segundo, TeeColor.BLUE)
+
+        rehecho = await mundo.el_partido(partido)
+        for mujer in (mundo.jugadora, mundo.capitana):
+            foto = rehecho.find_player(mujer)
+            assert (foto.tee_color, foto.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
+        for hombre in (mundo.capitan_b, mundo.otro):
+            assert rehecho.find_player(hombre).tee_color == TeeColor.YELLOW
+
+    async def test_course_tee_in_scratch_rebuilds_both_affected_partners_at_once(self):
+        """
+        Given una Ryder SCRATCH con el fourball de las dos mujeres en el segundo
+            campo, guardadas las dos con blancas de mujer
+        When el organizador fija azules allí para las mujeres
+        Then las dos pasan a azules de mujer y los hombres siguen con su foto
+        """
+        mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS), play_mode="SCRATCH")
+        segundo = list(mundo.campos.por_id)[1]
+        sin_valorar = (TeeColor.WHITE, Gender.FEMALE)
+        partido = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            campo=1,
+            barras={mundo.jugadora: sin_valorar, mundo.capitana: sin_valorar},
+        )
+        antes = await mundo.el_partido(partido)
+        hombres = [antes.find_player(h) for h in (mundo.capitan_b, mundo.otro)]
+
+        await _para_todas(mundo, segundo, TeeColor.BLUE)
+
+        rehecho = await mundo.el_partido(partido)
+        for mujer in (mundo.jugadora, mundo.capitana):
+            foto = rehecho.find_player(mujer)
+            assert (foto.tee_color, foto.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
+        assert [rehecho.find_player(h.user_id) for h in hombres] == hombres
+
+    async def test_course_tee_with_an_unaffected_player_whose_saved_tee_is_gone_changes_nothing(
+        self,
+    ):
+        """
+        Given el mismo fourball, y además un hombre (no afectado) guardado con
+            blancas de hombre, que el campo ya no tiene
+        When el organizador fija azules allí para las mujeres
+        Then 409 PENDING_GAME_NOT_RECALCULABLE: su foto no se toca y con ella no se
+            puede rehacer; no cambia nada de nadie
+        """
+        mundo = await _Mundo().montar(campos=(ALDEAMAYOR, SIN_ROJAS))
+        segundo = list(mundo.campos.por_id)[1]
+        sin_valorar = (TeeColor.WHITE, Gender.FEMALE)
+        partido = await mundo.partido(
+            [mundo.jugadora, mundo.capitana],
+            [mundo.capitan_b, mundo.otro],
+            formato=MatchFormat.FOURBALL,
+            campo=1,
+            barras={
+                mundo.jugadora: sin_valorar,
+                mundo.capitana: sin_valorar,
+                mundo.otro: (TeeColor.WHITE, Gender.MALE),
+            },
+        )
+
+        with pytest.raises(PendingGameNotRecalculableError):
+            await _para_todas(mundo, segundo, TeeColor.BLUE)
+
+        assert await _del_campo(mundo, segundo) == {}
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.WHITE
         )
 
     async def test_course_tee_logs_who_where_and_how_many(self, caplog):

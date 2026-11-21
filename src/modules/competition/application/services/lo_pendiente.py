@@ -9,10 +9,11 @@ y lo que depende de ella; los demás se quedan como se generaron.
 Lo usan los tres cambios de barras: la general de una inscripción, la propia de
 una inscripción en un campo (R1) y la del campo para todos los de un género (R2).
 Por eso trabaja sobre un espacio de trabajo: cada partido o partida se bloquea
-una sola vez y se rehace sobre una copia, de modo que si un mismo partido cambia
-para dos jugadores (un fourball con las dos de un género), el segundo parte de
-lo que dejó el primero. Nada se escribe hasta `guardar`: si algo falla antes, no
-se ha tocado nada.
+una sola vez y se rehace sobre una copia. Si un mismo partido cambia para varios
+jugadores a la vez (el R2 en un fourball con las dos de un género), se rehace de
+una sola vez con las barras nuevas de todos: ninguno se resuelve con la barra
+guardada de otro que también cambia. Nada se escribe hasta `guardar`: si algo
+falla antes, no se ha tocado nada.
 """
 
 import copy
@@ -96,30 +97,48 @@ class LoPendiente:
         solo_en: GolfCourseId | None = None,
     ) -> None:
         """
-        Rehace en el espacio de trabajo lo que le queda por jugar a un jugador.
+        Rehace en el espacio de trabajo lo que le queda por jugar a un jugador
+        (`rehacer_varios` con él solo).
 
-        En cada campo juega su barra efectiva (`BarrasDelCampo.color_de`: su cambio
-        propio, la del campo para su género o su general), con los cambios de ese
-        campo leídos o los de `cambios` si se pasan (los nuevos de quien cambia).
+        Raises:
+            Lo mismo que `rehacer_varios`
+        """
+        await self.rehacer_varios(competition, {user_id: (genero, general)}, cambios, solo_en)
+
+    async def rehacer_varios(
+        self,
+        competition: Competition,
+        jugadores: Mapping[UserId, tuple[Gender | None, TeeColor | None]],
+        cambios: Mapping[GolfCourseId, BarrasDelCampo] | None = None,
+        solo_en: GolfCourseId | None = None,
+    ) -> None:
+        """
+        Rehace en el espacio de trabajo lo que les queda por jugar a varios
+        jugadores que cambian a la vez; cada partido, de una vez con todos los
+        suyos que cambian (los demás, con su foto).
+
+        En cada campo juega cada uno su barra efectiva (`BarrasDelCampo.color_de`:
+        su cambio propio, la del campo para su género o su general), con los
+        cambios de ese campo leídos o los de `cambios` si se pasan (los nuevos).
 
         Args:
-            general: Su barra general (la nueva, si es lo que cambia)
+            jugadores: Por cada uno, su género y su barra general (la nueva, si es
+                lo que cambia)
             cambios: Los cambios nuevos de algún campo, en vez de los guardados
             solo_en: Solo lo de ese campo
 
         Raises:
-            TeeNotRatedForPlayerError: Si su barra no está valorada en el campo de
-                algo pendiente
+            TeeNotRatedForPlayerError: Si la barra de uno no está valorada en el
+                campo de algo pendiente
             PendingGameNotRecalculableError: Si algo pendiente no se puede rehacer
-                por otra cosa que su barra
+                por otra cosa que sus barras
         """
         rondas = await self._rondas_de(competition)
-        await self._rehacer_partidos(
-            competition, rondas, user_id, genero, general, cambios, solo_en
-        )
-        await self._rehacer_partidas(
-            competition, rondas, user_id, genero, general, cambios, solo_en
-        )
+        await self._rehacer_partidos(competition, rondas, jugadores, cambios, solo_en)
+        for user_id, (genero, general) in jugadores.items():
+            await self._rehacer_partidas(
+                competition, rondas, user_id, genero, general, cambios, solo_en
+            )
 
     async def _color_en(
         self,
@@ -146,33 +165,40 @@ class LoPendiente:
         self,
         competition: Competition,
         rondas: dict[RoundId, Round],
-        user_id: UserId,
-        genero: Gender | None,
-        general: TeeColor | None,
+        jugadores: Mapping[UserId, tuple[Gender | None, TeeColor | None]],
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
         solo_en: GolfCourseId | None,
     ) -> None:
         """
-        Sus partidos de Ryder sin empezar. Se filtran con la lectura sin bloqueo, se
-        bloquean solo esos (una vez) y se vuelve a mirar con el bloqueo: lo que esté
-        en juego ni se bloquea.
+        Sus partidos de Ryder sin empezar, cada uno con todos los suyos que cambian.
+        Se filtran con la lectura sin bloqueo, se bloquean solo esos (una vez) y se
+        vuelve a mirar con el bloqueo: lo que esté en juego ni se bloquea.
         """
         if not rondas:
             return
-        for leido in await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id):
-            ronda = rondas[leido.round_id]
-            if solo_en is not None and ronda.golf_course_id != solo_en:
-                continue
-            if leido.status != MatchStatus.SCHEDULED:
-                continue
-            copia = await self._partido_de_trabajo(leido.id)
+        afectados: dict[MatchId, tuple[Round, list[UserId]]] = {}
+        for user_id in jugadores:
+            for leido in await self._uow.matches.find_by_rounds_for_player(list(rondas), user_id):
+                ronda = rondas[leido.round_id]
+                if solo_en is not None and ronda.golf_course_id != solo_en:
+                    continue
+                if leido.status != MatchStatus.SCHEDULED:
+                    continue
+                afectados.setdefault(leido.id, (ronda, []))[1].append(user_id)
+
+        for match_id, (ronda, suyos) in afectados.items():
+            copia = await self._partido_de_trabajo(match_id)
             if copia is None or copia.status != MatchStatus.SCHEDULED:
                 continue
-            color = await self._color_en(
-                competition, ronda.golf_course_id, user_id, genero, general, cambios
-            )
+            nuevas: dict[UserId, tuple[TeeColor | None, Gender | None]] = {}
+            for user_id in suyos:
+                genero, general = jugadores[user_id]
+                color = await self._color_en(
+                    competition, ronda.golf_course_id, user_id, genero, general, cambios
+                )
+                nuevas[user_id] = (color, genero)
             bandos = await self._del_partido.con_otra_barra(
-                ronda, competition, copia, user_id, color, genero, self.contextos
+                ronda, competition, copia, nuevas, self.contextos
             )
             if bandos is not None:
                 copia.recalcular_jugadores(*bandos)

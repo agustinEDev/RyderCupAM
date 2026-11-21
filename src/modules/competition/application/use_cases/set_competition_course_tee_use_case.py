@@ -131,21 +131,20 @@ class SetCompetitionCourseTeeUseCase:
             usuarios = {
                 u.id: u for u in await self._usuarios.find_by_ids([i.user_id for i in inscritos])
             }
+            afectados = {
+                inscripcion.user_id: (genero, inscripcion.tee_color)
+                for inscripcion in inscritos
+                if (usuario := usuarios.get(inscripcion.user_id)) is not None
+                and usuario.gender == genero
+                and inscripcion.user_id not in guardados.propias
+            }
             try:
-                for inscripcion in inscritos:
-                    usuario = usuarios.get(inscripcion.user_id)
-                    if usuario is None or usuario.gender != genero:
-                        continue
-                    if inscripcion.user_id in guardados.propias:
-                        continue
-                    await pendiente.rehacer(
-                        competition,
-                        inscripcion.user_id,
-                        genero,
-                        inscripcion.tee_color,
-                        cambios={campo: nuevos},
-                        solo_en=campo,
-                    )
+                # Todos de una vez: en un partido con varios afectados (un fourball
+                # con las dos de un género) ninguno se resuelve con la barra
+                # guardada de otro que también cambia
+                await pendiente.rehacer_varios(
+                    competition, afectados, cambios={campo: nuevos}, solo_en=campo
+                )
             except TeeNotRatedForPlayerError as e:
                 raise TeeNotAvailableError(
                     "Con ese cambio, a un jugador no le valen las barras en algo pendiente"
