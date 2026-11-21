@@ -4,6 +4,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_add_golf_course_to_competition_use_case,
@@ -11,12 +12,14 @@ from src.config.dependencies import (
     get_current_user,
     get_remove_golf_course_from_competition_use_case,
     get_reorder_golf_courses_use_case,
+    get_set_competition_course_tee_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseBodyDTO,
     AddGolfCourseRequestDTO,
     AddGolfCourseResponseDTO,
+    CompetitionCourseTeeResponseDTO,
     CompetitionGolfCourseResponseDTO,
     GolfCourseDetailDTO,
     HoleResponseDTO,
@@ -25,6 +28,7 @@ from src.modules.competition.application.dto.competition_dto import (
     ReorderGolfCourseIdsRequest,
     ReorderGolfCoursesRequestDTO,
     ReorderGolfCoursesResponseDTO,
+    SetCompetitionCourseTeeRequestDTO,
     TeeResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -43,13 +47,22 @@ from src.modules.competition.application.use_cases.remove_golf_course_use_case i
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
     ReorderGolfCoursesUseCase,
 )
+from src.modules.competition.application.use_cases.set_competition_course_tee_use_case import (
+    SetCompetitionCourseTeeUseCase,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.infrastructure.api.v1.errores_de_barras import (
+    ERRORES_DE_BARRAS,
+    respuesta_de_barras,
+)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 # Aliases for shared exceptions
 RemoveGCNotFoundError = CompetitionNotFoundError
@@ -249,3 +262,46 @@ async def list_competition_golf_courses(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al cargar campos de golf",
         ) from e
+
+
+class SetCourseTeeBody(BaseModel):
+    """La barra del campo para un género; null la quita (barras por campo)."""
+
+    gender: Gender = Field(..., description="MALE o FEMALE.")
+    tee_color: TeeColor | None = Field(
+        ..., description="Las barras de ese campo para ese género, o null para quitarlas."
+    )
+
+
+@router.put(
+    "/{competition_id}/courses/{golf_course_id}/tee",
+    response_model=CompetitionCourseTeeResponseDTO,
+    summary="Fijar la barra de un campo para todos los de un género",
+    description=(
+        "Solo el organizador o un admin, también con la competición en curso. Pisa la "
+        "barra general de los de ese género, no el cambio propio de nadie, y rehace lo "
+        "que les queda por jugar en ese campo: todo o nada."
+    ),
+    tags=["Competitions - Golf Courses"],
+)
+async def set_competition_course_tee(
+    competition_id: UUID,
+    golf_course_id: UUID,
+    body: SetCourseTeeBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SetCompetitionCourseTeeUseCase = Depends(get_set_competition_course_tee_use_case),
+):
+    """La barra de un campo para todos los de un género (barras por campo, 20 nov 2026)."""
+    try:
+        return await use_case.execute(
+            SetCompetitionCourseTeeRequestDTO(
+                competition_id=competition_id,
+                golf_course_id=golf_course_id,
+                gender=body.gender,
+                tee_color=body.tee_color,
+            ),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except ERRORES_DE_BARRAS as e:
+        return respuesta_de_barras(e)

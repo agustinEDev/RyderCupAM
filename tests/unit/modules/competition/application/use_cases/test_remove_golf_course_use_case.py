@@ -10,6 +10,7 @@ Verifica que:
 """
 
 from datetime import date
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -175,6 +176,64 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         # Verificar que el campo ya no está en la competición
         updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert len(updated_competition.golf_courses) == 0
+
+    async def test_remove_golf_course_also_removes_its_tee_changes(
+        self,
+        competition_uow: InMemoryUnitOfWork,
+        competition: Competition,
+        golf_course: GolfCourse,
+        creator_id: UserId,
+    ):
+        """
+        Given un campo de la competición con una barra fijada para las mujeres
+        When el organizador lo quita de la competición
+        Then sus cambios de barras se van con él (barras por campo, 20 nov 2026)
+        """
+        competition.add_golf_course(golf_course.id, CountryCode("ES"))
+        await competition_uow.competitions.update(competition)
+        await competition_uow.barras_por_campo.fijar_del_campo(
+            competition.id, golf_course.id, Gender.FEMALE, TeeColor.RED
+        )
+
+        await RemoveGolfCourseFromCompetitionUseCase(uow=competition_uow).execute(
+            RemoveGolfCourseRequestDTO(
+                competition_id=str(competition.id.value),
+                golf_course_id=str(golf_course.id.value),
+            ),
+            creator_id,
+        )
+
+        cambios = await competition_uow.barras_por_campo.del_campo(competition.id, golf_course.id)
+        assert cambios.por_genero == {}
+
+    async def test_remove_golf_course_locks_the_competition(
+        self,
+        competition_uow: InMemoryUnitOfWork,
+        competition: Competition,
+        golf_course: GolfCourse,
+        creator_id: UserId,
+    ):
+        """
+        Given un campo de la competición
+        When el organizador lo quita
+        Then la competición se lee con bloqueo: un cambio de barras en ese campo a la
+            vez no puede escribir filas de un campo que ya no es de la competición
+        """
+        competition.add_golf_course(golf_course.id, CountryCode("ES"))
+        await competition_uow.competitions.update(competition)
+        competition_uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=competition_uow.competitions.find_by_id_for_update
+        )
+
+        await RemoveGolfCourseFromCompetitionUseCase(uow=competition_uow).execute(
+            RemoveGolfCourseRequestDTO(
+                competition_id=str(competition.id.value),
+                golf_course_id=str(golf_course.id.value),
+            ),
+            creator_id,
+        )
+
+        competition_uow.competitions.find_by_id_for_update.assert_awaited_once_with(competition.id)
 
     async def test_should_fail_when_competition_not_found(
         self,

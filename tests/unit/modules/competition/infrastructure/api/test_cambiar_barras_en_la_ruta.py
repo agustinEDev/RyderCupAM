@@ -10,9 +10,9 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
-from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
+from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
+    PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
 )

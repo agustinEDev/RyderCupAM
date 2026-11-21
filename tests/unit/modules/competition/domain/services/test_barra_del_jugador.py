@@ -30,6 +30,7 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
     MISSING_TEE_COLOR,
 )
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.value_objects.gender import Gender
 
@@ -285,3 +286,127 @@ class TestBarraPorDefecto:
         barra = barra_sin_golpes(None, Gender.FEMALE, valoradas, valoradas)
 
         assert (barra.tee_color, barra.tee_gender) == (TeeColor.RED, Gender.FEMALE)
+
+
+class TestBarraEnElCampo:
+    """
+    Qué barra juega un jugador en un campo (barras por campo, 20 nov 2026). Gana la
+    primera que se cumpla:
+
+    | #  | Regla                                                         |
+    |----|---------------------------------------------------------------|
+    | R1 | su cambio propio para ese campo                               |
+    | R2 | la del campo para todos los de su género (no pisa R1)         |
+    | R3 | su barra general (o la habitual de su género), si el campo la |
+    |    | tiene para su género o mixta                                  |
+    | R4 | si no: sin barra válida en ese campo (el aviso de generar)    |
+    """
+
+    def _campo(self, propias=None, por_genero=None):
+        from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
+
+        return BarrasDelCampo(propias=propias or {}, por_genero=por_genero or {})
+
+    def test_barra_en_el_campo_su_cambio_propio_gana(self):
+        """
+        Given una mujer con cambio propio a azules y el campo con rojas para mujeres
+        When se busca su barra en ese campo
+        Then azules (R1)
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        ana = UserId.generate()
+        cambios = self._campo({ana: TeeColor.BLUE}, {Gender.FEMALE: TeeColor.RED})
+        valoradas = {("BLUE", "FEMALE"): ROJAS_M, ("RED", "FEMALE"): ROJAS_M}
+
+        barra = barra_en_el_campo(ana, None, Gender.FEMALE, cambios, valoradas)
+
+        assert (barra.tee_color, barra.tee_gender) == (TeeColor.BLUE, Gender.FEMALE)
+
+    def test_barra_en_el_campo_la_del_campo_para_su_genero(self):
+        """
+        Given una mujer sin cambio propio, con barra general amarilla, y el campo con
+            rojas para mujeres
+        When se busca su barra en ese campo
+        Then rojas (R2), aunque su general sea otra
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        cambios = self._campo(por_genero={Gender.FEMALE: TeeColor.RED})
+        valoradas = {("RED", "FEMALE"): ROJAS_M, ("YELLOW", "FEMALE"): AMARILLAS_M}
+
+        barra = barra_en_el_campo(
+            UserId.generate(), TeeColor.YELLOW, Gender.FEMALE, cambios, valoradas
+        )
+
+        assert barra.tee_color == TeeColor.RED
+
+    def test_barra_en_el_campo_la_del_campo_no_es_para_el_otro_genero(self):
+        """
+        Given un hombre y el campo con rojas fijadas para mujeres
+        When se busca su barra
+        Then la suya general (R3), no la de ellas
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        cambios = self._campo(por_genero={Gender.FEMALE: TeeColor.RED})
+        valoradas = {("YELLOW", "MALE"): AMARILLAS_H, ("RED", "FEMALE"): ROJAS_M}
+
+        barra = barra_en_el_campo(UserId.generate(), None, Gender.MALE, cambios, valoradas)
+
+        assert (barra.tee_color, barra.tee_gender) == (TeeColor.YELLOW, Gender.MALE)
+
+    def test_barra_en_el_campo_sin_cambios_su_general(self):
+        """
+        Given una mujer con barra general azul y sin cambios en el campo
+        When se busca su barra
+        Then azules (R3)
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        barra = barra_en_el_campo(
+            UserId.generate(),
+            TeeColor.BLUE,
+            Gender.FEMALE,
+            self._campo(),
+            {("BLUE", "FEMALE"): ROJAS_M},
+        )
+
+        assert barra.tee_color == TeeColor.BLUE and barra.tee_rating is ROJAS_M
+
+    def test_barra_en_el_campo_sin_la_suya_no_hay_otra_automatica(self):
+        """
+        Given una mujer con general azul en un campo sin azules para ella
+        When se busca su barra
+        Then sin valorar (R4): no se elige otra sola; el aviso dirá azules
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        valoradas = {("RED", "FEMALE"): ROJAS_M}
+        barra = barra_en_el_campo(
+            UserId.generate(), TeeColor.BLUE, Gender.FEMALE, self._campo(), valoradas
+        )
+
+        assert (barra.tee_color, barra.tee_rating) == (TeeColor.BLUE, None)
+        assert lo_que_le_falta(barra, Gender.FEMALE, valoradas) == (MISSING_TEE_COLOR, "BLUE")
+
+    def test_barra_en_el_campo_en_scratch_con_tarjeta(self):
+        """
+        Given SCRATCH y el campo con blancas de mujer solo con tarjeta, fijadas para ellas
+        When se busca su barra con las de tarjeta
+        Then blancas de mujer
+        """
+        from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+
+        cambios = self._campo(por_genero={Gender.FEMALE: TeeColor.WHITE})
+
+        barra = barra_en_el_campo(
+            UserId.generate(),
+            None,
+            Gender.FEMALE,
+            cambios,
+            {},
+            con_tarjeta={("WHITE", "FEMALE"): object()},
+        )
+
+        assert (barra.tee_color, barra.tee_gender) == (TeeColor.WHITE, Gender.FEMALE)

@@ -4,6 +4,9 @@ import copy
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from src.modules.competition.domain.repositories.barras_por_campo_repository_interface import (
+    BarrasPorCampoRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
@@ -56,6 +59,7 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
     InMemoryCountryRepository,
 )
 
+from .in_memory_barras_por_campo_repository import InMemoryBarrasPorCampoRepository
 from .in_memory_competition_repository import InMemoryCompetitionRepository
 from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
@@ -91,6 +95,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._partidas = InMemoryPartidaRepository()
         self._golpes_de_partida = InMemoryGolpeDePartidaRepository()
         self._esperas = InMemoryEsperaEnFranjaRepository()
+        self._barras_por_campo = InMemoryBarrasPorCampoRepository(self._enrollments)
         self.committed = False
 
     @property
@@ -108,6 +113,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
         return self._handicap_updates
+
+    @property
+    def barras_por_campo(self) -> BarrasPorCampoRepositoryInterface:
+        return self._barras_por_campo
 
     @property
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:
@@ -200,8 +209,13 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
             self._esperas,
             self._partidas,
             self._golpes_de_partida,
+            self._barras_por_campo,
         ]
-        copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
+        # Cada repositorio se copia a sí mismo como él mismo: el de barras por
+        # campo mira el de inscripciones vivo, y al reponer debe seguir haciéndolo
+        # (no una copia desconectada de antes del savepoint)
+        memo: dict[int, object] = {id(repo): repo for repo in repositorios}
+        copias = [copy.deepcopy(repo.__dict__, memo) for repo in repositorios]
         try:
             yield
         except BaseException:

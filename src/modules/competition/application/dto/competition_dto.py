@@ -26,6 +26,8 @@ from src.modules.competition.domain.value_objects.overall_standing import Overal
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.shared.domain.value_objects.gender import Gender
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
 # lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
@@ -1606,3 +1608,26 @@ class CompetitionSummaryDTO(BaseModel):
     visibility: str = Field(..., description="PUBLIC o PRIVATE.")
     start_date: date = Field(..., description="Primer día.")
     end_date: date = Field(..., description="Último día.")
+
+
+class SetCompetitionCourseTeeRequestDTO(BaseModel):
+    """
+    DTO de entrada para la barra de un campo para todos los de un género (R2,
+    barras por campo). Sin barras (null) se quita.
+    """
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    golf_course_id: UUID = Field(..., description="ID del campo de la competición.")
+    gender: Gender = Field(..., description="MALE o FEMALE.")
+    tee_color: TeeColor | None = Field(
+        ..., description="Las barras de ese campo para ese género, o null para quitarlas."
+    )
+
+
+class CompetitionCourseTeeResponseDTO(BaseModel):
+    """DTO de salida de la barra de un campo para un género."""
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    golf_course_id: UUID = Field(..., description="ID del campo.")
+    gender: str = Field(..., description="MALE o FEMALE.")
+    tee_color: str | None = Field(None, description="La barra fijada, o null si se quitó.")

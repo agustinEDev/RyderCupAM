@@ -18,9 +18,10 @@ from src.modules.competition.application.services.handicaps_de_la_competicion im
     para_jugar_la_ryder,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.services.barra_del_jugador import (
-    barra_del_jugador,
-    barra_sin_golpes,
+from src.modules.competition.domain.services.barra_del_jugador import barra_en_el_campo
+from src.modules.competition.domain.value_objects.barras_del_campo import (
+    SIN_CAMBIOS,
+    BarrasDelCampo,
 )
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
@@ -60,8 +61,14 @@ class MatchPlayersBuilder:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
-        """Los jugadores de los dos equipos, con los golpes que da su formato."""
+        """
+        Los jugadores de los dos equipos, con los golpes que da su formato.
+
+        `cambios`: los cambios de barras del campo del partido (R1 y R2); cada uno
+        juega desde `barra_en_el_campo`.
+        """
         args = (
             enrollment_map,
             tee_ratings,
@@ -73,6 +80,7 @@ class MatchPlayersBuilder:
             user_gender_map,
             max_playing_handicap,
             holes_by_tee,
+            cambios,
         )
         if match_format == MatchFormat.SINGLES:
             a_player, b_player = self._build_singles_match_players(
@@ -93,6 +101,7 @@ class MatchPlayersBuilder:
         user_handicap_map: Mapping[str, Decimal],
         user_gender_map: Mapping[str, Gender | None],
         con_tarjeta: Mapping[TeeKey, object] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> tuple[TeeColor, Gender | None, TeeRating | None, Decimal]:
         """
         Resuelve datos de un jugador: tee colour, gender, tee rating e handicap index.
@@ -106,10 +115,9 @@ class MatchPlayersBuilder:
         enrollment = enrollment_map.get(str(user_id.value))
         de_la_inscripcion = enrollment.tee_color if enrollment else None
         genero = user_gender_map.get(str(user_id.value))
-        barra = (
-            barra_del_jugador(de_la_inscripcion, genero, tee_ratings)
-            if con_tarjeta is None
-            else barra_sin_golpes(de_la_inscripcion, genero, tee_ratings, con_tarjeta)
+        # La regla única de qué barra juega en este campo (R1-R4)
+        barra = barra_en_el_campo(
+            user_id, de_la_inscripcion, genero, cambios, tee_ratings, con_tarjeta
         )
 
         # El que cuenta en la competición: el propio, si no el del perfil
@@ -158,6 +166,7 @@ class MatchPlayersBuilder:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURBALL usando el método diferencial WHS.
@@ -181,6 +190,7 @@ class MatchPlayersBuilder:
                     user_handicap_map,
                     user_gender_map,
                     con_tarjeta=holes_by_tee or {},
+                    cambios=cambios,
                 )
                 team_a_players.append(
                     MatchPlayer.create(
@@ -201,6 +211,7 @@ class MatchPlayersBuilder:
                     user_handicap_map,
                     user_gender_map,
                     con_tarjeta=holes_by_tee or {},
+                    cambios=cambios,
                 )
                 team_b_players.append(
                     MatchPlayer.create(
@@ -220,7 +231,12 @@ class MatchPlayersBuilder:
 
         for uid in all_ids:
             tee_color, tee_gen, tee_rating, hi = self.resolve_player_data(
-                uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                uid,
+                enrollment_map,
+                tee_ratings,
+                user_handicap_map,
+                user_gender_map,
+                cambios=cambios,
             )
             if not tee_rating:
                 raise TeeColorNotFoundError(
@@ -272,6 +288,7 @@ class MatchPlayersBuilder:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> tuple["MatchPlayer", "MatchPlayer"]:
         """
         Construye MatchPlayers para SINGLES usando el método diferencial WHS.
@@ -292,6 +309,7 @@ class MatchPlayersBuilder:
             user_gender_map,
             # En SCRATCH, el género también de las barras con tarjeta sin valorar
             con_tarjeta=(holes_by_tee or {}) if is_scratch else None,
+            cambios=cambios,
         )
         tee_color_b, tee_gen_b, tee_rating_b, hi_b = self.resolve_player_data(
             b_player_id,
@@ -301,6 +319,7 @@ class MatchPlayersBuilder:
             user_gender_map,
             # En SCRATCH, el género también de las barras con tarjeta sin valorar
             con_tarjeta=(holes_by_tee or {}) if is_scratch else None,
+            cambios=cambios,
         )
 
         if is_scratch:
@@ -377,6 +396,7 @@ class MatchPlayersBuilder:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURSOMES usando el método diferencial WHS.
@@ -403,6 +423,7 @@ class MatchPlayersBuilder:
                     user_handicap_map,
                     user_gender_map,
                     con_tarjeta=holes_by_tee or {},
+                    cambios=cambios,
                 )
                 team_a_players.append(
                     MatchPlayer.create(
@@ -423,6 +444,7 @@ class MatchPlayersBuilder:
                     user_handicap_map,
                     user_gender_map,
                     con_tarjeta=holes_by_tee or {},
+                    cambios=cambios,
                 )
                 team_b_players.append(
                     MatchPlayer.create(
@@ -443,7 +465,12 @@ class MatchPlayersBuilder:
 
         for uid in all_ids:
             tee_color, tee_gen, tee_rating, hi = self.resolve_player_data(
-                uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                uid,
+                enrollment_map,
+                tee_ratings,
+                user_handicap_map,
+                user_gender_map,
+                cambios=cambios,
             )
             if not tee_rating:
                 raise TeeColorNotFoundError(

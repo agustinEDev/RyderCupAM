@@ -52,6 +52,10 @@ from src.modules.competition.domain.services.barra_del_jugador import (
     lo_que_le_falta,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.barras_del_campo import (
+    SIN_CAMBIOS,
+    BarrasDelCampo,
+)
 from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
@@ -308,6 +312,11 @@ class GenerateMatchesUseCase:
 
         # 8. Obtener campo de golf y tees
         golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+        # Los cambios de barras de este campo (R1 y R2): cada uno juega desde
+        # `barra_en_el_campo`, también para el aviso de quién no tiene barras
+        cambios = await self._uow.barras_por_campo.del_campo(
+            round_entity.competition_id, round_entity.golf_course_id
+        )
 
         # 9. Determinar modo de juego
         is_scratch = competition.play_mode == PlayMode.SCRATCH
@@ -353,6 +362,7 @@ class GenerateMatchesUseCase:
                 tee_ratings=tee_ratings,
                 user_handicap_map=user_handicap_map,
                 user_gender_map=user_gender_map,
+                cambios=cambios,
             )
 
         # 11. Eliminar partidos existentes (re-generación)
@@ -378,6 +388,7 @@ class GenerateMatchesUseCase:
                 user_gender_map,
                 max_playing_handicap,
                 holes_by_tee,
+                cambios,
             )
         else:
             creados = await self._generate_auto(
@@ -395,6 +406,7 @@ class GenerateMatchesUseCase:
                 user_gender_map,
                 max_playing_handicap,
                 holes_by_tee,
+                cambios,
             )
 
         # 13. Transicionar ronda
@@ -493,6 +505,7 @@ class GenerateMatchesUseCase:
         tee_ratings: Mapping[TeeKey, TeeRating],
         user_handicap_map: Mapping[str, Decimal],
         user_gender_map: Mapping[str, Gender | None],
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> None:
         """
         Raises:
@@ -502,7 +515,12 @@ class GenerateMatchesUseCase:
         sin_barras = []
         for uid in jugadores:
             tee_color, _, tee_rating, _ = self._match_players.resolve_player_data(
-                uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                uid,
+                enrollment_map,
+                tee_ratings,
+                user_handicap_map,
+                user_gender_map,
+                cambios=cambios,
             )
             falta = lo_que_le_falta(
                 BarraDelJugador(tee_color, None, tee_rating),
@@ -609,6 +627,7 @@ class GenerateMatchesUseCase:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> list[Match]:
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
@@ -643,6 +662,7 @@ class GenerateMatchesUseCase:
                 user_gender_map,
                 max_playing_handicap,
                 holes_by_tee,
+                cambios,
             )
             match = Match.create(
                 round_id=round_entity.id,
@@ -674,6 +694,7 @@ class GenerateMatchesUseCase:
         user_gender_map: Mapping[str, Gender | None],
         max_playing_handicap: int | None = None,
         holes_by_tee: Mapping[TeeKey, list[int]] | None = None,
+        cambios: BarrasDelCampo = SIN_CAMBIOS,
     ) -> list[Match]:
         """Genera partidos según emparejamientos ya decididos.
 
@@ -701,6 +722,7 @@ class GenerateMatchesUseCase:
                 user_gender_map,
                 max_playing_handicap,
                 holes_by_tee,
+                cambios,
             )
 
             match = Match.create(

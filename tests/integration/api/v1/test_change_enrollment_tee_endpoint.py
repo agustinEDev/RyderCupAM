@@ -88,6 +88,8 @@ async def _montar(client: AsyncClient) -> tuple[dict, dict, dict, str]:
     aceptada = await inscrito_por_invitacion(
         client, organizador["cookies"], competicion["id"], jugadora
     )
+    # La competición, a mano de quien la necesite (barras por campo)
+    organizador["competition_id"] = competicion["id"]
     return organizador, jugadora, otro, aceptada["enrollment_id"]
 
 
