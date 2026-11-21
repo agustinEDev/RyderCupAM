@@ -343,6 +343,8 @@ class TeeNotAvailableError(Exception):
       está valorada en lo que se rehace.
     - Con la general (o la habitual) en un campo así: la subclase
       `TeeNotOnPendingCourseError`, con su propio código.
+    - Al quitar una fijada, la que quedaría no vale en un campo así: la subclase
+      `TeeRemovalLeavesNoValidTeeError`, con su propio texto.
     """
 
     error_code = "TEE_NOT_AVAILABLE"
@@ -363,6 +365,15 @@ class TeeNotOnPendingCourseError(TeeNotAvailableError):
     """
 
     error_code = "TEE_NOT_ON_PENDING_COURSE"
+
+
+class TeeRemovalLeavesNoValidTeeError(TeeNotAvailableError):
+    """
+    Al quitar una barra fijada en un campo (el cambio propio, R1, o la del campo
+    para un género, R2), la que pasaría a jugar allí (la del campo, la general o
+    la habitual) no vale y le queda algo por jugar en él. Mismo código que
+    `TeeNotAvailableError`, con su propio texto.
+    """
 
 
 class TeeChangeClosedError(Exception):

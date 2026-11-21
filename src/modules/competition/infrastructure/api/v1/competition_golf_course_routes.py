@@ -280,7 +280,9 @@ class SetCourseTeeBody(BaseModel):
     description=(
         "Solo el organizador o un admin, también con la competición en curso. Pisa la "
         "barra general de los de ese género, no el cambio propio de nadie, y rehace lo "
-        "que les queda por jugar en ese campo: todo o nada."
+        "que les queda por jugar en ese campo: todo o nada. 422 TEE_NOT_AVAILABLE si "
+        "ese campo no tiene esa barra para ese género, o si al quitarla (null) a alguno "
+        "con algo por jugar allí no le valdría la que quedaría (texto propio)."
     ),
     tags=["Competitions - Golf Courses"],
 )

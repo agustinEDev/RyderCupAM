@@ -55,7 +55,6 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
-    TeeNotAvailableError,
     TeeNotOnPendingCourseError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_tee_use_case import (
@@ -765,19 +764,20 @@ class TestQueBarras:
 
     @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
     @pytest.mark.parametrize("fijada", ["propia", "del campo"])
-    async def test_change_tee_with_a_set_course_tee_no_longer_valid_there_is_not_available(
+    async def test_change_tee_with_an_old_set_course_tee_no_longer_valid_there_saves_it(
         self, play_mode, fijada
     ):
         """
         Given un partido pendiente en un campo cuya barra fijada para ella (su
             cambio propio o la del campo para las mujeres, en verdes) ya no vale allí
-        When la jugadora cambia su general a rojas, que allí valen
-        Then 422 TEE_NOT_AVAILABLE, no TEE_NOT_ON_PENDING_COURSE: lo que no vale es
-            la barra fijada de ese campo, no la general; y no cambia nada
+            (en SCRATCH, verdes sin tarjeta)
+        When la jugadora cambia su general a rojas
+        Then se guardan: allí juega la fijada, no la general, así que ese campo ni
+            cambia ni se comprueba; su partido queda como estaba
         """
         mundo = await _Mundo().montar(play_mode=play_mode)
         campo = next(iter(mundo.campos.por_id))
-        await mundo.partido([mundo.jugadora], [mundo.otro])
+        partido = await mundo.partido([mundo.jugadora], [mundo.otro])
         if fijada == "propia":
             await mundo.uow.barras_por_campo.fijar_propia(mundo.inscripcion, campo, TeeColor.GREEN)
         else:
@@ -785,11 +785,34 @@ class TestQueBarras:
                 mundo.competition_id, campo, Gender.FEMALE, TeeColor.GREEN
             )
 
-        with pytest.raises(TeeNotAvailableError) as error:
-            await mundo.cambiar(TeeColor.RED)
+        await mundo.cambiar(TeeColor.RED)
 
-        assert error.value.error_code == "TEE_NOT_AVAILABLE"
-        assert await mundo.barras_guardadas() is None
+        assert await mundo.barras_guardadas() == TeeColor.RED
+        assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
+            TeeColor.YELLOW
+        )
+
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_change_tee_with_an_old_own_tee_on_a_pending_tee_group_course_saves_it(
+        self, play_mode
+    ):
+        """
+        Given un stroke play con una partida suya que aún no salió en Aldeamayor y
+            allí su cambio propio en verdes, que ya no valen
+        When la jugadora cambia su general a amarillas
+        Then se guardan: en ese campo juega la fijada; su partida queda como estaba
+        """
+        mundo = await _Mundo().montar(play_mode=play_mode, tipo=TournamentType.MEDAL)
+        partida = await mundo.partida_con(mundo.jugadora)
+        await mundo.uow.barras_por_campo.fijar_propia(
+            mundo.inscripcion, next(iter(mundo.campos.por_id)), TeeColor.GREEN
+        )
+
+        await mundo.cambiar(TeeColor.YELLOW)
+
+        assert await mundo.barras_guardadas() == TeeColor.YELLOW
+        [ella] = (await mundo.la_partida(partida)).jugadores
+        assert ella.tee_color == TeeColor.YELLOW and ella.tee_gender == Gender.MALE
 
     async def test_change_tee_of_a_player_without_gender_accepts_a_mixed_tee(self):
         """

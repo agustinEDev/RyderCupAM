@@ -28,7 +28,6 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError,
     TeeChangeClosedError,
     TeeNotAvailableError,
-    TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -146,37 +145,16 @@ class ChangeEnrollmentCourseTeeUseCase:
             if request.tee_color is not None:
                 propias[enrollment.user_id] = request.tee_color
             nuevos = BarrasDelCampo(propias=propias, por_genero=guardados.por_genero)
-            try:
-                await pendiente.rehacer(
-                    competition,
-                    enrollment.user_id,
-                    genero,
-                    enrollment.tee_color,
-                    cambios={campo: nuevos},
-                    solo_en=campo,
-                )
-            except TeeNotRatedForPlayerError as e:
-                # Al quitarlo (null) puede fallar su general: lo dice la comprobación
-                await pendiente.comprobar_que_vale(
-                    competition,
-                    enrollment.user_id,
-                    genero,
-                    enrollment.tee_color,
-                    cambios={campo: nuevos},
-                    solo_en=campo,
-                )
-                raise TeeNotAvailableError(
-                    "Esas barras no están valoradas en el campo de algo que le queda por jugar"
-                ) from e
-            # En SCRATCH `rehacer` no valora: al quitarlo, la que pasaría a jugar
-            # allí (la del campo, su general o la habitual) tiene que valer
-            await pendiente.comprobar_que_vale(
+            # Comprueba también que nada pendiente quede sin barra válida: al
+            # quitarlo (null), la que pasaría a jugar allí tiene que valer
+            await pendiente.rehacer(
                 competition,
                 enrollment.user_id,
                 genero,
                 enrollment.tee_color,
                 cambios={campo: nuevos},
                 solo_en=campo,
+                cambia="del_campo",
             )
 
             antes = guardados.propias.get(enrollment.user_id)

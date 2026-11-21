@@ -46,8 +46,6 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotApprovedError,
     EnrollmentNotFoundError,
     TeeChangeClosedError,
-    TeeNotOnPendingCourseError,
-    TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -164,19 +162,9 @@ class ChangeEnrollmentTeeUseCase:
             )
             # Todo calculado antes de escribir nada: en cada campo su barra efectiva
             # (su cambio propio, la del campo para su género, o esta general)
-            try:
-                await pendiente.rehacer(competition, enrollment.user_id, genero, request.tee_color)
-            except TeeNotRatedForPlayerError as e:
-                # Con golpes: dice cuál falla (la general o la fijada de un campo)
-                await pendiente.comprobar_que_vale(
-                    competition, enrollment.user_id, genero, request.tee_color
-                )
-                raise TeeNotOnPendingCourseError(
-                    "Sus barras nuevas no están valoradas en el campo de algo que le "
-                    "queda por jugar"
-                ) from e
-            await pendiente.comprobar_que_vale(
-                competition, enrollment.user_id, genero, request.tee_color
+            # Comprueba también que nada pendiente quede sin barra válida
+            await pendiente.rehacer(
+                competition, enrollment.user_id, genero, request.tee_color, cambia="general"
             )
 
             antes = enrollment.tee_color

@@ -20,7 +20,7 @@ Solo el organizador o un admin, también con la competición en curso:
 | Las dos mujeres de un fourball con barras ya sin valorar | Las dos a la nueva, de una vez          |
 | Y un tercero no afectado con barras ya sin valorar       | 409 (todo o nada)                       |
 | Lo mismo en SCRATCH                                      | Las dos a la nueva; los demás, igual    |
-| null con algo pendiente y su general sin valer allí      | 422 TEE_NOT_ON_PENDING_COURSE (también SCRATCH) |
+| null con algo pendiente y su general sin valer allí      | 422 TEE_NOT_AVAILABLE, texto de quitarla (también SCRATCH) |
 | El log                                                   | ids, sin nombres                        |
 """
 
@@ -38,7 +38,7 @@ from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeChangeClosedError,
     TeeNotAvailableError,
-    TeeNotOnPendingCourseError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.application.use_cases.set_competition_course_tee_use_case import (
     SetCompetitionCourseTeeUseCase,
@@ -339,8 +339,8 @@ class TestQuitarlaConAlgoPendiente:
             azules, la general de la jugadora en azules, la barra del campo para
             las mujeres en blancas y un partido suyo pendiente allí
         When el organizador quita la barra del campo para las mujeres (null)
-        Then 422 TEE_NOT_ON_PENDING_COURSE: la jugadora pasaría a azules, que allí
-            no hay; y no cambia nada
+        Then 422 TEE_NOT_AVAILABLE con el texto de quitarla: la jugadora pasaría a
+            azules, que allí no hay; y no cambia nada
         """
         mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
         campo = next(iter(mundo.campos.por_id))
@@ -350,9 +350,10 @@ class TestQuitarlaConAlgoPendiente:
             [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)}
         )
 
-        with pytest.raises(TeeNotOnPendingCourseError):
+        with pytest.raises(TeeRemovalLeavesNoValidTeeError) as error:
             await _para_todas(mundo, campo, None)
 
+        assert error.value.error_code == "TEE_NOT_AVAILABLE"
         assert await _del_campo(mundo, campo) == {Gender.FEMALE: TeeColor.WHITE}
         assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
             TeeColor.WHITE

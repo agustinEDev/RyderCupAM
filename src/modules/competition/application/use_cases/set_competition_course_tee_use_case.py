@@ -27,8 +27,6 @@ from src.modules.competition.application.exceptions import (
     CourseNotInCompetitionError,
     CourseTeeNotAvailableError,
     TeeChangeClosedError,
-    TeeNotAvailableError,
-    TeeNotRatedForPlayerError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -138,39 +136,12 @@ class SetCompetitionCourseTeeUseCase:
                 and usuario.gender == genero
                 and inscripcion.user_id not in guardados.propias
             }
-            try:
-                # Todos de una vez: en un partido con varios afectados (un fourball
-                # con las dos de un género) ninguno se resuelve con la barra
-                # guardada de otro que también cambia
-                await pendiente.rehacer_varios(
-                    competition, afectados, cambios={campo: nuevos}, solo_en=campo
-                )
-            except TeeNotRatedForPlayerError as e:
-                # Al quitarla (null) puede fallar la general de alguno: lo dice
-                for user_id, (su_genero, general) in afectados.items():
-                    await pendiente.comprobar_que_vale(
-                        competition,
-                        user_id,
-                        su_genero,
-                        general,
-                        cambios={campo: nuevos},
-                        solo_en=campo,
-                    )
-                raise TeeNotAvailableError(
-                    "Con ese cambio, a un jugador no le valen las barras en algo pendiente"
-                ) from e
-
-            # En SCRATCH `rehacer` no valora: al quitarla, la que pasaría a jugar
-            # cada uno allí (su general o la habitual) tiene que valer
-            for user_id, (su_genero, general) in afectados.items():
-                await pendiente.comprobar_que_vale(
-                    competition,
-                    user_id,
-                    su_genero,
-                    general,
-                    cambios={campo: nuevos},
-                    solo_en=campo,
-                )
+            # Todos de una vez: en un partido con varios afectados (un fourball con
+            # las dos de un género) ninguno se resuelve con la barra guardada de
+            # otro que también cambia. Y que nada pendiente quede sin barra válida
+            await pendiente.rehacer_varios(
+                competition, afectados, cambios={campo: nuevos}, solo_en=campo, cambia="del_campo"
+            )
 
             antes = guardados.por_genero.get(genero)
             await self._uow.barras_por_campo.fijar_del_campo(

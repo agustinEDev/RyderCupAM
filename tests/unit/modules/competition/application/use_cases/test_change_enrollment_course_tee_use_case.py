@@ -17,7 +17,8 @@ que el cambio de la barra general (#912):
 | Terminada                                             | 409 TEE_CHANGE_CLOSED                     |
 | Inscripción no aprobada                               | 409 ENROLLMENT_NOT_APPROVED               |
 | Cambiar luego la general no toca ese campo            | R1 gana                                   |
-| null con algo pendiente allí y la general sin valer    | 422 TEE_NOT_ON_PENDING_COURSE (también SCRATCH) |
+| null con algo pendiente allí y la general sin valer    | 422 TEE_NOT_AVAILABLE, texto de quitarla (también SCRATCH) |
+| null con la del campo para su género sin valer         | 422 TEE_NOT_AVAILABLE (la fijada no vale) |
 | El log                                                | ids, sin nombres                          |
 """
 
@@ -36,7 +37,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     TeeChangeClosedError,
     TeeNotAvailableError,
-    TeeNotOnPendingCourseError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.application.use_cases.change_enrollment_course_tee_use_case import (
     ChangeEnrollmentCourseTeeUseCase,
@@ -211,9 +212,9 @@ class TestQuitarloConAlgoPendiente:
             general en azules, su cambio propio allí en blancas y un partido suyo
             pendiente en ese campo
         When se quita su cambio propio (null)
-        Then 422 TEE_NOT_ON_PENDING_COURSE (en SCRATCH también, aunque sin golpes
-            no se valore nada): pasaría a jugar azules, que allí no hay; y no
-            cambia nada
+        Then 422 TEE_NOT_AVAILABLE con el texto de quitarla (en SCRATCH también,
+            aunque sin golpes no se valore nada): pasaría a jugar azules, que allí
+            no hay; y no cambia nada
         """
         mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
         campo = next(iter(mundo.campos.por_id))
@@ -225,13 +226,41 @@ class TestQuitarloConAlgoPendiente:
             barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)},
         )
 
-        with pytest.raises(TeeNotOnPendingCourseError):
+        with pytest.raises(TeeRemovalLeavesNoValidTeeError) as error:
             await _fijar(mundo, campo, None)
 
+        assert error.value.error_code == "TEE_NOT_AVAILABLE"
         assert await _propia(mundo, campo) == TeeColor.WHITE
         assert (await mundo.el_partido(partido)).find_player(mundo.jugadora).tee_color == (
             TeeColor.WHITE
         )
+
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    async def test_course_tee_null_with_a_course_tee_no_longer_valid_is_not_available(
+        self, play_mode
+    ):
+        """
+        Given su cambio propio en blancas y, fijada para las mujeres en ese campo,
+            una barra que ya no vale allí (verdes), con un partido suyo pendiente
+        When se quita su cambio propio (null)
+        Then 422 TEE_NOT_AVAILABLE, pero no el de quitarla: lo que no vale es la
+            del campo, que pasaría a jugar
+        """
+        mundo = await _Mundo().montar(campos=(BLANCAS_DE_MUJER[play_mode],), play_mode=play_mode)
+        campo = next(iter(mundo.campos.por_id))
+        await _fijar(mundo, campo, TeeColor.WHITE)
+        await mundo.uow.barras_por_campo.fijar_del_campo(
+            mundo.competition_id, campo, Gender.FEMALE, TeeColor.GREEN
+        )
+        await mundo.partido(
+            [mundo.jugadora], [mundo.otro], barras={mundo.jugadora: (TeeColor.WHITE, Gender.FEMALE)}
+        )
+
+        with pytest.raises(TeeNotAvailableError) as error:
+            await _fijar(mundo, campo, None)
+
+        assert type(error.value) is TeeNotAvailableError
+        assert await _propia(mundo, campo) == TeeColor.WHITE
 
     async def test_course_tee_null_with_pending_where_the_general_is_valid_removes_it(self):
         """

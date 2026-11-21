@@ -14,16 +14,25 @@ jugadores a la vez (el R2 en un fourball con las dos de un género), se rehace d
 una sola vez con las barras nuevas de todos: ninguno se resuelve con la barra
 guardada de otro que también cambia. Nada se escribe hasta `guardar`: si algo
 falla antes, no se ha tocado nada.
+
+Y nada pendiente queda sin barra válida (21 nov 2026): `rehacer` comprueba en cada
+campo donde le queda algo la barra que jugaría allí, y dice cuál falla con un
+error fijo (ver `_comprobar`). Cambiando la general, los campos donde juega una
+barra fijada (su cambio propio o la del campo para su género) ni se rehacen ni se
+miran: allí no cambia nada.
 """
 
 import copy
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from typing import Literal
 
 from src.modules.competition.application.exceptions import (
     PendingGameNotRecalculableError,
     TeeNotAvailableError,
     TeeNotOnPendingCourseError,
+    TeeNotRatedForPlayerError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
@@ -57,6 +66,15 @@ from src.modules.user.domain.repositories.user_repository_interface import UserR
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
+# Qué barra cambia: la general de una inscripción, o una fijada en un campo (el
+# cambio propio, R1, o la del campo para un género, R2)
+QueCambia = Literal["general", "del_campo"]
+
+
+def _fijada(del_campo: BarrasDelCampo, user_id: UserId, genero: Gender | None) -> bool:
+    """Si en ese campo juega una barra fijada: su cambio propio o la de su género."""
+    return user_id in del_campo.propias or (genero is not None and genero in del_campo.por_genero)
+
 
 class LoPendiente:
     """El espacio de trabajo de un cambio de barras: lo que se rehace, y guardarlo."""
@@ -88,57 +106,67 @@ class LoPendiente:
         self._partidas_cambiadas: set[PartidaId] = set()
         # Los campos donde a cada uno le queda algo por jugar (visto con el bloqueo)
         self._campos_con_algo: dict[UserId, set[GolfCourseId]] = {}
+        # Si con golpes algo no estaba valorado: se dice al final cuál falla
+        self._sin_valorar = False
 
-    def campos_con_algo(self, user_id: UserId) -> set[GolfCourseId]:
-        """
-        Los campos donde, en lo rehecho hasta ahora, le queda algo por jugar: sus
-        partidos sin empezar y sus partidas que aún no salieron.
-        """
-        return set(self._campos_con_algo.get(user_id, set()))
-
-    async def comprobar_que_vale(
+    async def _comprobar(
         self,
         competition: Competition,
-        user_id: UserId,
-        genero: Gender | None,
-        general: TeeColor | None,
-        cambios: Mapping[GolfCourseId, BarrasDelCampo] | None = None,
-        solo_en: GolfCourseId | None = None,
+        jugadores: Mapping[UserId, tuple[Gender | None, TeeColor | None]],
+        cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
+        solo_en: GolfCourseId | None,
+        cambia: QueCambia,
     ) -> None:
         """
-        Que nada pendiente suyo quede sin barra válida (21 nov 2026): en cada campo
-        donde le queda algo por jugar (lo visto al rehacer), la barra que juega allí
-        (su cambio propio, la del campo para su género, su general o la habitual de
-        su género), con los cambios de ese campo leídos o los de `cambios`, tiene
-        que valer allí: la misma regla que ofrece el selector. Con golpes, `rehacer`
-        ya lo rechaza al valorar; en SCRATCH no valora nada, así que se mira aquí.
+        Que nada pendiente quede sin barra válida: en cada campo donde le queda algo
+        por jugar (lo visto al rehacer), la barra que jugaría allí (su cambio
+        propio, la del campo para su género, su general o la habitual de su
+        género) tiene que valer: la misma regla que ofrece el selector. Con golpes,
+        sin valoración no vale; en SCRATCH basta la tarjeta.
+
+        Jugadores y campos por orden de id, y si fallan varios, siempre el mismo
+        error, por este orden:
 
         Raises:
-            TeeNotOnPendingCourseError: Si no vale su general (o la habitual): antes
-                hay que fijar la de ese campo
-            TeeNotAvailableError: Si no vale la fijada para ese campo (su cambio
-                propio o la del campo para su género)
+            TeeNotAvailableError: Si no vale una barra fijada en un campo
+            TeeNotOnPendingCourseError: Si no, si no vale la general (o la
+                habitual) al cambiar la general: antes hay que fijar la de ese campo
+            TeeRemovalLeavesNoValidTeeError: Si no, si no vale la que quedaría al
+                quitar una fijada (R1 o R2)
+            TeeNotAvailableError: Si con golpes algo no estaba valorado y aquí
+                todo vale (no debería pasar: es la misma regla)
         """
-        for golf_course_id in self.campos_con_algo(user_id):
-            if solo_en is not None and golf_course_id != solo_en:
-                continue
-            del_campo = (cambios or {}).get(golf_course_id) or await self.cambios_del_campo(
-                competition, golf_course_id
+        fijadas: list[TeeColor] = []
+        otras: list[TeeColor] = []
+        for user_id in sorted(jugadores, key=lambda u: str(u.value)):
+            genero, general = jugadores[user_id]
+            for golf_course_id in sorted(
+                self._campos_con_algo.get(user_id, set()), key=lambda c: str(c.value)
+            ):
+                if solo_en is not None and golf_course_id != solo_en:
+                    continue
+                del_campo = await self._cambios_en(competition, golf_course_id, cambios)
+                jugaria = del_campo.color_de(user_id, general, genero) or barras_por_defecto(genero)
+                if await self._reglas.vale_en_el_campo(
+                    competition, golf_course_id, jugaria, genero, self.contextos
+                ):
+                    continue
+                (fijadas if _fijada(del_campo, user_id, genero) else otras).append(jugaria)
+        if fijadas:
+            raise TeeNotAvailableError(
+                f"La barra fijada en un campo ({fijadas[0].value}) ya no vale allí"
             )
-            jugaria = del_campo.color_de(user_id, general, genero) or barras_por_defecto(genero)
-            if await self._reglas.vale_en_el_campo(
-                competition, golf_course_id, jugaria, genero, self.contextos
-            ):
-                continue
-            if user_id in del_campo.propias or (
-                genero is not None and genero in del_campo.por_genero
-            ):
-                raise TeeNotAvailableError(
-                    f"La barra fijada en ese campo ({jugaria.value}) ya no vale allí"
-                )
+        if otras and cambia == "general":
             raise TeeNotOnPendingCourseError(
-                f"Las barras {jugaria.value} no valen en un campo donde le queda algo por jugar"
+                f"Las barras {otras[0].value} no valen en un campo donde le queda algo por jugar"
             )
+        if otras:
+            raise TeeRemovalLeavesNoValidTeeError(
+                f"Sin ella, las barras {otras[0].value} no valen en un campo donde le "
+                "queda algo por jugar"
+            )
+        if self._sin_valorar:
+            raise TeeNotAvailableError("Unas barras no están valoradas en algo pendiente")
 
     async def cambios_del_campo(
         self, competition: Competition, golf_course_id: GolfCourseId
@@ -158,6 +186,8 @@ class LoPendiente:
         general: TeeColor | None,
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None = None,
         solo_en: GolfCourseId | None = None,
+        *,
+        cambia: QueCambia,
     ) -> None:
         """
         Rehace en el espacio de trabajo lo que le queda por jugar a un jugador
@@ -166,7 +196,9 @@ class LoPendiente:
         Raises:
             Lo mismo que `rehacer_varios`
         """
-        await self.rehacer_varios(competition, {user_id: (genero, general)}, cambios, solo_en)
+        await self.rehacer_varios(
+            competition, {user_id: (genero, general)}, cambios, solo_en, cambia=cambia
+        )
 
     async def rehacer_varios(
         self,
@@ -174,11 +206,14 @@ class LoPendiente:
         jugadores: Mapping[UserId, tuple[Gender | None, TeeColor | None]],
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None = None,
         solo_en: GolfCourseId | None = None,
+        *,
+        cambia: QueCambia,
     ) -> None:
         """
         Rehace en el espacio de trabajo lo que les queda por jugar a varios
         jugadores que cambian a la vez; cada partido, de una vez con todos los
-        suyos que cambian (los demás, con su foto).
+        suyos que cambian (los demás, con su foto). Y comprueba que nada pendiente
+        quede sin barra válida (`_comprobar`).
 
         En cada campo juega cada uno su barra efectiva (`BarrasDelCampo.color_de`:
         su cambio propio, la del campo para su género o su general), con los
@@ -189,19 +224,35 @@ class LoPendiente:
                 lo que cambia)
             cambios: Los cambios nuevos de algún campo, en vez de los guardados
             solo_en: Solo lo de ese campo
+            cambia: Qué barra cambia: con "general", los campos donde juega una
+                fijada ni se rehacen ni se miran
 
         Raises:
-            TeeNotRatedForPlayerError: Si la barra de uno no está valorada en el
-                campo de algo pendiente
+            TeeNotAvailableError, TeeNotOnPendingCourseError,
+            TeeRemovalLeavesNoValidTeeError: Si algo pendiente quedaría sin barra
+                válida (cuál, en `_comprobar`)
             PendingGameNotRecalculableError: Si algo pendiente no se puede rehacer
                 por otra cosa que sus barras
         """
+        self._sin_valorar = False
         rondas = await self._rondas_de(competition)
-        await self._rehacer_partidos(competition, rondas, jugadores, cambios, solo_en)
+        await self._rehacer_partidos(competition, rondas, jugadores, cambios, solo_en, cambia)
         for user_id, (genero, general) in jugadores.items():
             await self._rehacer_partidas(
-                competition, rondas, user_id, genero, general, cambios, solo_en
+                competition, rondas, user_id, genero, general, cambios, solo_en, cambia
             )
+        await self._comprobar(competition, jugadores, cambios, solo_en, cambia)
+
+    async def _cambios_en(
+        self,
+        competition: Competition,
+        golf_course_id: GolfCourseId,
+        cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
+    ) -> BarrasDelCampo:
+        """Los cambios de un campo: los nuevos si se pasan, si no los guardados."""
+        return (cambios or {}).get(golf_course_id) or await self.cambios_del_campo(
+            competition, golf_course_id
+        )
 
     async def _color_en(
         self,
@@ -212,9 +263,7 @@ class LoPendiente:
         general: TeeColor | None,
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
     ) -> TeeColor | None:
-        del_campo = (cambios or {}).get(golf_course_id) or await self.cambios_del_campo(
-            competition, golf_course_id
-        )
+        del_campo = await self._cambios_en(competition, golf_course_id, cambios)
         return del_campo.color_de(user_id, general, genero)
 
     async def _rondas_de(self, competition: Competition) -> dict[RoundId, Round]:
@@ -231,6 +280,7 @@ class LoPendiente:
         jugadores: Mapping[UserId, tuple[Gender | None, TeeColor | None]],
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
         solo_en: GolfCourseId | None,
+        cambia: QueCambia,
     ) -> None:
         """
         Sus partidos de Ryder sin empezar, cada uno con todos los suyos que cambian.
@@ -247,6 +297,13 @@ class LoPendiente:
                     continue
                 if leido.status != MatchStatus.SCHEDULED:
                     continue
+                if cambia == "general" and _fijada(
+                    await self._cambios_en(competition, ronda.golf_course_id, cambios),
+                    user_id,
+                    jugadores[user_id][0],
+                ):
+                    # Allí juega la fijada: la general no cambia nada
+                    continue
                 afectados.setdefault(leido.id, (ronda, []))[1].append(user_id)
 
         for match_id, (ronda, suyos) in afectados.items():
@@ -262,9 +319,14 @@ class LoPendiente:
                     competition, ronda.golf_course_id, user_id, genero, general, cambios
                 )
                 nuevas[user_id] = (color, genero)
-            bandos = await self._del_partido.con_otra_barra(
-                ronda, competition, copia, nuevas, self.contextos
-            )
+            try:
+                bandos = await self._del_partido.con_otra_barra(
+                    ronda, competition, copia, nuevas, self.contextos
+                )
+            except TeeNotRatedForPlayerError:
+                # Se sigue: al final se dice cuál falla, siempre el mismo
+                self._sin_valorar = True
+                continue
             if bandos is not None:
                 copia.recalcular_jugadores(*bandos)
                 self._partidos_cambiados.add(copia.id)
@@ -286,6 +348,7 @@ class LoPendiente:
         general: TeeColor | None,
         cambios: Mapping[GolfCourseId, BarrasDelCampo] | None,
         solo_en: GolfCourseId | None,
+        cambia: QueCambia,
     ) -> None:
         """
         Sus partidas de stroke play que aún no salieron. Una lectura de franja y de
@@ -305,6 +368,13 @@ class LoPendiente:
                 raise PendingGameNotRecalculableError("La franja de una partida ya no existe")
             if solo_en is not None and franja.golf_course_id != solo_en:
                 continue
+            if cambia == "general" and _fijada(
+                await self._cambios_en(competition, franja.golf_course_id, cambios),
+                user_id,
+                genero,
+            ):
+                # Allí juega la fijada: la general no cambia nada
+                continue
             salieron = await las_que_salieron(franja, leidas, self._zonas, ahora)
             for leida in leidas:
                 if leida.id in salieron:
@@ -323,9 +393,13 @@ class LoPendiente:
                 color = await self._color_en(
                     competition, franja.golf_course_id, user_id, genero, general, cambios
                 )
-                nueva = await self._de_la_partida.con_otra_barra(
-                    competition, franja, foto, color, genero, self.contextos
-                )
+                try:
+                    nueva = await self._de_la_partida.con_otra_barra(
+                        competition, franja, foto, color, genero, self.contextos
+                    )
+                except TeeNotRatedForPlayerError:
+                    self._sin_valorar = True
+                    continue
                 if nueva is not None:
                     copia.recalcular(
                         [nueva if j.user_id == user_id else j for j in copia.jugadores]

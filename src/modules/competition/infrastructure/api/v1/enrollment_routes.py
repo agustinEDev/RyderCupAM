@@ -743,7 +743,10 @@ class ChangeCourseTeeBody(BaseModel):
     description=(
         "El cambio propio de un jugador en un campo de la competición: gana a la barra "
         "del campo para su género y a su barra general. Mismos permisos y plazos que "
-        "el cambio de la barra general. Rehace lo que le queda por jugar en ese campo."
+        "el cambio de la barra general. Rehace lo que le queda por jugar en ese campo. "
+        "422 TEE_NOT_AVAILABLE si ese campo no tiene esa barra para él, si al quitarlo "
+        "(null) la que quedaría no vale allí y le queda algo por jugar (texto propio), "
+        "o si la del campo para su género ya no vale allí."
     ),
 )
 async def change_enrollment_course_tee(

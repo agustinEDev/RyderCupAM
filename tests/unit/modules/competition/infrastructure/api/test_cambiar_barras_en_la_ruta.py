@@ -16,6 +16,7 @@ from src.modules.competition.application.exceptions import (
     TeeChangeClosedError,
     TeeNotAvailableError,
     TeeNotOnPendingCourseError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 from src.modules.competition.infrastructure.api.v1 import enrollment_routes
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -110,3 +111,36 @@ async def test_change_tee_not_on_a_pending_course_answers_its_own_text():
         "set that course's tee first.",
         "error_code": "TEE_NOT_ON_PENDING_COURSE",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "texto"),
+    [
+        (
+            TeeNotAvailableError,
+            "That tee is not available for this player on a course with games still to play.",
+        ),
+        (
+            TeeRemovalLeavesNoValidTeeError,
+            "Removing it would leave a game still to play without a valid tee on this course.",
+        ),
+    ],
+)
+async def test_change_tee_not_available_answers_its_text_without_rated(error, texto):
+    """
+    Given un caso de uso que rechaza con TEE_NOT_AVAILABLE (en general, o al quitar
+        una barra fijada)
+    When llega la petición
+    Then 422 TEE_NOT_AVAILABLE con su texto, que no habla de valoración (en
+        SCRATCH no hace falta)
+    """
+    caso = AsyncMock()
+    caso.execute.side_effect = error("texto interno")
+
+    respuesta = await enrollment_routes.change_enrollment_tee(
+        uuid4(), enrollment_routes.ChangeTeeBody(tee_color=TeeColor.RED), _quien(), caso
+    )
+
+    assert respuesta.status_code == 422
+    assert json.loads(respuesta.body) == {"detail": texto, "error_code": "TEE_NOT_AVAILABLE"}

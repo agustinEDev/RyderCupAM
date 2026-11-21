@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     TeeChangeClosedError,
     TeeNotAvailableError,
     TeeNotOnPendingCourseError,
+    TeeRemovalLeavesNoValidTeeError,
 )
 
 ERRORES_DE_BARRAS: tuple[type[Exception], ...] = (
@@ -37,9 +38,13 @@ _NO_SE_CAMBIAN: dict[type[Exception], tuple[int, str]] = {
         "That tee is not available on a course with games still to play; "
         "set that course's tee first.",
     ),
+    TeeRemovalLeavesNoValidTeeError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "Removing it would leave a game still to play without a valid tee on this course.",
+    ),
     TeeNotAvailableError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
-        "That tee is not rated for this player on the courses still to be played.",
+        "That tee is not available for this player on a course with games still to play.",
     ),
     TeeChangeClosedError: (
         status.HTTP_409_CONFLICT,
