@@ -178,7 +178,7 @@ async def test_competition_course_tees_passes_the_competition_and_who_asks(is_ad
     )
 
     pedida, usuario = caso.execute.call_args.args
-    assert pedida == competicion
+    assert pedida.competition_id == competicion
     assert str(usuario.value) == str(quien.id)
     assert caso.execute.call_args.kwargs == {"is_admin": is_admin}
     assert respuesta == []

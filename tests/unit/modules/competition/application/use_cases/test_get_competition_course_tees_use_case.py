@@ -19,6 +19,9 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.dto.competition_dto import (
+    GetCompetitionCourseTeesRequestDTO,
+)
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
@@ -39,7 +42,9 @@ pytestmark = pytest.mark.asyncio
 
 async def _fijadas(mundo, quien=None, is_admin=False, competition_id=None):
     return await GetCompetitionCourseTeesUseCase(mundo.uow).execute(
-        competition_id or mundo.competition_id.value,
+        GetCompetitionCourseTeesRequestDTO(
+            competition_id=competition_id or mundo.competition_id.value
+        ),
         quien or mundo.organizador,
         is_admin=is_admin,
     )

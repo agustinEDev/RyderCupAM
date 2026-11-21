@@ -1633,6 +1633,12 @@ class CompetitionCourseTeeResponseDTO(BaseModel):
     tee_color: str | None = Field(None, description="La barra fijada, o null si se quitó.")
 
 
+class GetCompetitionCourseTeesRequestDTO(BaseModel):
+    """DTO de entrada de lo fijado por campo y género (tabla del 21 nov 2026, A)."""
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+
+
 class CourseTeeForGenderDTO(BaseModel):
     """La barra que el organizador fijó en un campo para un género (R2, tabla del 21 nov 2026)."""
 

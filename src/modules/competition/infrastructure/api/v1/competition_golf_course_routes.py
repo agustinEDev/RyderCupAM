@@ -23,6 +23,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CompetitionCourseTeeResponseDTO,
     CompetitionGolfCourseResponseDTO,
     CourseTeeForGenderDTO,
+    GetCompetitionCourseTeesRequestDTO,
     GolfCourseDetailDTO,
     HoleResponseDTO,
     RemoveGolfCourseRequestDTO,
@@ -332,5 +333,7 @@ async def get_competition_course_tees(
 ):
     """Lo fijado por campo y género (barras por campo, tabla del 21 nov 2026, A)."""
     return await use_case.execute(
-        competition_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        GetCompetitionCourseTeesRequestDTO(competition_id=competition_id),
+        UserId(str(current_user.id)),
+        is_admin=current_user.is_admin,
     )

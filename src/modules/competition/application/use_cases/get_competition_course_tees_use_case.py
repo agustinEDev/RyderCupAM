@@ -8,9 +8,10 @@ estado de la competición, también terminada o cancelada: es una lectura y no
 bloquea nada. Los cambios propios de cada jugador (R1) no salen: no son del campo.
 """
 
-from uuid import UUID
-
-from src.modules.competition.application.dto.competition_dto import CourseTeeForGenderDTO
+from src.modules.competition.application.dto.competition_dto import (
+    CourseTeeForGenderDTO,
+    GetCompetitionCourseTeesRequestDTO,
+)
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.services.barras_de_la_inscripcion import (
     BarrasDeLaInscripcion,
@@ -30,7 +31,7 @@ class GetCompetitionCourseTeesUseCase:
         self._uow = uow
 
     async def execute(
-        self, competition_id: UUID, quien: UserId, is_admin: bool = False
+        self, request: GetCompetitionCourseTeesRequestDTO, quien: UserId, is_admin: bool = False
     ) -> list[CourseTeeForGenderDTO]:
         """
         Lo fijado, en el orden de los campos de la competición y por género.
@@ -40,7 +41,8 @@ class GetCompetitionCourseTeesUseCase:
             NotCompetitionCreatorError: Si no es el organizador ni un admin
         """
         async with self._uow:
-            competition = await self._uow.competitions.find_by_id(CompetitionId(competition_id))
+            competition_id = CompetitionId(request.competition_id)
+            competition = await self._uow.competitions.find_by_id(competition_id)
             if competition is None:
                 raise CompetitionNotFoundError(f"Competición no encontrada: {competition_id}")
             BarrasDeLaInscripcion.comprobar_organizador(competition, quien, is_admin)
