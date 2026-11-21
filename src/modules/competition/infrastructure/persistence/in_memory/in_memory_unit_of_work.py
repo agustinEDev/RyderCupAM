@@ -211,7 +211,11 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
             self._golpes_de_partida,
             self._barras_por_campo,
         ]
-        copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
+        # Cada repositorio se copia a sí mismo como él mismo: el de barras por
+        # campo mira el de inscripciones vivo, y al reponer debe seguir haciéndolo
+        # (no una copia desconectada de antes del savepoint)
+        memo: dict[int, object] = {id(repo): repo for repo in repositorios}
+        copias = [copy.deepcopy(repo.__dict__, memo) for repo in repositorios]
         try:
             yield
         except BaseException:
