@@ -384,6 +384,16 @@ class TeeNotSelectableError(TeeNotAvailableError):
     """
 
 
+class PairingPlayerNotInTeamError(Exception):
+    """
+    Un emparejamiento a mano de la Ryder pone a un jugador que no está en ningún
+    equipo, o en el lado del equipo contrario (tabla del 21 nov 2026, D). Es lo que
+    manda el organizador, no un motivo de la sesión: no se apunta en ella.
+    """
+
+    error_code = "PAIRING_PLAYER_NOT_IN_TEAM"
+
+
 class TeeChangeClosedError(Exception):
     """La competición ya terminó o se canceló: ya no se cambian barras."""
 

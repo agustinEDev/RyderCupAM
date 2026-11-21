@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InsufficientPlayersError,
     NotCompetitionCreatorError,
+    PairingPlayerNotInTeamError,
     RoundNotFoundError,
 )
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
@@ -347,8 +348,11 @@ class GenerateMatchesUseCase:
         # inscripcion su color sale del defecto y su falta pareceria otra
         if pairings:
             await self._comprobar_inscripciones(pairings, enrollment_map, competition)
-            # Emparejar a mano solo exige la inscripción, no estar en un equipo:
-            # quien no esté en ninguno se lee como los demás (CodeRabbit, #918)
+            # Los del organizador, cada uno en el lado de su equipo (21 nov 2026,
+            # D). Los de los sobres no cambian: los entregó el capitán de cada uno
+            if manual_pairings:
+                self._comprobar_lados(manual_pairings, team_a_ids, team_b_ids)
+            # Quien no esté en ningún equipo se lee como los demás (CodeRabbit, #918)
             en_los_equipos = {*team_a_ids, *team_b_ids}
             de_fuera = [
                 uid
@@ -492,6 +496,26 @@ class GenerateMatchesUseCase:
                 for uid in sin_inscripcion
             ]
         )
+
+    @staticmethod
+    def _comprobar_lados(
+        pairings: list[ManualPairingDTO], team_a_ids: list[UserId], team_b_ids: list[UserId]
+    ) -> None:
+        """Cada emparejado a mano, en el lado de su equipo.
+
+        Raises:
+            PairingPlayerNotInTeamError: Si uno no está en ningún equipo, o está
+                en el lado del contrario. Sin nombres: lo mandó el organizador
+        """
+        equipo_a = {uid.value for uid in team_a_ids}
+        equipo_b = {uid.value for uid in team_b_ids}
+        for pairing in pairings:
+            if not set(pairing.team_a_player_ids) <= equipo_a or not (
+                set(pairing.team_b_player_ids) <= equipo_b
+            ):
+                raise PairingPlayerNotInTeamError(
+                    "Cada jugador emparejado tiene que ir en el lado de su equipo"
+                )
 
     @staticmethod
     def _jugadores_que_juegan(
