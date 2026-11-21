@@ -20,8 +20,15 @@ import copy
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
-from src.modules.competition.application.exceptions import PendingGameNotRecalculableError
+from src.modules.competition.application.exceptions import (
+    PendingGameNotRecalculableError,
+    TeeNotAvailableError,
+    TeeNotOnPendingCourseError,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.barras_de_la_inscripcion import (
+    BarrasDeLaInscripcion,
+)
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
@@ -36,6 +43,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
 from src.modules.competition.domain.value_objects.barras_del_campo import BarrasDelCampo
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -67,6 +75,8 @@ class LoPendiente:
         # El mismo cálculo que al generar y al reasignar: sin reglas propias
         self._del_partido = JugadoresDelPartido(golf_course_repository, user_repository)
         self._de_la_partida = JugadoresDeLaPartida(golf_course_repository, user_repository)
+        # Qué barra vale en un campo: la misma regla que ofrece el selector
+        self._reglas = BarrasDeLaInscripcion(uow, golf_course_repository)
         # Cada campo y sus cambios, leídos una vez en toda la ejecución
         self.contextos: dict[GolfCourseId, StrokeContext] = {}
         self._cambios: dict[GolfCourseId, BarrasDelCampo] = {}
@@ -85,6 +95,50 @@ class LoPendiente:
         partidos sin empezar y sus partidas que aún no salieron.
         """
         return set(self._campos_con_algo.get(user_id, set()))
+
+    async def comprobar_que_vale(
+        self,
+        competition: Competition,
+        user_id: UserId,
+        genero: Gender | None,
+        general: TeeColor | None,
+        cambios: Mapping[GolfCourseId, BarrasDelCampo] | None = None,
+        solo_en: GolfCourseId | None = None,
+    ) -> None:
+        """
+        Que nada pendiente suyo quede sin barra válida (21 nov 2026): en cada campo
+        donde le queda algo por jugar (lo visto al rehacer), la barra que juega allí
+        (su cambio propio, la del campo para su género, su general o la habitual de
+        su género), con los cambios de ese campo leídos o los de `cambios`, tiene
+        que valer allí: la misma regla que ofrece el selector. Con golpes, `rehacer`
+        ya lo rechaza al valorar; en SCRATCH no valora nada, así que se mira aquí.
+
+        Raises:
+            TeeNotOnPendingCourseError: Si no vale su general (o la habitual): antes
+                hay que fijar la de ese campo
+            TeeNotAvailableError: Si no vale la fijada para ese campo (su cambio
+                propio o la del campo para su género)
+        """
+        for golf_course_id in self.campos_con_algo(user_id):
+            if solo_en is not None and golf_course_id != solo_en:
+                continue
+            del_campo = (cambios or {}).get(golf_course_id) or await self.cambios_del_campo(
+                competition, golf_course_id
+            )
+            jugaria = del_campo.color_de(user_id, general, genero) or barras_por_defecto(genero)
+            if await self._reglas.vale_en_el_campo(
+                competition, golf_course_id, jugaria, genero, self.contextos
+            ):
+                continue
+            if user_id in del_campo.propias or (
+                genero is not None and genero in del_campo.por_genero
+            ):
+                raise TeeNotAvailableError(
+                    f"La barra fijada en ese campo ({jugaria.value}) ya no vale allí"
+                )
+            raise TeeNotOnPendingCourseError(
+                f"Las barras {jugaria.value} no valen en un campo donde le queda algo por jugar"
+            )
 
     async def cambios_del_campo(
         self, competition: Competition, golf_course_id: GolfCourseId

@@ -333,9 +333,16 @@ class CourseNotInCompetitionError(Exception):
 
 class TeeNotAvailableError(Exception):
     """
-    Esas barras no valen para él: ESE campo no las tiene (su cambio propio o la
-    del campo para un género), o no lo están en el campo de algo que le queda por
-    jugar (`TeeNotOnPendingCourseError`, con la general).
+    Esas barras no valen (422 TEE_NOT_AVAILABLE):
+
+    - Ese campo no tiene la barra que se fija en él: el cambio propio de una
+      inscripción (R1) o la del campo para un género (R2,
+      `CourseTeeNotAvailableError`, con su propio texto).
+    - En un campo donde le queda algo por jugar, la barra fijada allí para él (su
+      cambio propio o la del campo para su género) ya no vale, o con golpes no
+      está valorada en lo que se rehace.
+    - Con la general (o la habitual) en un campo así: la subclase
+      `TeeNotOnPendingCourseError`, con su propio código.
     """
 
     error_code = "TEE_NOT_AVAILABLE"

@@ -146,9 +146,31 @@ class SetCompetitionCourseTeeUseCase:
                     competition, afectados, cambios={campo: nuevos}, solo_en=campo
                 )
             except TeeNotRatedForPlayerError as e:
+                # Al quitarla (null) puede fallar la general de alguno: lo dice
+                for user_id, (su_genero, general) in afectados.items():
+                    await pendiente.comprobar_que_vale(
+                        competition,
+                        user_id,
+                        su_genero,
+                        general,
+                        cambios={campo: nuevos},
+                        solo_en=campo,
+                    )
                 raise TeeNotAvailableError(
                     "Con ese cambio, a un jugador no le valen las barras en algo pendiente"
                 ) from e
+
+            # En SCRATCH `rehacer` no valora: al quitarla, la que pasaría a jugar
+            # cada uno allí (su general o la habitual) tiene que valer
+            for user_id, (su_genero, general) in afectados.items():
+                await pendiente.comprobar_que_vale(
+                    competition,
+                    user_id,
+                    su_genero,
+                    general,
+                    cambios={campo: nuevos},
+                    solo_en=campo,
+                )
 
             antes = guardados.por_genero.get(genero)
             await self._uow.barras_por_campo.fijar_del_campo(

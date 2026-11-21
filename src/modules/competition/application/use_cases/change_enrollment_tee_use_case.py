@@ -55,14 +55,11 @@ from src.modules.competition.application.services.barras_de_la_inscripcion impor
     BarrasDeLaInscripcion,
 )
 from src.modules.competition.application.services.lo_pendiente import LoPendiente
-from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.barra_del_jugador import barras_por_defecto
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
-from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.instante_utc import ahora_en_utc
@@ -120,6 +117,8 @@ class ChangeEnrollmentTeeUseCase:
             TeeChangeClosedError: Si la competición terminó o se canceló
             TeeNotOnPendingCourseError: Si esas barras no valen en un campo donde le
                 queda algo por jugar y no tiene ni cambio propio ni barra del campo
+            TeeNotAvailableError: Si en un campo así la que no vale es la fijada
+                (su cambio propio o la del campo para su género)
             PendingGameNotRecalculableError: Si algo pendiente no se puede rehacer
                 por otra cosa que sus barras
         """
@@ -168,12 +167,16 @@ class ChangeEnrollmentTeeUseCase:
             try:
                 await pendiente.rehacer(competition, enrollment.user_id, genero, request.tee_color)
             except TeeNotRatedForPlayerError as e:
+                # Con golpes: dice cuál falla (la general o la fijada de un campo)
+                await pendiente.comprobar_que_vale(
+                    competition, enrollment.user_id, genero, request.tee_color
+                )
                 raise TeeNotOnPendingCourseError(
                     "Sus barras nuevas no están valoradas en el campo de algo que le "
                     "queda por jugar"
                 ) from e
-            await self._vale_donde_le_queda_algo(
-                competition, enrollment.user_id, genero, request.tee_color, pendiente
+            await pendiente.comprobar_que_vale(
+                competition, enrollment.user_id, genero, request.tee_color
             )
 
             antes = enrollment.tee_color
@@ -200,33 +203,3 @@ class ChangeEnrollmentTeeUseCase:
             tee_color=enrollment.tee_color.value if enrollment.tee_color else None,
             updated_at=enrollment.updated_at,
         )
-
-    async def _vale_donde_le_queda_algo(
-        self,
-        competition: Competition,
-        user_id: UserId,
-        genero: Gender | None,
-        general: TeeColor | None,
-        pendiente: LoPendiente,
-    ) -> None:
-        """
-        Que nada pendiente quede sin barra válida: en cada campo donde le queda algo
-        por jugar y la que juega es la general (sin cambio propio ni la del campo
-        para su género), la nueva tiene que valer allí, la misma regla que ofrece el
-        selector. Con golpes, `rehacer` ya lo habrá rechazado; en SCRATCH (y en lo
-        que no se rehace por quedar igual) se mira aquí.
-
-        Raises:
-            TeeNotOnPendingCourseError: Si en alguno no vale
-        """
-        jugaria = general or barras_por_defecto(genero)
-        for golf_course_id in pendiente.campos_con_algo(user_id):
-            cambios = await pendiente.cambios_del_campo(competition, golf_course_id)
-            if user_id in cambios.propias or (genero is not None and genero in cambios.por_genero):
-                continue
-            if not await self._reglas.vale_en_el_campo(
-                competition, golf_course_id, jugaria, genero, pendiente.contextos
-            ):
-                raise TeeNotOnPendingCourseError(
-                    f"Las barras {jugaria.value} no valen en un campo donde le queda algo por jugar"
-                )

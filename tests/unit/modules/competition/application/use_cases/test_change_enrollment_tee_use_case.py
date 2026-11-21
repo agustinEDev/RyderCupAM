@@ -744,6 +744,53 @@ class TestQueBarras:
 
         assert await mundo.barras_guardadas() is None
 
+    async def test_change_tee_of_an_unknown_user_with_pending_is_treated_as_without_gender(
+        self,
+    ):
+        """
+        Given una inscripción cuyo usuario ya no se encuentra, con un partido
+            pendiente en Aldeamayor
+        When el organizador elige rojas, valoradas allí solo para mujer
+        Then 422 TEE_NOT_ON_PENDING_COURSE: sin usuario es como sin género, y sin
+            género solo valen las mixtas
+        """
+        mundo = await _Mundo().montar()
+        mundo.usuarios.quitar(mundo.jugadora)
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+
+        with pytest.raises(TeeNotOnPendingCourseError):
+            await mundo.cambiar(TeeColor.RED, quien=mundo.organizador)
+
+        assert await mundo.barras_guardadas() is None
+
+    @pytest.mark.parametrize("play_mode", ["HANDICAP", "SCRATCH"])
+    @pytest.mark.parametrize("fijada", ["propia", "del campo"])
+    async def test_change_tee_with_a_set_course_tee_no_longer_valid_there_is_not_available(
+        self, play_mode, fijada
+    ):
+        """
+        Given un partido pendiente en un campo cuya barra fijada para ella (su
+            cambio propio o la del campo para las mujeres, en verdes) ya no vale allí
+        When la jugadora cambia su general a rojas, que allí valen
+        Then 422 TEE_NOT_AVAILABLE, no TEE_NOT_ON_PENDING_COURSE: lo que no vale es
+            la barra fijada de ese campo, no la general; y no cambia nada
+        """
+        mundo = await _Mundo().montar(play_mode=play_mode)
+        campo = next(iter(mundo.campos.por_id))
+        await mundo.partido([mundo.jugadora], [mundo.otro])
+        if fijada == "propia":
+            await mundo.uow.barras_por_campo.fijar_propia(mundo.inscripcion, campo, TeeColor.GREEN)
+        else:
+            await mundo.uow.barras_por_campo.fijar_del_campo(
+                mundo.competition_id, campo, Gender.FEMALE, TeeColor.GREEN
+            )
+
+        with pytest.raises(TeeNotAvailableError) as error:
+            await mundo.cambiar(TeeColor.RED)
+
+        assert error.value.error_code == "TEE_NOT_AVAILABLE"
+        assert await mundo.barras_guardadas() is None
+
     async def test_change_tee_of_a_player_without_gender_accepts_a_mixed_tee(self):
         """
         Given un jugador sin género, un campo con blancas mixtas y un partido allí
@@ -1097,15 +1144,17 @@ class TestLoQueQuedaPorJugar:
         Given dos campos: el primero con rojas de mujer, el segundo sin ellas, y su
             partido programado en el segundo
         When la jugadora elige rojas
-        Then se rechaza (422 TEE_NOT_AVAILABLE, por SU barra) y no cambia nada
+        Then se rechaza (422 TEE_NOT_ON_PENDING_COURSE, por SU barra) y no cambia nada
         """
         mundo = await _Mundo().montar(
             campos=(ALDEAMAYOR, [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)])
         )
         partido = await mundo.partido([mundo.jugadora], [mundo.otro], campo=1)
 
-        with pytest.raises(TeeNotAvailableError):
+        with pytest.raises(TeeNotOnPendingCourseError) as error:
             await mundo.cambiar(TeeColor.RED)
+
+        assert error.value.error_code == "TEE_NOT_ON_PENDING_COURSE"
 
         assert await mundo.barras_guardadas() is None
         ella = (await mundo.el_partido(partido)).find_player(mundo.jugadora)
@@ -1417,7 +1466,8 @@ class TestLosDeCodeRabbit:
         Given su partido en un campo que ya no valora las rojas, con ella guardada en
             rojas mixtas (la misma clave que daría su barra nueva allí)
         When elige rojas (las tiene el otro campo de la competición)
-        Then 422: aunque la clave sea la guardada, en ese campo ya no está valorada
+        Then 422 TEE_NOT_ON_PENDING_COURSE: aunque la clave sea la guardada, en ese
+            campo ya no está valorada
         """
         mundo = await _Mundo().montar(
             campos=(ALDEAMAYOR, [(TeeColor.YELLOW, Gender.MALE), (TeeColor.BLUE, Gender.FEMALE)])
@@ -1429,7 +1479,7 @@ class TestLosDeCodeRabbit:
             barras={mundo.jugadora: (TeeColor.RED, None)},
         )
 
-        with pytest.raises(TeeNotAvailableError):
+        with pytest.raises(TeeNotOnPendingCourseError):
             await mundo.cambiar(TeeColor.RED)
 
     async def test_change_tee_in_scratch_keeps_the_others_snapshots_as_they_are(self):

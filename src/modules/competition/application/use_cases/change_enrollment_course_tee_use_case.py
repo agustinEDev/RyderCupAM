@@ -156,9 +156,28 @@ class ChangeEnrollmentCourseTeeUseCase:
                     solo_en=campo,
                 )
             except TeeNotRatedForPlayerError as e:
+                # Al quitarlo (null) puede fallar su general: lo dice la comprobación
+                await pendiente.comprobar_que_vale(
+                    competition,
+                    enrollment.user_id,
+                    genero,
+                    enrollment.tee_color,
+                    cambios={campo: nuevos},
+                    solo_en=campo,
+                )
                 raise TeeNotAvailableError(
                     "Esas barras no están valoradas en el campo de algo que le queda por jugar"
                 ) from e
+            # En SCRATCH `rehacer` no valora: al quitarlo, la que pasaría a jugar
+            # allí (la del campo, su general o la habitual) tiene que valer
+            await pendiente.comprobar_que_vale(
+                competition,
+                enrollment.user_id,
+                genero,
+                enrollment.tee_color,
+                cambios={campo: nuevos},
+                solo_en=campo,
+            )
 
             antes = guardados.propias.get(enrollment.user_id)
             await self._uow.barras_por_campo.fijar_propia(enrollment, campo, request.tee_color)
