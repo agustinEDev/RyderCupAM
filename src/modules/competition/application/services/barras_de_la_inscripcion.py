@@ -7,6 +7,8 @@ que luego el cambio rechace, ni esconder una que aceptaría. El front no conoce
 el género de los demás inscritos, así que las barras válidas las calcula el back.
 """
 
+from collections.abc import Mapping
+
 from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     PendingGameNotRecalculableError,
@@ -17,13 +19,14 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import la_barra_vale
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
+from src.shared.domain.services.tee_lookup import TeeKey
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -138,14 +141,12 @@ class BarrasDeLaInscripcion:
             contexto = await contexto_del_campo(self._campos, golf_course_id, contextos)
         except PendingGameNotRecalculableError:
             return False
-        barras: set[TeeKey] = set(contexto.tee_ratings)
+        con_tarjeta: Mapping[TeeKey, object] | None = None
         if competition.play_mode == PlayMode.SCRATCH:
             con_tarjeta = (
                 contexto.holes_by_tee if competition.ryder_cup is not None else contexto.pars_by_tee
             )
-            barras |= set(con_tarjeta)
-        su_genero = genero.value if genero else None
-        return tee_key_for(dict.fromkeys(barras), color.value, su_genero) is not None
+        return la_barra_vale(color, genero, contexto.tee_ratings, con_tarjeta)
 
     async def las_que_valen_en_el_campo(
         self,

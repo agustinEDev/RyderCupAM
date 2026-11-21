@@ -14,6 +14,9 @@ Campo de prueba: par 72, amarillas de hombre CR 71.2 / SR 128, dificultad = hoyo
 | Tope 8, fijado 20.0                            | De juego 8                               |
 | SCRATCH                                        | De juego 0, sin golpes; con su par       |
 | SCRATCH en barras con tarjeta y sin valorar    | El par de SUS barras, con su género      |
+| SCRATCH sin su barra en el campo (S1)          | JugadoresSinBarraError con su color      |
+| SCRATCH en barras mixtas (S3)                  | Foto, sin género                         |
+| SCRATCH sin género, el color solo con (S4)     | JugadoresSinBarraError, su género        |
 | Perfil distinto del fijado                     | Cuenta el fijado                         |
 | Uno sin su color y otro sin género             | JugadoresSinBarraError con los dos       |
 | Sin hándicap fijado                            | JugadoresSinHandicapError                |
@@ -175,17 +178,58 @@ async def test_the_competition_cap_applies():
     assert (await escenario.construir([ana]))[ana].playing_handicap == 8
 
 
-async def test_scratch_plays_zero_without_needing_rated_tees():
+async def test_scratch_plays_zero_with_the_par_of_each_hole():
     """Sin golpes, pero con el par de cada hoyo para los puntos (P12)."""
     escenario = _Escenario(play_mode=PlayMode.SCRATCH)
-    ana = await escenario.jugador(Decimal("20.0"), barras=TeeColor.RED)
+    ana = await escenario.jugador(Decimal("20.0"), barras=TeeColor.YELLOW)
 
     jugador = (await escenario.construir([ana]))[ana]
 
     assert jugador.playing_handicap == 0
     assert jugador.golpes_por_hoyo == (0,) * 18
-    assert jugador.tee_color == TeeColor.RED
+    assert jugador.tee_color == TeeColor.YELLOW
     assert jugador.par_por_hoyo == tuple(PARES)
+
+
+async def test_s1_scratch_without_their_tee_on_the_course_is_blocked():
+    """
+    Sin su barra en el campo (ni valorada ni con tarjeta, de su género o mixta)
+    hay que elegirla: se bloquea con el aviso de siempre (R4), como con golpes.
+    """
+    escenario = _Escenario(play_mode=PlayMode.SCRATCH)
+    bea = await escenario.jugador(
+        Decimal("20.0"), genero=Gender.FEMALE, barras=TeeColor.YELLOW, nombre="Bea"
+    )
+
+    with pytest.raises(JugadoresSinBarraError) as error:
+        await escenario.construir([bea])
+
+    assert [(p.user_id, p.missing, p.tee_color) for p in error.value.players] == [
+        (bea, MISSING_TEE_COLOR, "YELLOW")
+    ]
+
+
+async def test_s3_scratch_on_mixed_tees():
+    escenario = _Escenario(play_mode=PlayMode.SCRATCH, barras=((TeeColor.YELLOW, None),))
+    bea = await escenario.jugador(Decimal("20.0"), genero=Gender.FEMALE, barras=TeeColor.YELLOW)
+
+    jugadora = (await escenario.construir([bea]))[bea]
+
+    assert (jugadora.tee_color, jugadora.tee_gender) == (TeeColor.YELLOW, None)
+
+
+async def test_s5_scratch_everybody_without_tees_comes_in_one_error():
+    """S4 y S5: sin género y el color solo con género, y otra sin su color."""
+    escenario = _Escenario(play_mode=PlayMode.SCRATCH)
+    rojas = await escenario.jugador(Decimal("10.0"), barras=TeeColor.RED, nombre="Bea")
+    sin_genero = await escenario.jugador(Decimal("10.0"), genero=None, nombre="Carla")
+    con_barras = await escenario.jugador(Decimal("10.0"))
+
+    with pytest.raises(JugadoresSinBarraError) as error:
+        await escenario.construir([rojas, sin_genero, con_barras])
+
+    faltan = {(p.user_id, p.missing, p.tee_color) for p in error.value.players}
+    assert faltan == {(rojas, MISSING_TEE_COLOR, "RED"), (sin_genero, MISSING_GENDER, None)}
 
 
 async def test_scratch_on_unrated_tees_with_their_own_card():

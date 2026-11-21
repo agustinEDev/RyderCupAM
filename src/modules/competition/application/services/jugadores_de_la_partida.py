@@ -8,7 +8,7 @@ Decidido con Agustín el 6-9 oct 2026:
 - Las barras, las que le tocan en el campo de la franja (`barra_en_el_campo`: su cambio
   propio, la del campo para su género o su general).
 - Hándicap de juego individual al 95 % (el de la franja), con el tope de la
-  competición; en SCRATCH, 0 y ni se mira el campo, como en la Ryder (D7).
+  competición; en SCRATCH, 0, y basta que sus barras traigan tarjeta (D7).
 - Los golpes de cada hoyo con signo: un plus los da en los más fáciles.
 
 Gemelo de `JugadoresDelPartido` de la Ryder, que reparte entre dos bandos y
@@ -145,13 +145,10 @@ class JugadoresDeLaPartida:
         # Los cambios de barras del campo de la franja (R1 y R2)
         cambios = await uow.barras_por_campo.del_campo(competition.id, franja.golf_course_id)
 
-        if competition.play_mode == PlayMode.SCRATCH:
-            return {
-                u: self._sin_golpes(
-                    u, inscripciones[u].tee_color, fijados[u], generos.get(u), contexto, cambios
-                )
-                for u in user_ids
-            }
+        # En SCRATCH basta que sus barras traigan tarjeta; si tampoco, se bloquea
+        # igual que con golpes (21 nov 2026: se generaban sin barra en el campo)
+        sin_golpes = competition.play_mode == PlayMode.SCRATCH
+        con_tarjeta = contexto.pars_by_tee if sin_golpes else None
 
         jugadores: dict[UserId, JugadorDePartida] = {}
         sin_barras: list[tuple[UserId, str, str | None]] = []
@@ -159,24 +156,27 @@ class JugadoresDeLaPartida:
             inscripcion = inscripciones[user_id]
             genero = generos.get(user_id)
             barra = barra_en_el_campo(
-                user_id, inscripcion.tee_color, genero, cambios, contexto.tee_ratings
+                user_id, inscripcion.tee_color, genero, cambios, contexto.tee_ratings, con_tarjeta
             )
-            if barra.tee_rating is None:
-                falta = lo_que_le_falta(barra, genero, contexto.tee_ratings)
-                # Sin valoración siempre falta algo: el `if` es para mypy
-                if falta is not None:
-                    sin_barras.append((user_id, *falta))
-                continue
-            jugadores[user_id] = self._foto(
-                competition,
-                franja,
-                contexto,
-                user_id,
-                fijados[user_id],
-                barra.tee_color,
-                barra.tee_gender,
-                barra.tee_rating,
-            )
+            falta = lo_que_le_falta(barra, genero, contexto.tee_ratings, con_tarjeta)
+            if falta is not None:
+                sin_barras.append((user_id, *falta))
+            elif sin_golpes:
+                jugadores[user_id] = self._sin_golpes(
+                    user_id, inscripcion.tee_color, fijados[user_id], genero, contexto, cambios
+                )
+            # Con golpes, sin falta hay valoración: la condición es para mypy
+            elif barra.tee_rating is not None:
+                jugadores[user_id] = self._foto(
+                    competition,
+                    franja,
+                    contexto,
+                    user_id,
+                    fijados[user_id],
+                    barra.tee_color,
+                    barra.tee_gender,
+                    barra.tee_rating,
+                )
 
         if sin_barras:
             nombres = await self._nombres(uow, competition, [u for u, _, _ in sin_barras])

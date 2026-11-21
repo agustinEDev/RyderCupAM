@@ -37,6 +37,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.services.stroke_context import StrokeContext
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -94,18 +95,38 @@ class JugadoresDelPartido:
                 raise PlayerNotEnrolledError(f"El jugador {uid} no tiene inscripción aprobada")
 
         is_scratch = competition.play_mode == PlayMode.SCRATCH
+        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
         (
             tee_ratings,
             holes_by_stroke_index,
             user_handicap_map,
             user_gender_map,
             holes_by_tee,
-        ) = await self._datos_de_handicap(round_entity, is_scratch, [*team_a_ids, *team_b_ids])
+        ) = await self._datos_de_handicap(golf_course, is_scratch, [*team_a_ids, *team_b_ids])
 
         # Los cambios de barras de su campo (R1 y R2)
         cambios = await uow.barras_por_campo.del_campo(
             round_entity.competition_id, round_entity.golf_course_id
         )
+        # En SCRATCH, como al generar: sin barras en el campo (ni valoradas ni con
+        # tarjeta) no entra en un partido. Con golpes ya lo dice el reparto; sin
+        # campo se construye como siempre
+        if (
+            is_scratch
+            and golf_course is not None
+            and self._match_players.sin_barras(
+                [*team_a_ids, *team_b_ids],
+                enrollment_map,
+                tee_ratings,
+                user_gender_map,
+                cambios,
+                con_tarjeta=holes_by_tee,
+            )
+        ):
+            raise TeeColorNotFoundError(
+                "Un jugador no tiene barras en el campo de este partido "
+                "(ni valoradas ni con tarjeta)"
+            )
         return self._match_players.build(
             round_entity.match_format,
             list(team_a_ids),
@@ -262,7 +283,7 @@ class JugadoresDelPartido:
             ) from e
 
     async def _datos_de_handicap(
-        self, round_entity: Round, is_scratch: bool, player_ids: list[UserId]
+        self, golf_course: GolfCourse | None, is_scratch: bool, player_ids: list[UserId]
     ) -> tuple[
         dict[TeeKey, TeeRating],
         list[int],
@@ -279,7 +300,6 @@ class JugadoresDelPartido:
 
         # También en SCRATCH: sin golpes, pero cada uno guarda el género de su
         # barra, y con él su tarjeta y las muestras del mapa (RyderCupWeb #880)
-        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
         if not golf_course and not is_scratch:
             raise ValueError(
                 "Se requiere un campo de golf para el modo HANDICAP. "

@@ -18,6 +18,7 @@ from src.modules.competition.application.services.jugadores_del_partido import (
     JugadoresDelPartido,
     PlayerNotEnrolledError,
 )
+from src.modules.competition.application.services.match_players_builder import TeeColorNotFoundError
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -175,3 +176,53 @@ def _campo_con_amarillas():
     repo = MagicMock()
     repo.find_by_id = AsyncMock(return_value=campo)
     return repo
+
+
+async def test_p1_en_scratch_sin_barra_valida_en_el_campo_no_se_construye():
+    """
+    GIVEN: Una Ryder SCRATCH en un campo con amarillas solo de hombre, y una
+           jugadora con general amarillas (sin barra válida allí: R4)
+    WHEN: Se construyen los jugadores de un partido (reasignación)
+    THEN: El error de siempre, como con hándicap: no entra en un partido sin barra
+    """
+    uow = InMemoryUnitOfWork()
+    a, b = UserId.generate(), UserId.generate()
+    for u in (a, b):
+        await _inscrito(uow, u)
+    ella = _usuario(b, 4.0)
+    ella.gender = Gender.FEMALE
+    usuarios = MagicMock()
+    usuarios.find_by_ids = AsyncMock(return_value=[_usuario(a, 10.0), ella])
+
+    with pytest.raises(TeeColorNotFoundError):
+        await JugadoresDelPartido(_campo_con_amarillas(), usuarios).construir(
+            uow, _sesion(), _scratch(), [a], [b]
+        )
+
+
+async def test_p2_en_scratch_una_barra_solo_con_tarjeta_vale():
+    """
+    GIVEN: Una Ryder SCRATCH en un campo con amarillas de hombre con tarjeta pero
+           sin valoración (en SCRATCH no hace falta)
+    WHEN: Se construyen los jugadores de un partido (reasignación)
+    THEN: Se construyen, en amarillas de hombre
+    """
+    uow = InMemoryUnitOfWork()
+    a, b = UserId.generate(), UserId.generate()
+    for u in (a, b):
+        await _inscrito(uow, u)
+    campos = _campo_con_amarillas()
+    campo = campos.find_by_id.return_value
+    amarillas = campo.tees[0]
+    amarillas.slope_rating = 10  # fuera de rango: no se puede valorar
+    amarillas.holes = campo.reference_card
+    amarillas.par_total = 72
+    usuarios = MagicMock()
+    usuarios.find_by_ids = AsyncMock(return_value=[_usuario(a, 10.0), _usuario(b, 4.0)])
+
+    lado_a, lado_b = await JugadoresDelPartido(campos, usuarios).construir(
+        uow, _sesion(), _scratch(), [a], [b]
+    )
+
+    for jugador in (*lado_a, *lado_b):
+        assert (jugador.tee_color, jugador.tee_gender) == (TeeColor.YELLOW, Gender.MALE)
