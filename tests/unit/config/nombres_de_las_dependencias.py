@@ -59,6 +59,8 @@ NOMBRES_DE_ANTES = (
     # Las barras por campo (20 nov 2026)
     "get_change_enrollment_course_tee_use_case",
     "get_set_competition_course_tee_use_case",
+    # Lo fijado por campo (tabla del 21 nov 2026, A)
+    "get_competition_course_tees_use_case",
     "get_cancel_invitation_use_case",
     "get_cancel_quick_match_use_case",
     "get_cerrar_franja_use_case",

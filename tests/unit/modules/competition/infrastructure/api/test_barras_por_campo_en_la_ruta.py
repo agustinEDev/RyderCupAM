@@ -157,3 +157,27 @@ async def test_course_tee_for_a_gender_not_available_has_its_own_text():
         "detail": "That tee is not available for this gender on this course.",
         "error_code": "TEE_NOT_AVAILABLE",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_admin", [False, True])
+async def test_competition_course_tees_passes_the_competition_and_who_asks(is_admin):
+    """
+    Given una petición de lo fijado por campo (tabla del 21 nov 2026, A)
+    When llega a la ruta
+    Then el caso de uso recibe la competición, quién y si es admin, y se devuelve lo suyo
+    """
+    caso = AsyncMock()
+    caso.execute.return_value = []
+    quien = _quien(is_admin)
+    competicion = uuid4()
+
+    respuesta = await competition_golf_course_routes.get_competition_course_tees(
+        competicion, quien, caso
+    )
+
+    pedida, usuario = caso.execute.call_args.args
+    assert pedida == competicion
+    assert str(usuario.value) == str(quien.id)
+    assert caso.execute.call_args.kwargs == {"is_admin": is_admin}
+    assert respuesta == []
